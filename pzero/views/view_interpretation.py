@@ -557,6 +557,25 @@ class ViewInterpretation(ViewMap):
             
             # Convert StructuredGrid to surface for proper 2D rendering
             subset = subset.extract_surface()
+
+            # Align slice to its true plane for rotated/skewed grids
+            # (avoids forcing Inline/Crossline to X/Y-constant planes)
+            affine = self._get_seismic_axis_vectors()
+            if affine is not None:
+                plane_info = self._get_slice_plane_from_affine(
+                    slice_idx=self.current_slice_index,
+                    affine=affine,
+                    axis=self.current_axis,
+                )
+                if plane_info is not None:
+                    plane_center, plane_normal, _row_vec, _col_vec, _dims = plane_info
+                    self.current_slice_plane_center = plane_center
+                    self.current_slice_plane_normal = plane_normal
+                    try:
+                        pts = subset.points.astype(np.float64, copy=False)
+                        subset.points = self._project_points_to_plane(pts, plane_center, plane_normal)
+                    except Exception:
+                        pass
             
             self.print_terminal(f"Slice position for {self.current_axis} index {self.current_slice_index}: {self.current_slice_position}")
             
@@ -1004,45 +1023,71 @@ class ViewInterpretation(ViewMap):
         except:
             pass
         
-        # Create a plane mesh at the slice position
-        # The plane must be positioned in DISPLAY coordinates (with VE applied)
-        # because the tracer picks in the rendered/displayed space
-        if self.current_axis == 'Inline':
-            # YZ plane at current X position
-            plane_center = (self.current_slice_position, (bounds[2]+bounds[3])/2, (bounds[4]+bounds[5])/2 * v_exag)
-            plane = pv.Plane(
-                center=plane_center,
-                direction=(1, 0, 0),  # Normal along X
-                i_size=bounds[3] - bounds[2],  # Y extent
-                j_size=abs(bounds[5] - bounds[4]) * v_exag,  # Z extent with VE
-                i_resolution=1,
-                j_resolution=1
+        # Create a plane mesh for picking.
+        # It must be in DISPLAY coordinates (with VE applied) because the tracer picks in rendered space.
+        plane = None
+        affine = self._get_seismic_axis_vectors()
+        if affine is not None:
+            plane_info = self._get_slice_plane_from_affine(
+                slice_idx=self.current_slice_index,
+                affine=affine,
+                axis=self.current_axis,
             )
-            self.print_terminal(f"DEBUG: Inline picking plane center: {plane_center}")
-        elif self.current_axis == 'Crossline':
-            # XZ plane at current Y position  
-            plane_center = ((bounds[0]+bounds[1])/2, self.current_slice_position, (bounds[4]+bounds[5])/2 * v_exag)
-            plane = pv.Plane(
-                center=plane_center,
-                direction=(0, 1, 0),  # Normal along Y
-                i_size=bounds[1] - bounds[0],  # X extent
-                j_size=abs(bounds[5] - bounds[4]) * v_exag,  # Z extent with VE
-                i_resolution=1,
-                j_resolution=1
-            )
-            self.print_terminal(f"DEBUG: Crossline picking plane center: {plane_center}")
-        elif self.current_axis == 'Z-slice':
-            # XY plane at current Z position (scaled)
-            plane_center = ((bounds[0]+bounds[1])/2, (bounds[2]+bounds[3])/2, self.current_slice_position * v_exag)
-            plane = pv.Plane(
-                center=plane_center,
-                direction=(0, 0, 1),  # Normal along Z
-                i_size=bounds[1] - bounds[0],  # X extent
-                j_size=bounds[3] - bounds[2],  # Y extent
-                i_resolution=1,
-                j_resolution=1
-            )
-            self.print_terminal(f"DEBUG: Z-slice picking plane center: {plane_center}")
+            if plane_info is not None:
+                plane_center, plane_normal, row_vec, col_vec, dims = plane_info
+                disp_center, disp_normal, i_size, j_size = self._get_display_plane_from_affine(
+                    plane_center, plane_normal, row_vec, col_vec, dims, v_exag
+                )
+                plane = pv.Plane(
+                    center=disp_center,
+                    direction=disp_normal,
+                    i_size=i_size,
+                    j_size=j_size,
+                    i_resolution=1,
+                    j_resolution=1
+                )
+                self.print_terminal(
+                    f"DEBUG: Affine picking plane center: {disp_center}, normal: {disp_normal}"
+                )
+
+        if plane is None:
+            # Fallback to axis-aligned planes
+            if self.current_axis == 'Inline':
+                # YZ plane at current X position
+                plane_center = (self.current_slice_position, (bounds[2]+bounds[3])/2, (bounds[4]+bounds[5])/2 * v_exag)
+                plane = pv.Plane(
+                    center=plane_center,
+                    direction=(1, 0, 0),  # Normal along X
+                    i_size=bounds[3] - bounds[2],  # Y extent
+                    j_size=abs(bounds[5] - bounds[4]) * v_exag,  # Z extent with VE
+                    i_resolution=1,
+                    j_resolution=1
+                )
+                self.print_terminal(f"DEBUG: Inline picking plane center: {plane_center}")
+            elif self.current_axis == 'Crossline':
+                # XZ plane at current Y position
+                plane_center = ((bounds[0]+bounds[1])/2, self.current_slice_position, (bounds[4]+bounds[5])/2 * v_exag)
+                plane = pv.Plane(
+                    center=plane_center,
+                    direction=(0, 1, 0),  # Normal along Y
+                    i_size=bounds[1] - bounds[0],  # X extent
+                    j_size=abs(bounds[5] - bounds[4]) * v_exag,  # Z extent with VE
+                    i_resolution=1,
+                    j_resolution=1
+                )
+                self.print_terminal(f"DEBUG: Crossline picking plane center: {plane_center}")
+            elif self.current_axis == 'Z-slice':
+                # XY plane at current Z position (scaled)
+                plane_center = ((bounds[0]+bounds[1])/2, (bounds[2]+bounds[3])/2, self.current_slice_position * v_exag)
+                plane = pv.Plane(
+                    center=plane_center,
+                    direction=(0, 0, 1),  # Normal along Z
+                    i_size=bounds[1] - bounds[0],  # X extent
+                    j_size=bounds[3] - bounds[2],  # Y extent
+                    i_resolution=1,
+                    j_resolution=1
+                )
+                self.print_terminal(f"DEBUG: Z-slice picking plane center: {plane_center}")
         
         # Add the plane with very low opacity so it's invisible but pickable
         self.plotter.add_mesh(
@@ -1083,20 +1128,28 @@ class ViewInterpretation(ViewMap):
             snapped[:, 2] = snapped[:, 2] / v_exag
             self.print_terminal(f"Unscaled Z by factor {v_exag}")
         
-        # Now forcefully snap to the EXACT slice position we got from the extracted subset
-        # This ensures lines are exactly on the slice plane
-        if self.current_axis == 'Inline':
-            # For inline view (YZ plane), X must be constant
-            snapped[:, 0] = self.current_slice_position
-            self.print_terminal(f"Snapped X to {self.current_slice_position}")
-        elif self.current_axis == 'Crossline':
-            # For crossline view (XZ plane), Y must be constant
-            snapped[:, 1] = self.current_slice_position
-            self.print_terminal(f"Snapped Y to {self.current_slice_position}")
-        elif self.current_axis == 'Z-slice':
-            # For Z-slice view (XY plane), Z must be constant
-            snapped[:, 2] = self.current_slice_position
-            self.print_terminal(f"Snapped Z to {self.current_slice_position}")
+        # Snap to the true slice plane if available (rotated/skewed grids)
+        plane_center = getattr(self, "current_slice_plane_center", None)
+        plane_normal = getattr(self, "current_slice_plane_normal", None)
+        if plane_center is not None and plane_normal is not None:
+            try:
+                snapped = self._project_points_to_plane(snapped, plane_center, plane_normal)
+            except Exception:
+                pass
+        else:
+            # Fallback to axis-aligned snapping
+            if self.current_axis == 'Inline':
+                # For inline view (YZ plane), X must be constant
+                snapped[:, 0] = self.current_slice_position
+                self.print_terminal(f"Snapped X to {self.current_slice_position}")
+            elif self.current_axis == 'Crossline':
+                # For crossline view (XZ plane), Y must be constant
+                snapped[:, 1] = self.current_slice_position
+                self.print_terminal(f"Snapped Y to {self.current_slice_position}")
+            elif self.current_axis == 'Z-slice':
+                # For Z-slice view (XY plane), Z must be constant
+                snapped[:, 2] = self.current_slice_position
+                self.print_terminal(f"Snapped Z to {self.current_slice_position}")
         
         self.print_terminal(f"Final snapped points range: X=[{snapped[:, 0].min():.2f}, {snapped[:, 0].max():.2f}], Y=[{snapped[:, 1].min():.2f}, {snapped[:, 1].max():.2f}], Z=[{snapped[:, 2].min():.2f}, {snapped[:, 2].max():.2f}]")
         
@@ -2138,13 +2191,32 @@ class ViewInterpretation(ViewMap):
 
             point = list(picked_point)
 
-            # Snap picked point to exact slice plane
-            if self.current_axis == 'Inline':
-                point[0] = self.current_slice_position
-            elif self.current_axis == 'Crossline':
-                point[1] = self.current_slice_position
-            elif self.current_axis == 'Z-slice':
-                point[2] = self.current_slice_position
+            # Snap picked point to the true slice plane (supports rotated/skewed grids)
+            try:
+                plane_center = getattr(self, "current_slice_plane_center", None)
+                plane_normal = getattr(self, "current_slice_plane_normal", None)
+                if plane_center is not None and plane_normal is not None:
+                    z_real = float(point[2]) / v_exag if v_exag != 0 else float(point[2])
+                    p_real = np.array([float(point[0]), float(point[1]), z_real], dtype=float)
+                    p_proj = self._project_points_to_plane(p_real[None, :], plane_center, plane_normal)[0]
+                    point[0] = float(p_proj[0])
+                    point[1] = float(p_proj[1])
+                    point[2] = float(p_proj[2] * v_exag)
+                else:
+                    # Fallback to axis-aligned snapping
+                    if self.current_axis == 'Inline':
+                        point[0] = self.current_slice_position
+                    elif self.current_axis == 'Crossline':
+                        point[1] = self.current_slice_position
+                    elif self.current_axis == 'Z-slice':
+                        point[2] = self.current_slice_position
+            except Exception:
+                if self.current_axis == 'Inline':
+                    point[0] = self.current_slice_position
+                elif self.current_axis == 'Crossline':
+                    point[1] = self.current_slice_position
+                elif self.current_axis == 'Z-slice':
+                    point[2] = self.current_slice_position
 
             self.print_terminal(f"DEBUG: Snapped to slice position: {point}")
 
@@ -2260,6 +2332,10 @@ class ViewInterpretation(ViewMap):
             (bounds[3] - bounds[2]) / max(dims[1] - 1, 1),
             (bounds[5] - bounds[4]) / max(dims[2] - 1, 1)
         ]
+        affine = self._get_seismic_axis_vectors()
+        #affine = self._get_seismic_axis_vectors()
+        #affine = self._get_seismic_axis_vectors()
+        #affine = self._get_seismic_axis_vectors()
         
         # Extract the 2D slice based on current axis
         axis_info = {
@@ -2267,7 +2343,8 @@ class ViewInterpretation(ViewMap):
             'slice_index': self.current_slice_index,
             'bounds': bounds,
             'dims': dims,
-            'spacing': spacing
+            'spacing': spacing,
+            'affine': self._get_seismic_axis_vectors()
         }
         
         if self.current_axis == 'Inline':
@@ -2309,11 +2386,23 @@ class ViewInterpretation(ViewMap):
             v_exag: vertical exaggeration factor applied to display
         """
         bounds = axis_info['bounds']
+        affine = axis_info.get('affine')
         
         # The picked point Z is in display coords (scaled by VE)
         # Convert Z back to real coordinates for slice indexing
         real_z = world_point[2] / v_exag if v_exag != 0 else world_point[2]
         
+        if affine is not None:
+            real_pt = (float(world_point[0]), float(world_point[1]), float(real_z))
+            rc = self._world_to_slice_rc(
+                real_pt,
+                slice_idx=int(axis_info.get('slice_index', self.current_slice_index)),
+                affine=affine,
+                axis=self.current_axis,
+            )
+            if rc is not None:
+                return rc
+
         if self.current_axis == 'Inline':
             # YZ plane - world (x, y, z) -> slice (row=y, col=z)
             row = int((world_point[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
@@ -2332,7 +2421,19 @@ class ViewInterpretation(ViewMap):
     def slice_coords_to_world(self, slice_point, axis_info, spacing, origin):
         """Convert slice 2D array indices to world coordinates."""
         bounds = axis_info['bounds']
+        affine = axis_info.get('affine')
         row, col = slice_point
+
+        if affine is not None:
+            wp = self._slice_rc_to_world(
+                slice_idx=int(axis_info.get('slice_index', self.current_slice_index)),
+                row=int(row),
+                col=int(col),
+                affine=affine,
+                axis=self.current_axis,
+            )
+            if wp is not None:
+                return wp
         
         if self.current_axis == 'Inline':
             # YZ plane - slice (row=y_idx, col=z_idx) -> world (x, y, z)
@@ -2351,6 +2452,165 @@ class ViewInterpretation(ViewMap):
             z = self.current_slice_position
         
         return (x, y, z)
+
+    def _get_seismic_axis_vectors(self):
+        """Return affine axis vectors derived from the current seismic StructuredGrid."""
+        try:
+            if getattr(self, "_cached_affine_uid", None) == self.current_seismic_uid:
+                return getattr(self, "_cached_affine", None)
+
+            seismic_vtk = self.parent.image_coll.get_uid_vtk_obj(self.current_seismic_uid)
+            if seismic_vtk is None:
+                return None
+            dims = seismic_vtk.GetDimensions()
+            nx, ny, nz = int(dims[0]), int(dims[1]), int(dims[2])
+            origin = np.array(seismic_vtk.GetPoint(0), dtype=float)
+            a0 = (
+                np.array(seismic_vtk.GetPoint(1), dtype=float) - origin
+                if nx > 1
+                else np.array([1.0, 0.0, 0.0], dtype=float)
+            )
+            a1 = (
+                np.array(seismic_vtk.GetPoint(nx), dtype=float) - origin
+                if ny > 1
+                else np.array([0.0, 1.0, 0.0], dtype=float)
+            )
+            a2 = (
+                np.array(seismic_vtk.GetPoint(nx * ny), dtype=float) - origin
+                if nz > 1
+                else np.array([0.0, 0.0, 1.0], dtype=float)
+            )
+            affine = (origin, a0, a1, a2, (nx, ny, nz))
+            self._cached_affine = affine
+            self._cached_affine_uid = self.current_seismic_uid
+            return affine
+        except Exception:
+            return None
+
+    def _get_slice_plane_from_affine(self, slice_idx, affine=None, axis=None):
+        """Return slice plane center/normal and in-plane vectors for rotated/skewed grids."""
+        axis = axis or self.current_axis
+        if affine is None:
+            affine = self._get_seismic_axis_vectors()
+        if affine is None:
+            return None
+
+        origin, a0, a1, a2, dims = affine
+        nx, ny, nz = dims
+        i = int(slice_idx)
+
+        if axis == "Inline":
+            base = origin + i * a0
+            row_vec = a1
+            col_vec = a2
+            center = base + (ny - 1) * 0.5 * row_vec + (nz - 1) * 0.5 * col_vec
+        elif axis == "Crossline":
+            base = origin + i * a1
+            row_vec = a0
+            col_vec = a2
+            center = base + (nx - 1) * 0.5 * row_vec + (nz - 1) * 0.5 * col_vec
+        else:  # Z-slice
+            base = origin + i * a2
+            row_vec = a0
+            col_vec = a1
+            center = base + (nx - 1) * 0.5 * row_vec + (ny - 1) * 0.5 * col_vec
+
+        normal = np.cross(row_vec, col_vec)
+        n_norm = float(np.linalg.norm(normal))
+        if n_norm > 0:
+            normal = normal / n_norm
+        return (center, normal, row_vec, col_vec, dims)
+
+    def _get_display_plane_from_affine(self, center, normal, row_vec, col_vec, dims, v_exag):
+        """Convert a real-space slice plane to display-space parameters (VE applied)."""
+        center_disp = (float(center[0]), float(center[1]), float(center[2]) * v_exag)
+        normal_disp = np.array([normal[0], normal[1], normal[2] / v_exag], dtype=float)
+        n_norm = float(np.linalg.norm(normal_disp))
+        if n_norm > 0:
+            normal_disp = normal_disp / n_norm
+
+        row_disp = np.array([row_vec[0], row_vec[1], row_vec[2] * v_exag], dtype=float)
+        col_disp = np.array([col_vec[0], col_vec[1], col_vec[2] * v_exag], dtype=float)
+
+        row_len = float(np.linalg.norm(row_disp))
+        col_len = float(np.linalg.norm(col_disp))
+        nx, ny, nz = dims
+
+        if self.current_axis == "Inline":
+            i_size = max(row_len * max(ny - 1, 1), 1.0)
+            j_size = max(col_len * max(nz - 1, 1), 1.0)
+        elif self.current_axis == "Crossline":
+            i_size = max(row_len * max(nx - 1, 1), 1.0)
+            j_size = max(col_len * max(nz - 1, 1), 1.0)
+        else:  # Z-slice
+            i_size = max(row_len * max(nx - 1, 1), 1.0)
+            j_size = max(col_len * max(ny - 1, 1), 1.0)
+
+        return center_disp, normal_disp.tolist(), i_size, j_size
+
+    def _project_points_to_plane(self, points, center, normal):
+        """Project points onto a plane defined by center and normal (real coords)."""
+        pts = np.asarray(points, dtype=np.float64)
+        c = np.asarray(center, dtype=np.float64)
+        n = np.asarray(normal, dtype=np.float64)
+        n_norm = float(np.linalg.norm(n))
+        if n_norm == 0:
+            return pts
+        n = n / n_norm
+        d = np.dot(pts - c, n)
+        return pts - d[:, None] * n[None, :]
+
+    def _slice_rc_to_world(self, slice_idx: int, row: int, col: int, affine=None, axis=None):
+        """Convert (slice_idx, row, col) to world coordinates using affine axis vectors."""
+        axis = axis or self.current_axis
+        if affine is None:
+            affine = self._get_seismic_axis_vectors()
+        if affine is None:
+            return None
+        origin, a0, a1, a2, _dims = affine
+        i = int(slice_idx)
+        r = float(row)
+        c = float(col)
+        if axis == "Inline":
+            p = origin + i * a0 + r * a1 + c * a2
+        elif axis == "Crossline":
+            p = origin + r * a0 + i * a1 + c * a2
+        else:  # "Z-slice"
+            p = origin + r * a0 + c * a1 + i * a2
+        return (float(p[0]), float(p[1]), float(p[2]))
+
+    def _world_to_slice_rc(self, world_point, slice_idx: int, affine=None, axis=None):
+        """Convert world coordinates to (row, col) on a given slice using affine axis vectors."""
+        axis = axis or self.current_axis
+        if affine is None:
+            affine = self._get_seismic_axis_vectors()
+        if affine is None:
+            return None
+        origin, a0, a1, a2, dims = affine
+        p = np.array(world_point, dtype=float)
+        i = int(slice_idx)
+
+        if axis == "Inline":
+            base = origin + i * a0
+            A = np.column_stack([a1, a2])
+            size_row, size_col = dims[1], dims[2]
+        elif axis == "Crossline":
+            base = origin + i * a1
+            A = np.column_stack([a0, a2])
+            size_row, size_col = dims[0], dims[2]
+        else:  # "Z-slice"
+            base = origin + i * a2
+            A = np.column_stack([a0, a1])
+            size_row, size_col = dims[0], dims[1]
+
+        b = p - base
+        try:
+            rc, *_ = np.linalg.lstsq(A, b, rcond=None)
+            row = int(np.clip(np.round(rc[0]), 0, max(size_row - 1, 0)))
+            col = int(np.clip(np.round(rc[1]), 0, max(size_col - 1, 0)))
+            return (row, col)
+        except Exception:
+            return None
     
     def draw_semi_auto_line(self):
         """
@@ -2494,15 +2754,25 @@ class ViewInterpretation(ViewMap):
             # Create numpy array of points (in REAL coordinates)
             points_array = np.array(all_world_points, dtype=np.float64)
             
-            # Apply slice snapping (small offset to avoid z-fighting)
-            # But do NOT unscale Z again - these are already in real coords
-            offset = 1.0
-            if self.current_axis == 'Inline':
-                points_array[:, 0] = self.current_slice_position - offset
-            elif self.current_axis == 'Crossline':
-                points_array[:, 1] = self.current_slice_position - offset
+            # Snap to slice:
+            # - Inline/Crossline: project to the fitted slice plane (supports rotated surveys)
+            # - Z-slice: enforce constant Z
+            if self.current_axis in ("Inline", "Crossline"):
+                plane_center = getattr(self, "current_slice_plane_center", None)
+                plane_normal = getattr(self, "current_slice_plane_normal", None)
+                if plane_center is not None and plane_normal is not None:
+                    try:
+                        points_array = self._project_points_to_plane(points_array, plane_center, plane_normal)
+                    except Exception:
+                        pass
+                else:
+                    offset = 1.0
+                    if self.current_axis == 'Inline':
+                        points_array[:, 0] = self.current_slice_position - offset
+                    else:
+                        points_array[:, 1] = self.current_slice_position - offset
             elif self.current_axis == 'Z-slice':
-                points_array[:, 2] = self.current_slice_position + offset
+                points_array[:, 2] = self.current_slice_position
             
             # Create proper VTK PolyLine
             n_points = len(points_array)
@@ -3064,20 +3334,25 @@ class ViewInterpretation(ViewMap):
         if len(slices_to_track) == 0:
             self.print_terminal("No slices to propagate to!")
             return
-        
+        affine = self._get_seismic_axis_vectors()
         # Convert seed points to slice coordinates (row, col)
         seed_indices = []
         for pt in seed_points:
-            if self.current_axis == 'Inline':
-                row = int((pt[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
-                col = int((pt[2] - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
-            elif self.current_axis == 'Crossline':
-                row = int((pt[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
-                col = int((pt[2] - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
-            else:  # Z-slice
-                row = int((pt[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
-                col = int((pt[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
-            seed_indices.append((row, col))
+            rc = None
+            if affine is not None:
+                rc = self._world_to_slice_rc(pt, slice_idx=current_idx, affine=affine, axis=self.current_axis)
+            if rc is None:
+                if self.current_axis == 'Inline':
+                    row = int((pt[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+                    col = int((pt[2] - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
+                elif self.current_axis == 'Crossline':
+                    row = int((pt[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+                    col = int((pt[2] - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
+                else:  # Z-slice
+                    row = int((pt[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+                    col = int((pt[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+                rc = (row, col)
+            seed_indices.append(rc)
         
         # Subsample if too many points (for speed)
         if len(seed_indices) > 200:
@@ -3138,16 +3413,26 @@ class ViewInterpretation(ViewMap):
                             trace = []
                             for j in range(n_pts):
                                 x, y, z = pts.GetPoint(j)
-                                if self.current_axis == 'Inline':
-                                    row = int((y - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
-                                    col = int((z - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
-                                elif self.current_axis == 'Crossline':
-                                    row = int((x - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
-                                    col = int((z - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
-                                else:  # Z-slice
-                                    row = int((x - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
-                                    col = int((y - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
-                                trace.append((row, col))
+                                rc = None
+                                if affine is not None:
+                                    rc = self._world_to_slice_rc(
+                                        (x, y, z),
+                                        slice_idx=sidx,
+                                        affine=affine,
+                                        axis=self.current_axis,
+                                    )
+                                if rc is None:
+                                    if self.current_axis == 'Inline':
+                                        row = int((y - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+                                        col = int((z - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
+                                    elif self.current_axis == 'Crossline':
+                                        row = int((x - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+                                        col = int((z - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
+                                    else:  # Z-slice
+                                        row = int((x - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+                                        col = int((y - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+                                    rc = (row, col)
+                                trace.append(rc)
 
                             if len(trace) >= 2:
                                 fault_traces_by_slice.setdefault(sidx, []).append(trace)
@@ -3205,19 +3490,30 @@ class ViewInterpretation(ViewMap):
                 # Convert slice coordinates to world coordinates
                 world_points = []
                 for row, col in positions:
-                    if self.current_axis == 'Inline':
-                        x = bounds[0] + slice_idx * (bounds[1] - bounds[0]) / max(dims[0] - 1, 1)
-                        y = bounds[2] + row * spacing[1]
-                        z = bounds[4] + col * spacing[2]
-                    elif self.current_axis == 'Crossline':
-                        x = bounds[0] + row * spacing[0]
-                        y = bounds[2] + slice_idx * (bounds[3] - bounds[2]) / max(dims[1] - 1, 1)
-                        z = bounds[4] + col * spacing[2]
-                    else:  # Z-slice
-                        x = bounds[0] + row * spacing[0]
-                        y = bounds[2] + col * spacing[1]
-                        z = bounds[4] + slice_idx * (bounds[5] - bounds[4]) / max(dims[2] - 1, 1)
-                    world_points.append((x, y, z))
+                    wp = None
+                    if affine is not None:
+                        wp = self._slice_rc_to_world(
+                            slice_idx=slice_idx,
+                            row=row,
+                            col=col,
+                            affine=affine,
+                            axis=self.current_axis,
+                        )
+                    if wp is None:
+                        if self.current_axis == 'Inline':
+                            x = bounds[0] + slice_idx * (bounds[1] - bounds[0]) / max(dims[0] - 1, 1)
+                            y = bounds[2] + row * spacing[1]
+                            z = bounds[4] + col * spacing[2]
+                        elif self.current_axis == 'Crossline':
+                            x = bounds[0] + row * spacing[0]
+                            y = bounds[2] + slice_idx * (bounds[3] - bounds[2]) / max(dims[1] - 1, 1)
+                            z = bounds[4] + col * spacing[2]
+                        else:  # Z-slice
+                            x = bounds[0] + row * spacing[0]
+                            y = bounds[2] + col * spacing[1]
+                            z = bounds[4] + slice_idx * (bounds[5] - bounds[4]) / max(dims[2] - 1, 1)
+                        wp = (x, y, z)
+                    world_points.append(wp)
                 
                 # Sort points along horizon
                 world_points.sort(key=lambda p: p[0] if self.current_axis != 'Inline' else p[1])
@@ -3682,28 +3978,34 @@ class ViewInterpretation(ViewMap):
         
         self.print_terminal(f"Seed fault line has {len(seed_points_world)} points")
         
+        current_idx = seed_slice_index if seed_slice_index is not None else self.current_slice_index
+
+        affine = self._get_seismic_axis_vectors()
         # Convert seed points to slice coordinates (row, col)
         # Same logic as horizon propagation
         seed_indices = []
         for pt in seed_points_world:
-            if self.current_axis == 'Inline':
-                row = int((pt[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
-                col = int((pt[2] - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
-            elif self.current_axis == 'Crossline':
-                row = int((pt[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
-                col = int((pt[2] - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
-            else:  # Z-slice
-                row = int((pt[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
-                col = int((pt[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
-            seed_indices.append((row, col))
+            rc = None
+            if affine is not None:
+                rc = self._world_to_slice_rc(pt, slice_idx=current_idx, affine=affine, axis=self.current_axis)
+            if rc is None:
+                if self.current_axis == 'Inline':
+                    row = int((pt[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+                    col = int((pt[2] - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
+                elif self.current_axis == 'Crossline':
+                    row = int((pt[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+                    col = int((pt[2] - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
+                else:  # Z-slice
+                    row = int((pt[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+                    col = int((pt[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+                rc = (row, col)
+            seed_indices.append(rc)
         
         if not seed_indices:
             self.print_terminal("Could not convert seed points to slice coordinates")
             return
         
         self.print_terminal(f"Converted to {len(seed_indices)} slice coordinates")
-        
-        current_idx = seed_slice_index if seed_slice_index is not None else self.current_slice_index
         
         # Build slice list
         if self.current_axis == 'Inline':
@@ -3769,19 +4071,30 @@ class ViewInterpretation(ViewMap):
                     # Convert slice coordinates to world coordinates (same as horizon)
                     world_points = []
                     for row, col in positions:
-                        if self.current_axis == 'Inline':
-                            x = bounds[0] + slice_idx * (bounds[1] - bounds[0]) / max(dims[0] - 1, 1)
-                            y = bounds[2] + row * spacing[1]
-                            z = bounds[4] + col * spacing[2]
-                        elif self.current_axis == 'Crossline':
-                            x = bounds[0] + row * spacing[0]
-                            y = bounds[2] + slice_idx * (bounds[3] - bounds[2]) / max(dims[1] - 1, 1)
-                            z = bounds[4] + col * spacing[2]
-                        else:  # Z-slice
-                            x = bounds[0] + row * spacing[0]
-                            y = bounds[2] + col * spacing[1]
-                            z = bounds[4] + slice_idx * (bounds[5] - bounds[4]) / max(dims[2] - 1, 1)
-                        world_points.append((x, y, z))
+                        wp = None
+                        if affine is not None:
+                            wp = self._slice_rc_to_world(
+                                slice_idx=slice_idx,
+                                row=row,
+                                col=col,
+                                affine=affine,
+                                axis=self.current_axis,
+                            )
+                        if wp is None:
+                            if self.current_axis == 'Inline':
+                                x = bounds[0] + slice_idx * (bounds[1] - bounds[0]) / max(dims[0] - 1, 1)
+                                y = bounds[2] + row * spacing[1]
+                                z = bounds[4] + col * spacing[2]
+                            elif self.current_axis == 'Crossline':
+                                x = bounds[0] + row * spacing[0]
+                                y = bounds[2] + slice_idx * (bounds[3] - bounds[2]) / max(dims[1] - 1, 1)
+                                z = bounds[4] + col * spacing[2]
+                            else:  # Z-slice
+                                x = bounds[0] + row * spacing[0]
+                                y = bounds[2] + col * spacing[1]
+                                z = bounds[4] + slice_idx * (bounds[5] - bounds[4]) / max(dims[2] - 1, 1)
+                            wp = (x, y, z)
+                        world_points.append(wp)
                     
                     # For faults, sort by Z (vertical) instead of horizontal
                     world_points.sort(key=lambda p: p[2])
