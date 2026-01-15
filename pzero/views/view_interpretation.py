@@ -3097,6 +3097,66 @@ class ViewInterpretation(ViewMap):
         # Run attribute-guided tracking
         self._is_propagating = True
         try:
+            # Collect fault traces (if any) to make horizon propagation fault-aware.
+            # This helps preserve horizon throw and prevents the horizon from snapping onto faults.
+            fault_traces_by_slice = None
+            try:
+                wanted_slices = set([current_idx] + list(slices_to_track))
+                fault_traces_by_slice = {}
+
+                if hasattr(self, 'multipart_faults') and self.multipart_faults:
+                    for fault_uid, info in list(self.multipart_faults.items()):
+                        if (info.get('seismic_uid') != self.current_seismic_uid or
+                            info.get('axis') != self.current_axis):
+                            continue
+
+                        fault_vtk = self.parent.geol_coll.get_uid_vtk_obj(fault_uid)
+                        if fault_vtk is None or fault_vtk.GetNumberOfCells() == 0:
+                            continue
+
+                        cell_data = fault_vtk.GetCellData()
+                        if cell_data is None or not cell_data.HasArray("slice_index"):
+                            continue
+
+                        slice_arr = cell_data.GetArray("slice_index")
+                        n_cells = fault_vtk.GetNumberOfCells()
+
+                        for cell_idx in range(n_cells):
+                            sidx = int(slice_arr.GetValue(cell_idx))
+                            if sidx not in wanted_slices:
+                                continue
+
+                            cell = fault_vtk.GetCell(cell_idx)
+                            pts = cell.GetPoints()
+                            if pts is None:
+                                continue
+
+                            n_pts = pts.GetNumberOfPoints()
+                            if n_pts < 2:
+                                continue
+
+                            trace = []
+                            for j in range(n_pts):
+                                x, y, z = pts.GetPoint(j)
+                                if self.current_axis == 'Inline':
+                                    row = int((y - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+                                    col = int((z - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
+                                elif self.current_axis == 'Crossline':
+                                    row = int((x - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+                                    col = int((z - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
+                                else:  # Z-slice
+                                    row = int((x - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+                                    col = int((y - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+                                trace.append((row, col))
+
+                            if len(trace) >= 2:
+                                fault_traces_by_slice.setdefault(sidx, []).append(trace)
+
+                if not fault_traces_by_slice:
+                    fault_traces_by_slice = None
+            except Exception:
+                fault_traces_by_slice = None
+
             success, horizons, result_msg = propagate_horizon(
                 data_3d=data_3d,
                 seed_positions=seed_indices,
@@ -3113,7 +3173,8 @@ class ViewInterpretation(ViewMap):
                 phase_weight=phase_weight,
                 similarity_weight=similarity_weight,
                 dip_weight=dip_weight,
-                progress_callback=progress_callback
+                progress_callback=progress_callback,
+                fault_traces_by_slice=fault_traces_by_slice
             )
             
             if not success:

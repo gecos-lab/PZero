@@ -88,6 +88,22 @@ class Autotracker:
             'phase_weight': 0.2,        # Weight for phase
             'similarity_weight': 0.15,  # Weight for similarity
             'dip_weight': 0.15,         # Weight for dip direction
+            # Fault-aware horizon tracking
+            # Penalize picking too close to fault traces (prevents horizons snapping onto faults)
+            'fault_barrier_width': 2,   # Pixels (row) around fault to penalize
+            'fault_barrier_weight': 2.0,  # Penalty scale (higher = stronger avoidance)
+            # Do not smooth across faults: break horizon smoothing near fault traces
+            'fault_break_width': 1,     # Pixels (row) considered "on fault"
+            # Keep points on the same side of the fault (preserve throw)
+            'fault_side_weight': 8.0,   # Penalty for switching fault side
+            # Near-fault behavior: allow larger vertical search to follow drag/rollover
+            'fault_influence_width': 6,   # Pixels (row) from fault considered "near fault"
+            'fault_search_multiplier': 2, # Multiply search_window near faults
+            # If a horizon point is close to a fault, attract it to the fault plane (stick to fault edge)
+            # This helps handle drag/rollover and large throw near the fault.
+            'fault_snap_row_width': 4,    # Only apply snap if within this row-distance from fault
+            'fault_snap_col_range': 50,   # Search range (col) to find fault intersection depth for this row
+            'fault_snap_weight': 3.0,     # Penalty scale pulling horizon onto fault plane
         }
 
         # Store previous dip for consistency tracking
@@ -114,7 +130,8 @@ class Autotracker:
         phase_weight: float = 0.2,
         similarity_weight: float = 0.15,
         dip_weight: float = 0.15,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
+        fault_traces_by_slice: Optional[Dict[int, List[List[Tuple[int, int]]]]] = None
     ) -> Tuple[bool, Dict[int, List[Tuple[int, int]]], str]:
         """
         Track horizon through slices using attribute-guided dynamic programming.
@@ -174,6 +191,7 @@ class Autotracker:
         self._prev_dip = None
 
         try:
+            prev_slice_idx_for_fault = seed_slice_idx
             for i, slice_idx in enumerate(slices_to_track):
                 # Extract slice data based on axis
                 if axis == 'Inline':
@@ -183,16 +201,27 @@ class Autotracker:
                 else:  # Z-slice
                     slice_data = data_3d[:, :, slice_idx]
 
+                faults_on_slice = None
+                prev_faults_on_slice = None
+                if fault_traces_by_slice is not None:
+                    faults_on_slice = fault_traces_by_slice.get(slice_idx)
+                    prev_faults_on_slice = fault_traces_by_slice.get(prev_slice_idx_for_fault)
+
                 # Track horizon on this slice
                 new_positions = self._track_on_slice(
-                    slice_data, current_positions, attributes
+                    slice_data,
+                    current_positions,
+                    attributes,
+                    fault_traces=faults_on_slice,
+                    prev_fault_traces=prev_faults_on_slice,
                 )
 
                 # Apply smoothing
-                new_positions = self._smooth_positions(new_positions)
+                new_positions = self._smooth_positions(new_positions, faults_on_slice)
 
                 horizons[slice_idx] = new_positions
                 current_positions = new_positions
+                prev_slice_idx_for_fault = slice_idx
 
                 # Progress update every 10 slices
                 if (i + 1) % 10 == 0 or i == total_slices - 1:
@@ -210,7 +239,9 @@ class Autotracker:
         self,
         slice_data: np.ndarray,
         seed_positions: List[Tuple[int, int]],
-        attributes: TrackingAttribute
+        attributes: TrackingAttribute,
+        fault_traces: Optional[List[List[Tuple[int, int]]]] = None,
+        prev_fault_traces: Optional[List[List[Tuple[int, int]]]] = None,
     ) -> List[Tuple[int, int]]:
         """
         Track horizon points on a single slice using attribute-guided search.
@@ -247,6 +278,11 @@ class Autotracker:
             slice_data, attr_types
         )
 
+        fault_models = self._prepare_fault_models(fault_traces, w=w) if fault_traces else []
+        prev_fault_models = self._prepare_fault_models(prev_fault_traces, w=w) if prev_fault_traces else []
+        if not prev_fault_models:
+            prev_fault_models = fault_models
+
         new_positions = []
 
         for row, expected_col in seed_positions:
@@ -255,17 +291,81 @@ class Autotracker:
             expected_col = int(np.clip(expected_col, 0, w - 1))
 
             # Define search range (vertical search around expected column)
-            col_min = max(0, expected_col - search_window)
-            col_max = min(w, expected_col + search_window + 1)
+            # Near faults we widen the vertical search to follow drag/rollover and throw.
+            effective_search = int(search_window)
+            if prev_fault_models:
+                d_prev = self._fault_distance_abs(row=row, col=expected_col, fault_models=prev_fault_models)
+                influence_w = int(self.tracking_params.get('fault_influence_width', 6))
+                if np.isfinite(d_prev) and d_prev <= influence_w:
+                    mult = int(self.tracking_params.get('fault_search_multiplier', 2))
+                    effective_search = max(effective_search, effective_search * max(1, mult))
+
+            col_min = max(0, expected_col - effective_search)
+            col_max = min(w, expected_col + effective_search + 1)
 
             # Compute cost for each candidate position
             best_col = expected_col
             best_cost = float('inf')
 
+            preferred_side = self._fault_side_sign(row=row, col=expected_col, fault_models=prev_fault_models)
+
+            # If we're near a fault, compute the depth (col) where the fault plane intersects this row.
+            # We then attract the picked horizon depth toward that fault-intersection depth, letting the
+            # horizon "stick" to the fault edge through the throw.
+            fault_snap_target_col = None
+            snap_active = False
+            if fault_models:
+                snap_row_w = int(self.tracking_params.get('fault_snap_row_width', 4))
+                col_range = int(self.tracking_params.get('fault_snap_col_range', 50))
+
+                # Robust "near fault" test: first find where the fault intersects this row
+                # on the PREVIOUS slice, then test distance there (not at expected_col).
+                prev_intersect_col = None
+                if prev_fault_models:
+                    prev_intersect_col = self._fault_intersection_col_for_row(
+                        row=row,
+                        fault_models=prev_fault_models,
+                        expected_col=expected_col,
+                        max_col_delta=col_range,
+                    )
+
+                if prev_intersect_col is not None:
+                    d_prev = self._fault_distance_abs(row=row, col=prev_intersect_col, fault_models=prev_fault_models)
+                    if np.isfinite(d_prev) and d_prev <= snap_row_w:
+                        # Use previous intersection as anchor to follow moving fault
+                        fault_snap_target_col = self._fault_intersection_col_for_row(
+                            row=row,
+                            fault_models=fault_models,
+                            expected_col=prev_intersect_col,
+                            max_col_delta=col_range,
+                        )
+                        snap_active = fault_snap_target_col is not None
+
             for candidate_col in range(col_min, col_max):
                 cost = self._compute_tracking_cost(
                     computed_attrs, row, candidate_col, expected_col, attributes
                 )
+
+                # Fault terms
+                if fault_models:
+                    # If we are explicitly snapping/sticking to the fault, DO NOT apply the barrier.
+                    # The barrier is for preventing accidental snapping when far from faults.
+                    if not snap_active:
+                        cost += self._fault_barrier_cost(row=row, col=candidate_col, fault_models=fault_models)
+
+                    cost += self._fault_side_cost(
+                        row=row,
+                        col=candidate_col,
+                        fault_models=fault_models,
+                        preferred_side=preferred_side,
+                    )
+                    cost += self._fault_snap_cost(
+                        candidate_col=candidate_col,
+                        target_col=fault_snap_target_col,
+                    )
+                    # Keep the point hugging the moving fault plane when snap is active.
+                    if snap_active:
+                        cost += self._fault_proximity_cost(row=row, col=candidate_col, fault_models=fault_models)
 
                 if cost < best_cost:
                     best_cost = cost
@@ -385,30 +485,273 @@ class Autotracker:
 
         return cost
 
-    def _smooth_positions(self, positions: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
-        """Apply smoothing to horizon positions."""
+    def _smooth_positions(
+        self,
+        positions: List[Tuple[int, int]],
+        fault_traces: Optional[List[List[Tuple[int, int]]]] = None
+    ) -> List[Tuple[int, int]]:
+        """
+        Apply smoothing to horizon positions.
+
+        Fault-aware behavior:
+        - If faults are present, we DO NOT smooth across the fault throw.
+          Instead we split the horizon into segments near the fault and smooth each segment independently.
+        """
+        if len(positions) < 5:
+            return positions
+
+        if not fault_traces:
+            return self._smooth_positions_segment(positions)
+
+        # Build fault models for proximity tests
+        cols_all = [c for _, c in positions]
+        w = int(max(cols_all)) + 1 if cols_all else 0
+        fault_models = self._prepare_fault_models(fault_traces, w=w)
+        if not fault_models:
+            return self._smooth_positions_segment(positions)
+
+        break_width = int(self.tracking_params.get('fault_break_width', 1))
+
+        # Identify points that sit on/very near a fault
+        is_break = []
+        for r, c in positions:
+            is_break.append(self._fault_distance_abs(row=int(r), col=int(c), fault_models=fault_models) <= break_width)
+
+        if not any(is_break):
+            return self._smooth_positions_segment(positions)
+
+        out: List[Tuple[int, int]] = []
+        run: List[Tuple[int, int]] = []
+        for i, p in enumerate(positions):
+            if is_break[i]:
+                if run:
+                    out.extend(self._smooth_positions_segment(run))
+                    run = []
+                # Keep the breakpoint as-is to preserve the throw location
+                out.append(p)
+            else:
+                run.append(p)
+
+        if run:
+            out.extend(self._smooth_positions_segment(run))
+
+        return out
+
+    def _smooth_positions_segment(self, positions: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
+        """Smooth a continuous horizon segment (no fault throw inside)."""
         if len(positions) < 5:
             return positions
 
         rows = np.array([p[0] for p in positions])
         cols = np.array([p[1] for p in positions], dtype=np.float64)
 
-        # Median filter to remove outliers
         cols_smoothed = median_filter(cols, size=5)
 
-        # Gaussian smoothing
         sigma = self.tracking_params['smooth_sigma']
         if sigma > 0:
             cols_smoothed = gaussian_filter1d(cols_smoothed, sigma=sigma)
 
-        # Limit max jump between adjacent points
         max_jump = self.tracking_params['max_jump']
         for j in range(1, len(cols_smoothed)):
-            diff = cols_smoothed[j] - cols_smoothed[j-1]
+            diff = cols_smoothed[j] - cols_smoothed[j - 1]
             if abs(diff) > max_jump:
-                cols_smoothed[j] = cols_smoothed[j-1] + np.sign(diff) * max_jump
+                cols_smoothed[j] = cols_smoothed[j - 1] + np.sign(diff) * max_jump
 
         return [(int(rows[j]), int(round(cols_smoothed[j]))) for j in range(len(rows))]
+
+    @staticmethod
+    def _prepare_fault_models(
+        fault_traces: Optional[List[List[Tuple[int, int]]]],
+        w: int
+    ) -> List[Tuple[int, int, np.ndarray]]:
+        """
+        Prepare interpolated fault row=f(col) models for fast lookup.
+
+        Returns list of tuples: (col_min, col_max, rows_interp_by_col_offset)
+        """
+        if not fault_traces or w <= 0:
+            return []
+
+        models: List[Tuple[int, int, np.ndarray]] = []
+        for trace in fault_traces:
+            if not trace or len(trace) < 2:
+                continue
+            cols = np.array([c for r, c in trace if 0 <= c < w], dtype=np.int32)
+            rows = np.array([r for r, c in trace if 0 <= c < w], dtype=np.float64)
+            if cols.size < 2:
+                continue
+            order = np.argsort(cols)
+            cols = cols[order]
+            rows = rows[order]
+
+            unique_cols = np.unique(cols)
+            if unique_cols.size != cols.size:
+                med_rows = []
+                for cc in unique_cols.tolist():
+                    med_rows.append(float(np.median(rows[cols == cc])))
+                cols_u = unique_cols.astype(np.int32)
+                rows_u = np.array(med_rows, dtype=np.float64)
+            else:
+                cols_u = cols
+                rows_u = rows
+
+            col_min = int(cols_u.min())
+            col_max = int(cols_u.max())
+            if col_max <= col_min:
+                continue
+            grid = np.arange(col_min, col_max + 1, dtype=np.int32)
+            rows_interp = np.interp(grid.astype(np.float64), cols_u.astype(np.float64), rows_u)
+            models.append((col_min, col_max, rows_interp.astype(np.float64)))
+
+        return models
+
+    def _fault_distance_abs(self, row: int, col: int, fault_models: List[Tuple[int, int, np.ndarray]]) -> float:
+        """Return absolute distance (in row pixels) to the nearest fault at this col."""
+        best = np.inf
+        for col_min, col_max, rows_interp in fault_models:
+            if col < col_min or col > col_max:
+                continue
+            fault_row = float(rows_interp[col - col_min])
+            best = min(best, abs(float(row) - fault_row))
+        return float(best)
+
+    def _fault_barrier_cost(self, row: int, col: int, fault_models: List[Tuple[int, int, np.ndarray]]) -> float:
+        """Penalty for being too close to a fault (avoid snapping onto faults)."""
+        width = int(self.tracking_params.get('fault_barrier_width', 2))
+        weight = float(self.tracking_params.get('fault_barrier_weight', 2.0))
+
+        d = self._fault_distance_abs(row=row, col=col, fault_models=fault_models)
+        if not np.isfinite(d) or d > width:
+            return 0.0
+
+        # Strong penalty near the fault, tapering to 0 at width
+        return weight * (1.0 - (d / max(width, 1)))
+
+    def _fault_side_sign(self, row: int, col: int, fault_models: List[Tuple[int, int, np.ndarray]]) -> int:
+        """
+        Determine which side of the nearest fault the point is on.
+
+        Returns:
+            -1: row is "left" of fault (row < fault_row)
+            +1: row is "right" of fault (row > fault_row)
+             0: no fault defined at this col
+        """
+        best = np.inf
+        best_side = 0
+        for col_min, col_max, rows_interp in fault_models:
+            if col < col_min or col > col_max:
+                continue
+            fault_row = float(rows_interp[col - col_min])
+            d = abs(float(row) - fault_row)
+            if d < best:
+                best = d
+                if row < fault_row:
+                    best_side = -1
+                elif row > fault_row:
+                    best_side = 1
+                else:
+                    best_side = 0
+        return int(best_side)
+
+    def _fault_side_cost(
+        self,
+        row: int,
+        col: int,
+        fault_models: List[Tuple[int, int, np.ndarray]],
+        preferred_side: int,
+    ) -> float:
+        """
+        Penalize switching to the opposite side of the fault.
+
+        This is the key mechanism that preserves horizon throw across faults as slices change.
+        """
+        if preferred_side == 0:
+            return 0.0
+
+        # Allow ambiguity right on the fault
+        break_w = int(self.tracking_params.get('fault_break_width', 1))
+        d = self._fault_distance_abs(row=row, col=col, fault_models=fault_models)
+        if np.isfinite(d) and d <= break_w:
+            return 0.0
+
+        side = self._fault_side_sign(row=row, col=col, fault_models=fault_models)
+        if side == 0 or side == preferred_side:
+            return 0.0
+
+        return float(self.tracking_params.get('fault_side_weight', 8.0))
+
+    def _fault_intersection_col_for_row(
+        self,
+        row: int,
+        fault_models: List[Tuple[int, int, np.ndarray]],
+        expected_col: int,
+        max_col_delta: int,
+    ) -> Optional[int]:
+        """
+        Given a fault model row=f(col), find the col where the fault is closest to a fixed row.
+
+        This is effectively an inversion of the fault trace to get the fault intersection depth
+        for this row on the current slice.
+        """
+        best_col = None
+        best_dist = np.inf
+
+        for col_min, col_max, rows_interp in fault_models:
+            # Restrict search to a window around expected_col to avoid snapping to unrelated parts
+            lo = max(col_min, expected_col - max_col_delta)
+            hi = min(col_max, expected_col + max_col_delta)
+            if hi < lo:
+                continue
+
+            seg = rows_interp[(lo - col_min):(hi - col_min + 1)]
+            if seg.size == 0:
+                continue
+
+            diffs = np.abs(seg - float(row))
+            j = int(np.argmin(diffs))
+            d = float(diffs[j])
+            if d < best_dist:
+                best_dist = d
+                best_col = int(lo + j)
+
+        return best_col
+
+    def _fault_snap_cost(self, candidate_col: int, target_col: Optional[int]) -> float:
+        """
+        Add a penalty proportional to distance from the fault-intersection depth for this row.
+
+        Lower cost if candidate_col is close to target_col (i.e., horizon sticks to fault plane).
+        """
+        if target_col is None:
+            return 0.0
+
+        max_delta = float(max(int(self.tracking_params.get('fault_snap_col_range', 50)), 1))
+        w = float(self.tracking_params.get('fault_snap_weight', 3.0))
+        # Quadratic pull to avoid drifting away as the fault moves
+        x = abs(float(candidate_col) - float(target_col)) / max_delta
+        return w * (x ** 2)
+
+    def _fault_proximity_cost(
+        self,
+        row: int,
+        col: int,
+        fault_models: List[Tuple[int, int, np.ndarray]],
+    ) -> float:
+        """
+        When snapping is active, encourage the horizon to remain close to the fault plane.
+
+        This penalizes row-distance to the fault at the candidate depth (col). Since row is fixed,
+        this effectively favors candidate depths where the fault intersects this row.
+        """
+        snap_row_w = float(max(int(self.tracking_params.get('fault_snap_row_width', 4)), 1))
+        # Use the same weight as snap (scaled down) so it doesn't override seismic attributes.
+        w = float(self.tracking_params.get('fault_snap_weight', 3.0)) * 0.5
+
+        d = self._fault_distance_abs(row=row, col=col, fault_models=fault_models)
+        if not np.isfinite(d):
+            return 0.0
+        x = min(d / snap_row_w, 1.0)
+        return w * (x ** 2)
 
     def compute_tracking_quality(self, horizons: Dict[int, List[Tuple[int, int]]]) -> Dict[str, float]:
         """Compute quality metrics for tracking results."""
@@ -455,7 +798,8 @@ def propagate_horizon(
     phase_weight: float = 0.2,
     similarity_weight: float = 0.15,
     dip_weight: float = 0.15,
-    progress_callback: Optional[Callable] = None
+    progress_callback: Optional[Callable] = None,
+    fault_traces_by_slice: Optional[Dict[int, List[List[Tuple[int, int]]]]] = None
 ) -> Tuple[bool, Dict[int, List[Tuple[int, int]]], str]:
     """
     Main function to propagate horizon using attribute-guided tracking.
@@ -509,7 +853,8 @@ def propagate_horizon(
         phase_weight=phase_weight,
         similarity_weight=similarity_weight,
         dip_weight=dip_weight,
-        progress_callback=progress_callback
+        progress_callback=progress_callback,
+        fault_traces_by_slice=fault_traces_by_slice
     )
 
 
