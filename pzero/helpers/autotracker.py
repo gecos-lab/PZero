@@ -576,6 +576,10 @@ class FaultTracker:
             'discontinuity_weight': 0.4, # Discontinuity indicates fault
             'variance_weight': 0.2,      # Variance can help
             'smoothness_weight': 0.1,    # LOW smoothness - let attributes guide more
+            # New: smoothness of the fault trace *along depth* (prevents zig-zag jitter)
+            'depth_smoothness_weight': 0.6,
+            # New: how strongly we stay close to previous slice position (per depth sample)
+            'prior_weight': 0.4,
         }
 
     def set_tracking_parameters(self, **params):
@@ -792,52 +796,176 @@ class FaultTracker:
         """
         h, w = slice_data.shape
         fault_attrs = self.attributes_processor.compute_fault_attributes(slice_data)
-        search_window = self.tracking_params['search_window']
-        
-        # Pre-compute global normalization for better attribute detection
-        # Using local search window normalization gives weak results
-        attr_norms = {}
-        for attr_name in ['vertical_edge', 'discontinuity', 'variance', 'fault_likelihood']:
-            if attr_name in fault_attrs:
-                arr = fault_attrs[attr_name]
-                attr_norms[attr_name] = (arr.min(), arr.max())
-        
-        new_fault = []
-        
-        # Compute average expected row to get a reference point
-        valid_rows = [r for r, c in prev_fault if 0 <= c < w]
-        if valid_rows:
-            avg_prev_row = np.mean(valid_rows)
-        else:
-            avg_prev_row = h // 2
-        
-        for expected_row, col in prev_fault:
-            # Keep Z position (col) the same, search in X direction (row)
-            if col < 0 or col >= w:
+
+        # DP-based propagation: solve the whole fault trace on this slice at once.
+        # We model the fault as row = f(col) and enforce:
+        # - good attribute response at (row, col)
+        # - closeness to previous slice (a prior per col)
+        # - smoothness along col (prevents zig-zag jitter)
+
+        col_grid, expected_rows = self._build_expected_row_by_col(prev_fault, w=w)
+        if col_grid.size == 0:
+            return []
+
+        norm_attrs = self._normalize_fault_attrs(fault_attrs)
+
+        search_window = int(self.tracking_params['search_window'])
+        max_jump = max(1, int(self.tracking_params['max_jump']))
+        depth_smooth_w = float(self.tracking_params.get('depth_smoothness_weight', 0.6))
+        prior_w = float(self.tracking_params.get('prior_weight', 0.4))
+
+        # Limit between-depth step to keep shape coherent, but allow real dip changes.
+        max_step = max(3, int(round(max_jump * 2)))
+
+        back_ptrs: List[np.ndarray] = []
+        prev_rows: Optional[np.ndarray] = None
+        prev_costs: Optional[np.ndarray] = None
+
+        for i, col in enumerate(col_grid.tolist()):
+            expected = int(np.clip(int(round(expected_rows[i])), 0, h - 1))
+
+            row_min = max(0, expected - search_window)
+            row_max = min(h - 1, expected + search_window)
+            cand_rows = np.arange(row_min, row_max + 1, dtype=np.int32)
+
+            base_cost = self._fault_attribute_cost_vector(norm_attrs, cand_rows, col, attributes)
+            prior_cost = prior_w * ((cand_rows - expected) / max(search_window, 1)) ** 2
+            node_cost = base_cost + prior_cost
+
+            if prev_rows is None:
+                # First column: no transition cost
+                prev_rows = cand_rows
+                prev_costs = node_cost.astype(np.float64)
+                back_ptrs.append(np.full(cand_rows.shape, -1, dtype=np.int32))
                 continue
-                
-            expected_row = int(np.clip(expected_row, 0, h - 1))
-            
-            # Search horizontally (in row/X direction) for the fault position
-            # Use wider search window for fault (faults can shift more than horizons)
-            effective_window = int(search_window * 1.5)
-            row_min = max(0, expected_row - effective_window)
-            row_max = min(h, expected_row + effective_window + 1)
-            
-            best_row = expected_row
-            best_cost = float('inf')
-            
-            for candidate_row in range(row_min, row_max):
-                cost = self._compute_fault_cost_global(
-                    fault_attrs, attr_norms, candidate_row, col, expected_row, attributes
-                )
-                if cost < best_cost:
-                    best_cost = cost
-                    best_row = candidate_row
-            
-            new_fault.append((best_row, col))
-        
+
+            # Transition: penalize rapid horizontal changes along depth (col direction).
+            # Compute pairwise diffs: shape (n_curr, n_prev)
+            diff = np.abs(cand_rows[:, None] - prev_rows[None, :]).astype(np.float64)
+            # Hard constraint to prevent extreme zig-zags
+            diff[diff > max_step] = np.inf
+            trans_cost = depth_smooth_w * (diff / max_step) ** 2
+
+            # DP: curr_cost[j] = node_cost[j] + min_k(prev_costs[k] + trans_cost[j,k])
+            scores = trans_cost + prev_costs[None, :]
+            best_prev_idx = np.argmin(scores, axis=1).astype(np.int32)
+            best_prev_score = scores[np.arange(scores.shape[0]), best_prev_idx]
+
+            curr_costs = node_cost + best_prev_score
+
+            back_ptrs.append(best_prev_idx)
+            prev_rows = cand_rows
+            prev_costs = curr_costs
+
+        assert prev_rows is not None and prev_costs is not None
+
+        # Backtrack best path
+        path_rows = np.zeros(col_grid.shape[0], dtype=np.int32)
+        j = int(np.argmin(prev_costs))
+        for i in range(col_grid.shape[0] - 1, -1, -1):
+            # Reconstruct the candidate row for this col
+            # We need the candidate row array for this step; rebuild it deterministically.
+            col = int(col_grid[i])
+            expected = int(np.clip(int(round(expected_rows[i])), 0, h - 1))
+            row_min = max(0, expected - search_window)
+            row_max = min(h - 1, expected + search_window)
+            cand_rows = np.arange(row_min, row_max + 1, dtype=np.int32)
+
+            path_rows[i] = int(cand_rows[j])
+            j = int(back_ptrs[i][j])
+            if j < 0:
+                break
+
+        new_fault = [(int(path_rows[i]), int(col_grid[i])) for i in range(col_grid.shape[0])]
         return new_fault
+
+    @staticmethod
+    def _build_expected_row_by_col(prev_fault: List[Tuple[int, int]], w: int) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Convert a previous fault polyline into an expected row for each depth sample (col).
+
+        Returns:
+            col_grid: int array of cols to track (contiguous)
+            expected_rows: float array aligned with col_grid
+        """
+        cols = np.array([c for r, c in prev_fault if 0 <= c < w], dtype=np.int32)
+        if cols.size == 0:
+            return np.array([], dtype=np.int32), np.array([], dtype=np.float64)
+        rows = np.array([r for r, c in prev_fault if 0 <= c < w], dtype=np.float64)
+
+        order = np.argsort(cols)
+        cols = cols[order]
+        rows = rows[order]
+
+        # If multiple points share the same col, aggregate by median row
+        unique_cols = np.unique(cols)
+        if unique_cols.size != cols.size:
+            med_rows = []
+            for c in unique_cols.tolist():
+                med_rows.append(float(np.median(rows[cols == c])))
+            cols_u = unique_cols.astype(np.int32)
+            rows_u = np.array(med_rows, dtype=np.float64)
+        else:
+            cols_u = cols
+            rows_u = rows
+
+        col_min = int(cols_u.min())
+        col_max = int(cols_u.max())
+        if col_max < col_min:
+            return np.array([], dtype=np.int32), np.array([], dtype=np.float64)
+
+        col_grid = np.arange(col_min, col_max + 1, dtype=np.int32)
+        expected_rows = np.interp(col_grid.astype(np.float64), cols_u.astype(np.float64), rows_u)
+        return col_grid, expected_rows
+
+    @staticmethod
+    def _normalize_fault_attrs(fault_attrs: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+        """Normalize attribute maps to 0..1 for stable weighting."""
+        norm = {}
+        for k, arr in fault_attrs.items():
+            a = arr.astype(np.float32, copy=False)
+            mn = float(np.nanmin(a))
+            mx = float(np.nanmax(a))
+            if np.isfinite(mn) and np.isfinite(mx) and mx > mn:
+                norm[k] = (a - mn) / (mx - mn)
+            else:
+                norm[k] = np.zeros_like(a, dtype=np.float32)
+        return norm
+
+    def _fault_attribute_cost_vector(
+        self,
+        norm_attrs: Dict[str, np.ndarray],
+        cand_rows: np.ndarray,
+        col: int,
+        attributes: FaultAttribute
+    ) -> np.ndarray:
+        """
+        Vectorized attribute cost for a fixed col and multiple candidate rows.
+        Lower cost is better.
+        """
+        cost = np.zeros(cand_rows.shape[0], dtype=np.float64)
+
+        if attributes & FaultAttribute.VERTICAL_EDGE and 'vertical_edge' in norm_attrs:
+            w_edge = float(self.tracking_params['vertical_edge_weight'])
+            val = norm_attrs['vertical_edge'][cand_rows, col].astype(np.float64)
+            cost += w_edge * np.sqrt(np.clip(1.0 - val, 0.0, 1.0))
+
+        if attributes & FaultAttribute.DISCONTINUITY and 'discontinuity' in norm_attrs:
+            w_disc = float(self.tracking_params['discontinuity_weight'])
+            val = norm_attrs['discontinuity'][cand_rows, col].astype(np.float64)
+            cost += w_disc * np.sqrt(np.clip(1.0 - val, 0.0, 1.0))
+
+        if attributes & FaultAttribute.VARIANCE and 'variance' in norm_attrs:
+            w_var = float(self.tracking_params['variance_weight'])
+            val = norm_attrs['variance'][cand_rows, col].astype(np.float64)
+            cost += w_var * np.sqrt(np.clip(1.0 - val, 0.0, 1.0))
+
+        if attributes & FaultAttribute.LIKELIHOOD and 'fault_likelihood' in norm_attrs:
+            w_like = 0.4  # keep consistent with prior behavior
+            val = norm_attrs['fault_likelihood'][cand_rows, col].astype(np.float64)
+            cost += w_like * np.sqrt(np.clip(1.0 - val, 0.0, 1.0))
+
+        return cost
     
     def _compute_fault_cost_global(
         self,
