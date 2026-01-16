@@ -93,11 +93,15 @@ class ViewInterpretation(ViewMap):
         self.refresh_volume_list()
         
         # Scan and index existing horizons if we have a volume selected
+        # Note: on_volume_changed (triggered by refresh_volume_list) already handles this,
+        # but we call it again here as a safety net for edge cases
         if self.current_seismic_uid:
-             self.scan_and_index_existing_horizons()
+            # Ensure cache is populated before scanning
+            self._populate_seismic_cache()
+            self.scan_and_index_existing_horizons()
         
     def show_actor_with_property(self, uid=None, coll_name=None, show_property=None, visible=None):
-        """Override to prevent showing full seismic volumes - we only show slices."""
+        """Override to prevent showing full seismic volumes and full multipart horizons - we only show slices."""
         # Check if this is a seismic entity that we're slicing
         if coll_name == 'image_coll' and uid:
             try:
@@ -110,17 +114,28 @@ class ViewInterpretation(ViewMap):
             except:
                 pass
         
+        # Check if this is a multipart horizon - NEVER show the full version
+        if coll_name == 'geol_coll' and uid:
+            if hasattr(self, 'multipart_horizons') and uid in self.multipart_horizons:
+                # Don't show the full multipart horizon - we show filtered slices instead
+                # Just update the visibility of our filtered version
+                self.update_multipart_horizon_visibility(uid)
+                return
+            if hasattr(self, 'multipart_faults') and uid in self.multipart_faults:
+                # Don't show the full multipart fault - we show filtered slices instead
+                self.update_multipart_fault_visibility(uid)
+                return
+        
         # For all other entities, use normal display
         super().show_actor_with_property(uid=uid, coll_name=coll_name, show_property=show_property, visible=visible)
         
-        # After showing, increase line width for interpretation lines and multipart horizons
+        # After showing, increase line width for interpretation lines
         if coll_name == 'geol_coll' and uid:
             try:
-                # Check if this is an interpretation line or multipart horizon
+                # Check if this is an interpretation line (not multipart - those are handled above)
                 is_interp_line = uid in self.interpretation_lines if hasattr(self, 'interpretation_lines') else False
-                is_multipart = uid in self.multipart_horizons if hasattr(self, 'multipart_horizons') else False
                 
-                if is_interp_line or is_multipart:
+                if is_interp_line:
                     # Get the actor and increase line width significantly for better visibility
                     if uid in self.plotter.renderer.actors:
                         actor = self.plotter.renderer.actors[uid]
@@ -362,6 +377,8 @@ class ViewInterpretation(ViewMap):
             self._lines_indexed = False
             self.interpretation_lines.clear()
             self.interpretation_lines_by_slice.clear()
+            # Also clear multipart horizons tracking when volume changes
+            self.multipart_horizons.clear()
             
             self._camera_initialized = False  # Reset camera on volume change
             self.scalar_range = None  # Reset scalar range
@@ -370,6 +387,11 @@ class ViewInterpretation(ViewMap):
                 del self._cached_seismic
             if hasattr(self, '_cached_scalar_range'):
                 del self._cached_scalar_range
+            
+            # Pre-populate the seismic cache BEFORE scanning horizons
+            # This is needed because scan_and_index_single_horizon uses _cached_bounds/_cached_dims
+            self._populate_seismic_cache()
+            
             self.update_slice_limits()
             self.update_camera_orientation()
             # Scan for existing horizons compatible with this volume
@@ -475,6 +497,40 @@ class ViewInterpretation(ViewMap):
         self.plotter.reset_key_events()
         self.selected_uids = self.parent.selected_uids
         self.enable_actions()
+
+    def _populate_seismic_cache(self):
+        """Pre-populate the seismic cache (dimensions, bounds) for horizon scanning.
+        
+        This should be called before scan_and_index_existing_horizons() to ensure
+        the cached bounds and dimensions are available for classifying horizons.
+        """
+        if not self.current_seismic_uid:
+            return
+            
+        # Check if cache is already valid for this seismic
+        if (hasattr(self, '_cached_seismic') and 
+            hasattr(self, '_cached_seismic_uid') and 
+            self._cached_seismic_uid == self.current_seismic_uid):
+            return  # Cache is already valid
+        
+        try:
+            seismic_vtk = self.parent.image_coll.get_uid_vtk_obj(self.current_seismic_uid)
+            if not seismic_vtk:
+                self.print_terminal("Could not get seismic VTK object for cache")
+                return
+            self._cached_seismic = pv.wrap(seismic_vtk)
+            self._cached_seismic_uid = self.current_seismic_uid
+            self._cached_dims = self._cached_seismic.dimensions
+            self._cached_bounds = self._cached_seismic.bounds
+            self.print_terminal(f"Pre-cached seismic dims: {self._cached_dims}, bounds: {self._cached_bounds}")
+            
+            # Also cache scalar range for consistent colormap
+            if 'intensity' in self._cached_seismic.array_names:
+                self._cached_scalar_range = self._cached_seismic.get_data_range('intensity')
+            else:
+                self._cached_scalar_range = None
+        except Exception as e:
+            self.print_terminal(f"Error pre-populating seismic cache: {e}")
 
     def update_slice(self):
         if not self.current_seismic_uid:
@@ -1293,14 +1349,13 @@ class ViewInterpretation(ViewMap):
         Update visibility of multipart horizon lines by extracting only the cells
         that match the current slice and creating a filtered actor.
         
-        This uses VTK's threshold filter to show only cells with matching slice_index.
-        
         Args:
             uid: Specific horizon UID to update, or None to update all multipart horizons
         """
-        from vtk import vtkThreshold, vtkGeometryFilter
-        
         if not hasattr(self, 'multipart_horizons'):
+            return
+        
+        if not self.multipart_horizons:
             return
         
         uids_to_update = [uid] if uid else list(self.multipart_horizons.keys())
@@ -1312,23 +1367,33 @@ class ViewInterpretation(ViewMap):
             horizon_info = self.multipart_horizons[horizon_uid]
             actor_name = f"multipart_slice_{horizon_uid}"
             
+            # ALWAYS remove the old filtered actor first to prevent accumulation
+            # Try multiple methods to ensure it's removed
+            try:
+                self.plotter.remove_actor(actor_name)
+            except:
+                pass
+            
+            # Also try to remove from renderer.actors dict directly
+            try:
+                if actor_name in self.plotter.renderer.actors:
+                    actor = self.plotter.renderer.actors[actor_name]
+                    self.plotter.renderer.RemoveActor(actor)
+                    del self.plotter.renderer.actors[actor_name]
+            except:
+                pass
+            
             # Check if this horizon matches current view context
             if (horizon_info['seismic_uid'] != self.current_seismic_uid or 
                 horizon_info['axis'] != self.current_axis):
                 # Hide completely if not matching seismic/axis
                 self.set_actor_visibility(horizon_uid, False)
-                # Also remove the filtered actor
-                if actor_name in self.plotter.renderer.actors:
-                    self.plotter.remove_actor(actor_name)
                 continue
             
             # Check if current slice is in this horizon's range
             if self.current_slice_index not in horizon_info['slice_indices']:
                 # Hide if current slice is not in this horizon
                 self.set_actor_visibility(horizon_uid, False)
-                # Also remove the filtered actor - THIS IS THE KEY FIX
-                if actor_name in self.plotter.renderer.actors:
-                    self.plotter.remove_actor(actor_name)
                 continue
             
             # Get the VTK object
@@ -1336,33 +1401,68 @@ class ViewInterpretation(ViewMap):
                 vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(horizon_uid)
                 if vtk_obj is None:
                     continue
-            except:
+            except Exception as e:
                 continue
             
-            # Extract only cells matching current slice using VTK threshold
+            # Extract only cells matching current slice using direct cell iteration
             try:
-                # Set active scalars to slice_index for thresholding
-                vtk_obj.GetCellData().SetActiveScalars("slice_index")
+                # Check if slice_index array exists
+                if not vtk_obj.GetCellData().HasArray("slice_index"):
+                    self.print_terminal(f"  Warning: No slice_index array in {horizon_uid}")
+                    # No slice data - show the full horizon for this slice
+                    self.set_actor_visibility(horizon_uid, True)
+                    continue
                 
-                # Threshold to extract only cells with current slice index
-                threshold = vtkThreshold()
-                threshold.SetInputData(vtk_obj)
-                threshold.SetInputArrayToProcess(0, 0, 0, 1, "slice_index")  # 1 = cell data
-                threshold.SetLowerThreshold(self.current_slice_index)
-                threshold.SetUpperThreshold(self.current_slice_index)
-                threshold.Update()
+                slice_array = vtk_obj.GetCellData().GetArray("slice_index")
+                n_cells = vtk_obj.GetNumberOfCells()
                 
-                # Convert to polydata for rendering
-                geometry = vtkGeometryFilter()
-                geometry.SetInputConnection(threshold.GetOutputPort())
-                geometry.Update()
+                # Find cells that match the current slice index
+                matching_cell_ids = []
+                for i in range(n_cells):
+                    cell_slice_idx = int(slice_array.GetValue(i))
+                    if cell_slice_idx == self.current_slice_index:
+                        matching_cell_ids.append(i)
                 
-                filtered_polydata = geometry.GetOutput()
+                if len(matching_cell_ids) == 0:
+                    self.set_actor_visibility(horizon_uid, False)
+                    continue
                 
-                if filtered_polydata.GetNumberOfCells() > 0:
-                    # Update or create the actor for this filtered view
-                    actor_name = f"multipart_slice_{horizon_uid}"
+                # Extract the matching cells manually
+                from vtk import vtkPoints, vtkCellArray, vtkPolyData
+                
+                new_points = vtkPoints()
+                new_lines = vtkCellArray()
+                point_map = {}  # old_id -> new_id
+                
+                for cell_id in matching_cell_ids:
+                    cell = vtk_obj.GetCell(cell_id)
+                    n_pts = cell.GetNumberOfPoints()
                     
+                    new_line_pts = []
+                    for j in range(n_pts):
+                        old_pt_id = cell.GetPointId(j)
+                        
+                        if old_pt_id not in point_map:
+                            pt = vtk_obj.GetPoint(old_pt_id)
+                            new_pt_id = new_points.InsertNextPoint(pt)
+                            point_map[old_pt_id] = new_pt_id
+                        
+                        new_line_pts.append(point_map[old_pt_id])
+                    
+                    # Add the line cell
+                    new_lines.InsertNextCell(len(new_line_pts))
+                    for pt_id in new_line_pts:
+                        new_lines.InsertCellPoint(pt_id)
+                
+                # Create filtered polydata
+                filtered_polydata = vtkPolyData()
+                filtered_polydata.SetPoints(new_points)
+                filtered_polydata.SetLines(new_lines)
+                
+                n_filtered_cells = filtered_polydata.GetNumberOfCells()
+                n_filtered_points = filtered_polydata.GetNumberOfPoints()
+                
+                if n_filtered_cells > 0 and n_filtered_points > 0:
                     # Get color from collection
                     try:
                         mask = self.parent.geol_coll.df['uid'] == horizon_uid
@@ -1373,10 +1473,6 @@ class ViewInterpretation(ViewMap):
                             color = (1.0, 1.0, 0.0)  # Default yellow
                     except:
                         color = (1.0, 1.0, 0.0)
-                    
-                    # Remove old filtered actor if exists
-                    if actor_name in self.plotter.renderer.actors:
-                        self.plotter.remove_actor(actor_name)
                     
                     # Add new filtered actor
                     self.plotter.add_mesh(
@@ -1392,14 +1488,13 @@ class ViewInterpretation(ViewMap):
                     # Hide the full multipart actor (we're showing the filtered version)
                     self.set_actor_visibility(horizon_uid, False)
                 else:
-                    # No cells match - hide everything
-                    actor_name = f"multipart_slice_{horizon_uid}"
-                    if actor_name in self.plotter.renderer.actors:
-                        self.plotter.remove_actor(actor_name)
+                    # No cells match - just hide (actor already removed above)
                     self.set_actor_visibility(horizon_uid, False)
                     
             except Exception as e:
                 self.print_terminal(f"Error filtering multipart horizon {horizon_uid}: {e}")
+                import traceback
+                self.print_terminal(traceback.format_exc())
                 # Fall back to showing full horizon
                 self.set_actor_visibility(horizon_uid, True)
 
@@ -1419,9 +1514,12 @@ class ViewInterpretation(ViewMap):
         Args:
             uid: Specific fault UID to update, or None to update all multipart faults
         """
-        from vtk import vtkThreshold, vtkGeometryFilter
+        from vtk import vtkPoints, vtkCellArray, vtkPolyData
         
         if not hasattr(self, 'multipart_faults'):
+            return
+        
+        if not self.multipart_faults:
             return
         
         uids_to_update = [uid] if uid else list(self.multipart_faults.keys())
@@ -1433,13 +1531,32 @@ class ViewInterpretation(ViewMap):
             fault_info = self.multipart_faults[fault_uid]
             actor_name = f"multipart_fault_slice_{fault_uid}"
             
+            # ALWAYS remove the old filtered actor first to prevent accumulation
+            # Try multiple methods to ensure it's removed
+            try:
+                self.plotter.remove_actor(actor_name)
+            except:
+                pass
+            
+            # Also try to remove from renderer.actors dict directly
+            try:
+                if actor_name in self.plotter.renderer.actors:
+                    actor = self.plotter.renderer.actors[actor_name]
+                    self.plotter.renderer.RemoveActor(actor)
+                    del self.plotter.renderer.actors[actor_name]
+            except:
+                pass
+            
             # Check if this fault matches current view context
             if (fault_info['seismic_uid'] != self.current_seismic_uid or
                 fault_info['axis'] != self.current_axis):
                 # Hide completely if not matching seismic/axis
                 self.set_actor_visibility(fault_uid, False)
-                if actor_name in self.plotter.renderer.actors:
-                    self.plotter.remove_actor(actor_name)
+                continue
+            
+            # Check if current slice is in this fault's range
+            if 'slice_indices' in fault_info and self.current_slice_index not in fault_info['slice_indices']:
+                self.set_actor_visibility(fault_uid, False)
                 continue
             
             # Get the original VTK object
@@ -1459,28 +1576,54 @@ class ViewInterpretation(ViewMap):
             # Hide the original full actor
             self.set_actor_visibility(fault_uid, False)
             
-            # Remove old filtered actor if exists
-            if actor_name in self.plotter.renderer.actors:
-                self.plotter.remove_actor(actor_name)
+            # Extract cells matching current slice using direct iteration
+            slice_array = vtk_obj.GetCellData().GetArray("slice_index")
+            n_cells = vtk_obj.GetNumberOfCells()
             
-            # Use vtkThreshold to extract only cells matching current slice
-            vtk_obj.GetCellData().SetActiveScalars("slice_index")
+            # Find cells that match the current slice index
+            matching_cell_ids = []
+            for i in range(n_cells):
+                cell_slice_idx = int(slice_array.GetValue(i))
+                if cell_slice_idx == self.current_slice_index:
+                    matching_cell_ids.append(i)
             
-            threshold = vtkThreshold()
-            threshold.SetInputData(vtk_obj)
-            threshold.SetInputArrayToProcess(0, 0, 0, 1, "slice_index")  # 1 = cell data
-            threshold.SetLowerThreshold(self.current_slice_index)
-            threshold.SetUpperThreshold(self.current_slice_index)
-            threshold.Update()
+            if len(matching_cell_ids) == 0:
+                continue
             
-            # Convert to polydata for rendering
-            geometry = vtkGeometryFilter()
-            geometry.SetInputConnection(threshold.GetOutputPort())
-            geometry.Update()
+            # Extract the matching cells manually
+            new_points = vtkPoints()
+            new_lines = vtkCellArray()
+            point_map = {}  # old_id -> new_id
             
-            filtered_polydata = geometry.GetOutput()
+            for cell_id in matching_cell_ids:
+                cell = vtk_obj.GetCell(cell_id)
+                n_pts = cell.GetNumberOfPoints()
+                
+                new_line_pts = []
+                for j in range(n_pts):
+                    old_pt_id = cell.GetPointId(j)
+                    
+                    if old_pt_id not in point_map:
+                        pt = vtk_obj.GetPoint(old_pt_id)
+                        new_pt_id = new_points.InsertNextPoint(pt)
+                        point_map[old_pt_id] = new_pt_id
+                    
+                    new_line_pts.append(point_map[old_pt_id])
+                
+                # Add the line cell
+                new_lines.InsertNextCell(len(new_line_pts))
+                for pt_id in new_line_pts:
+                    new_lines.InsertCellPoint(pt_id)
             
-            if filtered_polydata.GetNumberOfCells() > 0:
+            # Create filtered polydata
+            filtered_polydata = vtkPolyData()
+            filtered_polydata.SetPoints(new_points)
+            filtered_polydata.SetLines(new_lines)
+            
+            n_filtered_cells = filtered_polydata.GetNumberOfCells()
+            n_filtered_points = filtered_polydata.GetNumberOfPoints()
+            
+            if n_filtered_cells > 0 and n_filtered_points > 0:
                 # Get color from dataframe
                 try:
                     mask = self.parent.geol_coll.df['uid'] == fault_uid
@@ -1496,11 +1639,12 @@ class ViewInterpretation(ViewMap):
                 
                 # Add filtered actor
                 self.plotter.add_mesh(
-                    filtered_polydata,
+                    pv.wrap(filtered_polydata),
                     name=actor_name,
                     color=color,
                     line_width=6,
-                    render_lines_as_tubes=True
+                    render_lines_as_tubes=True,
+                    reset_camera=False
                 )
 
     def update_all_multipart_faults_visibility(self):
@@ -1579,46 +1723,83 @@ class ViewInterpretation(ViewMap):
                         slice_indices.append(slice_idx)
                         slice_to_cell_index[slice_idx] = i
                 
-                # Determine axis by checking the geometry of the first cell's points
-                # Get first cell points to detect which plane it lies in
-                first_cell = vtk_obj.GetCell(0)
-                n_pts = first_cell.GetNumberOfPoints()
-                if n_pts > 0:
-                    # Sample a few points to determine axis
-                    pts = [first_cell.GetPoints().GetPoint(i) for i in range(min(n_pts, 10))]
-                    xs = [p[0] for p in pts]
-                    ys = [p[1] for p in pts]
-                    zs = [p[2] for p in pts]
+                # First, try to get the axis from stored field data (preferred method)
+                axis = None
+                field_data = vtk_obj.GetFieldData()
+                if field_data and field_data.HasArray("slice_axis"):
+                    axis_array = field_data.GetAbstractArray("slice_axis")
+                    if axis_array and axis_array.GetNumberOfValues() > 0:
+                        axis = axis_array.GetValue(0)
+                        self.print_terminal(f"  Recovered axis from field data: {axis}")
+                
+                # Fall back to geometry detection if no stored axis
+                if axis is None:
+                    # Determine axis by checking the geometry of the first cell's points
+                    # Get first cell points to detect which plane it lies in
+                    first_cell = vtk_obj.GetCell(0)
+                    n_pts = first_cell.GetNumberOfPoints()
+                    if n_pts > 0:
+                        # Sample more points for better accuracy
+                        pts = [first_cell.GetPoints().GetPoint(i) for i in range(min(n_pts, 50))]
+                        xs = [p[0] for p in pts]
+                        ys = [p[1] for p in pts]
+                        zs = [p[2] for p in pts]
+                        
+                        x_range = max(xs) - min(xs)
+                        y_range = max(ys) - min(ys)
+                        z_range = max(zs) - min(zs)
+                        
+                        # Determine which axis has minimal variation (that's the slice axis)
+                        # Use a more robust comparison: check which dimension has the smallest range
+                        # relative to the total span, or is essentially zero
+                        ranges = [('Inline', x_range), ('Crossline', y_range), ('Z-slice', z_range)]
+                        
+                        # Sort by range to find the smallest
+                        ranges.sort(key=lambda r: r[1])
+                        smallest_axis, smallest_range = ranges[0]
+                        second_axis, second_range = ranges[1]
+                        
+                        # The axis with smallest range is the slice axis, but only if it's
+                        # significantly smaller than the others (at least 10x smaller, or near zero)
+                        total_range = x_range + y_range + z_range
+                        if total_range > 0:
+                            if smallest_range < 0.01 * total_range or smallest_range < second_range * 0.1:
+                                axis = smallest_axis
+                            else:
+                                # Default to current axis if detection is ambiguous
+                                axis = self.current_axis
+                        else:
+                            axis = self.current_axis
+                        
+                        self.print_terminal(f"  Detected axis from geometry: {axis} (ranges: X={x_range:.2f}, Y={y_range:.2f}, Z={z_range:.2f})")
+                
+                # If axis is still None (no field data and geometry detection failed), default to current axis
+                if axis is None:
+                    axis = self.current_axis
+                    self.print_terminal(f"  Using current axis as fallback: {axis}")
                     
-                    x_range = max(xs) - min(xs)
-                    y_range = max(ys) - min(ys)
-                    z_range = max(zs) - min(zs)
-                    
-                    # Determine which axis has minimal variation (that's the slice axis)
-                    axis = 'Z-slice'  # default
-                    if x_range < min(y_range, z_range) * 0.1:
-                        axis = 'Inline'
-                    elif y_range < min(x_range, z_range) * 0.1:
-                        axis = 'Crossline'
-                    elif z_range < min(x_range, y_range) * 0.1:
-                        axis = 'Z-slice'
-                    
-                    # Register as multipart horizon
-                    if not hasattr(self, 'multipart_horizons'):
-                        self.multipart_horizons = {}
-                    
-                    self.multipart_horizons[uid] = {
-                        'seismic_uid': self.current_seismic_uid,
-                        'axis': axis,
-                        'slice_indices': slice_indices,
-                        'slice_to_cell_index': slice_to_cell_index,
-                        'seed_slice': slice_indices[0] if slice_indices else 0
-                    }
-                    
-                    self.print_terminal(f"Registered multipart horizon {uid}: {len(slice_indices)} slices on {axis}")
-                    # Initially hide, visibility will be updated by update_multipart_horizon_visibility
-                    self.set_actor_visibility(uid, False)
-                    return
+                # Register as multipart horizon
+                if not hasattr(self, 'multipart_horizons'):
+                    self.multipart_horizons = {}
+                
+                self.multipart_horizons[uid] = {
+                    'seismic_uid': self.current_seismic_uid,
+                    'axis': axis,
+                    'slice_indices': slice_indices,
+                    'slice_to_cell_index': slice_to_cell_index,
+                    'seed_slice': slice_indices[0] if slice_indices else 0
+                }
+                
+                self.print_terminal(f"Registered multipart horizon {uid}: {len(slice_indices)} slices on {axis}")
+                # IMPORTANT: Hide the full horizon actor - we will only show filtered slices
+                self.set_actor_visibility(uid, False)
+                # Also try to remove it from renderer completely to prevent it showing
+                try:
+                    if uid in self.plotter.renderer.actors:
+                        self.plotter.remove_actor(uid)
+                except:
+                    pass
+                return
             
             # Not a multipart horizon - check if it's a single-slice interpretation line
             bounds = vtk_obj.GetBounds() # (xmin, xmax, ymin, ymax, zmin, zmax)
@@ -3572,6 +3753,14 @@ class ViewInterpretation(ViewMap):
                     cell_slice_array.InsertNextValue(idx)
                 multipart_line.GetCellData().AddArray(cell_slice_array)
                 
+                # Store the slice axis as field data so it can be recovered on project reload
+                from vtk import vtkStringArray
+                axis_array = vtkStringArray()
+                axis_array.SetName("slice_axis")
+                axis_array.SetNumberOfValues(1)
+                axis_array.SetValue(0, self.current_axis)
+                multipart_line.GetFieldData().AddArray(axis_array)
+                
                 # Create entity dictionary
                 line_dict = deepcopy(self.parent.geol_coll.entity_dict)
                 line_dict["name"] = f"horizon_{current_idx}_multipart"
@@ -4148,6 +4337,14 @@ class ViewInterpretation(ViewMap):
                     for idx in cell_slice_indices:
                         cell_array.InsertNextValue(idx)
                     multipart_fault.GetCellData().AddArray(cell_array)
+                    
+                    # Store the slice axis as field data so it can be recovered on project reload
+                    from vtk import vtkStringArray
+                    axis_array = vtkStringArray()
+                    axis_array.SetName("slice_axis")
+                    axis_array.SetNumberOfValues(1)
+                    axis_array.SetValue(0, self.current_axis)
+                    multipart_fault.GetFieldData().AddArray(axis_array)
                     
                     # Create entity
                     fault_dict = deepcopy(self.parent.geol_coll.entity_dict)
