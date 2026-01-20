@@ -91,19 +91,19 @@ class Autotracker:
             # Fault-aware horizon tracking
             # Penalize picking too close to fault traces (prevents horizons snapping onto faults)
             'fault_barrier_width': 2,   # Pixels (row) around fault to penalize
-            'fault_barrier_weight': 2.0,  # Penalty scale (higher = stronger avoidance)
+            'fault_barrier_weight': 5.0,  # Penalty scale (higher = stronger avoidance)
             # Do not smooth across faults: break horizon smoothing near fault traces
             'fault_break_width': 1,     # Pixels (row) considered "on fault"
             # Keep points on the same side of the fault (preserve throw)
-            'fault_side_weight': 8.0,   # Penalty for switching fault side
+            'fault_side_weight': 10.0,   # Penalty for switching fault side
             # Near-fault behavior: allow larger vertical search to follow drag/rollover
-            'fault_influence_width': 6,   # Pixels (row) from fault considered "near fault"
-            'fault_search_multiplier': 2, # Multiply search_window near faults
+            'fault_influence_width': 2,   # Pixels (row) from fault considered "near fault"
+            'fault_search_multiplier': 1, # Multiply search_window near faults (1 = disabled)
             # If a horizon point is close to a fault, attract it to the fault plane (stick to fault edge)
             # This helps handle drag/rollover and large throw near the fault.
-            'fault_snap_row_width': 4,    # Only apply snap if within this row-distance from fault
-            'fault_snap_col_range': 50,   # Search range (col) to find fault intersection depth for this row
-            'fault_snap_weight': 3.0,     # Penalty scale pulling horizon onto fault plane
+            'fault_snap_row_width': 1,    # Only apply snap if within this row-distance from fault
+            'fault_snap_col_range': 30,   # Search range (col) to find fault intersection depth for this row
+            'fault_snap_weight': 0.1,     # Penalty scale pulling horizon onto fault plane
         }
 
         # Store previous dip for consistency tracking

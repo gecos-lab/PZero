@@ -1480,7 +1480,7 @@ class ViewInterpretation(ViewMap):
                         name=actor_name,
                         color=color,
                         line_width=5,
-                        render_lines_as_tubes=False,
+                        render_lines_as_tubes=True,
                         pickable=False,
                         reset_camera=False
                     )
