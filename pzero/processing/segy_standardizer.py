@@ -361,6 +361,17 @@ def standardize_segy_for_pzero(input_file, output_file, print_fn=print):
     hint_x = coord_info.get('n_x', 1)
     hint_y = coord_info.get('n_y', 1)
     
+    # Check if coordinate hints are realistic for a grid
+    # If the implied grid size is vastly larger than the trace count,
+    # it means the coordinates are likely continuous/rotated and not grid indices.
+    if hint_x * hint_y > total_traces * 2:
+        print_fn(f"Coordinate hints ({hint_x} unique X, {hint_y} unique Y) imply non-grid geometry.")
+        print_fn("Ignoring coordinates for grid estimation - using purely sequential estimation.")
+        hint_x = 1
+        hint_y = 1
+        # Clear trace coords to force sequential mapping
+        coord_info['trace_coords'] = []
+    
     if hint_x * hint_y == total_traces:
         n_xlines = hint_x
         n_inlines = hint_y
