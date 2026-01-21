@@ -680,6 +680,530 @@ class DirectTriangleWrapper:
         else:
             self.logger.info("Disabled C++ MeshIt compatible mode, using standard switches")
 
+    def triangulate_folded_surface(self, points_3d: np.ndarray, segments: Optional[np.ndarray] = None,
+                                   fold_angle_threshold: float = 120.0,
+                                   uniform: bool = True) -> Dict:
+        """
+        Multi-patch triangulation for folded surfaces (recumbent/overturned folds).
+        
+        This method handles surfaces that fold back on themselves by:
+        1. Computing local normals for each point
+        2. Detecting fold hinges where normal direction reverses
+        3. Partitioning the surface into monotonic patches
+        4. Triangulating each patch separately using its local projection
+        5. Stitching patches together along shared hinge constraints
+        
+        Args:
+            points_3d: Input 3D points (N, 3)
+            segments: Optional boundary segment indices (M, 2)
+            fold_angle_threshold: Angle threshold (degrees) for fold hinge detection
+            uniform: Whether to use uniform mesh generation
+            
+        Returns:
+            Dictionary with combined triangulation results (vertices, triangles)
+        """
+        import triangle as tr
+        from scipy.spatial import cKDTree, Delaunay
+        
+        self.logger.info(f"Multi-patch triangulation: {len(points_3d)} points, fold_threshold={fold_angle_threshold}°")
+        
+        points_3d = np.asarray(points_3d, dtype=np.float64)
+        
+        if len(points_3d) < 4:
+            self.logger.warning("Too few points for multi-patch triangulation, using standard method")
+            return self._fallback_standard_triangulation(points_3d, segments, uniform)
+        
+        # Step 1: Compute local normals using k-nearest neighbors
+        normals = self._compute_local_normals(points_3d)
+        
+        if normals is None:
+            self.logger.warning("Failed to compute normals, using standard triangulation")
+            return self._fallback_standard_triangulation(points_3d, segments, uniform)
+        
+        # Step 2: Detect fold hinges based on normal angle changes
+        fold_regions = self._detect_fold_regions(points_3d, normals, fold_angle_threshold)
+        
+        if len(fold_regions) <= 1:
+            self.logger.info("No significant folds detected, using standard triangulation")
+            return self._fallback_standard_triangulation(points_3d, segments, uniform)
+        
+        self.logger.info(f"Detected {len(fold_regions)} fold regions/patches")
+        
+        # Step 3: Triangulate each patch separately
+        all_vertices = []
+        all_triangles = []
+        vertex_offset = 0
+        
+        for i, region_indices in enumerate(fold_regions):
+            if len(region_indices) < 3:
+                continue
+                
+            region_points = points_3d[region_indices]
+            
+            # Project region to its local best-fit plane
+            local_2d, projection_params = self._project_to_local_plane(region_points)
+            
+            if local_2d is None:
+                self.logger.warning(f"Failed to project patch {i}, skipping")
+                continue
+            
+            # Triangulate in 2D
+            try:
+                # Set up triangulation for this patch
+                if self.base_size is None:
+                    min_coords = np.min(local_2d, axis=0)
+                    max_coords = np.max(local_2d, axis=0)
+                    diagonal = np.sqrt(np.sum((max_coords - min_coords) ** 2))
+                    patch_base_size = diagonal / 10.0
+                else:
+                    patch_base_size = self.base_size
+                
+                area_constraint = patch_base_size * patch_base_size * 0.5
+                tri_options = f'pzYYa{area_constraint:.8f}'
+                
+                tri_input = {'vertices': local_2d}
+                result = tr.triangulate(tri_input, tri_options)
+                
+                if 'vertices' not in result or 'triangles' not in result:
+                    continue
+                
+                patch_vertices_2d = result['vertices']
+                patch_triangles = result['triangles']
+                
+                # Project vertices back to 3D
+                patch_vertices_3d = self._project_back_to_3d(patch_vertices_2d, projection_params, region_points)
+                
+                # Adjust triangle indices and add to combined result
+                adjusted_triangles = patch_triangles + vertex_offset
+                
+                all_vertices.append(patch_vertices_3d)
+                all_triangles.append(adjusted_triangles)
+                vertex_offset += len(patch_vertices_3d)
+                
+                self.logger.debug(f"Patch {i}: {len(patch_vertices_3d)} vertices, {len(patch_triangles)} triangles")
+                
+            except Exception as e:
+                self.logger.warning(f"Triangulation failed for patch {i}: {e}")
+                continue
+        
+        if not all_vertices:
+            self.logger.warning("All patches failed, using standard triangulation")
+            return self._fallback_standard_triangulation(points_3d, segments, uniform)
+        
+        # Step 4: Combine all patches
+        combined_vertices = np.vstack(all_vertices)
+        combined_triangles = np.vstack(all_triangles)
+        
+        # Step 5: Merge duplicate vertices at patch boundaries (stitching)
+        merged_vertices, merged_triangles = self._merge_patch_boundaries(
+            combined_vertices, combined_triangles, tolerance=self.base_size * 0.01 if self.base_size else 1e-6
+        )
+        
+        self.logger.info(f"Multi-patch result: {len(merged_vertices)} vertices, {len(merged_triangles)} triangles")
+        
+        return {
+            'vertices': merged_vertices,
+            'triangles': merged_triangles
+        }
+    
+    def _compute_local_normals(self, points_3d: np.ndarray, k: int = 12) -> Optional[np.ndarray]:
+        """
+        Compute local surface normals using PCA on k-nearest neighbors.
+        
+        Args:
+            points_3d: 3D points (N, 3)
+            k: Number of neighbors to use for normal estimation
+            
+        Returns:
+            Array of unit normals (N, 3), or None if computation fails
+        """
+        from scipy.spatial import cKDTree
+        
+        try:
+            k = min(k, len(points_3d) - 1)
+            if k < 3:
+                return None
+            
+            tree = cKDTree(points_3d)
+            _, indices = tree.query(points_3d, k=k+1)  # +1 because query includes the point itself
+            
+            normals = np.zeros((len(points_3d), 3))
+            
+            for i, neighbors in enumerate(indices):
+                neighbor_points = points_3d[neighbors]
+                centered = neighbor_points - neighbor_points.mean(axis=0)
+                
+                try:
+                    _, _, vh = np.linalg.svd(centered, full_matrices=False)
+                    normal = vh[-1]  # Smallest singular vector is the normal
+                    
+                    # Ensure consistent orientation (positive Z component by default)
+                    if normal[2] < 0:
+                        normal = -normal
+                    
+                    normals[i] = normal / np.linalg.norm(normal)
+                except:
+                    normals[i] = np.array([0, 0, 1])
+            
+            return normals
+            
+        except Exception as e:
+            self.logger.warning(f"Normal computation failed: {e}")
+            return None
+    
+    def _detect_fold_regions(self, points_3d: np.ndarray, normals: np.ndarray, 
+                            angle_threshold: float = 120.0) -> List[np.ndarray]:
+        """
+        Detect fold regions by clustering points based on normal similarity.
+        
+        Points with normal angles exceeding the threshold are considered to be
+        in different fold regions.
+        
+        Args:
+            points_3d: 3D points (N, 3)
+            normals: Unit normals for each point (N, 3)
+            angle_threshold: Angle threshold in degrees
+            
+        Returns:
+            List of arrays, each containing point indices for a fold region
+        """
+        from scipy.spatial import cKDTree
+        from collections import deque
+        
+        try:
+            n_points = len(points_3d)
+            cos_threshold = np.cos(np.radians(angle_threshold))
+            
+            # Build spatial tree for neighbor queries
+            tree = cKDTree(points_3d)
+            
+            # Find connected regions where normals are similar
+            visited = np.zeros(n_points, dtype=bool)
+            regions = []
+            
+            for start_idx in range(n_points):
+                if visited[start_idx]:
+                    continue
+                
+                # BFS to find connected region
+                region = []
+                queue = deque([start_idx])
+                
+                while queue:
+                    idx = queue.popleft()
+                    
+                    if visited[idx]:
+                        continue
+                    
+                    visited[idx] = True
+                    region.append(idx)
+                    
+                    # Find spatial neighbors
+                    # Use distance based on local point density
+                    if self.base_size:
+                        search_radius = self.base_size * 2
+                    else:
+                        dists, _ = tree.query(points_3d[idx], k=min(5, n_points))
+                        search_radius = np.mean(dists[1:]) * 3 if len(dists) > 1 else 1.0
+                    
+                    neighbors = tree.query_ball_point(points_3d[idx], search_radius)
+                    
+                    for neighbor_idx in neighbors:
+                        if visited[neighbor_idx]:
+                            continue
+                        
+                        # Check normal similarity
+                        dot_product = np.dot(normals[idx], normals[neighbor_idx])
+                        
+                        # If normals are similar (dot product > cos_threshold), same region
+                        # Note: for folds, normals may flip, so we check absolute value
+                        if abs(dot_product) > cos_threshold:
+                            queue.append(neighbor_idx)
+                
+                if region:
+                    regions.append(np.array(region))
+            
+            # Merge very small regions into nearest larger region
+            min_region_size = max(10, n_points // 20)
+            large_regions = [r for r in regions if len(r) >= min_region_size]
+            small_regions = [r for r in regions if len(r) < min_region_size]
+            
+            if large_regions and small_regions:
+                # Merge small regions into nearest large region
+                for small_region in small_regions:
+                    if len(small_region) == 0:
+                        continue
+                    
+                    # Find centroid of small region
+                    small_centroid = points_3d[small_region].mean(axis=0)
+                    
+                    # Find nearest large region
+                    min_dist = float('inf')
+                    nearest_idx = 0
+                    
+                    for i, large_region in enumerate(large_regions):
+                        large_centroid = points_3d[large_region].mean(axis=0)
+                        dist = np.linalg.norm(small_centroid - large_centroid)
+                        if dist < min_dist:
+                            min_dist = dist
+                            nearest_idx = i
+                    
+                    # Merge
+                    large_regions[nearest_idx] = np.concatenate([large_regions[nearest_idx], small_region])
+                
+                return large_regions
+            
+            return regions if regions else [np.arange(n_points)]
+            
+        except Exception as e:
+            self.logger.warning(f"Fold region detection failed: {e}")
+            return [np.arange(len(points_3d))]
+    
+    def _project_to_local_plane(self, points_3d: np.ndarray) -> Tuple[Optional[np.ndarray], Dict]:
+        """
+        Project 3D points to their local best-fit plane.
+        
+        Args:
+            points_3d: 3D points (N, 3)
+            
+        Returns:
+            Tuple of (2D projected points, projection parameters dict)
+        """
+        try:
+            centroid = points_3d.mean(axis=0)
+            centered = points_3d - centroid
+            
+            _, _, vh = np.linalg.svd(centered, full_matrices=False)
+            
+            # u_axis and v_axis span the plane, normal is perpendicular
+            u_axis = vh[0]
+            v_axis = vh[1]
+            normal = vh[2]
+            
+            # Project to 2D
+            u_coords = np.dot(centered, u_axis)
+            v_coords = np.dot(centered, v_axis)
+            
+            points_2d = np.column_stack([u_coords, v_coords])
+            
+            projection_params = {
+                'centroid': centroid,
+                'u_axis': u_axis,
+                'v_axis': v_axis,
+                'normal': normal
+            }
+            
+            return points_2d, projection_params
+            
+        except Exception as e:
+            self.logger.warning(f"Projection failed: {e}")
+            return None, {}
+    
+    def _project_back_to_3d(self, points_2d: np.ndarray, params: Dict, 
+                           original_3d: np.ndarray) -> np.ndarray:
+        """
+        Project 2D triangulation vertices back to 3D using interpolation.
+        
+        Args:
+            points_2d: 2D vertices from triangulation (M, 2)
+            params: Projection parameters from _project_to_local_plane
+            original_3d: Original 3D points used for interpolation
+            
+        Returns:
+            3D coordinates (M, 3)
+        """
+        from scipy.interpolate import RBFInterpolator
+        from scipy.spatial import cKDTree
+        
+        try:
+            centroid = params['centroid']
+            u_axis = params['u_axis']
+            v_axis = params['v_axis']
+            
+            # Project original points to 2D for interpolation reference
+            centered_orig = original_3d - centroid
+            u_orig = np.dot(centered_orig, u_axis)
+            v_orig = np.dot(centered_orig, v_axis)
+            orig_2d = np.column_stack([u_orig, v_orig])
+            
+            # Z-values in local coordinate system
+            normal = params['normal']
+            z_orig = np.dot(centered_orig, normal)
+            
+            # Interpolate Z for new vertices using TPS
+            try:
+                rbf = RBFInterpolator(orig_2d, z_orig, kernel='thin_plate_spline', smoothing=0.0)
+                z_new = rbf(points_2d)
+            except:
+                # Fallback to IDW
+                tree = cKDTree(orig_2d)
+                k = min(8, len(orig_2d))
+                dists, indices = tree.query(points_2d, k=k)
+                
+                if dists.ndim == 1:
+                    dists = dists[:, np.newaxis]
+                    indices = indices[:, np.newaxis]
+                
+                weights = 1.0 / np.maximum(dists ** 2, 1e-10)
+                weights_sum = weights.sum(axis=1, keepdims=True)
+                weights_norm = weights / weights_sum
+                
+                z_new = np.sum(weights_norm * z_orig[indices], axis=1)
+            
+            # Convert back to 3D
+            points_3d = (centroid + 
+                        points_2d[:, 0:1] * u_axis + 
+                        points_2d[:, 1:2] * v_axis + 
+                        z_new[:, np.newaxis] * normal)
+            
+            return points_3d
+            
+        except Exception as e:
+            self.logger.warning(f"Back-projection failed: {e}, using planar projection")
+            # Fallback: simple planar projection
+            centroid = params['centroid']
+            u_axis = params['u_axis']
+            v_axis = params['v_axis']
+            
+            points_3d = centroid + points_2d[:, 0:1] * u_axis + points_2d[:, 1:2] * v_axis
+            return points_3d
+    
+    def _merge_patch_boundaries(self, vertices: np.ndarray, triangles: np.ndarray, 
+                               tolerance: float = 1e-6) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Merge duplicate vertices at patch boundaries to stitch patches together.
+        
+        Args:
+            vertices: Combined vertices from all patches (M, 3)
+            triangles: Combined triangles with original indices (T, 3)
+            tolerance: Distance tolerance for merging vertices
+            
+        Returns:
+            Tuple of (merged vertices, updated triangles)
+        """
+        from scipy.spatial import cKDTree
+        
+        try:
+            tree = cKDTree(vertices)
+            
+            # Find duplicate vertices
+            pairs = tree.query_pairs(tolerance)
+            
+            if not pairs:
+                return vertices, triangles
+            
+            # Build union-find structure for merging
+            parent = np.arange(len(vertices))
+            
+            def find(x):
+                if parent[x] != x:
+                    parent[x] = find(parent[x])
+                return parent[x]
+            
+            def union(x, y):
+                px, py = find(x), find(y)
+                if px != py:
+                    parent[px] = py
+            
+            for i, j in pairs:
+                union(i, j)
+            
+            # Build mapping from old to new indices
+            unique_roots = {}
+            new_index = 0
+            old_to_new = np.zeros(len(vertices), dtype=np.int32)
+            
+            for i in range(len(vertices)):
+                root = find(i)
+                if root not in unique_roots:
+                    unique_roots[root] = new_index
+                    new_index += 1
+                old_to_new[i] = unique_roots[root]
+            
+            # Create merged vertex array (use representative vertex for each group)
+            n_unique = len(unique_roots)
+            merged_vertices = np.zeros((n_unique, 3))
+            
+            for old_idx, new_idx in enumerate(old_to_new):
+                merged_vertices[new_idx] = vertices[old_idx]
+            
+            # Update triangle indices
+            merged_triangles = old_to_new[triangles]
+            
+            # Remove degenerate triangles (where two or more vertices are the same)
+            valid_mask = (merged_triangles[:, 0] != merged_triangles[:, 1]) & \
+                        (merged_triangles[:, 1] != merged_triangles[:, 2]) & \
+                        (merged_triangles[:, 0] != merged_triangles[:, 2])
+            
+            merged_triangles = merged_triangles[valid_mask]
+            
+            self.logger.info(f"Merged {len(vertices)} -> {n_unique} vertices, removed {np.sum(~valid_mask)} degenerate triangles")
+            
+            return merged_vertices, merged_triangles
+            
+        except Exception as e:
+            self.logger.warning(f"Vertex merging failed: {e}")
+            return vertices, triangles
+    
+    def _fallback_standard_triangulation(self, points_3d: np.ndarray, 
+                                         segments: Optional[np.ndarray],
+                                         uniform: bool) -> Dict:
+        """
+        Fallback to standard 2D projected triangulation.
+        
+        Args:
+            points_3d: 3D points
+            segments: Optional segments
+            uniform: Uniform mesh flag
+            
+        Returns:
+            Triangulation result dict
+        """
+        # Project to 2D using PCA
+        try:
+            centroid = points_3d.mean(axis=0)
+            centered = points_3d - centroid
+            _, _, vh = np.linalg.svd(centered, full_matrices=False)
+            
+            u_axis = vh[0]
+            v_axis = vh[1]
+            
+            u_coords = np.dot(centered, u_axis)
+            v_coords = np.dot(centered, v_axis)
+            points_2d = np.column_stack([u_coords, v_coords])
+            
+            # Use standard triangulation
+            result_2d = self.triangulate(points_2d, segments, uniform=uniform)
+            
+            if 'vertices' not in result_2d:
+                return result_2d
+            
+            # Project back to 3D
+            vertices_2d = result_2d['vertices']
+            vertices_3d = centroid + vertices_2d[:, 0:1] * u_axis + vertices_2d[:, 1:2] * v_axis
+            
+            # Interpolate Z values
+            from scipy.interpolate import RBFInterpolator
+            z_orig = np.dot(centered, vh[2])
+            orig_2d = points_2d
+            
+            try:
+                rbf = RBFInterpolator(orig_2d, z_orig, kernel='thin_plate_spline')
+                z_new = rbf(vertices_2d)
+                vertices_3d = vertices_3d + z_new[:, np.newaxis] * vh[2]
+            except:
+                pass  # Keep planar projection
+            
+            return {
+                'vertices': vertices_3d,
+                'triangles': result_2d['triangles']
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Fallback triangulation failed: {e}")
+            return {}
+
+
 # Helper function for calculating minimum distance to boundary
 def min_distance_to_boundary(point, hull_points):
     """Calculate minimum distance from a point to the hull boundary."""

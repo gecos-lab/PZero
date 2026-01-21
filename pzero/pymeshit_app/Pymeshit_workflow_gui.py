@@ -2830,10 +2830,12 @@ class MeshItWorkflowGUI(QWidget):
         method_layout.addWidget(QLabel("Method:"))
         self.hull_method_combo = QComboBox()
         self.hull_method_combo.addItem("Delaunay 2D (Default)", "delaunay")
-        self.hull_method_combo.addItem("Alpha Shape (Wavy Surfaces)", "alpha")
+        self.hull_method_combo.addItem("Alpha Shape 2D (Wavy Surfaces)", "alpha")
+        self.hull_method_combo.addItem("3D Alpha Shape (Folded Surfaces)", "alpha_3d")
         self.hull_method_combo.setToolTip(
             "Delaunay 2D: Original method - best for flat/quasi-planar surfaces\n"
-            "Alpha Shape: Best for wavy/undulating surfaces with concave boundaries"
+            "Alpha Shape 2D: Best for wavy/undulating surfaces with concave boundaries\n"
+            "3D Alpha Shape: Advanced method for recumbent/overturned folds that cannot be projected to 2D"
         )
         self.hull_method_combo.setCurrentIndex(0)  # Default to Delaunay
         method_layout.addWidget(self.hull_method_combo)
@@ -2847,10 +2849,13 @@ class MeshItWorkflowGUI(QWidget):
         self.hull_alpha_spin.setValue(1.0)
         self.hull_alpha_spin.setSingleStep(0.1)
         self.hull_alpha_spin.setToolTip(
-            "Alpha factor for concave hull computation.\n"
-            "Lower values = more concave (tighter fit)\n"
-            "Higher values = more convex (smoother boundary)\n"
-            "1.0 = adaptive default"
+            "Alpha factor controls hull tightness:\n"
+            "• 0.1-0.5: Very tight fit (may miss points)\n"
+            "• 0.5-1.0: Tight fit, good for dense point clouds\n"
+            "• 1.0-2.0: Balanced (recommended for most cases)\n"
+            "• 2.0-5.0: Looser fit, smoother boundary\n"
+            "• 5.0-10.0: Very loose, approaches convex hull\n"
+            "\nFor folded surfaces (3D Alpha), use 1.0-3.0"
         )
         self.hull_alpha_spin.setEnabled(False)  # Disabled by default (Delaunay selected)
         alpha_layout.addWidget(self.hull_alpha_spin)
@@ -2945,8 +2950,20 @@ class MeshItWorkflowGUI(QWidget):
     def _on_hull_method_changed(self, index):
         """Handle hull method dropdown change - enable/disable alpha parameter."""
         method = self.hull_method_combo.currentData()
-        # Enable alpha spin box only for alpha shape method
-        self.hull_alpha_spin.setEnabled(method == "alpha")
+        # Enable alpha spin box for alpha shape methods (both 2D and 3D)
+        self.hull_alpha_spin.setEnabled(method in ("alpha", "alpha_3d"))
+    
+    def _on_tri_method_changed(self, index):
+        """Handle triangulation method dropdown change - enable/disable fold angle threshold."""
+        method = self.tri_method_combo.currentData()
+        # Enable fold angle threshold only for multi-patch method
+        self.fold_angle_threshold_spin.setEnabled(method == "multipatch")
+    
+    def _on_mesh_tri_method_changed(self, index):
+        """Handle mesh triangulation method dropdown change - enable/disable fold angle threshold."""
+        method = self.mesh_tri_method_combo.currentData()
+        # Enable fold angle threshold only for multi-patch method
+        self.mesh_fold_angle_threshold_spin.setEnabled(method == "multipatch")
     
     
     def _setup_segment_tab(self):
@@ -3091,6 +3108,33 @@ class MeshItWorkflowGUI(QWidget):
         # Mesh quality controls (remain the same)
         quality_group = QGroupBox("Quality Settings")
         quality_layout = QFormLayout(quality_group)
+
+        # Triangulation Method Selection (NEW - for folded surfaces)
+        self.tri_method_combo = QComboBox()
+        self.tri_method_combo.addItem("Standard CDT (Default)", "standard")
+        self.tri_method_combo.addItem("Multi-Patch (Folded Surfaces)", "multipatch")
+        self.tri_method_combo.setToolTip(
+            "Standard CDT: Constrained Delaunay Triangulation - best for quasi-planar surfaces\n"
+            "Multi-Patch: Detects fold hinges and triangulates each patch separately - use for recumbent/overturned folds"
+        )
+        self.tri_method_combo.setCurrentIndex(0)
+        quality_layout.addRow("Tri Method:", self.tri_method_combo)
+
+        # Fold detection threshold (only for multi-patch)
+        self.fold_angle_threshold_spin = QDoubleSpinBox()
+        self.fold_angle_threshold_spin.setRange(90.0, 170.0)
+        self.fold_angle_threshold_spin.setValue(120.0)
+        self.fold_angle_threshold_spin.setSingleStep(5.0)
+        self.fold_angle_threshold_spin.setToolTip(
+            "Normal angle threshold for fold hinge detection (degrees).\n"
+            "Angles > threshold between adjacent normals indicate a fold hinge.\n"
+            "Lower = more sensitive (detects subtle folds), Higher = less sensitive"
+        )
+        self.fold_angle_threshold_spin.setEnabled(False)
+        quality_layout.addRow("Fold Angle:", self.fold_angle_threshold_spin)
+        
+        # Connect method change to enable/disable fold angle
+        self.tri_method_combo.currentIndexChanged.connect(self._on_tri_method_changed)
 
         # Gradient
         self.gradient_input = QDoubleSpinBox()
@@ -3423,6 +3467,33 @@ class MeshItWorkflowGUI(QWidget):
         # Mesh settings (compact form)
         mesh_settings_group = QGroupBox("Global Mesh Settings")
         mg = QFormLayout(mesh_settings_group)
+
+        # Triangulation Method Selection for Refine & Mesh (NEW - for folded surfaces)
+        self.mesh_tri_method_combo = QComboBox()
+        self.mesh_tri_method_combo.addItem("Standard CDT (Default)", "standard")
+        self.mesh_tri_method_combo.addItem("Multi-Patch (Folded Surfaces)", "multipatch")
+        self.mesh_tri_method_combo.setToolTip(
+            "Standard CDT: Constrained Delaunay Triangulation - best for quasi-planar surfaces\n"
+            "Multi-Patch: Detects fold hinges and triangulates each patch separately - use for recumbent/overturned folds"
+        )
+        self.mesh_tri_method_combo.setCurrentIndex(0)
+        mg.addRow("Tri Method", self.mesh_tri_method_combo)
+        
+        # Fold detection threshold for refine mesh (only for multi-patch)
+        self.mesh_fold_angle_threshold_spin = QDoubleSpinBox()
+        self.mesh_fold_angle_threshold_spin.setRange(90.0, 170.0)
+        self.mesh_fold_angle_threshold_spin.setValue(120.0)
+        self.mesh_fold_angle_threshold_spin.setSingleStep(5.0)
+        self.mesh_fold_angle_threshold_spin.setToolTip(
+            "Normal angle threshold for fold hinge detection (degrees).\n"
+            "Angles > threshold between adjacent normals indicate a fold hinge.\n"
+            "Lower = more sensitive (detects subtle folds), Higher = less sensitive"
+        )
+        self.mesh_fold_angle_threshold_spin.setEnabled(False)
+        mg.addRow("Fold Angle", self.mesh_fold_angle_threshold_spin)
+        
+        # Connect method change to enable/disable fold angle
+        self.mesh_tri_method_combo.currentIndexChanged.connect(self._on_mesh_tri_method_changed)
 
         self.mesh_interp_combo = QComboBox()
         self.mesh_interp_combo.addItems([
@@ -7186,8 +7257,18 @@ class MeshItWorkflowGUI(QWidget):
     def _generate_conforming_meshes_action(self):
         """Generate conforming surface meshes from currently checked segments."""
         import numpy as np
+        from Pymeshit.triangle_direct import DirectTriangleWrapper
+        
         # Keep status/log but compute per-surface target size below
         self.statusBar().showMessage("Generating conforming surface meshes…")
+        
+        # Get triangulation method from dropdown (NEW - for folded surfaces)
+        mesh_tri_method = "standard"
+        mesh_fold_angle_threshold = 120.0
+        if hasattr(self, 'mesh_tri_method_combo'):
+            mesh_tri_method = self.mesh_tri_method_combo.currentData() or "standard"
+        if hasattr(self, 'mesh_fold_angle_threshold_spin'):
+            mesh_fold_angle_threshold = self.mesh_fold_angle_threshold_spin.value()
 
         ok, total, fails = 0, 0, []
         for s_idx, ds in enumerate(self.datasets):
@@ -7215,7 +7296,41 @@ class MeshItWorkflowGUI(QWidget):
                     "max_area":   float(per_surface_target) ** 2 * 1.5,
                     "interp":     self.mesh_interp_combo.currentText(),
                     "smoothing":  float(self.mesh_smoothing_input.value()),
+                    "tri_method": mesh_tri_method,  # NEW - for folded surfaces
+                    "fold_angle_threshold": mesh_fold_angle_threshold,  # NEW
                 }
+                
+                # Check if multi-patch triangulation is requested
+                if mesh_tri_method == "multipatch":
+                    logger.info(f"Using Multi-Patch triangulation for conforming mesh '{name}' (fold_angle={mesh_fold_angle_threshold}°)")
+                    
+                    # Get all points for this surface
+                    all_pts = np.asarray(ds.get('points', []), dtype=float)
+                    if len(all_pts) >= 4:
+                        triangulator = DirectTriangleWrapper(
+                            gradient=float(self.mesh_gradient_input.value()),
+                            min_angle=cfg["min_angle"],
+                            base_size=per_surface_target
+                        )
+                        tri_res = triangulator.triangulate_folded_surface(
+                            points_3d=all_pts,
+                            segments=None,
+                            fold_angle_threshold=mesh_fold_angle_threshold,
+                            uniform=self.mesh_uniform_checkbox.isChecked()
+                        )
+                        
+                        if tri_res and 'vertices' in tri_res and 'triangles' in tri_res:
+                            ds.setdefault("conforming_mesh", {})
+                            ds["conforming_mesh"]["vertices"] = tri_res['vertices']
+                            ds["conforming_mesh"]["triangles"] = tri_res['triangles']
+                            ds["conforming_mesh"]["holes"] = []
+                            
+                            ok += 1
+                            logger.info(f"✓ Multi-Patch conforming mesh generated for '{name}': {len(tri_res['vertices'])} vertices, {len(tri_res['triangles'])} triangles")
+                            continue  # Skip standard triangulation
+                        else:
+                            logger.warning(f"Multi-Patch failed for '{name}', falling back to standard")
+                            # Fall through to standard triangulation
 
                 surf_data = self._prepare_surface_data_for_triangulation(s_idx, ds, cfg)
                 if not surf_data:
@@ -8610,6 +8725,19 @@ class MeshItWorkflowGUI(QWidget):
                 # 1. Project all 3D points onto their best-fit 2D plane using PCA.
                 _centroid, projected_pts_2d = self._pca_project(pts)
                 
+                if method == "alpha_3d":
+                    # 3D Alpha Shape for folded surfaces (recumbent/overturned folds)
+                    logger.info(f"Computing 3D alpha shape boundary for '{ds.get('name')}' (alpha_factor={alpha_factor})...")
+                    ordered_indices = self._compute_3d_alpha_shape_boundary(pts, alpha_factor)
+                    
+                    if ordered_indices is not None and len(ordered_indices) >= 3:
+                        logger.info(f"3D Alpha shape boundary computed with {len(ordered_indices)} vertices")
+                        hull_pts_np = pts[ordered_indices]
+                    else:
+                        # Fallback to 2D alpha shapes if 3D fails
+                        logger.warning("3D Alpha shapes failed, falling back to 2D alpha shape...")
+                        method = "alpha"  # Fall through to 2D alpha below
+                
                 if method == "alpha":
                     # Alpha shapes for wavy/concave surfaces
                     logger.info(f"Computing alpha shape boundary for '{ds.get('name')}' (alpha_factor={alpha_factor})...")
@@ -8700,6 +8828,324 @@ class MeshItWorkflowGUI(QWidget):
             logger.debug(traceback.format_exc())
             return False
     
+    def _compute_3d_alpha_shape_boundary(self, points_3d: np.ndarray, alpha_factor: float = 1.0) -> Optional[np.ndarray]:
+        """
+        Compute the boundary of a 3D sheet-like point cloud (geological surfaces).
+        
+        This method is designed for folded surfaces (recumbent/overturned folds) where
+        2D projection fails because the surface folds back on itself.
+        
+        ALGORITHM FOR SHEET-LIKE FOLDED SURFACES:
+        1. Detect boundary points using angular gap method (points with "open" sides)
+        2. Build local surface triangulation using k-NN
+        3. Find edges that connect boundary points
+        4. Order boundary points along the perimeter
+        
+        Args:
+            points_3d: 3D points (N, 3)
+            alpha_factor: Controls boundary detection sensitivity
+                         Lower values (0.5-1.0) = tighter boundary detection
+                         Higher values (2.0-5.0) = more inclusive boundary
+            
+        Returns:
+            Ordered boundary point indices, or None if computation fails
+        """
+        from scipy.spatial import cKDTree
+        from collections import defaultdict
+        import traceback
+        
+        try:
+            n_points = len(points_3d)
+            if n_points < 4:
+                logger.warning("3D alpha shape requires at least 4 points")
+                return None
+            
+            logger.info(f"Sheet boundary detection: {n_points} points, alpha_factor={alpha_factor}")
+            
+            # Step 1: Build k-NN tree and compute local geometry
+            tree = cKDTree(points_3d)
+            k_neighbors = min(20, n_points - 1)  # More neighbors for better angular coverage
+            dists, indices = tree.query(points_3d, k=k_neighbors + 1)
+            
+            # Compute average neighbor distance for scaling
+            if dists.ndim > 1 and dists.shape[1] > 1:
+                avg_nn_dist = np.median(dists[:, 1:].mean(axis=1))
+            else:
+                avg_nn_dist = np.median(dists)
+            
+            logger.info(f"Average nearest neighbor distance: {avg_nn_dist:.4f}")
+            
+            # Step 2: Detect boundary points using angular gap method
+            # For each point, project neighbors onto local tangent plane
+            # and measure the largest angular gap. Large gaps indicate boundary points.
+            
+            boundary_scores = np.zeros(n_points)
+            local_normals = np.zeros((n_points, 3))
+            
+            for i in range(n_points):
+                # Get neighbors (skip self at index 0)
+                neighbor_indices = indices[i, 1:k_neighbors+1]
+                neighbors = points_3d[neighbor_indices]
+                
+                # Compute local tangent plane using PCA
+                centered = neighbors - points_3d[i]
+                
+                if len(centered) < 3:
+                    continue
+                
+                try:
+                    _, _, vh = np.linalg.svd(centered, full_matrices=False)
+                    normal = vh[-1]
+                    if normal[2] < 0:
+                        normal = -normal
+                    local_normals[i] = normal
+                    
+                    # Project neighbors onto tangent plane
+                    u_axis = vh[0]
+                    v_axis = vh[1]
+                    
+                    # Compute angles of neighbors around the point
+                    angles = []
+                    for neighbor in centered:
+                        u = np.dot(neighbor, u_axis)
+                        v = np.dot(neighbor, v_axis)
+                        angle = np.arctan2(v, u)
+                        angles.append(angle)
+                    
+                    if len(angles) < 2:
+                        continue
+                    
+                    # Sort angles and find largest gap
+                    angles = np.sort(angles)
+                    gaps = np.diff(angles)
+                    # Add gap between last and first (wrapping around)
+                    wrap_gap = (2 * np.pi) - angles[-1] + angles[0]
+                    gaps = np.append(gaps, wrap_gap)
+                    
+                    max_gap = np.max(gaps)
+                    boundary_scores[i] = max_gap
+                    
+                except:
+                    boundary_scores[i] = 0
+            
+            # Step 3: Identify boundary points based on angular gap threshold
+            # Boundary points have gaps > threshold (indicating "open" side)
+            # Adjust threshold based on alpha_factor
+            # With k=20 neighbors evenly distributed, expected gap ~= 2*pi/20 = 0.314 rad (18 deg)
+            # For boundary points, gap should be >> 0.314
+            
+            # Base threshold: ~90 degrees (pi/2) indicates a clear boundary
+            # Lower alpha_factor = higher threshold = stricter boundary detection
+            # Higher alpha_factor = lower threshold = more points considered boundary
+            base_threshold = np.pi / 2  # 90 degrees
+            gap_threshold = base_threshold / alpha_factor
+            
+            # Clamp threshold to reasonable range
+            gap_threshold = np.clip(gap_threshold, np.pi / 6, np.pi)  # 30-180 degrees
+            
+            boundary_mask = boundary_scores > gap_threshold
+            boundary_indices = np.where(boundary_mask)[0]
+            
+            logger.info(f"Gap threshold: {np.degrees(gap_threshold):.1f}°, found {len(boundary_indices)} boundary points")
+            
+            if len(boundary_indices) < 3:
+                logger.warning("Too few boundary points detected")
+                return None
+            
+            # Step 4: Build local triangulation among boundary points to find edges
+            # Use k-NN among boundary points to establish connectivity
+            boundary_points = points_3d[boundary_indices]
+            boundary_tree = cKDTree(boundary_points)
+            
+            # For each boundary point, find its nearest boundary neighbors
+            k_boundary = min(8, len(boundary_indices) - 1)
+            _, boundary_neighbor_indices = boundary_tree.query(boundary_points, k=k_boundary + 1)
+            
+            # Build adjacency graph for boundary points
+            adjacency = defaultdict(set)
+            edge_weights = {}  # (i, j) -> distance for ordering
+            
+            for local_i in range(len(boundary_indices)):
+                for local_j in boundary_neighbor_indices[local_i, 1:]:
+                    # Add edge between these boundary points
+                    i = int(local_i)
+                    j = int(local_j)
+                    if i != j:
+                        dist = np.linalg.norm(boundary_points[i] - boundary_points[j])
+                        adjacency[i].add(j)
+                        adjacency[j].add(i)
+                        edge_key = (min(i, j), max(i, j))
+                        edge_weights[edge_key] = dist
+            
+            # Step 5: Order boundary points by tracing the perimeter
+            # Use greedy path following, preferring shorter edges and avoiding backtracking
+            
+            # Start from the point with smallest X (leftmost)
+            start_local = np.argmin(boundary_points[:, 0])
+            
+            ordered_local = [start_local]
+            visited = {start_local}
+            
+            max_edge_length = avg_nn_dist * alpha_factor * 5  # Maximum edge length to consider
+            
+            while len(ordered_local) < len(boundary_indices):
+                current = ordered_local[-1]
+                neighbors = adjacency[current] - visited
+                
+                if not neighbors:
+                    # Try to find any unvisited boundary point nearby
+                    current_pos = boundary_points[current]
+                    unvisited = set(range(len(boundary_indices))) - visited
+                    if not unvisited:
+                        break
+                    
+                    # Find closest unvisited
+                    min_dist = float('inf')
+                    closest = None
+                    for uv in unvisited:
+                        dist = np.linalg.norm(boundary_points[uv] - current_pos)
+                        if dist < min_dist:
+                            min_dist = dist
+                            closest = uv
+                    
+                    if closest is not None and min_dist < max_edge_length:
+                        ordered_local.append(closest)
+                        visited.add(closest)
+                    else:
+                        break
+                else:
+                    # Choose the nearest neighbor that continues in a consistent direction
+                    current_pos = boundary_points[current]
+                    
+                    if len(ordered_local) > 1:
+                        prev_pos = boundary_points[ordered_local[-2]]
+                        direction = current_pos - prev_pos
+                        dir_norm = np.linalg.norm(direction)
+                        if dir_norm > 1e-10:
+                            direction = direction / dir_norm
+                    else:
+                        direction = None
+                    
+                    best_neighbor = None
+                    best_score = float('inf')
+                    
+                    for neighbor in neighbors:
+                        neighbor_pos = boundary_points[neighbor]
+                        dist = np.linalg.norm(neighbor_pos - current_pos)
+                        
+                        if dist > max_edge_length:
+                            continue
+                        
+                        # Score based on distance and direction consistency
+                        score = dist
+                        
+                        if direction is not None:
+                            to_neighbor = neighbor_pos - current_pos
+                            to_neighbor_norm = np.linalg.norm(to_neighbor)
+                            if to_neighbor_norm > 1e-10:
+                                to_neighbor = to_neighbor / to_neighbor_norm
+                                # Prefer neighbors in roughly the same direction (not backtracking)
+                                dot = np.dot(direction, to_neighbor)
+                                # Penalize backtracking heavily
+                                if dot < -0.5:
+                                    score += dist * 10
+                                elif dot < 0:
+                                    score += dist * 2
+                        
+                        if score < best_score:
+                            best_score = score
+                            best_neighbor = neighbor
+                    
+                    if best_neighbor is not None:
+                        ordered_local.append(best_neighbor)
+                        visited.add(best_neighbor)
+                    else:
+                        break
+            
+            logger.info(f"Ordered {len(ordered_local)} of {len(boundary_indices)} boundary points")
+            
+            if len(ordered_local) < 3:
+                logger.warning("Could not order boundary points")
+                return None
+            
+            # Convert local indices back to original indices
+            ordered_global = [boundary_indices[i] for i in ordered_local]
+            
+            return np.array(ordered_global)
+            
+        except Exception as e:
+            logger.error(f"Sheet boundary detection failed: {e}")
+            logger.debug(traceback.format_exc())
+            return None
+    
+    def _compute_tetrahedron_circumradius(self, pts: np.ndarray) -> Optional[float]:
+        """
+        Compute the circumsphere radius of a tetrahedron.
+        
+        Args:
+            pts: 4x3 array of tetrahedron vertices
+            
+        Returns:
+            Circumsphere radius, or None if degenerate
+        """
+        try:
+            # Tetrahedron vertices
+            a, b, c, d = pts[0], pts[1], pts[2], pts[3]
+            
+            # Edge vectors from vertex a
+            ab = b - a
+            ac = c - a
+            ad = d - a
+            
+            # Volume of tetrahedron (6 * volume = |det([ab, ac, ad])|)
+            vol6 = abs(np.dot(ab, np.cross(ac, ad)))
+            
+            if vol6 < 1e-20:
+                return None  # Degenerate tetrahedron
+            
+            # Edge lengths squared
+            ab2 = np.dot(ab, ab)
+            ac2 = np.dot(ac, ac)
+            ad2 = np.dot(ad, ad)
+            bc = c - b
+            bd = d - b
+            cd = d - c
+            bc2 = np.dot(bc, bc)
+            bd2 = np.dot(bd, bd)
+            cd2 = np.dot(cd, cd)
+            
+            # Circumradius formula: R = (abc)/(4*Area) for triangle
+            # For tetrahedron, use the Cayley-Menger determinant approach
+            # Simplified: R = sqrt(a*b*c*d) / (6*V) where a,b,c,d are opposite edge products
+            
+            # Alternative simpler formula:
+            # R^2 = (|AB|^2 * |CD|^2 * (|AC||BD| + |AD||BC|)^2 - ...) / (144 * V^2)
+            # Use numerical approach instead
+            
+            # Find circumcenter and compute radius
+            # Circumcenter satisfies: |O - A|^2 = |O - B|^2 = |O - C|^2 = |O - D|^2
+            # This leads to a 3x3 linear system
+            
+            # Vectors from a
+            v1 = ab
+            v2 = ac
+            v3 = ad
+            
+            # Build matrix: 2 * [v1; v2; v3]^T * O = [|v1|^2; |v2|^2; |v3|^2] + 2 * [v1; v2; v3]^T * a
+            # Simplified: solve for O - a
+            A_mat = 2 * np.array([v1, v2, v3])
+            b_vec = np.array([ab2, ac2, ad2])
+            
+            try:
+                center_local = np.linalg.solve(A_mat, b_vec)
+                circumradius = np.linalg.norm(center_local)
+                return circumradius
+            except np.linalg.LinAlgError:
+                return None
+                
+        except Exception:
+            return None
+
     def _compute_alpha_shape_boundary_robust(self, points_2d: np.ndarray, alpha_factor: float = 1.0) -> Optional[np.ndarray]:
         """
         Compute the boundary of a 2D point cloud using alpha shapes with adaptive alpha.
@@ -9426,6 +9872,14 @@ segmentation, triangulation, and visualization.
         uniform = self.uniform_checkbox.isChecked()
         interp_label = self.interp_combo.currentText() if hasattr(self, "interp_combo") else "Thin Plate Spline (TPS)"
         smoothing = float(self.interp_smoothing_input.value()) if hasattr(self, "interp_smoothing_input") else 0.0
+        
+        # Get triangulation method from dropdown (NEW - for folded surfaces)
+        tri_method = "standard"
+        fold_angle_threshold = 120.0
+        if hasattr(self, 'tri_method_combo'):
+            tri_method = self.tri_method_combo.currentData() or "standard"
+        if hasattr(self, 'fold_angle_threshold_spin'):
+            fold_angle_threshold = self.fold_angle_threshold_spin.value()
 
         try:
             import numpy as np
@@ -9433,8 +9887,41 @@ segmentation, triangulation, and visualization.
             from scipy.interpolate import RBFInterpolator, CloughTocher2DInterpolator
             from Pymeshit.triangle_direct import DirectTriangleWrapper
 
-            # Common rotation basis (C++ rotate-by-normal)
+            # Get all points for this dataset
             all_pts = np.asarray(dataset['points'], dtype=float)
+            
+            # Check if multi-patch triangulation is requested
+            if tri_method == "multipatch":
+                logger.info(f"Using Multi-Patch triangulation for '{dataset_name}' (fold_angle={fold_angle_threshold}°)")
+                
+                try:
+                    base_size = float(self._get_seg_target_length_for_dataset(dataset_index))
+                    if base_size <= 1e-6: base_size = 1.0
+                except Exception:
+                    base_size = 1.0
+                
+                # Use multi-patch triangulation for folded surfaces
+                triangulator = DirectTriangleWrapper(gradient=gradient, min_angle=min_angle, base_size=base_size)
+                tri_res = triangulator.triangulate_folded_surface(
+                    points_3d=all_pts,
+                    segments=None,  # Segments handled internally
+                    fold_angle_threshold=fold_angle_threshold,
+                    uniform=uniform
+                )
+                
+                if tri_res and 'vertices' in tri_res and 'triangles' in tri_res:
+                    dataset['triangulation_result'] = {
+                        'vertices': tri_res['vertices'],
+                        'triangles': tri_res['triangles']
+                    }
+                    logger.info(f"Multi-Patch triangulation for {dataset_name} completed. V={len(tri_res['vertices'])}, T={len(tri_res['triangles'])}")
+                    return True
+                else:
+                    logger.warning(f"Multi-Patch triangulation failed for {dataset_name}, falling back to standard method")
+                    # Fall through to standard triangulation
+            
+            # Standard triangulation method (original code)
+            # Common rotation basis (C++ rotate-by-normal)
             centred = all_pts - all_pts.mean(axis=0, keepdims=True)
             _, _, vh = np.linalg.svd(centred, full_matrices=False)
             normal = vh[-1];  normal = -normal if normal[2] < 0.0 else normal
