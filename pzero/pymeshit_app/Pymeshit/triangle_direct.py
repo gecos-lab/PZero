@@ -445,20 +445,23 @@ class DirectTriangleWrapper:
             # Check if C++ MeshIt compatible mode is requested
             use_cpp_switches = getattr(self, 'use_cpp_switches', False)
             
+            # Determine if we need 'p' switch (PSLG mode)
+            # Only use 'p' if we have segments or holes, otherwise it might fail on some systems
+            has_constraints = (segments is not None and len(segments) > 0) or \
+                             (holes is not None and len(holes) > 0)
+            p_switch = 'p' if has_constraints else ''
+            
+            effective_min_angle = self.min_angle
+            area_constraint = self.base_size * self.base_size * 0.5
+            
             if use_cpp_switches:
                 # C++ MeshIt compatible switches with better area control
-                # Use "pzY" (no boundary insertion) with area constraint
                 # The C++ version actually uses "pzYYu" but 'u' needs external callback
-                area_constraint = self.base_size * self.base_size * 0.5
-                tri_options = f'pzYYa{area_constraint:.8f}'
+                tri_options = f'{p_switch}zYYa{area_constraint:.8f}'
                 self.logger.info(f"Using C++ MeshIt compatible Triangle options: '{tri_options}'")
             else:
-                # Original fast approach
-                effective_min_angle = self.min_angle
-                area_constraint = self.base_size * self.base_size * 0.5
-                
                 # Simplified options - no expensive callbacks or complex features
-                tri_options = f'pzYYa{area_constraint:.8f}'
+                tri_options = f'{p_switch}zYYa{area_constraint:.8f}'
         else:
             # Non-uniform approach for complex cases
             hull_points = self._get_hull_points_fast(points)
@@ -729,6 +732,9 @@ class DirectTriangleWrapper:
         
         self.logger.info(f"Detected {len(fold_regions)} fold regions/patches")
         
+        # Build tree for finding patch boundaries/overlaps
+        tree = cKDTree(points_3d)
+        
         # Step 3: Triangulate each patch separately
         all_vertices = []
         all_triangles = []
@@ -737,8 +743,44 @@ class DirectTriangleWrapper:
         for i, region_indices in enumerate(fold_regions):
             if len(region_indices) < 3:
                 continue
-                
-            region_points = points_3d[region_indices]
+            
+            # Add spatial buffer (1-ring neighbors) to ensure patches overlap/touch
+            # This is critical for the stitching/merging step to work
+            patch_mask = np.zeros(len(points_3d), dtype=bool)
+            patch_mask[region_indices] = True
+            
+            # Find neighbors of region points
+            # Simple approach: query radius or k-neighbors
+            # Uses base_size or estimation
+            search_k = 30
+            dists, nbrs = tree.query(points_3d[region_indices], k=search_k)
+            
+            # Flatten and find candidates
+            candidates = np.unique(nbrs.flatten())
+            candidates = candidates[candidates < len(points_3d)]
+            
+            # Filter candidates: Only add points that are compatible with the region's orientation
+            # This prevents jumping gaps to opposing limbs (e.g., Top -> Bottom)
+            # We use a safe threshold to prevent back-folding (concave artifacts)
+            
+            # Calculate robust patch normal (mean of seed or all region)
+            # region_indices are the core points.
+            patch_avg_normal = np.mean(normals[region_indices], axis=0)
+            patch_avg_normal /= (np.linalg.norm(patch_avg_normal) + 1e-12)
+            
+            # Vectorized check for candidates
+            cand_normals = normals[candidates]
+            dots = np.dot(cand_normals, patch_avg_normal)
+            
+            # Threshold: Must be positively aligned (> 0.05 approx 87 degrees)
+            # This ensures injectivity of the projection and prevents artifacts like "bitten" edges
+            valid_mask = dots > 0.05 
+            
+            buffered_indices = candidates[valid_mask] 
+            
+            buffered_indices = candidates[valid_mask]
+            
+            region_points = points_3d[buffered_indices]
             
             # Project region to its local best-fit plane
             local_2d, projection_params = self._project_to_local_plane(region_points)
@@ -758,10 +800,20 @@ class DirectTriangleWrapper:
                 else:
                     patch_base_size = self.base_size
                 
+                # Compute Concave Hull boundary for this patch to prevent "big triangle" artifacts
+                # This ensures the triangulation respects the actual shape of the patch
+                patch_segments = self._compute_patch_boundary(local_2d, patch_base_size)
+                
                 area_constraint = patch_base_size * patch_base_size * 0.5
-                tri_options = f'pzYYa{area_constraint:.8f}'
+                
+                # Use 'p' switch if we have segments (which we should now)
+                p_switch = 'p' if patch_segments is not None and len(patch_segments) > 0 else ''
+                tri_options = f'{p_switch}zYYa{area_constraint:.8f}'
                 
                 tri_input = {'vertices': local_2d}
+                if patch_segments is not None and len(patch_segments) > 0:
+                    tri_input['segments'] = patch_segments
+                
                 result = tr.triangulate(tri_input, tri_options)
                 
                 if 'vertices' not in result or 'triangles' not in result:
@@ -770,8 +822,13 @@ class DirectTriangleWrapper:
                 patch_vertices_2d = result['vertices']
                 patch_triangles = result['triangles']
                 
-                # Project vertices back to 3D
-                patch_vertices_3d = self._project_back_to_3d(patch_vertices_2d, projection_params, region_points)
+                # Project vertices back to 3D with Exact Point Restoration
+                # We pass the input 2D points (local_2d) and valid 3D points (region_points)
+                # to map back exactly where possible, eliminating gaps.
+                patch_vertices_3d = self._project_back_to_3d(
+                    patch_vertices_2d, projection_params, region_points, 
+                    input_2d=local_2d, input_3d=region_points
+                )
                 
                 # Adjust triangle indices and add to combined result
                 adjusted_triangles = patch_triangles + vertex_offset
@@ -795,8 +852,10 @@ class DirectTriangleWrapper:
         combined_triangles = np.vstack(all_triangles)
         
         # Step 5: Merge duplicate vertices at patch boundaries (stitching)
+        # We need a slightly larger tolerance because of TPS projection drift
+        merge_tolerance = self.base_size * 0.1 if self.base_size else 1e-4
         merged_vertices, merged_triangles = self._merge_patch_boundaries(
-            combined_vertices, combined_triangles, tolerance=self.base_size * 0.01 if self.base_size else 1e-6
+            combined_vertices, combined_triangles, tolerance=merge_tolerance
         )
         
         self.logger.info(f"Multi-patch result: {len(merged_vertices)} vertices, {len(merged_triangles)} triangles")
@@ -806,13 +865,13 @@ class DirectTriangleWrapper:
             'triangles': merged_triangles
         }
     
-    def _compute_local_normals(self, points_3d: np.ndarray, k: int = 12) -> Optional[np.ndarray]:
+    def _compute_local_normals(self, points_3d: np.ndarray, k: int = 20) -> Optional[np.ndarray]:
         """
-        Compute local surface normals using PCA on k-nearest neighbors.
+        Compute consistently oriented local surface normals using PCA and BFS propagation.
         
         Args:
             points_3d: 3D points (N, 3)
-            k: Number of neighbors to use for normal estimation
+            k: Number of neighbors to use for normal estimation (increase for smoothness)
             
         Returns:
             Array of unit normals (N, 3), or None if computation fails
@@ -820,30 +879,65 @@ class DirectTriangleWrapper:
         from scipy.spatial import cKDTree
         
         try:
-            k = min(k, len(points_3d) - 1)
-            if k < 3:
+            n_points = len(points_3d)
+            k = min(k, n_points - 1)
+            # Ensure minimal neighbors
+            if n_points < 4:
                 return None
+            k = max(k, 6)
             
             tree = cKDTree(points_3d)
             _, indices = tree.query(points_3d, k=k+1)  # +1 because query includes the point itself
             
-            normals = np.zeros((len(points_3d), 3))
+            normals = np.zeros((n_points, 3))
             
-            for i, neighbors in enumerate(indices):
-                neighbor_points = points_3d[neighbors]
-                centered = neighbor_points - neighbor_points.mean(axis=0)
+            # 1. Compute unoriented PCA normals
+            for i in range(n_points):
+                neighbors = points_3d[indices[i]]
+                centered = neighbors - neighbors.mean(axis=0)
                 
                 try:
-                    _, _, vh = np.linalg.svd(centered, full_matrices=False)
+                    u, s, vh = np.linalg.svd(centered, full_matrices=False)
                     normal = vh[-1]  # Smallest singular vector is the normal
-                    
-                    # Ensure consistent orientation (positive Z component by default)
-                    if normal[2] < 0:
-                        normal = -normal
-                    
-                    normals[i] = normal / np.linalg.norm(normal)
+                    normals[i] = normal / (np.linalg.norm(normal) + 1e-12)
                 except:
-                    normals[i] = np.array([0, 0, 1])
+                    normals[i] = np.array([0, 0, 1.0])
+            
+            # 2. Consistent Orientation Propagation using BFS
+            visited = np.zeros(n_points, dtype=bool)
+            
+            # Iterate through all components (handles disconnected islands)
+            for start_node in range(n_points):
+                if visited[start_node]:
+                    continue
+                
+                # Seed orientation: prioritize World-Z up for the first seen point
+                if normals[start_node, 2] < 0:
+                    normals[start_node] = -normals[start_node]
+                    
+                visited[start_node] = True
+                queue = [start_node]
+                
+                # BFS
+                head = 0
+                while head < len(queue):
+                    curr = queue[head]
+                    head += 1
+                    curr_normal = normals[curr]
+                    
+                    # Propagate to neighbors
+                    # indices[curr] has self at 0, neighbors at 1..k
+                    nbrs = indices[curr][1:]
+                    
+                    for nbr in nbrs:
+                        if not visited[nbr]:
+                            visited[nbr] = True
+                            queue.append(nbr)
+                            
+                            # Check orientation consistency
+                            if np.dot(normals[nbr], curr_normal) < 0:
+                                normals[nbr] = -normals[nbr]
+                        # If already visited, we could check for conflict, but ignore for now
             
             return normals
             
@@ -854,110 +948,197 @@ class DirectTriangleWrapper:
     def _detect_fold_regions(self, points_3d: np.ndarray, normals: np.ndarray, 
                             angle_threshold: float = 120.0) -> List[np.ndarray]:
         """
-        Detect fold regions by clustering points based on normal similarity.
-        
-        Points with normal angles exceeding the threshold are considered to be
-        in different fold regions.
+        Detect fold regions using seed-based region growing.
+        Segments the surface into patches monotonic enough for projection.
         
         Args:
             points_3d: 3D points (N, 3)
             normals: Unit normals for each point (N, 3)
-            angle_threshold: Angle threshold in degrees
+            angle_threshold: Angle threshold in degrees (tolerance for patch deviation)
             
         Returns:
             List of arrays, each containing point indices for a fold region
         """
         from scipy.spatial import cKDTree
-        from collections import deque
         
         try:
             n_points = len(points_3d)
-            cos_threshold = np.cos(np.radians(angle_threshold))
+            
+            # Calculate strict dot threshold for projection safety
+            # If a patch bends more than 90 degrees, it cannot be projected injectively
+            # We enforce a safe limit (e.g., 60 degrees) to force splitting hinges
+            # angle_threshold from user is likely large (120), so we clamp it aggressively
+            max_deviation_deg = min(angle_threshold, 60.0)
+            min_dot = np.cos(np.radians(max_deviation_deg))
             
             # Build spatial tree for neighbor queries
             tree = cKDTree(points_3d)
+            k = 12
+            _, all_indices = tree.query(points_3d, k=k+1)
             
-            # Find connected regions where normals are similar
             visited = np.zeros(n_points, dtype=bool)
             regions = []
             
-            for start_idx in range(n_points):
-                if visited[start_idx]:
+            for i in range(n_points):
+                if visited[i]:
                     continue
                 
-                # BFS to find connected region
+                # Start new region/patch
                 region = []
-                queue = deque([start_idx])
+                queue = [i]
+                visited[i] = True
+                region.append(i)
                 
-                while queue:
-                    idx = queue.popleft()
+                # The normal of the SEED defines the projection plane for this patch
+                seed_normal = normals[i]
+                
+                head = 0
+                while head < len(queue):
+                    curr = queue[head]
+                    head += 1
                     
-                    if visited[idx]:
-                        continue
+                    # Direct neighbors
+                    nbrs = all_indices[curr][1:]
                     
-                    visited[idx] = True
-                    region.append(idx)
-                    
-                    # Find spatial neighbors
-                    # Use distance based on local point density
-                    if self.base_size:
-                        search_radius = self.base_size * 2
-                    else:
-                        dists, _ = tree.query(points_3d[idx], k=min(5, n_points))
-                        search_radius = np.mean(dists[1:]) * 3 if len(dists) > 1 else 1.0
-                    
-                    neighbors = tree.query_ball_point(points_3d[idx], search_radius)
-                    
-                    for neighbor_idx in neighbors:
-                        if visited[neighbor_idx]:
+                    for nbr in nbrs:
+                        if visited[nbr]:
                             continue
                         
-                        # Check normal similarity
-                        dot_product = np.dot(normals[idx], normals[neighbor_idx])
+                        # Check criteria 1: Consistency with SEED normal (Global patch planarity)
+                        # This prevents the patch from wrapping around > 60 degrees
+                        dot_seed = np.dot(normals[nbr], seed_normal)
                         
-                        # If normals are similar (dot product > cos_threshold), same region
-                        # Note: for folds, normals may flip, so we check absolute value
-                        if abs(dot_product) > cos_threshold:
-                            queue.append(neighbor_idx)
+                        # Check criteria 2: Consistency with CURRENT normal (Local smoothness)
+                        dot_local = np.dot(normals[nbr], normals[curr])
+                        
+                        # Grow if satisfies both
+                        if dot_seed > min_dot and dot_local > 0.5:
+                            visited[nbr] = True
+                            queue.append(nbr)
+                            region.append(nbr)
                 
-                if region:
+                # Keep significant regions
+                if len(region) >= 4:
                     regions.append(np.array(region))
             
-            # Merge very small regions into nearest larger region
-            min_region_size = max(10, n_points // 20)
-            large_regions = [r for r in regions if len(r) >= min_region_size]
-            small_regions = [r for r in regions if len(r) < min_region_size]
-            
-            if large_regions and small_regions:
-                # Merge small regions into nearest large region
-                for small_region in small_regions:
-                    if len(small_region) == 0:
-                        continue
-                    
-                    # Find centroid of small region
-                    small_centroid = points_3d[small_region].mean(axis=0)
-                    
-                    # Find nearest large region
-                    min_dist = float('inf')
-                    nearest_idx = 0
-                    
-                    for i, large_region in enumerate(large_regions):
-                        large_centroid = points_3d[large_region].mean(axis=0)
-                        dist = np.linalg.norm(small_centroid - large_centroid)
-                        if dist < min_dist:
-                            min_dist = dist
-                            nearest_idx = i
-                    
-                    # Merge
-                    large_regions[nearest_idx] = np.concatenate([large_regions[nearest_idx], small_region])
-                
-                return large_regions
-            
-            return regions if regions else [np.arange(n_points)]
+            return regions
             
         except Exception as e:
             self.logger.warning(f"Fold region detection failed: {e}")
             return [np.arange(len(points_3d))]
+
+    def _compute_patch_boundary(self, points_2d: np.ndarray, base_size: float) -> Optional[np.ndarray]:
+        """
+        Compute the concave hull boundary segments for a set of 2D points.
+        Uses Delaunay filtering (Alpha Shape concept) to avoid "big triangle" artifacts.
+        
+        Args:
+            points_2d: 2D points (N, 2)
+            base_size: Reference length for edge filtering
+            
+        Returns:
+            Segments array (M, 2) of indices, or None on failure
+        """
+        from scipy.spatial import Delaunay
+        
+        try:
+            if len(points_2d) < 3:
+                return None
+                
+            tri = Delaunay(points_2d)
+            simplices = tri.simplices
+            
+            # Calculate edge lengths
+            edges = []
+            # Extract unique edges and their lengths
+            # An edge is internal if shared by 2 triangles, boundary if only 1
+            
+            edge_dict = {} # (idx1, idx2) -> count
+            
+            for s in simplices:
+                #Sort indices for consistent edge keys
+                s_edges = [
+                    tuple(sorted((s[0], s[1]))),
+                    tuple(sorted((s[1], s[2]))),
+                    tuple(sorted((s[2], s[0])))
+                ]
+                
+                for e in s_edges:
+                    if e not in edge_dict:
+                        edge_dict[e] = 0
+                    edge_dict[e] += 1
+            
+            # Use strict alpha-like threshold
+            # Edges longer than this are considered "spanning the void" and removed
+            # But we can't just remove edges, we need to find the boundary of the kept triangles.
+            max_len_sq = (base_size * 2.5) ** 2
+            
+            valid_boundary_edges = []
+            
+            for s in simplices:
+                # Check if triangle is valid (perimeter/area check or max edge check)
+                # Simple check: max edge length
+                pts = points_2d[s]
+                d1 = np.sum((pts[0] - pts[1])**2)
+                d2 = np.sum((pts[1] - pts[2])**2)
+                d3 = np.sum((pts[2] - pts[0])**2)
+                
+                if max(d1, d2, d3) > max_len_sq:
+                    # Too big, discard
+                    continue
+                    
+                # Add its edges to a boundary counter for valid triangles
+                s_edges = [
+                    tuple(sorted((s[0], s[1]))),
+                    tuple(sorted((s[1], s[2]))),
+                    tuple(sorted((s[2], s[0])))
+                ]
+                
+                for e in s_edges:
+                    edge_dict[e] = edge_dict.get(e, 0) # Track specifically for kept tris?
+                    # No, simpler: 
+                    # Re-build edge count for ONLY kept triangles
+                    pass
+
+            # Lets do it cleanly:
+            kept_simplices = []
+            for s in simplices:
+                pts = points_2d[s]
+                d1 = np.sum((pts[0] - pts[1])**2)
+                d2 = np.sum((pts[1] - pts[2])**2)
+                d3 = np.sum((pts[2] - pts[0])**2)
+                if max(d1, d2, d3) <= max_len_sq:
+                    kept_simplices.append(s)
+            
+            if not kept_simplices:
+                # Fallback: keep all if too strict
+                kept_simplices = simplices
+                
+            # Find boundary of kept simplices
+            boundary_counts = {}
+            for s in kept_simplices:
+                es = [
+                    tuple(sorted((s[0], s[1]))),
+                    tuple(sorted((s[1], s[2]))),
+                    tuple(sorted((s[2], s[0])))
+                ]
+                for e in es:
+                    if e in boundary_counts:
+                        boundary_counts[e] += 1
+                    else:
+                        boundary_counts[e] = 1
+            
+            # Boundary edges appear exactly once
+            segments = []
+            for e, count in boundary_counts.items():
+                if count == 1:
+                    segments.append(e)
+            
+            return np.array(segments)
+            
+        except Exception as e:
+            self.logger.warning(f"Boundary computation failed: {e}")
+            return None
     
     def _project_to_local_plane(self, points_3d: np.ndarray) -> Tuple[Optional[np.ndarray], Dict]:
         """
@@ -1000,7 +1181,8 @@ class DirectTriangleWrapper:
             return None, {}
     
     def _project_back_to_3d(self, points_2d: np.ndarray, params: Dict, 
-                           original_3d: np.ndarray) -> np.ndarray:
+                           original_3d: np.ndarray, 
+                           input_2d: np.ndarray = None, input_3d: np.ndarray = None) -> np.ndarray:
         """
         Project 2D triangulation vertices back to 3D using interpolation.
         
@@ -1008,6 +1190,8 @@ class DirectTriangleWrapper:
             points_2d: 2D vertices from triangulation (M, 2)
             params: Projection parameters from _project_to_local_plane
             original_3d: Original 3D points used for interpolation
+            input_2d: Optional original 2D points (N, 2) for exact matching
+            input_3d: Optional original 3D points (N, 3) for exact matching
             
         Returns:
             3D coordinates (M, 3)
@@ -1055,6 +1239,30 @@ class DirectTriangleWrapper:
                         points_2d[:, 0:1] * u_axis + 
                         points_2d[:, 1:2] * v_axis + 
                         z_new[:, np.newaxis] * normal)
+            
+            # Restore exact points if inputs are provided
+            # Uses KDTree to match output points to original input points robustly
+            if input_2d is not None and input_3d is not None:
+                try:
+                    tree = cKDTree(input_2d)
+                    # Find nearest original point within tolerance
+                    dists, indices = tree.query(points_2d, k=1)
+                    
+                    # Tolerance: tiny deviation allowed (floating point jitter)
+                    # but small enough to avoid snapping to wrong point
+                    tolerance = 1e-5 
+                    if self.base_size:
+                        tolerance = self.base_size * 1e-4
+                        
+                    match_mask = dists < tolerance
+                    
+                    # Snap matched points
+                    if np.any(match_mask):
+                        matched_indices = indices[match_mask]
+                        points_3d[match_mask] = input_3d[matched_indices]
+                        
+                except Exception as e:
+                    self.logger.warning(f"Exact point restoration failed: {e}")
             
             return points_3d
             

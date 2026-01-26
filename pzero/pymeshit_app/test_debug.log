@@ -1,0 +1,20 @@
+2026-01-26 10:53:41,533 - TestFold - INFO - Starting Fold Triangulation Test
+2026-01-26 10:53:41,533 - TestFold - INFO - Generating Top Limb...
+2026-01-26 10:53:41,533 - TestFold - INFO - Generating Bottom Limb...
+2026-01-26 10:53:41,533 - TestFold - INFO - Generating Hinge...
+2026-01-26 10:53:41,535 - TestFold - INFO - Generated 580 points
+2026-01-26 10:53:41,535 - TestFold - INFO - --- Testing _compute_local_normals ---
+2026-01-26 10:53:41,544 - TestFold - INFO - Avg Top Normal: [ 0.09550364 -0.00356063  0.97137045]
+2026-01-26 10:53:41,544 - TestFold - INFO - Avg Bottom Normal: [ 0.09402534 -0.00386243 -0.9704907 ]
+2026-01-26 10:53:41,545 - TestFold - INFO - Dot product of Top/Bottom normals: -0.9337124775824511
+2026-01-26 10:53:41,545 - TestFold - INFO - --- Testing _detect_fold_regions ---
+2026-01-26 10:53:41,547 - TestFold - INFO - Detected Regions: 3
+2026-01-26 10:53:41,547 - TestFold - INFO - Region 0: 260 points
+2026-01-26 10:53:41,547 - TestFold - INFO - Region 1: 259 points
+2026-01-26 10:53:41,548 - TestFold - INFO - Region 2: 61 points
+2026-01-26 10:53:41,548 - TestFold - INFO - --- Testing triangulate_folded_surface ---
+2026-01-26 10:53:41,548 - MeshIt-Workflow - INFO - Multi-patch triangulation: 580 points, fold_threshold=80.0°
+2026-01-26 10:53:41,560 - MeshIt-Workflow - INFO - Detected 3 fold regions/patches
+2026-01-26 10:53:41,664 - MeshIt-Workflow - INFO - Merged 754 -> 615 vertices, removed 0 degenerate triangles
+2026-01-26 10:53:41,664 - MeshIt-Workflow - INFO - Multi-patch result: 615 vertices, 1411 triangles
+2026-01-26 10:53:41,664 - TestFold - INFO - SUCCESS: Triangulation created 1411 triangles and 615 vertices.
