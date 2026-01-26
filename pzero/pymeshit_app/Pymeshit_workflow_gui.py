@@ -9895,7 +9895,99 @@ segmentation, triangulation, and visualization.
             all_pts = np.asarray(dataset['points'], dtype=float)
             
             # Check if multi-patch triangulation is requested
+            explicit_segments = None
             if tri_method == "multipatch":
+                # DEBUG: Collect global constraints from MAIN surfaces to pass to BOUNDARY surfaces
+                # This ensures the boundaries match the refined edges of the main surfaces.
+                # Initialize constraint cache if first run (defensive)
+                if not hasattr(self, '_global_constraint_cache'):
+                    self._global_constraint_cache = {'points': [], 'segments': []}
+
+                # Build explicit segments from this dataset's segments_data so multipatch gets real constraints
+                seg_round = 6
+                new_points = [p for p in all_pts] # Start with original points
+                pmap = {tuple(np.round(p, seg_round)): i for i, p in enumerate(new_points)}
+                explicit_segments_list = []
+
+                if segments_data is not None and len(segments_data) > 0:
+                    for s in segments_data:
+                        p1 = np.array(s[0], dtype=float)
+                        p2 = np.array(s[1], dtype=float)
+                        k1 = tuple(np.round(p1, seg_round))
+                        k2 = tuple(np.round(p2, seg_round))
+                        if k1 not in pmap:
+                            pmap[k1] = len(new_points)
+                            new_points.append(p1)
+                        if k2 not in pmap:
+                            pmap[k2] = len(new_points)
+                            new_points.append(p2)
+                        explicit_segments_list.append([pmap[k1], pmap[k2]])
+                
+                # If this is a MAIN surface (has segments), add to cache
+                if segments_data is not None and len(segments_data) > 0 and "new_boundary" not in dataset_name:
+                     # Add points and segments (offset indices)
+                     lines = []
+                     for s in segments_data:
+                         p1 = np.array(s[0], dtype=float)
+                         p2 = np.array(s[1], dtype=float)
+                         lines.append((p1, p2))
+                     self._global_constraint_cache['segments'].extend(lines)
+                
+                # If this is a BOUNDARY surface ("new_boundary"), INJECT global constraints
+                if "new_boundary" in dataset_name:
+                    logger.info(f"Injecting global constraints into boundary '{dataset_name}'")
+                    
+                    if hasattr(self, '_global_constraint_cache') and self._global_constraint_cache['segments']:
+                        # Convert cached lines back to points + segments array
+                        extra_lines = self._global_constraint_cache['segments']
+                        
+                        # We need to merge 'all_pts' (boundary corners) with 'extra_lines' vertices
+                        # new_points already initialized above
+                        
+                        # Use a map to deduplicate points (essential for connectivity)
+                        pmap = {}
+                        for i, p in enumerate(new_points):
+                            key = tuple(np.round(p, seg_round))
+                            pmap[key] = i
+                            
+                        # Keep existing explicit_segments_list so dataset constraints are preserved
+                            
+                        for p1, p2 in extra_lines:
+                            k1 = tuple(np.round(p1, seg_round))
+                            k2 = tuple(np.round(p2, seg_round))
+                            
+                            # Only add segments that are close to this surface (simple bbox check or similar?)
+                            # For now, simplistic approach: check if points are somewhat coplanar or just assume 
+                            # the triangulation will ignore distant points?
+                            # DirectTriangleWrapper usually projects to 2D. 
+                            # Adding distant points is bad for projection.
+                            # Better: distance check.
+                            
+                            # Check distance to simple centroid of boundary
+                            cent = np.mean(all_pts, axis=0)
+                            if np.linalg.norm(p1 - cent) > 10000 and np.linalg.norm(p2 - cent) > 10000:
+                                 # Skip very far points (safety)
+                                 continue
+
+                            if k1 not in pmap:
+                                pmap[k1] = len(new_points)
+                                new_points.append(p1)
+                            if k2 not in pmap:
+                                pmap[k2] = len(new_points)
+                                new_points.append(p2)
+                                
+                            explicit_segments_list.append([pmap[k1], pmap[k2]])
+                            
+                        all_pts = np.array(new_points)
+                        if explicit_segments_list:
+                            explicit_segments = np.array(explicit_segments_list, dtype=int)
+                        
+                        logger.info(f"Boundary '{dataset_name}' now has {len(new_points)} points and {len(explicit_segments_list)} injected constraints")
+
+                all_pts = np.array(new_points)
+                if explicit_segments_list:
+                    explicit_segments = np.array(explicit_segments_list, dtype=int)
+
                 logger.info(f"Using Multi-Patch triangulation for '{dataset_name}' (fold_angle={fold_angle_threshold}°)")
                 
                 try:
@@ -9908,7 +10000,7 @@ segmentation, triangulation, and visualization.
                 triangulator = DirectTriangleWrapper(gradient=gradient, min_angle=min_angle, base_size=base_size)
                 tri_res = triangulator.triangulate_folded_surface(
                     points_3d=all_pts,
-                    segments=None,  # Segments handled internally
+                    segments=explicit_segments,  # Pass explicitly injected segments
                     fold_angle_threshold=fold_angle_threshold,
                     uniform=uniform
                 )
@@ -10142,6 +10234,9 @@ segmentation, triangulation, and visualization.
             self.statusBar().showMessage(f"Completed triangulation for {self.datasets[self.current_dataset_index]['name']}") # Add success message here
 
     def run_all_triangulations(self):
+        # Initialize global constraint cache for boundary injection
+        self._global_constraint_cache = {'points': [], 'segments': []}
+
         # Ensure VTU datasets have true boundary rings as segments
         self._rebuild_segments_from_vtu_boundaries()
         self._attach_vtu_constraints_to_all_datasets()
