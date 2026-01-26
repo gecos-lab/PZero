@@ -2830,12 +2830,12 @@ class MeshItWorkflowGUI(QWidget):
         method_layout.addWidget(QLabel("Method:"))
         self.hull_method_combo = QComboBox()
         self.hull_method_combo.addItem("Delaunay 2D (Default)", "delaunay")
-        self.hull_method_combo.addItem("Alpha Shape 2D (Wavy Surfaces)", "alpha")
-        self.hull_method_combo.addItem("3D Alpha Shape (Folded Surfaces)", "alpha_3d")
+        self.hull_method_combo.addItem("2D Alpha Shapes (Wavy)", "alpha_shape_2d")
+        self.hull_method_combo.addItem("3D Angular Gap (Folds)", "angular_gap")
         self.hull_method_combo.setToolTip(
             "Delaunay 2D: Original method - best for flat/quasi-planar surfaces\n"
-            "Alpha Shape 2D: Best for wavy/undulating surfaces with concave boundaries\n"
-            "3D Alpha Shape: Advanced method for recumbent/overturned folds that cannot be projected to 2D"
+            "2D Alpha Shapes: Best for wavy/undulating surfaces with concave boundaries\n"
+            "3D Angular Gap: Advanced method for recumbent/overturned folds that cannot be projected to 2D"
         )
         self.hull_method_combo.setCurrentIndex(0)  # Default to Delaunay
         method_layout.addWidget(self.hull_method_combo)
@@ -2849,13 +2849,13 @@ class MeshItWorkflowGUI(QWidget):
         self.hull_alpha_spin.setValue(1.0)
         self.hull_alpha_spin.setSingleStep(0.1)
         self.hull_alpha_spin.setToolTip(
-            "Alpha factor controls hull tightness:\n"
-            "• 0.1-0.5: Very tight fit (may miss points)\n"
+            "Controls boundary tightness (Alpha Factor / Sensitivity):\n"
+            "• 0.1-0.5: Very tight fit (stricter)\n"
             "• 0.5-1.0: Tight fit, good for dense point clouds\n"
-            "• 1.0-2.0: Balanced (recommended for most cases)\n"
+            "• 1.0-2.0: Balanced (recommended)\n"
             "• 2.0-5.0: Looser fit, smoother boundary\n"
-            "• 5.0-10.0: Very loose, approaches convex hull\n"
-            "\nFor folded surfaces (3D Alpha), use 1.0-3.0"
+            "• 5.0+: Very loose, approaches convex hull\n"
+            "\nFor Angular Gap (3D): Lower = Stricter, Higher = More Inclusive"
         )
         self.hull_alpha_spin.setEnabled(False)  # Disabled by default (Delaunay selected)
         alpha_layout.addWidget(self.hull_alpha_spin)
@@ -2951,7 +2951,7 @@ class MeshItWorkflowGUI(QWidget):
         """Handle hull method dropdown change - enable/disable alpha parameter."""
         method = self.hull_method_combo.currentData()
         # Enable alpha spin box for alpha shape methods (both 2D and 3D)
-        self.hull_alpha_spin.setEnabled(method in ("alpha", "alpha_3d"))
+        self.hull_alpha_spin.setEnabled(method in ("alpha_shape_2d", "angular_gap"))
     
     def _on_tri_method_changed(self, index):
         """Handle triangulation method dropdown change - enable/disable fold angle threshold."""
@@ -8682,7 +8682,7 @@ class MeshItWorkflowGUI(QWidget):
         """
         Compute (and store) the boundary poly-line for the selected dataset.
         - For 2D data, this computes the convex hull.
-        - For 3D sheet-like data, uses Delaunay (original) or Alpha Shape based on dropdown.
+        - For 3D sheet-like data, uses Delaunay (original) or Angular Gap based on dropdown.
         
         This version also identifies and marks geometric corners as "special points"
         immediately after calculation, preparing it for robust segmentation.
@@ -8703,13 +8703,15 @@ class MeshItWorkflowGUI(QWidget):
             logger.warning("Dataset '%s' has < 3 points, skipping hull computation.", ds.get('name'))
             return False
 
-        # Get the selected hull method from the dropdown (default to Delaunay)
+        # Get the selected hull method from the dropdown
         hull_method = getattr(self, 'hull_method_combo', None)
         method = hull_method.currentData() if hull_method else "delaunay"
         
-        # Get alpha factor for alpha shape method
-        alpha_factor = getattr(self, 'hull_alpha_spin', None)
-        alpha_factor = alpha_factor.value() if alpha_factor else 1.0
+        # Get sensitivity/alpha parameter
+        # For Angular Gap: "sensitivity"
+        # For Alpha Shapes: "alpha_factor"
+        boundary_sensitivity_spin = getattr(self, 'hull_alpha_spin', None)
+        boundary_sensitivity = boundary_sensitivity_spin.value() if boundary_sensitivity_spin else 1.0
 
         try:
             dim = pts.shape[1]
@@ -8729,23 +8731,26 @@ class MeshItWorkflowGUI(QWidget):
                 # 1. Project all 3D points onto their best-fit 2D plane using PCA.
                 _centroid, projected_pts_2d = self._pca_project(pts)
                 
-                if method == "alpha_3d":
-                    # 3D Alpha Shape for folded surfaces (recumbent/overturned folds)
-                    logger.info(f"Computing 3D alpha shape boundary for '{ds.get('name')}' (alpha_factor={alpha_factor})...")
-                    ordered_indices = self._compute_3d_alpha_shape_boundary(pts, alpha_factor)
+                if method == "angular_gap":
+                    # 3D Angular Gap for folded surfaces (recumbent/overturned folds)
+                    # Replaces the previous "alpha_3d" method name
+                    logger.info(f"Computing 3D boundary using angular gap method for '{ds.get('name')}' "
+                               f"(sensitivity={boundary_sensitivity})...")
+                    ordered_indices = self._compute_boundary_angular_gap(pts, boundary_sensitivity)
                     
                     if ordered_indices is not None and len(ordered_indices) >= 3:
-                        logger.info(f"3D Alpha shape boundary computed with {len(ordered_indices)} vertices")
+                        logger.info(f"Angular gap boundary computed with {len(ordered_indices)} vertices")
                         hull_pts_np = pts[ordered_indices]
                     else:
                         # Fallback to 2D alpha shapes if 3D fails
-                        logger.warning("3D Alpha shapes failed, falling back to 2D alpha shape...")
-                        method = "alpha"  # Fall through to 2D alpha below
+                        logger.warning("Angular gap method failed, falling back to 2D alpha shape...")
+                        method = "alpha_shape_2d"  # Fall through below
                 
-                if method == "alpha":
-                    # Alpha shapes for wavy/concave surfaces
-                    logger.info(f"Computing alpha shape boundary for '{ds.get('name')}' (alpha_factor={alpha_factor})...")
-                    ordered_indices = self._compute_alpha_shape_boundary_robust(projected_pts_2d, alpha_factor)
+                if method == "alpha_shape_2d":
+                    # Alpha shapes for wavy/concave surfaces (formerly "alpha")
+                    logger.info(f"Computing 2D alpha shape boundary for '{ds.get('name')}' "
+                               f"(alpha_factor={boundary_sensitivity})...")
+                    ordered_indices = self._compute_alpha_shape_boundary_2d(projected_pts_2d, boundary_sensitivity)
                     
                     if ordered_indices is not None and len(ordered_indices) >= 3:
                         logger.info(f"Alpha shape boundary computed with {len(ordered_indices)} vertices")
@@ -8753,7 +8758,7 @@ class MeshItWorkflowGUI(QWidget):
                     else:
                         # Fallback to Delaunay if alpha shapes fail
                         logger.warning("Alpha shapes failed, falling back to Delaunay boundary...")
-                        method = "delaunay"  # Fall through to Delaunay below
+                        method = "delaunay"  # Fall through below
                 
                 if method == "delaunay" or hull_pts_np is None:
                     # ORIGINAL DELAUNAY CODE - unchanged
@@ -8832,24 +8837,23 @@ class MeshItWorkflowGUI(QWidget):
             logger.debug(traceback.format_exc())
             return False
     
-    def _compute_3d_alpha_shape_boundary(self, points_3d: np.ndarray, alpha_factor: float = 1.0) -> Optional[np.ndarray]:
+    def _compute_boundary_angular_gap(self, points_3d: np.ndarray, sensitivity: float = 1.0) -> Optional[np.ndarray]:
         """
-        Compute the boundary of a 3D sheet-like point cloud (geological surfaces).
+        Compute the boundary of a 3D sheet-like point cloud using angular gap detection.
         
-        This method is designed for folded surfaces (recumbent/overturned folds) where
-        2D projection fails because the surface folds back on itself.
+        This method is designed for folded geological surfaces (recumbent/overturned folds) 
+        where 2D projection fails because the surface folds back on itself.
         
-        ALGORITHM FOR SHEET-LIKE FOLDED SURFACES:
-        1. Detect boundary points using angular gap method (points with "open" sides)
-        2. Build local surface triangulation using k-NN
-        3. Find edges that connect boundary points
-        4. Order boundary points along the perimeter
+        ALGORITHM:
+        1. Detect boundary points using angular gap analysis (points with "open" sides)
+        2. Build local connectivity using k-NN
+        3. Order boundary points along the perimeter
         
         Args:
             points_3d: 3D points (N, 3)
-            alpha_factor: Controls boundary detection sensitivity
-                         Lower values (0.5-1.0) = tighter boundary detection
-                         Higher values (2.0-5.0) = more inclusive boundary
+            sensitivity: Controls boundary detection sensitivity
+                        Lower values (0.5-1.0) = stricter boundary detection
+                        Higher values (2.0-5.0) = more inclusive boundary
             
         Returns:
             Ordered boundary point indices, or None if computation fails
@@ -8861,10 +8865,10 @@ class MeshItWorkflowGUI(QWidget):
         try:
             n_points = len(points_3d)
             if n_points < 4:
-                logger.warning("3D alpha shape requires at least 4 points")
+                logger.warning("Angular gap boundary requires at least 4 points")
                 return None
             
-            logger.info(f"Sheet boundary detection: {n_points} points, alpha_factor={alpha_factor}")
+            logger.info(f"Sheet boundary detection: {n_points} points, sensitivity={sensitivity}")
             
             # Step 1: Build k-NN tree and compute local geometry
             tree = cKDTree(points_3d)
@@ -8939,10 +8943,10 @@ class MeshItWorkflowGUI(QWidget):
             # For boundary points, gap should be >> 0.314
             
             # Base threshold: ~90 degrees (pi/2) indicates a clear boundary
-            # Lower alpha_factor = higher threshold = stricter boundary detection
-            # Higher alpha_factor = lower threshold = more points considered boundary
+            # Lower sensitivity = higher threshold = stricter boundary detection
+            # Higher sensitivity = lower threshold = more points considered boundary
             base_threshold = np.pi / 2  # 90 degrees
-            gap_threshold = base_threshold / alpha_factor
+            gap_threshold = base_threshold / sensitivity
             
             # Clamp threshold to reasonable range
             gap_threshold = np.clip(gap_threshold, np.pi / 6, np.pi)  # 30-180 degrees
@@ -8990,7 +8994,7 @@ class MeshItWorkflowGUI(QWidget):
             ordered_local = [start_local]
             visited = {start_local}
             
-            max_edge_length = avg_nn_dist * alpha_factor * 5  # Maximum edge length to consider
+            max_edge_length = avg_nn_dist * sensitivity * 5  # Maximum edge length to consider
             
             while len(ordered_local) < len(boundary_indices):
                 current = ordered_local[-1]
@@ -9150,10 +9154,12 @@ class MeshItWorkflowGUI(QWidget):
         except Exception:
             return None
 
-    def _compute_alpha_shape_boundary_robust(self, points_2d: np.ndarray, alpha_factor: float = 1.0) -> Optional[np.ndarray]:
+    def _compute_alpha_shape_boundary_2d(self, points_2d: np.ndarray, alpha_factor: float = 1.0) -> Optional[np.ndarray]:
         """
-        Compute the boundary of a 2D point cloud using alpha shapes with adaptive alpha.
-        This method is robust for wavy/undulating surfaces that have concave boundaries.
+        Compute the boundary of a 2D point cloud using classical alpha shapes (Delaunay filter).
+        
+        This method uses Delaunay triangulation with circumradius filtering.
+        Suitable for wavy/undulating surfaces with concave boundaries where 2D projection is valid.
         
         The algorithm:
         1. Computes an adaptive alpha based on local point density
