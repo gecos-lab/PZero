@@ -743,7 +743,43 @@ class DirectTriangleWrapper:
         for i, region_indices in enumerate(fold_regions):
             if len(region_indices) < 3:
                 continue
+        
             
+            # Expand region via explicit segments (BFS)
+            # If segment connects P1 (in region) to P2 (outside), add P2.
+            # This ensures refined boundary points that might have been skipped by growing
+            # due to poor normals are "dragged" into the correct patch.
+            if segments is not None and len(segments) > 0:
+                current_region_set = set(region_indices)
+                
+                # Build simple adjacency for segments (could be pre-computed but this is per-patch effectively)
+                # Actually efficient to do one pass? No, let's do iteratively
+                # Or better: Build global adjacency once?
+                if not hasattr(self, '_segment_adj'):
+                     self._segment_adj = {}
+                     for s in segments:
+                         u, v = s[0], s[1]
+                         self._segment_adj.setdefault(u, []).append(v)
+                         self._segment_adj.setdefault(v, []).append(u)
+                
+                # BFS expansion
+                queue = list(region_indices)
+                expanded_count = 0
+                
+                while queue:
+                    u = queue.pop(0)
+                    if u in self._segment_adj:
+                        for v in self._segment_adj[u]:
+                            if v not in current_region_set:
+                                # Add to region
+                                current_region_set.add(v)
+                                queue.append(v)
+                                expanded_count += 1
+                
+                if expanded_count > 0:
+                    region_indices = list(current_region_set)
+                    # self.logger.debug(f"Expanded patch {i} by {expanded_count} points via segments")
+
             # Add spatial buffer (1-ring neighbors) to ensure patches overlap/touch
             # This is critical for the stitching/merging step to work
             patch_mask = np.zeros(len(points_3d), dtype=bool)
@@ -802,32 +838,114 @@ class DirectTriangleWrapper:
                 
                 # Compute Concave Hull boundary for this patch to prevent "big triangle" artifacts
                 # This ensures the triangulation respects the actual shape of the patch
-                patch_segments = self._compute_patch_boundary(local_2d, patch_base_size)
+                boundary_segments = self._compute_patch_boundary(local_2d, patch_base_size)
                 
+                # Filter explicit segments relevant to this patch
+                explicit_patch_segments = []
+                if segments is not None:
+                    # Create a mapping from global index to local patch index (0..M)
+                    # buffered_indices contains global indices in order of local_2d
+                    global_to_local = {global_idx: local_idx for local_idx, global_idx in enumerate(buffered_indices)}
+                    
+                    for seg in segments:
+                        p1, p2 = seg[0], seg[1]
+                        # If both endpoints are in this patch, add the segment
+                        if p1 in global_to_local and p2 in global_to_local:
+                            explicit_patch_segments.append([global_to_local[p1], global_to_local[p2]])
+                
+                explicit_patch_segments = np.array(explicit_patch_segments, dtype=int) if explicit_patch_segments else np.empty((0, 2), dtype=int)
+                
+                # Merge segments: Explicit take precedence logically, but we just union them for triangle
+                if boundary_segments is not None and len(boundary_segments) > 0:
+                    if len(explicit_patch_segments) > 0:
+                        patch_segments = np.vstack((boundary_segments, explicit_patch_segments))
+                    else:
+                        patch_segments = boundary_segments
+                else:
+                    patch_segments = explicit_patch_segments
+
+                # SPARSE INPUT STRATEGY (uniformity fix):
+                # Instead of passing ALL local_2d vertices (dense cloud) to Triangle,
+                # we pass ONLY the vertices used by segments (boundary + constraints).
+                # Triangle will then fill the interior using Steiner points based on 'a' constraint.
+                # This ensures the mesh density is controlled by 'a' and not the dense input cloud.
+                
+                tri_vertices = None
+                tri_segments = None
+                remapped_indices_map = None # New -> Old (local patch idx)
+                
+                if patch_segments is not None and len(patch_segments) > 0:
+                    # Identify active vertices
+                    unique_indices = np.unique(patch_segments.flatten())
+                    
+                    # Create Mapping: Old (local patch idx) -> New (sparse idx)
+                    old_to_new = {old: new for new, old in enumerate(unique_indices)}
+                    
+                    # Store reverse mapping for projection back
+                    remapped_indices_map = unique_indices
+                    
+                    # Create sparse vertices
+                    tri_vertices = local_2d[unique_indices]
+                    
+                    # Remap segments
+                    # Use a vectorized lookup or list compr
+                    tri_segments = np.array([[old_to_new[s[0]], old_to_new[s[1]]] for s in patch_segments], dtype=int)
+                else:
+                    # Fallback if no segments found (rare, implies point cloud only)
+                    tri_vertices = local_2d
+                    tri_segments = None
+                    # remapped_indices_map remains None, implying 1:1 mapping
+
+                # Match standard CDT area constraint (0.5 factor, same as _setup_complex_triangulation)
                 area_constraint = patch_base_size * patch_base_size * 0.5
                 
                 # Use 'p' switch if we have segments (which we should now)
-                p_switch = 'p' if patch_segments is not None and len(patch_segments) > 0 else ''
+                p_switch = 'p' if tri_segments is not None and len(tri_segments) > 0 else ''
+                
+                # Use standard switches matching 'FAST' triangulation: z (indexes), YY (no new vertices on boundary), a (area)
                 tri_options = f'{p_switch}zYYa{area_constraint:.8f}'
                 
-                tri_input = {'vertices': local_2d}
-                if patch_segments is not None and len(patch_segments) > 0:
-                    tri_input['segments'] = patch_segments
+                self.logger.info(f"Patch {i}: base_size={patch_base_size:.4f}, max_area={area_constraint:.4f}, opts='{tri_options}'")
+                
+                tri_input = {'vertices': tri_vertices}
+                if tri_segments is not None and len(tri_segments) > 0:
+                    tri_input['segments'] = tri_segments
                 
                 result = tr.triangulate(tri_input, tri_options)
                 
                 if 'vertices' not in result or 'triangles' not in result:
                     continue
                 
-                patch_vertices_2d = result['vertices']
+                result_vertices_2d = result['vertices']
                 patch_triangles = result['triangles']
                 
-                # Project vertices back to 3D with Exact Point Restoration
-                # We pass the input 2D points (local_2d) and valid 3D points (region_points)
-                # to map back exactly where possible, eliminating gaps.
+                # Project back to 3D
+                # We need to map result vertices back.
+                # Case A: Vertex came from input (sparse) -> Exact match to remapped_indices_map -> local_2d -> region_points
+                # Case B: Vertex is Steiner (new) -> Interpolate using local_2d/region_points as source
+                
+                # Reconstruct 'input_2d' and 'input_3d' for exact matching in _project_back_to_3d
+                # If we sparsified, we only have exact 3D coords for the sparse subset.
+                # However, _project_back_to_3d's "input_2d" arg is used for KDTree snapping.
+                # We should pass the *sparse* subset as the valid snap targets? 
+                # YES, because we only want to snap to original constraint points, not arbitrary dense interior points we discarded.
+                
+                exact_2d_targets = None
+                exact_3d_targets = None
+                
+                if remapped_indices_map is not None:
+                     exact_2d_targets = local_2d[remapped_indices_map]
+                     exact_3d_targets = region_points[remapped_indices_map]
+                else:
+                     exact_2d_targets = local_2d
+                     exact_3d_targets = region_points
+                
+                # For interpolation source, we still want the FULL DENSE CLOUD to capture curvature
+                # So we pass local_2d/region_points as the 'original_3d' params source.
+                
                 patch_vertices_3d = self._project_back_to_3d(
-                    patch_vertices_2d, projection_params, region_points, 
-                    input_2d=local_2d, input_3d=region_points
+                    result_vertices_2d, projection_params, region_points,
+                    input_2d=exact_2d_targets, input_3d=exact_3d_targets
                 )
                 
                 # Adjust triangle indices and add to combined result

@@ -7300,12 +7300,16 @@ class MeshItWorkflowGUI(QWidget):
                     "fold_angle_threshold": mesh_fold_angle_threshold,  # NEW
                 }
                 
+                # Prepare data including segments (explicit boundary constraints)
+                pts3d, seg_arr, holes = self._build_plc_from_selection(s_idx)
+
                 # Check if multi-patch triangulation is requested
                 if mesh_tri_method == "multipatch":
                     logger.info(f"Using Multi-Patch triangulation for conforming mesh '{name}' (fold_angle={mesh_fold_angle_threshold}°)")
                     
-                    # Get all points for this surface
-                    all_pts = np.asarray(ds.get('points', []), dtype=float)
+                    # Use retrieved points and segments (ensure float64 points)
+                    all_pts = pts3d.astype(float)
+                    
                     if len(all_pts) >= 4:
                         triangulator = DirectTriangleWrapper(
                             gradient=float(self.mesh_gradient_input.value()),
@@ -7314,7 +7318,7 @@ class MeshItWorkflowGUI(QWidget):
                         )
                         tri_res = triangulator.triangulate_folded_surface(
                             points_3d=all_pts,
-                            segments=None,
+                            segments=seg_arr, # Pass explicit segments
                             fold_angle_threshold=mesh_fold_angle_threshold,
                             uniform=self.mesh_uniform_checkbox.isChecked()
                         )
@@ -7335,8 +7339,8 @@ class MeshItWorkflowGUI(QWidget):
                 surf_data = self._prepare_surface_data_for_triangulation(s_idx, ds, cfg)
                 if not surf_data:
                     raise RuntimeError("surface-data prep failed")
-
-                pts3d, seg_arr, holes = self._build_plc_from_selection(s_idx)
+                
+                # Check required counts (pts3d/seg_arr already retrieved)
                 if len(pts3d) < 3 or len(seg_arr) < 3:
                     raise RuntimeError("too few PLC entities")
 

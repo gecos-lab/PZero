@@ -61,16 +61,42 @@ def create_recumbent_fold():
             points.append([x_val, y, z_val])
             
     pts = np.array(points)
+    
+    # Generate simple segments for the boundary
+    # We generated points in a grid structure
+    # Top limb: 20 x 10 = 200 points.
+    # Rows along Y (10 points each).
+    # X=0 (start) boundary is points [0, 10, 20... 190]? NO
+    # Inner loop is Y. So indices 0..9 are x=0.
+    
+    segments = []
+    
+    # Helper to clean up duplicates if noise wasn't added yet
+    # But noise is added AFTER.
+    
+    # Top Limb: X=0 edge (left) -> indices 0..9
+    for i in range(9):
+        segments.append([i, i+1])
+        
+    # Bottom Limb: Same structure (generated second)
+    # Start idx = 200
+    # X=0 edge -> indices 200..209
+    for i in range(200, 209):
+        segments.append([i, i+1])
+        
+    # We just need SOME segments to test the logic
+    segments = np.array(segments, dtype=int)
+    
     # Add some noise to avoid perfect alignment issues
     pts += np.random.normal(0, 0.005, pts.shape)
     
-    return pts
+    return pts, segments
 
 def test_fold_triangulation():
     logger.info("Starting Fold Triangulation Test")
     
-    points = create_recumbent_fold()
-    logger.info(f"Generated {len(points)} points")
+    points, segments = create_recumbent_fold()
+    logger.info(f"Generated {len(points)} points, {len(segments)} segments")
     
     wrapper = DirectTriangleWrapper(base_size=0.1)
     
@@ -113,7 +139,8 @@ def test_fold_triangulation():
         logger.warning("WARNING: Only 1 region detected. Expecting at least 2 or 3 for recumbent fold.")
 
     logger.info("--- Testing triangulate_folded_surface ---")
-    result = wrapper.triangulate_folded_surface(points, fold_angle_threshold=80.0)
+    # Pass explicit segments
+    result = wrapper.triangulate_folded_surface(points, segments=segments, fold_angle_threshold=80.0)
     
     if result and 'vertices' in result and 'triangles' in result:
         n_tris = len(result['triangles'])
