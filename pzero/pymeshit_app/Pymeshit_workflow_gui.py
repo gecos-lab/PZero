@@ -10008,7 +10008,9 @@ segmentation, triangulation, and visualization.
                     points_3d=all_pts,
                     segments=explicit_segments,  # Pass explicitly injected segments
                     fold_angle_threshold=fold_angle_threshold,
-                    uniform=uniform
+                    uniform=uniform,
+                    interpolator=interp_label,
+                    smoothing=smoothing
                 )
                 
                 if tri_res and 'vertices' in tri_res and 'triangles' in tri_res:

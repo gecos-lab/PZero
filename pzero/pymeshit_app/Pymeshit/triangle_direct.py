@@ -685,7 +685,9 @@ class DirectTriangleWrapper:
 
     def triangulate_folded_surface(self, points_3d: np.ndarray, segments: Optional[np.ndarray] = None,
                                    fold_angle_threshold: float = 120.0,
-                                   uniform: bool = True) -> Dict:
+                                   uniform: bool = True,
+                                   interpolator: str = 'tps',
+                                   smoothing: float = 0.0) -> Dict:
         """
         Multi-patch triangulation for folded surfaces (recumbent/overturned folds).
         
@@ -714,21 +716,24 @@ class DirectTriangleWrapper:
         
         if len(points_3d) < 4:
             self.logger.warning("Too few points for multi-patch triangulation, using standard method")
-            return self._fallback_standard_triangulation(points_3d, segments, uniform)
+            self.logger.warning("All patches failed, using standard triangulation")
+            return self._fallback_standard_triangulation(points_3d, segments, uniform, interpolator, smoothing)
         
         # Step 1: Compute local normals using k-nearest neighbors
         normals = self._compute_local_normals(points_3d)
         
         if normals is None:
             self.logger.warning("Failed to compute normals, using standard triangulation")
-            return self._fallback_standard_triangulation(points_3d, segments, uniform)
+            self.logger.warning("All patches failed, using standard triangulation")
+            return self._fallback_standard_triangulation(points_3d, segments, uniform, interpolator, smoothing)
         
         # Step 2: Detect fold hinges based on normal angle changes
         fold_regions = self._detect_fold_regions(points_3d, normals, fold_angle_threshold)
         
         if len(fold_regions) <= 1:
             self.logger.info("No significant folds detected, using standard triangulation")
-            return self._fallback_standard_triangulation(points_3d, segments, uniform)
+            self.logger.warning("All patches failed, using standard triangulation")
+            return self._fallback_standard_triangulation(points_3d, segments, uniform, interpolator, smoothing)
         
         self.logger.info(f"Detected {len(fold_regions)} fold regions/patches")
         
@@ -945,7 +950,8 @@ class DirectTriangleWrapper:
                 
                 patch_vertices_3d = self._project_back_to_3d(
                     result_vertices_2d, projection_params, region_points,
-                    input_2d=exact_2d_targets, input_3d=exact_3d_targets
+                    input_2d=exact_2d_targets, input_3d=exact_3d_targets,
+                    interpolator=interpolator, smoothing=smoothing
                 )
                 
                 # Adjust triangle indices and add to combined result
@@ -963,7 +969,8 @@ class DirectTriangleWrapper:
         
         if not all_vertices:
             self.logger.warning("All patches failed, using standard triangulation")
-            return self._fallback_standard_triangulation(points_3d, segments, uniform)
+
+            return self._fallback_standard_triangulation(points_3d, segments, uniform, interpolator, smoothing)
         
         # Step 4: Combine all patches
         combined_vertices = np.vstack(all_vertices)
@@ -1300,7 +1307,8 @@ class DirectTriangleWrapper:
     
     def _project_back_to_3d(self, points_2d: np.ndarray, params: Dict, 
                            original_3d: np.ndarray, 
-                           input_2d: np.ndarray = None, input_3d: np.ndarray = None) -> np.ndarray:
+                           input_2d: np.ndarray = None, input_3d: np.ndarray = None,
+                           interpolator: str = 'tps', smoothing: float = 0.0) -> np.ndarray:
         """
         Project 2D triangulation vertices back to 3D using interpolation.
         
@@ -1332,25 +1340,69 @@ class DirectTriangleWrapper:
             normal = params['normal']
             z_orig = np.dot(centered_orig, normal)
             
-            # Interpolate Z for new vertices using TPS
-            try:
-                rbf = RBFInterpolator(orig_2d, z_orig, kernel='thin_plate_spline', smoothing=0.0)
-                z_new = rbf(points_2d)
-            except:
-                # Fallback to IDW
-                tree = cKDTree(orig_2d)
-                k = min(8, len(orig_2d))
-                dists, indices = tree.query(points_2d, k=k)
+            # Interpolate Z for new vertices using TPS or IDW
+            if interpolator is not None and 'idw' in interpolator.lower():
+                 # Explicit IDW requested
+                 self.logger.info("Using IDW interpolation for patch back-projection")
+                 tree = cKDTree(orig_2d)
+                 k = min(12, len(orig_2d)) # Use slightly more neighbors for IDW explicit
+                 dists, indices = tree.query(points_2d, k=k)
+                 
+                 if dists.ndim == 1:
+                     dists = dists[:, np.newaxis]
+                     indices = indices[:, np.newaxis]
+                 
+                 # Inverse distance weighting with small epsilon
+                 # power = 2.0 (standard)
+                 weights = 1.0 / np.maximum(dists ** 2, 1e-10)
+                 weights_sum = weights.sum(axis=1, keepdims=True)
+                 weights_norm = weights / weights_sum
+                 
+                 z_new = np.sum(weights_norm * z_orig[indices], axis=1)
+                 
+            elif interpolator is not None and 'linear' in interpolator.lower():
+                # Linear interpolation
+                self.logger.info("Using Linear interpolation for patch back-projection")
+                from scipy.interpolate import LinearNDInterpolator
+                try:
+                    lin_interp = LinearNDInterpolator(orig_2d, z_orig)
+                    z_new = lin_interp(points_2d)
+                    
+                    # Fill NaNs (outside convex hull of data) with Nearest
+                    nan_mask = np.isnan(z_new)
+                    if np.any(nan_mask):
+                        from scipy.interpolate import NearestNDInterpolator
+                        near_interp = NearestNDInterpolator(orig_2d, z_orig)
+                        z_new[nan_mask] = near_interp(points_2d[nan_mask])
+                except Exception as e:
+                    self.logger.warning(f"Linear interpolation failed: {e}, falling back to TPS")
+                    # Fallback to TPS
+                    rbf = RBFInterpolator(orig_2d, z_orig, kernel='thin_plate_spline', smoothing=smoothing)
+                    z_new = rbf(points_2d)
+
+            else:
+                # Default: Thin Plate Spline (TPS)
+                try:
+                    self.logger.info(f"Using TPS interpolation for patch back-projection (smoothing={smoothing})")
+                    rbf = RBFInterpolator(orig_2d, z_orig, kernel='thin_plate_spline', smoothing=smoothing)
+                    z_new = rbf(points_2d)
+                except:
+                    # Fallback to IDW if TPS fails singular matrix etc
+                    self.logger.warning("TPS interpolation failed, falling back to IDW")
+                    # Fallback to IDW
+                    tree = cKDTree(orig_2d)
+                    k = min(8, len(orig_2d))
+                    dists, indices = tree.query(points_2d, k=k)
                 
-                if dists.ndim == 1:
-                    dists = dists[:, np.newaxis]
-                    indices = indices[:, np.newaxis]
-                
-                weights = 1.0 / np.maximum(dists ** 2, 1e-10)
-                weights_sum = weights.sum(axis=1, keepdims=True)
-                weights_norm = weights / weights_sum
-                
-                z_new = np.sum(weights_norm * z_orig[indices], axis=1)
+                    if dists.ndim == 1:
+                        dists = dists[:, np.newaxis]
+                        indices = indices[:, np.newaxis]
+                    
+                    weights = 1.0 / np.maximum(dists ** 2, 1e-10)
+                    weights_sum = weights.sum(axis=1, keepdims=True)
+                    weights_norm = weights / weights_sum
+                    
+                    z_new = np.sum(weights_norm * z_orig[indices], axis=1)
             
             # Convert back to 3D
             points_3d = (centroid + 
@@ -1473,7 +1525,9 @@ class DirectTriangleWrapper:
     
     def _fallback_standard_triangulation(self, points_3d: np.ndarray, 
                                          segments: Optional[np.ndarray],
-                                         uniform: bool) -> Dict:
+                                         uniform: bool,
+                                         interpolator: str = 'tps',
+                                         smoothing: float = 0.0) -> Dict:
         """
         Fallback to standard 2D projected triangulation.
         
@@ -1509,17 +1563,62 @@ class DirectTriangleWrapper:
             vertices_3d = centroid + vertices_2d[:, 0:1] * u_axis + vertices_2d[:, 1:2] * v_axis
             
             # Interpolate Z values
-            from scipy.interpolate import RBFInterpolator
             z_orig = np.dot(centered, vh[2])
             orig_2d = points_2d
             
-            try:
-                rbf = RBFInterpolator(orig_2d, z_orig, kernel='thin_plate_spline')
-                z_new = rbf(vertices_2d)
-                vertices_3d = vertices_3d + z_new[:, np.newaxis] * vh[2]
-            except:
-                pass  # Keep planar projection
+            # Select interpolator
+            z_new = None
             
+            if interpolator is not None and 'idw' in interpolator.lower():
+                 # Explicit IDW
+                 self.logger.info("Fallback: Using IDW interpolation")
+                 from scipy.spatial import cKDTree
+                 tree = cKDTree(orig_2d)
+                 k = min(12, len(orig_2d))
+                 dists, indices = tree.query(vertices_2d, k=k)
+                 
+                 if dists.ndim == 1:
+                     dists = dists[:, np.newaxis]
+                     indices = indices[:, np.newaxis]
+                 
+                 weights = 1.0 / np.maximum(dists ** 2, 1e-10)
+                 weights_sum = weights.sum(axis=1, keepdims=True)
+                 weights_norm = weights / weights_sum
+                 
+                 z_new = np.sum(weights_norm * z_orig[indices], axis=1)
+                 
+            elif interpolator is not None and 'linear' in interpolator.lower():
+                # Linear
+                self.logger.info("Fallback: Using Linear interpolation")
+                from scipy.interpolate import LinearNDInterpolator
+                try:
+                    lin_interp = LinearNDInterpolator(orig_2d, z_orig)
+                    z_new = lin_interp(vertices_2d)
+                    
+                    # Fill NaNs
+                    nan_mask = np.isnan(z_new)
+                    if np.any(nan_mask):
+                        from scipy.interpolate import NearestNDInterpolator
+                        near_interp = NearestNDInterpolator(orig_2d, z_orig)
+                        z_new[nan_mask] = near_interp(vertices_2d[nan_mask])
+                except Exception as e:
+                    self.logger.warning(f"Fallback Linear interpolation failed: {e}")
+            
+            # Default or fallback from above failures: TPS
+            if z_new is None:
+                try:
+                    self.logger.info(f"Fallback: Using TPS interpolation (smoothing={smoothing})")
+                    from scipy.interpolate import RBFInterpolator
+                    rbf = RBFInterpolator(orig_2d, z_orig, kernel='thin_plate_spline', smoothing=smoothing)
+                    z_new = rbf(vertices_2d)
+                except Exception as e:
+                    self.logger.warning(f"Fallback TPS failed: {e}")
+                    # Final IDW fallback
+                    pass
+
+            if z_new is not None:
+                vertices_3d = vertices_3d + z_new[:, np.newaxis] * vh[2]
+
             return {
                 'vertices': vertices_3d,
                 'triangles': result_2d['triangles']
