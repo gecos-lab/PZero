@@ -998,11 +998,11 @@ class DirectTriangleWrapper:
         
         try:
             n_points = len(points_3d)
-            k = min(k, n_points - 1)
+            k = min(k, n_points - 1) # preventing more neighbours than availble points
             # Ensure minimal neighbors
             if n_points < 4:
                 return None
-            k = max(k, 6)
+            k = max(k, 6) # 6 means at least 6 neighbors for each point
             
             tree = cKDTree(points_3d)
             _, indices = tree.query(points_3d, k=k+1)  # +1 because query includes the point itself
@@ -1086,7 +1086,7 @@ class DirectTriangleWrapper:
             # If a patch bends more than 90 degrees, it cannot be projected injectively
             # We enforce a safe limit (e.g., 60 degrees) to force splitting hinges
             # angle_threshold from user is likely large (120), so we clamp it aggressively
-            max_deviation_deg = min(angle_threshold, 60.0)
+            max_deviation_deg = min(angle_threshold, 60.0) # we use 60 because we want to split before the hinge not at the hinge
             min_dot = np.cos(np.radians(max_deviation_deg))
             
             # Build spatial tree for neighbor queries
