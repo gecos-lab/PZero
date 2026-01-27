@@ -14273,7 +14273,6 @@ segmentation, triangulation, and visualization.
         
         involved_dataset_indices = set()
         all_intersection_lines = []
-        unique_intersections = set()
 
         # Collect intersection lines and involved datasets
         for dataset_index, intersections in self.datasets_intersections.items():
@@ -14281,11 +14280,10 @@ segmentation, triangulation, and visualization.
             for i, intersection in enumerate(intersections):
                 involved_dataset_indices.add(intersection['dataset_id1'])
                 involved_dataset_indices.add(intersection['dataset_id2'])
-                key = tuple(sorted((intersection['dataset_id1'], intersection['dataset_id2']))) + (intersection['is_polyline_mesh'],)
-                if key not in unique_intersections:
-                    unique_intersections.add(key)
-                    if intersection['points'] and len(intersection['points']) >= 2:
-                        all_intersection_lines.append(np.array(intersection['points']))
+                # Add every intersection line. Deduping by surface pair hides distinct
+                # curves (multiple intersections between the same surfaces).
+                if intersection['points'] and len(intersection['points']) >= 2:
+                    all_intersection_lines.append(np.array(intersection['points']))
 
         # Collect and validate triple points
         all_triple_points_coords = []
