@@ -6833,6 +6833,12 @@ class MeshItWorkflowGUI(QWidget):
         logger.info("Starting refinement of intersection lines...")
         self.statusBar().showMessage("Refining intersection lines...")
 
+        # When using Multi-Patch, preserve the angular-gap hull geometry (skip draping)
+        mesh_tri_method = "standard"
+        if hasattr(self, 'mesh_tri_method_combo'):
+            mesh_tri_method = self.mesh_tri_method_combo.currentData() or "standard"
+        preserve_angular_gap_hull = (mesh_tri_method == "multipatch")
+
         if not hasattr(self, 'datasets_intersections') or not self.datasets_intersections:
             QMessageBox.information(self, "No Intersections", "No intersections found to refine.")
             self.statusBar().showMessage("Refinement skipped: No intersections found.", 5000)
@@ -7017,42 +7023,44 @@ class MeshItWorkflowGUI(QWidget):
             logger.error(f"Error during length-based refinement: {e}", exc_info=True)
             return
         # Step 3: Refine hull with interpolation (corrects hull geometry)
-        try:
-            config = {
-                'interp': self.mesh_interp_combo.currentText(),
-                'smoothing': float(self.mesh_smoothing_input.value())
-            }
-            for temp_surface_idx, temp_surface in enumerate(temp_model.surfaces):
-                if hasattr(temp_surface, 'convex_hull') and len(temp_surface.convex_hull) >= 3:
-                    raw_hull_points = [Vector3D(p.x, p.y, p.z, point_type=getattr(p, "point_type", "DEFAULT")) for p in temp_surface.convex_hull]
-                    original_idx = temp_model.original_indices_map.get(
-                        next((k for k, v in temp_model.surface_original_to_temp_idx_map.items() if v == temp_surface_idx), None)
-                    )
-                    if original_idx is not None and 'points' in self.datasets[original_idx]:
-                        scattered_points = [Vector3D(p[0], p[1], p[2]) for p in self.datasets[original_idx]['points']]
-                        refined_hull_3d = refine_hull_with_interpolation(
-                            raw_hull_points, scattered_points, config
+        if not preserve_angular_gap_hull:
+            try:
+                config = {
+                    'interp': self.mesh_interp_combo.currentText(),
+                    'smoothing': float(self.mesh_smoothing_input.value())
+                }
+                for temp_surface_idx, temp_surface in enumerate(temp_model.surfaces):
+                    if hasattr(temp_surface, 'convex_hull') and len(temp_surface.convex_hull) >= 3:
+                        raw_hull_points = [Vector3D(p.x, p.y, p.z, point_type=getattr(p, "point_type", "DEFAULT")) for p in temp_surface.convex_hull]
+                        original_idx = temp_model.original_indices_map.get(
+                            next((k for k, v in temp_model.surface_original_to_temp_idx_map.items() if v == temp_surface_idx), None)
                         )
-                        
+                        if original_idx is not None and 'points' in self.datasets[original_idx]:
+                            scattered_points = [Vector3D(p[0], p[1], p[2]) for p in self.datasets[original_idx]['points']]
+                            refined_hull_3d = refine_hull_with_interpolation(
+                                raw_hull_points, scattered_points, config
+                            )
 
-                    # Step 4: Create refined Vector3D objects preserving point types
-                    refined_hull_points = []
-                    for i, (orig_pt, refined_3d) in enumerate(zip(raw_hull_points, refined_hull_3d)):
-                        # If refined_3d is already a Vector3D, just copy it
-                        if isinstance(refined_3d, Vector3D):
-                            refined_pt = Vector3D(refined_3d.x, refined_3d.y, refined_3d.z)
-                        else:
-                            refined_pt = Vector3D(refined_3d[0], refined_3d[1], refined_3d[2])
-                        # Preserve original point type information
-                        refined_pt.point_type = getattr(orig_pt, 'point_type', 'DEFAULT')
-                        if hasattr(orig_pt, 'type'):
-                            refined_pt.type = orig_pt.type
-                        refined_hull_points.append(refined_pt)
+                        # Step 4: Create refined Vector3D objects preserving point types
+                        refined_hull_points = []
+                        for i, (orig_pt, refined_3d) in enumerate(zip(raw_hull_points, refined_hull_3d)):
+                            # If refined_3d is already a Vector3D, just copy it
+                            if isinstance(refined_3d, Vector3D):
+                                refined_pt = Vector3D(refined_3d.x, refined_3d.y, refined_3d.z)
+                            else:
+                                refined_pt = Vector3D(refined_3d[0], refined_3d[1], refined_3d[2])
+                            # Preserve original point type information
+                            refined_pt.point_type = getattr(orig_pt, 'point_type', 'DEFAULT')
+                            if hasattr(orig_pt, 'type'):
+                                refined_pt.type = orig_pt.type
+                            refined_hull_points.append(refined_pt)
 
-                    temp_surface.convex_hull = refined_hull_points
-        except Exception as e:
-            logger.error(f"Error during hull refinement: {e}", exc_info=True)
-            return
+                        temp_surface.convex_hull = refined_hull_points
+            except Exception as e:
+                logger.error(f"Error during hull refinement: {e}", exc_info=True)
+                return
+        else:
+            logger.info("Skipping hull interpolation refinement for Multi-Patch to preserve angular-gap hull shape.")
         # Step 4: Align intersections to hulls (defines hull topology)
         try:
             for temp_surface_list_idx in range(len(temp_model.surfaces)):
@@ -7308,7 +7316,10 @@ class MeshItWorkflowGUI(QWidget):
                     logger.info(f"Using Multi-Patch triangulation for conforming mesh '{name}' (fold_angle={mesh_fold_angle_threshold}°)")
                     
                     # Use retrieved points and segments (ensure float64 points)
-                    all_pts = pts3d.astype(float)
+                    if len(pts3d) > 0 and hasattr(pts3d[0], "x"):
+                        all_pts = np.array([[p.x, p.y, p.z] for p in pts3d], dtype=float)
+                    else:
+                        all_pts = np.asarray(pts3d, dtype=float)
                     
                     if len(all_pts) >= 4:
                         triangulator = DirectTriangleWrapper(
