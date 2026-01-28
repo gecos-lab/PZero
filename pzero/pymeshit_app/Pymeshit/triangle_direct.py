@@ -683,6 +683,50 @@ class DirectTriangleWrapper:
         else:
             self.logger.info("Disabled C++ MeshIt compatible mode, using standard switches")
 
+    def _sanitize_segments(self, segments: Optional[np.ndarray], n_vertices: int) -> np.ndarray:
+        """
+        Remove degenerate/duplicate/out-of-range segments for robust PSLG input.
+        """
+        if segments is None or len(segments) == 0 or n_vertices <= 0:
+            return np.empty((0, 2), dtype=np.int32)
+
+        segs = np.asarray(segments, dtype=np.int32)
+        if segs.ndim != 2 or segs.shape[1] != 2:
+            return np.empty((0, 2), dtype=np.int32)
+
+        # Drop degenerate or out-of-range segments
+        valid_mask = (
+            (segs[:, 0] != segs[:, 1]) &
+            (segs[:, 0] >= 0) & (segs[:, 1] >= 0) &
+            (segs[:, 0] < n_vertices) & (segs[:, 1] < n_vertices)
+        )
+        segs = segs[valid_mask]
+        if len(segs) == 0:
+            return np.empty((0, 2), dtype=np.int32)
+
+        # Remove duplicates regardless of orientation
+        segs_sorted = np.sort(segs, axis=1)
+        _, unique_idx = np.unique(segs_sorted, axis=0, return_index=True)
+        return segs[unique_idx]
+
+    def _filter_short_segments(self, segments: Optional[np.ndarray], points_2d: np.ndarray,
+                               min_len: float) -> np.ndarray:
+        """
+        Drop segments that are effectively zero-length in 2D (numerical robustness).
+        """
+        if segments is None or len(segments) == 0:
+            return np.empty((0, 2), dtype=np.int32)
+        if min_len <= 0.0:
+            return np.asarray(segments, dtype=np.int32)
+
+        segs = np.asarray(segments, dtype=np.int32)
+        pts = points_2d[segs]
+        lengths = np.linalg.norm(pts[:, 0] - pts[:, 1], axis=1)
+        segs = segs[lengths >= min_len]
+        if len(segs) == 0:
+            return np.empty((0, 2), dtype=np.int32)
+        return segs
+
     def triangulate_folded_surface(self, points_3d: np.ndarray, segments: Optional[np.ndarray] = None,
                                    fold_angle_threshold: float = 120.0,
                                    uniform: bool = True,
@@ -713,6 +757,10 @@ class DirectTriangleWrapper:
         self.logger.info(f"Multi-patch triangulation: {len(points_3d)} points, fold_threshold={fold_angle_threshold}°")
         
         points_3d = np.asarray(points_3d, dtype=np.float64)
+        if segments is not None and len(segments) > 0:
+            segments = self._sanitize_segments(segments, len(points_3d))
+            if len(segments) == 0:
+                segments = None
         
         if len(points_3d) < 4:
             self.logger.warning("Too few points for multi-patch triangulation, using standard method")
@@ -739,6 +787,27 @@ class DirectTriangleWrapper:
         
         # Build tree for finding patch boundaries/overlaps
         tree = cKDTree(points_3d)
+        max_deviation_deg = min(fold_angle_threshold, 60.0)
+        buffer_min_dot = np.cos(np.radians(max_deviation_deg))
+        tangent_align_max = 0.3
+        nn_median = None
+        overlap_radius = self.base_size * 0.5 if self.base_size else 1.0
+        try:
+            dists_all, _ = tree.query(points_3d, k=2)
+            nn = dists_all[:, 1]
+            nn = nn[np.isfinite(nn)]
+            if len(nn) > 0:
+                nn_median = float(np.median(nn))
+                overlap_radius = nn_median * 2.0
+        except Exception:
+            pass
+        segment_adj = None
+        if segments is not None and len(segments) > 0:
+            segment_adj = {}
+            for s in segments:
+                u, v = int(s[0]), int(s[1])
+                segment_adj.setdefault(u, []).append(v)
+                segment_adj.setdefault(v, []).append(u)
         
         # Step 3: Triangulate each patch separately
         all_vertices = []
@@ -754,18 +823,10 @@ class DirectTriangleWrapper:
             # If segment connects P1 (in region) to P2 (outside), add P2.
             # This ensures refined boundary points that might have been skipped by growing
             # due to poor normals are "dragged" into the correct patch.
-            if segments is not None and len(segments) > 0:
+            if segment_adj is not None:
+                seed_avg_normal = np.mean(normals[region_indices], axis=0)
+                seed_avg_normal /= (np.linalg.norm(seed_avg_normal) + 1e-12)
                 current_region_set = set(region_indices)
-                
-                # Build simple adjacency for segments (could be pre-computed but this is per-patch effectively)
-                # Actually efficient to do one pass? No, let's do iteratively
-                # Or better: Build global adjacency once?
-                if not hasattr(self, '_segment_adj'):
-                     self._segment_adj = {}
-                     for s in segments:
-                         u, v = s[0], s[1]
-                         self._segment_adj.setdefault(u, []).append(v)
-                         self._segment_adj.setdefault(v, []).append(u)
                 
                 # BFS expansion
                 queue = list(region_indices)
@@ -773,13 +834,14 @@ class DirectTriangleWrapper:
                 
                 while queue:
                     u = queue.pop(0)
-                    if u in self._segment_adj:
-                        for v in self._segment_adj[u]:
+                    if u in segment_adj:
+                        for v in segment_adj[u]:
                             if v not in current_region_set:
-                                # Add to region
-                                current_region_set.add(v)
-                                queue.append(v)
-                                expanded_count += 1
+                                # Add to region only if normals agree with seed patch
+                                if np.dot(normals[v], seed_avg_normal) > buffer_min_dot:
+                                    current_region_set.add(v)
+                                    queue.append(v)
+                                    expanded_count += 1
                 
                 if expanded_count > 0:
                     region_indices = list(current_region_set)
@@ -813,13 +875,25 @@ class DirectTriangleWrapper:
             cand_normals = normals[candidates]
             dots = np.dot(cand_normals, patch_avg_normal)
             
-            # Threshold: Must be positively aligned (> 0.05 approx 87 degrees)
+            # Threshold: Must be positively aligned with patch average
             # This ensures injectivity of the projection and prevents artifacts like "bitten" edges
-            valid_mask = dots > 0.05 
-            
-            buffered_indices = candidates[valid_mask] 
-            
-            buffered_indices = candidates[valid_mask]
+            valid_mask = dots > buffer_min_dot
+
+            # Add a close + tangential overlap buffer to stitch hinges without cross-limb mixing
+            try:
+                region_core = points_3d[region_indices]
+                region_tree = cKDTree(region_core)
+                d_core, idx_core = region_tree.query(points_3d[candidates], k=1)
+                vec = points_3d[candidates] - region_core[idx_core]
+                vec_norm = np.linalg.norm(vec, axis=1) + 1e-12
+                align = np.abs(np.einsum('ij,j->i', vec / vec_norm[:, None], patch_avg_normal))
+                close_mask = d_core < overlap_radius
+                tangent_mask = align < tangent_align_max
+                valid_mask = valid_mask | (close_mask & tangent_mask)
+            except Exception:
+                pass
+
+            buffered_indices = np.unique(np.concatenate((candidates[valid_mask], region_indices)))
             
             region_points = points_3d[buffered_indices]
             
@@ -859,70 +933,90 @@ class DirectTriangleWrapper:
                             explicit_patch_segments.append([global_to_local[p1], global_to_local[p2]])
                 
                 explicit_patch_segments = np.array(explicit_patch_segments, dtype=int) if explicit_patch_segments else np.empty((0, 2), dtype=int)
-                
-                # Merge segments: Explicit take precedence logically, but we just union them for triangle
-                if boundary_segments is not None and len(boundary_segments) > 0:
-                    if len(explicit_patch_segments) > 0:
-                        patch_segments = np.vstack((boundary_segments, explicit_patch_segments))
-                    else:
-                        patch_segments = boundary_segments
-                else:
-                    patch_segments = explicit_patch_segments
 
-                # SPARSE INPUT STRATEGY (uniformity fix):
-                # Instead of passing ALL local_2d vertices (dense cloud) to Triangle,
-                # we pass ONLY the vertices used by segments (boundary + constraints).
-                # Triangle will then fill the interior using Steiner points based on 'a' constraint.
-                # This ensures the mesh density is controlled by 'a' and not the dense input cloud.
-                
-                tri_vertices = None
-                tri_segments = None
-                remapped_indices_map = None # New -> Old (local patch idx)
-                
-                if patch_segments is not None and len(patch_segments) > 0:
-                    # Identify active vertices
-                    unique_indices = np.unique(patch_segments.flatten())
-                    
-                    # Create Mapping: Old (local patch idx) -> New (sparse idx)
-                    old_to_new = {old: new for new, old in enumerate(unique_indices)}
-                    
-                    # Store reverse mapping for projection back
-                    remapped_indices_map = unique_indices
-                    
-                    # Create sparse vertices
-                    tri_vertices = local_2d[unique_indices]
-                    
-                    # Remap segments
-                    # Use a vectorized lookup or list compr
-                    tri_segments = np.array([[old_to_new[s[0]], old_to_new[s[1]]] for s in patch_segments], dtype=int)
+                # Sanitize boundary/explicit segments before combining
+                if boundary_segments is not None and len(boundary_segments) > 0:
+                    boundary_segments = self._sanitize_segments(boundary_segments, len(local_2d))
                 else:
-                    # Fallback if no segments found (rare, implies point cloud only)
-                    tri_vertices = local_2d
-                    tri_segments = None
-                    # remapped_indices_map remains None, implying 1:1 mapping
+                    boundary_segments = np.empty((0, 2), dtype=np.int32)
+                explicit_patch_segments = self._sanitize_segments(explicit_patch_segments, len(local_2d))
 
                 # Match standard CDT area constraint (0.5 factor, same as _setup_complex_triangulation)
                 area_constraint = patch_base_size * patch_base_size * 0.5
-                
-                # Use 'p' switch if we have segments (which we should now)
-                p_switch = 'p' if tri_segments is not None and len(tri_segments) > 0 else ''
-                
-                # Use standard switches matching 'FAST' triangulation: z (indexes), YY (no new vertices on boundary), a (area)
-                tri_options = f'{p_switch}zYYa{area_constraint:.8f}'
-                
-                self.logger.info(f"Patch {i}: base_size={patch_base_size:.4f}, max_area={area_constraint:.4f}, opts='{tri_options}'")
-                
-                tri_input = {'vertices': tri_vertices}
-                if tri_segments is not None and len(tri_segments) > 0:
-                    tri_input['segments'] = tri_segments
-                
-                result = tr.triangulate(tri_input, tri_options)
-                
-                if 'vertices' not in result or 'triangles' not in result:
+                min_seg_len = max(1e-8, patch_base_size * 1e-4)
+
+                segment_candidates = []
+                if len(boundary_segments) > 0 and len(explicit_patch_segments) > 0:
+                    segment_candidates.append(("combined", np.vstack((boundary_segments, explicit_patch_segments))))
+                if len(explicit_patch_segments) > 0:
+                    segment_candidates.append(("explicit", explicit_patch_segments))
+                if len(boundary_segments) > 0:
+                    segment_candidates.append(("boundary", boundary_segments))
+                if not segment_candidates:
+                    segment_candidates.append(("none", None))
+
+                result_vertices_2d = None
+                patch_triangles = None
+                remapped_indices_map = None
+                used_opts = None
+                used_label = None
+
+                for seg_label, segs in segment_candidates:
+                    if segs is not None and len(segs) > 0:
+                        segs = self._sanitize_segments(segs, len(local_2d))
+                        segs = self._filter_short_segments(segs, local_2d, min_seg_len)
+                        if len(segs) == 0:
+                            segs = None
+
+                    # SPARSE INPUT STRATEGY (uniformity fix):
+                    # Instead of passing ALL local_2d vertices (dense cloud) to Triangle,
+                    # we pass ONLY the vertices used by segments (boundary + constraints).
+                    # Triangle will then fill the interior using Steiner points based on 'a' constraint.
+                    # This ensures the mesh density is controlled by 'a' and not the dense input cloud.
+                    if segs is not None and len(segs) > 0:
+                        unique_indices = np.unique(segs.flatten())
+                        old_to_new = {old: new for new, old in enumerate(unique_indices)}
+                        remapped_indices_map = unique_indices
+                        tri_vertices = local_2d[unique_indices]
+                        tri_segments = np.array([[old_to_new[s[0]], old_to_new[s[1]]] for s in segs], dtype=int)
+                    else:
+                        tri_vertices = local_2d
+                        tri_segments = None
+                        remapped_indices_map = None
+
+                    p_switch = 'p' if tri_segments is not None and len(tri_segments) > 0 else ''
+                    tri_options_list = [
+                        f'{p_switch}zYYa{area_constraint:.8f}',
+                        f'{p_switch}za{area_constraint:.8f}',
+                    ]
+
+                    for tri_options in tri_options_list:
+                        tri_input = {'vertices': tri_vertices}
+                        if tri_segments is not None and len(tri_segments) > 0:
+                            tri_input['segments'] = tri_segments
+
+                        try:
+                            result = tr.triangulate(tri_input, tri_options)
+                        except Exception:
+                            result = None
+
+                        if result and 'vertices' in result and 'triangles' in result:
+                            result_vertices_2d = result['vertices']
+                            patch_triangles = result['triangles']
+                            used_opts = tri_options
+                            used_label = seg_label
+                            break
+
+                    if result_vertices_2d is not None:
+                        break
+
+                if result_vertices_2d is None or patch_triangles is None:
                     continue
-                
-                result_vertices_2d = result['vertices']
-                patch_triangles = result['triangles']
+
+                self.logger.info(
+                    f"Patch {i}: base_size={patch_base_size:.4f}, max_area={area_constraint:.4f}, "
+                    f"segments='{used_label}', opts='{used_opts}'"
+                )
                 
                 # Project back to 3D
                 # We need to map result vertices back.
@@ -977,10 +1071,45 @@ class DirectTriangleWrapper:
         combined_triangles = np.vstack(all_triangles)
         
         # Step 5: Merge duplicate vertices at patch boundaries (stitching)
-        # We need a slightly larger tolerance because of TPS projection drift
-        merge_tolerance = self.base_size * 0.1 if self.base_size else 1e-4
+        # Use an adaptive tolerance based on point spacing, and a normal-consistency gate.
+        merge_tolerance = 1e-2
+        merge_normals = None
+        merge_min_dot = np.cos(np.radians(min(fold_angle_threshold, 60.0)))
+        merge_orig_index = None
+        snap_tol = 1e-2
+        try:
+            if len(combined_vertices) > 1:
+                tree = cKDTree(combined_vertices)
+                dists, _ = tree.query(combined_vertices, k=2)
+                nn = dists[:, 1]
+                nn = nn[np.isfinite(nn)]
+                if len(nn) > 0:
+                    nn_median = float(np.median(nn))
+                    tol_nn = nn_median * 0.6
+                    tol_base = self.base_size * 0.08 if self.base_size else tol_nn
+                    merge_tolerance = max(1e-8, min(tol_nn, tol_base))
+                    snap_tol = min(nn_median * 0.2, (self.base_size * 0.05) if self.base_size else nn_median * 0.2)
+                elif self.base_size:
+                    merge_tolerance = max(1e-8, self.base_size * 0.08)
+                    snap_tol = self.base_size * 0.05
+                else:
+                    snap_tol = 1e-4
+            # Compute normals for merge gating (prevents cross-limb stitching)
+            merge_normals = self._compute_local_normals(combined_vertices, k=12)
+            # Map combined vertices to nearest original points for exact stitch gating
+            if len(combined_vertices) > 0:
+                orig_tree = cKDTree(points_3d)
+                d_orig, idx_orig = orig_tree.query(combined_vertices, k=1)
+                merge_orig_index = np.full(len(combined_vertices), -1, dtype=np.int64)
+                merge_orig_index[d_orig < snap_tol] = idx_orig[d_orig < snap_tol]
+        except Exception as e:
+            self.logger.debug(f"Adaptive merge tolerance failed: {e}")
+            if self.base_size:
+                merge_tolerance = max(1e-8, self.base_size * 0.05)
         merged_vertices, merged_triangles = self._merge_patch_boundaries(
-            combined_vertices, combined_triangles, tolerance=merge_tolerance
+            combined_vertices, combined_triangles, tolerance=merge_tolerance,
+            normals=merge_normals, min_dot=merge_min_dot,
+            orig_index=merge_orig_index
         )
         
         self.logger.info(f"Multi-patch result: {len(merged_vertices)} vertices, {len(merged_triangles)} triangles")
@@ -1030,15 +1159,17 @@ class DirectTriangleWrapper:
             
             # 2. Consistent Orientation Propagation using BFS
             visited = np.zeros(n_points, dtype=bool)
+            orient_dot_min = np.cos(np.radians(60.0))
+            tangent_align_max = 0.3
             
             # Iterate through all components (handles disconnected islands)
             for start_node in range(n_points):
                 if visited[start_node]:
                     continue
                 
-                # Seed orientation: prioritize World-Z up for the first seen point
-                if normals[start_node, 2] < 0:
-                    normals[start_node] = -normals[start_node]
+                # Seed orientation: keep PCA sign to preserve fold flips
+                if np.linalg.norm(normals[start_node]) < 1e-12:
+                    normals[start_node] = np.array([0.0, 0.0, 1.0])
                     
                 visited[start_node] = True
                 queue = [start_node]
@@ -1056,12 +1187,19 @@ class DirectTriangleWrapper:
                     
                     for nbr in nbrs:
                         if not visited[nbr]:
-                            visited[nbr] = True
-                            queue.append(nbr)
-                            
-                            # Check orientation consistency
-                            if np.dot(normals[nbr], curr_normal) < 0:
-                                normals[nbr] = -normals[nbr]
+                            dot = np.dot(normals[nbr], curr_normal)
+                            if dot >= orient_dot_min:
+                                visited[nbr] = True
+                                queue.append(nbr)
+                            elif dot <= -orient_dot_min:
+                                vec = points_3d[nbr] - points_3d[curr]
+                                vec_len = np.linalg.norm(vec)
+                                if vec_len > 1e-12:
+                                    align = abs(np.dot(vec / vec_len, curr_normal))
+                                    if align < tangent_align_max:
+                                        normals[nbr] = -normals[nbr]
+                                        visited[nbr] = True
+                                        queue.append(nbr)
                         # If already visited, we could check for conflict, but ignore for now
             
             return normals
@@ -1093,7 +1231,7 @@ class DirectTriangleWrapper:
             # If a patch bends more than 90 degrees, it cannot be projected injectively
             # We enforce a safe limit (e.g., 60 degrees) to force splitting hinges
             # angle_threshold from user is likely large (120), so we clamp it aggressively
-            max_deviation_deg = min(angle_threshold, 60.0) # we use 60 because we want to split before the hinge not at the hinge
+            max_deviation_deg = min(angle_threshold, 50.0) # we use 60 because we want to split before the hinge not at the hinge
             min_dot = np.cos(np.radians(max_deviation_deg))
             
             # Build spatial tree for neighbor queries
@@ -1418,18 +1556,44 @@ class DirectTriangleWrapper:
                     # Find nearest original point within tolerance
                     dists, indices = tree.query(points_2d, k=1)
                     
-                    # Tolerance: tiny deviation allowed (floating point jitter)
-                    # but small enough to avoid snapping to wrong point
-                    tolerance = 1e-5 
+                    # Tolerance: adaptive to local spacing (prevents hinge cracks)
+                    tolerance = 1e-5
+                    try:
+                        nn_dists, _ = tree.query(input_2d, k=2)
+                        nn = nn_dists[:, 1]
+                        nn = nn[np.isfinite(nn)]
+                        if len(nn) > 0:
+                            nn_med = float(np.median(nn))
+                            tolerance = max(tolerance, nn_med * 0.1)
+                    except Exception:
+                        pass
                     if self.base_size:
-                        tolerance = self.base_size * 1e-4
+                        tolerance = max(tolerance, self.base_size * 1e-3)
                         
                     match_mask = dists < tolerance
                     
                     # Snap matched points
                     if np.any(match_mask):
                         matched_indices = indices[match_mask]
-                        points_3d[match_mask] = input_3d[matched_indices]
+                        # 3D sanity check to avoid snapping across limbs
+                        try:
+                            nn3 = None
+                            try:
+                                nn3_dists, _ = tree.query(input_2d, k=2)
+                                nn3 = nn3_dists[:, 1]
+                                nn3 = nn3[np.isfinite(nn3)]
+                                nn3 = float(np.median(nn3)) if len(nn3) > 0 else None
+                            except Exception:
+                                nn3 = None
+                            tol_3d = (nn3 * 0.2) if nn3 is not None else tolerance * 0.5
+                            matched_rows = np.where(match_mask)[0]
+                            deltas = points_3d[matched_rows] - input_3d[matched_indices]
+                            dist3 = np.linalg.norm(deltas, axis=1)
+                            ok = dist3 <= tol_3d
+                            if np.any(ok):
+                                points_3d[matched_rows[ok]] = input_3d[matched_indices[ok]]
+                        except Exception:
+                            points_3d[match_mask] = input_3d[matched_indices]
                         
                 except Exception as e:
                     self.logger.warning(f"Exact point restoration failed: {e}")
@@ -1447,7 +1611,10 @@ class DirectTriangleWrapper:
             return points_3d
     
     def _merge_patch_boundaries(self, vertices: np.ndarray, triangles: np.ndarray, 
-                               tolerance: float = 1e-6) -> Tuple[np.ndarray, np.ndarray]:
+                               tolerance: float = 1e-6,
+                               normals: Optional[np.ndarray] = None,
+                               min_dot: Optional[float] = None,
+                               orig_index: Optional[np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray]:
         """
         Merge duplicate vertices at patch boundaries to stitch patches together.
         
@@ -1455,6 +1622,9 @@ class DirectTriangleWrapper:
             vertices: Combined vertices from all patches (M, 3)
             triangles: Combined triangles with original indices (T, 3)
             tolerance: Distance tolerance for merging vertices
+            normals: Optional normals for gating merges (M, 3)
+            min_dot: Optional minimum dot product to allow merge
+            orig_index: Optional mapping to original points for exact stitch gating
             
         Returns:
             Tuple of (merged vertices, updated triangles)
@@ -1469,6 +1639,27 @@ class DirectTriangleWrapper:
             
             if not pairs:
                 return vertices, triangles
+            
+            # Optional gating by normal alignment to prevent cross-limb stitching
+            if normals is not None and min_dot is not None and len(normals) == len(vertices):
+                relax_dist = tolerance * 0.25
+                gated_pairs = set()
+                for i, j in pairs:
+                    # Always allow merges that map to the same original point
+                    if orig_index is not None and orig_index[i] >= 0 and orig_index[i] == orig_index[j]:
+                        gated_pairs.add((i, j))
+                    else:
+                        if np.dot(normals[i], normals[j]) >= min_dot:
+                            gated_pairs.add((i, j))
+                        else:
+                            # Allow very close vertices to merge even if normals disagree
+                            if relax_dist > 0.0:
+                                d = np.linalg.norm(vertices[i] - vertices[j])
+                                if d <= relax_dist:
+                                    gated_pairs.add((i, j))
+                pairs = gated_pairs
+                if not pairs:
+                    return vertices, triangles
             
             # Build union-find structure for merging
             parent = np.arange(len(vertices))
