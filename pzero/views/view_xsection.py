@@ -115,11 +115,11 @@ class ViewXsection(View2D):
         Fit frame to all entities in view.
         At the momento only the "parallel" method is implemented.
         """
-        self.print_terminal("Fitting frame to all entities.")
+        self.print_terminal("Fitting frame to all entities...")
         # Show a confirmation dialog
         frame_dialog = options_dialog(
-            title="Append name",
-            message="Append entity name to output file name?",
+            title="Fitting frame",
+            message="Fit frame to all entities?",
             yes_role="Yes",
             no_role="No",
             reject_role=None,
@@ -130,3 +130,4 @@ class ViewXsection(View2D):
         self.parent.xsect_coll.fit_to_entities(
             xuid=self.this_x_section_uid, fit_method="parallel"
         )
+        self.print_terminal("...fitting completed.")

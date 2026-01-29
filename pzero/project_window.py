@@ -1757,6 +1757,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         self.print_terminal(
                             "column top renamed as origin_z in x-section table"
                         )
+                    if not "parent_uid" in new_xsect_coll_df.columns:
+                        new_xsect_coll_df["parent_uid"] = new_xsect_coll_df["uid"]
+                        self.print_terminal(
+                            "column top renamed as origin_z in x-section table"
+                        )
 
 
                     for new_column in new_xsect_coll_df.columns.values.tolist():
