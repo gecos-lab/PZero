@@ -1747,10 +1747,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         new_xsect_coll_df.insert(
                             15,
                             "height",
-                            new_xsect_coll_df.top - new_xsect_coll_df.bottom,
+                            abs(new_xsect_coll_df.top - new_xsect_coll_df.bottom),
                         )
                         self.print_terminal("column height added to xsect table")
                     if "top" in new_xsect_coll_df.columns:
+                        if "bottom" in new_xsect_coll_df.columns:
+                            new_xsect_coll_df.loc[new_xsect_coll_df["bottom"] > new_xsect_coll_df["top"], "top"] = new_xsect_coll_df["bottom"]
                         new_xsect_coll_df.rename(
                             columns={"top": "origin_z"}, inplace=True
                         )
