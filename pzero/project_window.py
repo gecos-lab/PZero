@@ -1796,14 +1796,20 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             self.print_terminal(
                                 "column base_z renamed as origin_z in x-section table"
                             )
-                            new_xsect_coll_df["origin_x"] += (new_xsect_coll_df["height"] *
-                                                              np_cos(new_xsect_coll_df["dip"] * np_pi / 180) *
-                                                              np_cos((new_xsect_coll_df["strike"] * np_pi / 180 + 180) % 360))
-                            new_xsect_coll_df["origin_y"] += (new_xsect_coll_df["height"] *
-                                                              np_cos(new_xsect_coll_df["dip"] * np_pi / 180) *
-                                                              np_sin((new_xsect_coll_df["strike"] * np_pi / 180 + 180) % 360))
-                            new_xsect_coll_df["origin_z"] += (new_xsect_coll_df["height"] *
-                                                              np_sin(new_xsect_coll_df["dip"] * np_pi / 180))
+                            new_xsect_coll_df["origin_x"] += (
+                                new_xsect_coll_df["height"]
+                                * np_cos(new_xsect_coll_df["dip"] * np_pi / 180)
+                                * np_cos((new_xsect_coll_df["strike"] + 180 % 360) * np_pi / 180)
+                            )
+                            new_xsect_coll_df["origin_y"] += (
+                                new_xsect_coll_df["height"]
+                                * np_cos(new_xsect_coll_df["dip"] * np_pi / 180)
+                                * np_sin((new_xsect_coll_df["strike"] + 180 % 360) * np_pi / 180)
+                            )
+                            new_xsect_coll_df["origin_z"] += (
+                                new_xsect_coll_df["height"]
+                                * np_sin(new_xsect_coll_df["dip"] * np_pi / 180)
+                            )
 
                     for new_column in new_xsect_coll_df.columns.values.tolist():
                         # drop columns not included in the standard dictionary
