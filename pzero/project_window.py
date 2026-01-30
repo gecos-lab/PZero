@@ -1744,11 +1744,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     #         "column base_z renamed as origin_z in x-section table"
                     #     )
                     if not "height" in new_xsect_coll_df:
-                        new_xsect_coll_df.insert(
-                            15,
-                            "height",
-                            abs(new_xsect_coll_df.top - new_xsect_coll_df.bottom),
-                        )
+                        if not "width" in new_xsect_coll_df:
+                            new_xsect_coll_df.insert(
+                                15,
+                                "height",
+                                abs(new_xsect_coll_df.top - new_xsect_coll_df.bottom),
+                            )
+                        else:
+                            new_xsect_coll_df.rename(
+                                columns={"width": "height"}, inplace=True
+                            )
                         self.print_terminal("column height added to xsect table")
                     if "top" in new_xsect_coll_df.columns:
                         if "bottom" in new_xsect_coll_df.columns:
@@ -1756,6 +1761,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         new_xsect_coll_df.rename(
                             columns={"top": "origin_z"}, inplace=True
                         )
+                        if "width" in new_xsect_coll_df.columns:
+                            new_xsect_coll_df["origin_z"] += new_xsect_coll_df["height"]
                         self.print_terminal(
                             "column top renamed as origin_z in x-section table"
                         )
