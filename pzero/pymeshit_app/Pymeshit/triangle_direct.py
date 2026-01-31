@@ -727,11 +727,89 @@ class DirectTriangleWrapper:
             return np.empty((0, 2), dtype=np.int32)
         return segs
 
+    def _remove_intersecting_segments(self, segments: np.ndarray, points_2d: np.ndarray) -> np.ndarray:
+        """
+        Remove segments that intersect other segments (not at endpoints).
+        This prevents Triangle's "Topological inconsistency" errors.
+        
+        Uses a simple O(n^2) approach - fine for typical segment counts (<1000).
+        """
+        if segments is None or len(segments) < 2:
+            return segments if segments is not None else np.empty((0, 2), dtype=np.int32)
+        
+        segs = np.asarray(segments, dtype=np.int32)
+        n_segs = len(segs)
+        
+        def ccw(A, B, C):
+            """Check if three points are in counter-clockwise order."""
+            return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0])
+        
+        def segments_intersect(p1, p2, p3, p4):
+            """Check if segment (p1,p2) intersects segment (p3,p4) not at endpoints."""
+            # First check if they share an endpoint (allowed)
+            eps = 1e-10
+            for pa in [p1, p2]:
+                for pb in [p3, p4]:
+                    if np.linalg.norm(pa - pb) < eps:
+                        return False  # Shared endpoint is OK
+            
+            # Standard intersection test
+            if ccw(p1, p3, p4) != ccw(p2, p3, p4) and ccw(p1, p2, p3) != ccw(p1, p2, p4):
+                return True
+            return False
+        
+        # Track which segments to keep
+        keep = np.ones(n_segs, dtype=bool)
+        intersection_count = np.zeros(n_segs, dtype=int)
+        
+        # Check all pairs for intersections
+        for i in range(n_segs):
+            if not keep[i]:
+                continue
+            p1, p2 = points_2d[segs[i, 0]], points_2d[segs[i, 1]]
+            
+            for j in range(i + 1, n_segs):
+                if not keep[j]:
+                    continue
+                p3, p4 = points_2d[segs[j, 0]], points_2d[segs[j, 1]]
+                
+                if segments_intersect(p1, p2, p3, p4):
+                    intersection_count[i] += 1
+                    intersection_count[j] += 1
+        
+        # Remove segments with intersections (prefer removing those with more intersections)
+        # Iteratively remove worst offenders
+        removed = 0
+        while np.any(intersection_count > 0):
+            worst_idx = np.argmax(intersection_count)
+            if intersection_count[worst_idx] == 0:
+                break
+            
+            keep[worst_idx] = False
+            removed += 1
+            
+            # Recount intersections for remaining segments
+            intersection_count[worst_idx] = 0
+            p1, p2 = points_2d[segs[worst_idx, 0]], points_2d[segs[worst_idx, 1]]
+            
+            for j in range(n_segs):
+                if not keep[j] or j == worst_idx:
+                    continue
+                p3, p4 = points_2d[segs[j, 0]], points_2d[segs[j, 1]]
+                if segments_intersect(p1, p2, p3, p4):
+                    intersection_count[j] = max(0, intersection_count[j] - 1)
+        
+        if removed > 0:
+            self.logger.warning(f"Removed {removed} intersecting segments to prevent Triangle errors")
+        
+        return segs[keep]
+
     def triangulate_folded_surface(self, points_3d: np.ndarray, segments: Optional[np.ndarray] = None,
                                    fold_angle_threshold: float = 120.0,
                                    uniform: bool = True,
                                    interpolator: str = 'tps',
-                                   smoothing: float = 0.0) -> Dict:
+                                   smoothing: float = 0.0,
+                                   reference_points_3d: Optional[np.ndarray] = None) -> Dict:
         """
         Multi-patch triangulation for folded surfaces (recumbent/overturned folds).
         
@@ -743,10 +821,14 @@ class DirectTriangleWrapper:
         5. Stitching patches together along shared hinge constraints
         
         Args:
-            points_3d: Input 3D points (N, 3)
+            points_3d: Input 3D points (N, 3) - constraint points for triangulation
             segments: Optional boundary segment indices (M, 2)
             fold_angle_threshold: Angle threshold (degrees) for fold hinge detection
             uniform: Whether to use uniform mesh generation
+            reference_points_3d: Optional dense reference points for fold detection.
+                                 If provided, these are used for normal computation and
+                                 fold region detection instead of points_3d. Constraint 
+                                 points are then assigned to patches based on proximity.
             
         Returns:
             Dictionary with combined triangulation results (vertices, triangles)
@@ -762,28 +844,47 @@ class DirectTriangleWrapper:
             if len(segments) == 0:
                 segments = None
         
+        # Handle reference points for fold detection (used when points_3d are sparse constraints)
+        # For Refine Mesh case: Use standard CDT with reference mesh for Z-interpolation
+        # and add reference points as Steiner guides to maintain internal density
+        if reference_points_3d is not None:
+            reference_points_3d = np.asarray(reference_points_3d, dtype=np.float64)
+            self.logger.info(f"Using {len(reference_points_3d)} reference points for Z-interpolation (Refine Mesh mode)")
+            
+            # Use standard CDT with reference mesh Z-interpolation
+            return self._fallback_standard_triangulation(
+                points_3d, segments, uniform, interpolator, smoothing,
+                reference_mesh_3d=reference_points_3d
+            )
+        
+        fold_detection_points = points_3d
+        
         if len(points_3d) < 4:
             self.logger.warning("Too few points for multi-patch triangulation, using standard method")
             self.logger.warning("All patches failed, using standard triangulation")
             return self._fallback_standard_triangulation(points_3d, segments, uniform, interpolator, smoothing)
         
         # Step 1: Compute local normals using k-nearest neighbors
-        normals = self._compute_local_normals(points_3d)
+        ref_normals = self._compute_local_normals(fold_detection_points)
         
-        if normals is None:
+        if ref_normals is None:
             self.logger.warning("Failed to compute normals, using standard triangulation")
             self.logger.warning("All patches failed, using standard triangulation")
             return self._fallback_standard_triangulation(points_3d, segments, uniform, interpolator, smoothing)
         
         # Step 2: Detect fold hinges based on normal angle changes
-        fold_regions = self._detect_fold_regions(points_3d, normals, fold_angle_threshold)
+        ref_fold_regions = self._detect_fold_regions(fold_detection_points, ref_normals, fold_angle_threshold)
         
-        if len(fold_regions) <= 1:
+        if len(ref_fold_regions) <= 1:
             self.logger.info("No significant folds detected, using standard triangulation")
             self.logger.warning("All patches failed, using standard triangulation")
             return self._fallback_standard_triangulation(points_3d, segments, uniform, interpolator, smoothing)
         
-        self.logger.info(f"Detected {len(fold_regions)} fold regions/patches")
+        self.logger.info(f"Detected {len(ref_fold_regions)} fold regions/patches")
+        
+        # For dense point clouds (first triangulation tab), use detected fold regions directly
+        fold_regions = ref_fold_regions
+        normals = ref_normals
         
         # Build tree for finding patch boundaries/overlaps
         tree = cKDTree(points_3d)
@@ -965,6 +1066,9 @@ class DirectTriangleWrapper:
                     if segs is not None and len(segs) > 0:
                         segs = self._sanitize_segments(segs, len(local_2d))
                         segs = self._filter_short_segments(segs, local_2d, min_seg_len)
+                        # Remove intersecting segments to prevent Triangle's "Topological inconsistency" error
+                        if len(segs) > 1:
+                            segs = self._remove_intersecting_segments(segs, local_2d)
                         if len(segs) == 0:
                             segs = None
 
@@ -1010,6 +1114,23 @@ class DirectTriangleWrapper:
                     if result_vertices_2d is not None:
                         break
 
+                # Fallback: triangulate without segments if all segment-based attempts failed
+                if result_vertices_2d is None or patch_triangles is None:
+                    self.logger.warning(f"All segment-based triangulations failed for patch {i}, trying without segments")
+                    try:
+                        # Use all local_2d points without segments
+                        fallback_opts = f'za{area_constraint:.8f}'
+                        fallback_input = {'vertices': local_2d}
+                        result = tr.triangulate(fallback_input, fallback_opts)
+                        if result and 'vertices' in result and 'triangles' in result:
+                            result_vertices_2d = result['vertices']
+                            patch_triangles = result['triangles']
+                            used_opts = fallback_opts
+                            used_label = 'no_segments_fallback'
+                            remapped_indices_map = None  # Full cloud used
+                    except Exception as e:
+                        self.logger.warning(f"Fallback triangulation also failed for patch {i}: {e}")
+                
                 if result_vertices_2d is None or patch_triangles is None:
                     continue
 
@@ -1039,9 +1160,8 @@ class DirectTriangleWrapper:
                      exact_2d_targets = local_2d
                      exact_3d_targets = region_points
                 
-                # For interpolation source, we still want the FULL DENSE CLOUD to capture curvature
-                # So we pass local_2d/region_points as the 'original_3d' params source.
-                
+                # For interpolation source, use the FULL DENSE CLOUD to capture curvature
+                # (Note: Refine Mesh case with sparse constraints is handled earlier via standard CDT)
                 patch_vertices_3d = self._project_back_to_3d(
                     result_vertices_2d, projection_params, region_points,
                     input_2d=exact_2d_targets, input_3d=exact_3d_targets,
@@ -1527,10 +1647,22 @@ class DirectTriangleWrapper:
                 except:
                     # Fallback to IDW if TPS fails singular matrix etc
                     self.logger.warning("TPS interpolation failed, falling back to IDW")
-                    # Fallback to IDW
+                    z_new = None
+                
+                # Check for NaN/inf values and fix them with IDW fallback
+                if z_new is None or not np.all(np.isfinite(z_new)):
+                    if z_new is not None:
+                        nan_mask = ~np.isfinite(z_new)
+                        nan_count = np.sum(nan_mask)
+                        if nan_count > 0:
+                            self.logger.warning(f"TPS produced {nan_count} NaN/inf values, using IDW fallback for those points")
+                    else:
+                        nan_mask = np.ones(len(points_2d), dtype=bool)
+                    
+                    # IDW fallback for NaN values
                     tree = cKDTree(orig_2d)
-                    k = min(8, len(orig_2d))
-                    dists, indices = tree.query(points_2d, k=k)
+                    k = min(12, len(orig_2d))
+                    dists, indices = tree.query(points_2d[nan_mask] if z_new is not None else points_2d, k=k)
                 
                     if dists.ndim == 1:
                         dists = dists[:, np.newaxis]
@@ -1540,7 +1672,20 @@ class DirectTriangleWrapper:
                     weights_sum = weights.sum(axis=1, keepdims=True)
                     weights_norm = weights / weights_sum
                     
-                    z_new = np.sum(weights_norm * z_orig[indices], axis=1)
+                    z_idw = np.sum(weights_norm * z_orig[indices], axis=1)
+                    
+                    if z_new is not None:
+                        z_new[nan_mask] = z_idw
+                    else:
+                        z_new = z_idw
+            
+            # Final safety check - replace any remaining NaN with nearest neighbor
+            if not np.all(np.isfinite(z_new)):
+                remaining_nan = ~np.isfinite(z_new)
+                self.logger.warning(f"Still have {np.sum(remaining_nan)} NaN values, using nearest neighbor")
+                tree = cKDTree(orig_2d)
+                _, nearest_idx = tree.query(points_2d[remaining_nan], k=1)
+                z_new[remaining_nan] = z_orig[nearest_idx]
             
             # Convert back to 3D
             points_3d = (centroid + 
@@ -1548,23 +1693,45 @@ class DirectTriangleWrapper:
                         points_2d[:, 1:2] * v_axis + 
                         z_new[:, np.newaxis] * normal)
             
+            # Final NaN check on points_3d before restoration
+            nan_pts_mask = ~np.all(np.isfinite(points_3d), axis=1)
+            if np.any(nan_pts_mask):
+                self.logger.warning(f"Found {np.sum(nan_pts_mask)} NaN/inf points in 3D result, fixing with nearest neighbor")
+                # Use nearest valid original point
+                valid_orig_mask = np.all(np.isfinite(original_3d), axis=1)
+                if np.any(valid_orig_mask):
+                    valid_orig = original_3d[valid_orig_mask]
+                    valid_orig_2d = orig_2d[valid_orig_mask]
+                    tree_valid = cKDTree(valid_orig_2d)
+                    _, nn_idx = tree_valid.query(points_2d[nan_pts_mask], k=1)
+                    points_3d[nan_pts_mask] = valid_orig[nn_idx]
+            
             # Restore exact points if inputs are provided
             # Uses KDTree to match output points to original input points robustly
             if input_2d is not None and input_3d is not None:
                 try:
-                    tree = cKDTree(input_2d)
+                    # Filter out any NaN values from input_2d/input_3d
+                    valid_input_mask = np.all(np.isfinite(input_2d), axis=1) & np.all(np.isfinite(input_3d), axis=1)
+                    if not np.any(valid_input_mask):
+                        raise ValueError("No valid input points for restoration")
+                    
+                    valid_input_2d = input_2d[valid_input_mask]
+                    valid_input_3d = input_3d[valid_input_mask]
+                    
+                    tree = cKDTree(valid_input_2d)
                     # Find nearest original point within tolerance
                     dists, indices = tree.query(points_2d, k=1)
                     
                     # Tolerance: adaptive to local spacing (prevents hinge cracks)
                     tolerance = 1e-5
                     try:
-                        nn_dists, _ = tree.query(input_2d, k=2)
-                        nn = nn_dists[:, 1]
-                        nn = nn[np.isfinite(nn)]
-                        if len(nn) > 0:
-                            nn_med = float(np.median(nn))
-                            tolerance = max(tolerance, nn_med * 0.1)
+                        if len(valid_input_2d) > 1:
+                            nn_dists, _ = tree.query(valid_input_2d, k=2)
+                            nn = nn_dists[:, 1]
+                            nn = nn[np.isfinite(nn)]
+                            if len(nn) > 0:
+                                nn_med = float(np.median(nn))
+                                tolerance = max(tolerance, nn_med * 0.1)
                     except Exception:
                         pass
                     if self.base_size:
@@ -1579,21 +1746,34 @@ class DirectTriangleWrapper:
                         try:
                             nn3 = None
                             try:
-                                nn3_dists, _ = tree.query(input_2d, k=2)
-                                nn3 = nn3_dists[:, 1]
-                                nn3 = nn3[np.isfinite(nn3)]
-                                nn3 = float(np.median(nn3)) if len(nn3) > 0 else None
+                                if len(valid_input_2d) > 1:
+                                    nn3_dists, _ = tree.query(valid_input_2d, k=2)
+                                    nn3 = nn3_dists[:, 1]
+                                    nn3 = nn3[np.isfinite(nn3)]
+                                    nn3 = float(np.median(nn3)) if len(nn3) > 0 else None
                             except Exception:
                                 nn3 = None
                             tol_3d = (nn3 * 0.2) if nn3 is not None else tolerance * 0.5
                             matched_rows = np.where(match_mask)[0]
-                            deltas = points_3d[matched_rows] - input_3d[matched_indices]
-                            dist3 = np.linalg.norm(deltas, axis=1)
-                            ok = dist3 <= tol_3d
-                            if np.any(ok):
-                                points_3d[matched_rows[ok]] = input_3d[matched_indices[ok]]
+                            
+                            # Only compute delta for rows with finite points_3d
+                            finite_matched = np.all(np.isfinite(points_3d[matched_rows]), axis=1)
+                            if np.any(finite_matched):
+                                finite_rows = matched_rows[finite_matched]
+                                finite_indices = matched_indices[finite_matched]
+                                deltas = points_3d[finite_rows] - valid_input_3d[finite_indices]
+                                dist3 = np.linalg.norm(deltas, axis=1)
+                                ok = dist3 <= tol_3d
+                                if np.any(ok):
+                                    points_3d[finite_rows[ok]] = valid_input_3d[finite_indices[ok]]
+                            
+                            # For non-finite rows, just snap directly
+                            if np.any(~finite_matched):
+                                nonfinite_rows = matched_rows[~finite_matched]
+                                nonfinite_indices = matched_indices[~finite_matched]
+                                points_3d[nonfinite_rows] = valid_input_3d[nonfinite_indices]
                         except Exception:
-                            points_3d[match_mask] = input_3d[matched_indices]
+                            points_3d[match_mask] = valid_input_3d[matched_indices]
                         
                 except Exception as e:
                     self.logger.warning(f"Exact point restoration failed: {e}")
@@ -1714,18 +1894,203 @@ class DirectTriangleWrapper:
             self.logger.warning(f"Vertex merging failed: {e}")
             return vertices, triangles
     
+    def _triangulate_folded_with_patches(self, constraint_pts: np.ndarray,
+                                          segments: Optional[np.ndarray],
+                                          reference_pts: np.ndarray,
+                                          fold_regions: List[np.ndarray],
+                                          ref_normals: np.ndarray,
+                                          uniform: bool,
+                                          interpolator: str,
+                                          smoothing: float,
+                                          fold_angle_threshold: float) -> Dict:
+        """
+        Triangulate a folded surface by handling each fold patch separately.
+        
+        For each patch:
+        1. Project patch reference points to local 2D
+        2. Find constraint points that belong to this patch
+        3. Triangulate with constraints in local 2D
+        4. Back-project to 3D using patch reference points
+        """
+        from scipy.spatial import cKDTree
+        
+        self.logger.info(f"Patch-based triangulation: {len(fold_regions)} patches, {len(constraint_pts)} constraints")
+        
+        all_vertices = []
+        all_triangles = []
+        vertex_offset = 0
+        
+        # Build KD-tree for reference points to assign constraints to patches
+        ref_tree = cKDTree(reference_pts)
+        
+        # Find which patch each constraint point belongs to (based on nearest reference point)
+        _, nearest_ref_idx = ref_tree.query(constraint_pts, k=1)
+        
+        # Create mapping: reference point index -> patch index
+        ref_to_patch = np.zeros(len(reference_pts), dtype=int)
+        for patch_idx, region_indices in enumerate(fold_regions):
+            ref_to_patch[region_indices] = patch_idx
+        
+        # Assign each constraint to a patch
+        constraint_patches = ref_to_patch[nearest_ref_idx]
+        
+        # Process each patch
+        for patch_idx, region_indices in enumerate(fold_regions):
+            patch_ref_pts = reference_pts[region_indices]
+            
+            if len(patch_ref_pts) < 4:
+                continue
+            
+            # Find constraints belonging to this patch
+            patch_constraint_mask = constraint_patches == patch_idx
+            patch_constraints = constraint_pts[patch_constraint_mask]
+            
+            # Map original constraint indices to patch indices for segments
+            orig_to_patch_idx = np.full(len(constraint_pts), -1, dtype=int)
+            patch_constraint_indices = np.where(patch_constraint_mask)[0]
+            for new_idx, orig_idx in enumerate(patch_constraint_indices):
+                orig_to_patch_idx[orig_idx] = new_idx
+            
+            # Filter segments to only include those with both endpoints in this patch
+            patch_segments = None
+            if segments is not None and len(segments) > 0:
+                valid_segs = []
+                for seg in segments:
+                    i, j = int(seg[0]), int(seg[1])
+                    if orig_to_patch_idx[i] >= 0 and orig_to_patch_idx[j] >= 0:
+                        valid_segs.append([orig_to_patch_idx[i], orig_to_patch_idx[j]])
+                if valid_segs:
+                    patch_segments = np.array(valid_segs, dtype=np.int32)
+            
+            self.logger.info(f"Patch {patch_idx}: {len(patch_ref_pts)} ref pts, {len(patch_constraints)} constraints, {len(patch_segments) if patch_segments is not None else 0} segs")
+            
+            if len(patch_constraints) < 3:
+                # Not enough constraints for this patch, use reference points only
+                patch_constraints = patch_ref_pts
+                patch_segments = None
+            
+            # Project patch to local 2D using PCA on reference points
+            centroid = patch_ref_pts.mean(axis=0)
+            centered_ref = patch_ref_pts - centroid
+            _, _, vh = np.linalg.svd(centered_ref, full_matrices=False)
+            u_axis, v_axis = vh[0], vh[1]
+            
+            # Project constraints to 2D
+            centered_constraints = patch_constraints - centroid
+            constraints_2d = np.column_stack([
+                np.dot(centered_constraints, u_axis),
+                np.dot(centered_constraints, v_axis)
+            ])
+            
+            # Project reference points to 2D for Steiner guides
+            ref_2d = np.column_stack([
+                np.dot(centered_ref, u_axis),
+                np.dot(centered_ref, v_axis)
+            ])
+            
+            # Add reference points as Steiner guides (filtered)
+            try:
+                from scipy.spatial import Delaunay
+                if len(constraints_2d) >= 3:
+                    delaunay = Delaunay(constraints_2d)
+                    simplex_indices = delaunay.find_simplex(ref_2d)
+                    interior_mask = simplex_indices >= 0
+                    interior_ref_2d = ref_2d[interior_mask]
+                    
+                    if len(interior_ref_2d) > 0:
+                        constraint_tree = cKDTree(constraints_2d)
+                        min_dist = self.base_size * 0.15 if self.base_size else 1.0
+                        dists, _ = constraint_tree.query(interior_ref_2d, k=1)
+                        far_enough = dists > min_dist
+                        interior_ref_2d = interior_ref_2d[far_enough]
+                        
+                        if len(interior_ref_2d) > 0:
+                            max_pts = min(300, len(interior_ref_2d))
+                            if len(interior_ref_2d) > max_pts:
+                                idx = np.random.choice(len(interior_ref_2d), max_pts, replace=False)
+                                interior_ref_2d = interior_ref_2d[idx]
+                            constraints_2d = np.vstack([constraints_2d, interior_ref_2d])
+                            self.logger.info(f"  Added {len(interior_ref_2d)} interior Steiner guides")
+            except Exception as e:
+                self.logger.debug(f"Could not add Steiner guides: {e}")
+            
+            # Triangulate this patch
+            try:
+                result_2d = self.triangulate(constraints_2d, patch_segments, uniform=uniform)
+                
+                if 'vertices' not in result_2d or 'triangles' not in result_2d:
+                    continue
+                
+                vertices_2d = result_2d['vertices']
+                triangles = result_2d['triangles']
+                
+                # Back-project to 3D
+                vertices_3d = centroid + vertices_2d[:, 0:1] * u_axis + vertices_2d[:, 1:2] * v_axis
+                
+                # Interpolate Z using patch reference points (limb-aware)
+                ref_z = np.dot(centered_ref, vh[2])
+                ref_tree_2d = cKDTree(ref_2d)
+                k = min(8, len(ref_2d))
+                dists, indices = ref_tree_2d.query(vertices_2d, k=k)
+                
+                if dists.ndim == 1:
+                    dists = dists[:, np.newaxis]
+                    indices = indices[:, np.newaxis]
+                
+                weights = 1.0 / np.maximum(dists ** 2, 1e-10)
+                weights_norm = weights / weights.sum(axis=1, keepdims=True)
+                z_new = np.sum(weights_norm * ref_z[indices], axis=1)
+                
+                vertices_3d = vertices_3d + z_new[:, np.newaxis] * vh[2]
+                
+                # Add to global mesh with offset
+                all_vertices.append(vertices_3d)
+                all_triangles.append(triangles + vertex_offset)
+                vertex_offset += len(vertices_3d)
+                
+                self.logger.info(f"  Patch {patch_idx}: {len(vertices_3d)} vertices, {len(triangles)} triangles")
+                
+            except Exception as e:
+                self.logger.warning(f"Patch {patch_idx} triangulation failed: {e}")
+                continue
+        
+        if not all_vertices:
+            self.logger.warning("All patches failed, falling back to standard triangulation")
+            return self._fallback_standard_triangulation(
+                constraint_pts, segments, uniform, interpolator, smoothing,
+                reference_mesh_3d=reference_pts
+            )
+        
+        # Merge all patches
+        merged_vertices = np.vstack(all_vertices)
+        merged_triangles = np.vstack(all_triangles)
+        
+        # Merge duplicate vertices at patch boundaries
+        merged_vertices, merged_triangles = self._merge_patch_boundaries(
+            merged_vertices, merged_triangles, tolerance=self.base_size * 0.1 if self.base_size else 0.1
+        )
+        
+        self.logger.info(f"Patch-based triangulation complete: {len(merged_vertices)} vertices, {len(merged_triangles)} triangles")
+        
+        return {
+            'vertices': merged_vertices,
+            'triangles': merged_triangles
+        }
+    
     def _fallback_standard_triangulation(self, points_3d: np.ndarray, 
                                          segments: Optional[np.ndarray],
                                          uniform: bool,
                                          interpolator: str = 'tps',
-                                         smoothing: float = 0.0) -> Dict:
+                                         smoothing: float = 0.0,
+                                         reference_mesh_3d: Optional[np.ndarray] = None) -> Dict:
         """
         Fallback to standard 2D projected triangulation.
         
         Args:
-            points_3d: 3D points
+            points_3d: 3D points (constraint points for triangulation)
             segments: Optional segments
             uniform: Uniform mesh flag
+            reference_mesh_3d: Optional reference mesh for Z-interpolation (preserves fold structure)
             
         Returns:
             Triangulation result dict
@@ -1743,8 +2108,50 @@ class DirectTriangleWrapper:
             v_coords = np.dot(centered, v_axis)
             points_2d = np.column_stack([u_coords, v_coords])
             
-            # Use standard triangulation
-            result_2d = self.triangulate(points_2d, segments, uniform=uniform)
+            # For Refine Mesh case with reference mesh, add reference points as internal Steiner guides
+            # This ensures folded surfaces have proper internal density matching the reference mesh
+            original_base_size = self.base_size
+            augmented_points_2d = points_2d
+            n_original_points = len(points_2d)
+            
+            if reference_mesh_3d is not None and len(reference_mesh_3d) > 0:
+                from scipy.spatial import cKDTree
+                
+                # Project reference mesh to 2D
+                ref_centered = reference_mesh_3d - centroid
+                ref_2d = np.column_stack([np.dot(ref_centered, u_axis), np.dot(ref_centered, v_axis)])
+                
+                # Add ALL reference points as Steiner guides (no interior filtering)
+                # For folded surfaces, Delaunay/convex hull tests fail due to 2D collapse
+                # Instead, just filter by distance from constraints and let Triangle handle it
+                try:
+                    # Remove reference points too close to existing constraint points
+                    constraint_tree = cKDTree(points_2d)
+                    min_dist = self.base_size * 0.15 if self.base_size else 1.0
+                    dists, _ = constraint_tree.query(ref_2d, k=1)
+                    far_enough_mask = dists > min_dist
+                    interior_ref_2d = ref_2d[far_enough_mask]
+                    
+                    self.logger.info(f"Adding {len(interior_ref_2d)}/{len(ref_2d)} reference points as Steiner guides (filtered by distance)")
+                    
+                    if len(interior_ref_2d) > 0:
+                        # Subsample if too many points (keep it manageable)
+                        max_interior = min(1000, len(interior_ref_2d))
+                        if len(interior_ref_2d) > max_interior:
+                            indices = np.random.choice(len(interior_ref_2d), max_interior, replace=False)
+                            interior_ref_2d = interior_ref_2d[indices]
+                        
+                        # Add reference points as Steiner guides
+                        augmented_points_2d = np.vstack([points_2d, interior_ref_2d])
+                        self.logger.info(f"Added {len(interior_ref_2d)} interior reference points as Steiner guides for fold structure")
+                except Exception as e:
+                    self.logger.warning(f"Could not add interior Steiner guides: {e}")
+            
+            # Use standard triangulation with augmented points
+            result_2d = self.triangulate(augmented_points_2d, segments, uniform=uniform)
+            
+            # Restore original base_size
+            self.base_size = original_base_size
             
             if 'vertices' not in result_2d:
                 return result_2d
@@ -1753,62 +2160,116 @@ class DirectTriangleWrapper:
             vertices_2d = result_2d['vertices']
             vertices_3d = centroid + vertices_2d[:, 0:1] * u_axis + vertices_2d[:, 1:2] * v_axis
             
-            # Interpolate Z values
-            z_orig = np.dot(centered, vh[2])
-            orig_2d = points_2d
-            
-            # Select interpolator
-            z_new = None
-            
-            if interpolator is not None and 'idw' in interpolator.lower():
-                 # Explicit IDW
-                 self.logger.info("Fallback: Using IDW interpolation")
-                 from scipy.spatial import cKDTree
-                 tree = cKDTree(orig_2d)
-                 k = min(12, len(orig_2d))
-                 dists, indices = tree.query(vertices_2d, k=k)
-                 
-                 if dists.ndim == 1:
-                     dists = dists[:, np.newaxis]
-                     indices = indices[:, np.newaxis]
-                 
-                 weights = 1.0 / np.maximum(dists ** 2, 1e-10)
-                 weights_sum = weights.sum(axis=1, keepdims=True)
-                 weights_norm = weights / weights_sum
-                 
-                 z_new = np.sum(weights_norm * z_orig[indices], axis=1)
-                 
-            elif interpolator is not None and 'linear' in interpolator.lower():
-                # Linear
-                self.logger.info("Fallback: Using Linear interpolation")
-                from scipy.interpolate import LinearNDInterpolator
-                try:
-                    lin_interp = LinearNDInterpolator(orig_2d, z_orig)
-                    z_new = lin_interp(vertices_2d)
+            # Interpolate Z values - use reference mesh if provided (Refine Mesh case)
+            if reference_mesh_3d is not None and len(reference_mesh_3d) > 0:
+                # Use reference mesh for Z-interpolation to preserve fold structure
+                # IMPORTANT: For folded surfaces, we need LIMB-AWARE interpolation
+                # Standard TPS/IDW fails because multiple ref points map to same 2D location with different Z
+                from scipy.spatial import cKDTree
+                
+                self.logger.info(f"Using reference mesh ({len(reference_mesh_3d)} pts) for Z-interpolation to preserve fold structure")
+                ref_centered = reference_mesh_3d - centroid
+                ref_z = np.dot(ref_centered, vh[2])
+                ref_2d = np.column_stack([np.dot(ref_centered, u_axis), np.dot(ref_centered, v_axis)])
+                
+                # Get constraint points Z values for limb detection
+                constraint_z = np.dot(centered, vh[2])
+                
+                # Build tree for finding nearest constraint point to each vertex
+                constraint_tree = cKDTree(points_2d)
+                
+                # For each output vertex, find nearest constraint point and use its Z as limb guide
+                _, nearest_constraint_idx = constraint_tree.query(vertices_2d, k=1)
+                vertex_limb_z = constraint_z[nearest_constraint_idx]
+                
+                # Use limb-aware IDW: for each vertex, only use reference points with similar Z
+                self.logger.info("Using limb-aware IDW interpolation for folded surface")
+                ref_tree = cKDTree(ref_2d)
+                k = min(20, len(ref_2d))  # More neighbors to filter from
+                dists, indices = ref_tree.query(vertices_2d, k=k)
+                
+                if dists.ndim == 1:
+                    dists = dists[:, np.newaxis]
+                    indices = indices[:, np.newaxis]
+                
+                # Compute Z range for limb filtering threshold
+                z_range = np.ptp(ref_z)
+                limb_threshold = z_range * 0.3  # Points within 30% of Z range are "same limb"
+                
+                z_new = np.zeros(len(vertices_2d))
+                for i in range(len(vertices_2d)):
+                    target_z = vertex_limb_z[i]
+                    neighbor_indices = indices[i]
+                    neighbor_dists = dists[i]
+                    neighbor_z = ref_z[neighbor_indices]
                     
-                    # Fill NaNs
-                    nan_mask = np.isnan(z_new)
-                    if np.any(nan_mask):
-                        from scipy.interpolate import NearestNDInterpolator
-                        near_interp = NearestNDInterpolator(orig_2d, z_orig)
-                        z_new[nan_mask] = near_interp(vertices_2d[nan_mask])
-                except Exception as e:
-                    self.logger.warning(f"Fallback Linear interpolation failed: {e}")
-            
-            # Default or fallback from above failures: TPS
-            if z_new is None:
-                try:
-                    self.logger.info(f"Fallback: Using TPS interpolation (smoothing={smoothing})")
-                    from scipy.interpolate import RBFInterpolator
-                    rbf = RBFInterpolator(orig_2d, z_orig, kernel='thin_plate_spline', smoothing=smoothing)
-                    z_new = rbf(vertices_2d)
-                except Exception as e:
-                    self.logger.warning(f"Fallback TPS failed: {e}")
-                    # Final IDW fallback
-                    pass
-
-            if z_new is not None:
+                    # Filter to same-limb neighbors (similar Z value)
+                    limb_mask = np.abs(neighbor_z - target_z) < limb_threshold
+                    
+                    if np.sum(limb_mask) >= 3:
+                        # Use filtered neighbors
+                        filtered_dists = neighbor_dists[limb_mask]
+                        filtered_z = neighbor_z[limb_mask]
+                    else:
+                        # Fallback: use closest neighbors regardless of limb
+                        filtered_dists = neighbor_dists[:5]
+                        filtered_z = neighbor_z[:5]
+                    
+                    # IDW interpolation
+                    weights = 1.0 / np.maximum(filtered_dists ** 2, 1e-10)
+                    weights_norm = weights / weights.sum()
+                    z_new[i] = np.sum(weights_norm * filtered_z)
+                
                 vertices_3d = vertices_3d + z_new[:, np.newaxis] * vh[2]
+            else:
+                # Standard interpolation for non-folded surfaces
+                z_orig = np.dot(centered, vh[2])
+                orig_2d = points_2d
+                
+                z_new = None
+                
+                if interpolator is not None and 'idw' in interpolator.lower():
+                     self.logger.info("Fallback: Using IDW interpolation")
+                     tree = cKDTree(orig_2d)
+                     k = min(12, len(orig_2d))
+                     dists, indices = tree.query(vertices_2d, k=k)
+                     
+                     if dists.ndim == 1:
+                         dists = dists[:, np.newaxis]
+                         indices = indices[:, np.newaxis]
+                     
+                     weights = 1.0 / np.maximum(dists ** 2, 1e-10)
+                     weights_sum = weights.sum(axis=1, keepdims=True)
+                     weights_norm = weights / weights_sum
+                     
+                     z_new = np.sum(weights_norm * z_orig[indices], axis=1)
+                     
+                elif interpolator is not None and 'linear' in interpolator.lower():
+                    self.logger.info("Fallback: Using Linear interpolation")
+                    from scipy.interpolate import LinearNDInterpolator
+                    try:
+                        lin_interp = LinearNDInterpolator(orig_2d, z_orig)
+                        z_new = lin_interp(vertices_2d)
+                        
+                        nan_mask = np.isnan(z_new)
+                        if np.any(nan_mask):
+                            from scipy.interpolate import NearestNDInterpolator
+                            near_interp = NearestNDInterpolator(orig_2d, z_orig)
+                            z_new[nan_mask] = near_interp(vertices_2d[nan_mask])
+                    except Exception as e:
+                        self.logger.warning(f"Fallback Linear interpolation failed: {e}")
+                
+                if z_new is None:
+                    try:
+                        self.logger.info(f"Fallback: Using TPS interpolation (smoothing={smoothing})")
+                        from scipy.interpolate import RBFInterpolator
+                        rbf = RBFInterpolator(orig_2d, z_orig, kernel='thin_plate_spline', smoothing=smoothing)
+                        z_new = rbf(vertices_2d)
+                    except Exception as e:
+                        self.logger.warning(f"Fallback TPS failed: {e}")
+
+                if z_new is not None:
+                    vertices_3d = vertices_3d + z_new[:, np.newaxis] * vh[2]
 
             return {
                 'vertices': vertices_3d,

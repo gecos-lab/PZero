@@ -7321,6 +7321,14 @@ class MeshItWorkflowGUI(QWidget):
                     else:
                         all_pts = np.asarray(pts3d, dtype=float)
                     
+                    # Get original mesh vertices from first triangulation for fold detection
+                    # This provides dense reference points when constraint points are sparse
+                    reference_pts = None
+                    tri_result = ds.get('triangulation_result', {})
+                    if 'vertices' in tri_result and len(tri_result['vertices']) > 0:
+                        reference_pts = np.asarray(tri_result['vertices'], dtype=float)
+                        logger.info(f"Using {len(reference_pts)} reference points from original triangulation for fold detection")
+                    
                     if len(all_pts) >= 4:
                         triangulator = DirectTriangleWrapper(
                             gradient=float(self.mesh_gradient_input.value()),
@@ -7331,7 +7339,8 @@ class MeshItWorkflowGUI(QWidget):
                             points_3d=all_pts,
                             segments=seg_arr, # Pass explicit segments
                             fold_angle_threshold=mesh_fold_angle_threshold,
-                            uniform=self.mesh_uniform_checkbox.isChecked()
+                            uniform=self.mesh_uniform_checkbox.isChecked(),
+                            reference_points_3d=reference_pts  # Use original mesh for fold detection
                         )
                         
                         if tri_res and 'vertices' in tri_res and 'triangles' in tri_res:
