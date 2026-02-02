@@ -745,7 +745,7 @@ def gocad2vtk_section(
             reject_role=None,
         )
         if reset_frame == 0:
-            self.xsect_coll.fit_to_entities(self, xuid=None, fit_method="parallel")
+            self.xsect_coll.fit_to_entities(self, xuid=None, fit_method="frame")
 
     # if not append_opt:
     #     # Re-orient XSection only if it is a new one.

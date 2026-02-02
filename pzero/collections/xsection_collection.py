@@ -20,6 +20,8 @@ from numpy import arctan2 as np_arctan2
 from numpy import arcsin as np_arcsin
 from numpy import sqrt as np_sqrt
 from numpy import sign as np_sign
+from numpy import float32 as np_float32
+from numpy import float64 as np_float64
 from numpy.linalg import inv as np_linalg_inv
 
 from pandas import DataFrame as pd_DataFrame
@@ -642,19 +644,25 @@ class XSectionCollection(BaseCollection):
         """Get UV cross-section plane coordinates from XYZ world coordinates."""
         # the following are strike, dip, normal unit vectors and the
         # position vector origin of the cross-section plane in world XYZ coordinates
-        strike_vct = self.get_uid_strike_vect(section_uid=section_uid).reshape(1, 3)
-        dip_vct = self.get_uid_dip_vect(section_uid=section_uid).reshape(1, 3)
-        normal_vct = self.get_uid_normal_vect(section_uid=section_uid).reshape(1, 3)
+        strike_vct = np_float64(
+            self.get_uid_strike_vect(section_uid=section_uid).reshape(1, 3)
+        )
+        dip_vct = np_float64(
+            self.get_uid_dip_vect(section_uid=section_uid).reshape(1, 3)
+        )
+        normal_vct = np_float64(
+            self.get_uid_normal_vect(section_uid=section_uid).reshape(1, 3)
+        )
         origin = self.get_uid_origin(uid=section_uid).reshape(1, 3)
         XYZ = np_array([X, Y, Z]).T
         # the following is the vector from the origin of the cross-section plane
         # to the point XYZ, still in world XYZ coordinates
-        origin_2_point = XYZ - origin
+        origin_2_point = np_float64(XYZ - origin)
         # and here we convert to the UVW coordinates of the cross-section plane with dot products
         # W is just to check and can be commented in the future
-        U = np_dot(origin_2_point, strike_vct.T)
-        V = np_dot(origin_2_point, dip_vct.T)
-        W = np_dot(origin_2_point, normal_vct.T)
+        U = np_float32(np_dot(origin_2_point, strike_vct.T))
+        V = np_float32(np_dot(origin_2_point, dip_vct.T))
+        W = np_float32(np_dot(origin_2_point, normal_vct.T))
         if any(W**2 > 1e-10):
             print(" ---> check W (should be zero): ", W)
         if as_arr:
@@ -666,15 +674,15 @@ class XSectionCollection(BaseCollection):
         """Get XYZ world coordinates from UV cross-section plane coordinates."""
         # the following are strike, dip, normal unit vectors and the
         # position vector origin of the cross-section plane in world XYZ coordinates
-        strike_vct = self.get_uid_strike_vect(section_uid=section_uid)
-        dip_vct = self.get_uid_dip_vect(section_uid=section_uid)
-        origin = self.get_uid_origin(uid=section_uid)
+        strike_vct = np_float64(self.get_uid_strike_vect(section_uid=section_uid))
+        dip_vct = np_float64(self.get_uid_dip_vect(section_uid=section_uid))
+        origin = np_float64(self.get_uid_origin(uid=section_uid))
         # the following is the vector from the origin of the cross-section plane
         # to the point UV, already in world XYZ coordinates
         origin_2_point = strike_vct * U + dip_vct * V
         # then we add the vector from the origin of the cross-section plane to
         # world coordinates origin (0,0,0), and we get the position in world XYZ coordinates
-        XYZ = origin_2_point + origin
+        XYZ = np_float32(origin_2_point + origin)
         X = XYZ[0]
         Y = XYZ[1]
         Z = XYZ[2]
@@ -781,22 +789,26 @@ class XSectionCollection(BaseCollection):
     #     )
 
     def get_all_xsect_entities(self, xuid=None):
-        """Get all entities belonging to the uid cross-section, in a dictionary sorted by collection."""
+        """Get all entities belonging to the uid cross-section, in a dictionary sorted by collection, excluding the cross-section itself."""
         all_entities = {}
+        out_entities = {}
         for coll_name in self.parent.tab_collection_dict.values():
             coll = eval(f"self.parent.{coll_name}")
             if coll_name != "xsect_coll":
                 all_entities[coll_name] = coll.get_xuid_uid(xuid=xuid)
-        return all_entities
+        for key in all_entities.keys():
+            if all_entities[key]:
+                out_entities[key] = all_entities[key]
+        return out_entities
 
     def fit_to_entities(self, xuid=None, fit_method=None):
         """
         Fit the xsection geometry to its child entities.
-        fit_method could be 'all', 'vertical' or 'parallel', and in the third case only length, height, and the frame
+        fit_method could be 'dipping', 'vertical' or 'frame', and in the third case only length, height, and the frame
         are resized, but strike, dip, and origin are kept unchanged.
         """
         if not any(
-            [fit_method == "all", fit_method == "vertical", fit_method == "parallel"]
+            [fit_method == "dipping", fit_method == "vertical", fit_method == "frame"]
         ):
             return
         # collect all entities belonging to the cross-section in a dictionary sorted by collection
@@ -816,99 +828,69 @@ class XSectionCollection(BaseCollection):
                 ]:
                     vtkappend.AddInputData(coll.get_uid_vtk_obj(uid))
                 elif coll.get_uid_topology(uid=uid) in ["XsVoxet", "XsImage"]:
-                    vtkappend.AddInputData(
-                        coll.coll.get_uid_vtk_obj(uid).frame.GetOutput()
-                    )
+                    vtkappend.AddInputData(coll.get_uid_vtk_obj(uid).frame.GetOutput())
         vtkappend.Update()
         append_points = WrapDataObject(vtkappend.GetOutput()).Points
         if append_points.size == 0:
             return
         # get the best fitting plane parameters
-        origin, normal = best_fitting_plane(append_points)
-        # now fit origin, strike and dip if the 'all' option is selected
-        if any([fit_method == "all", fit_method == "vertical"]):
-            if normal[2] > 0:
+        fit_origin, fit_normal = best_fitting_plane(append_points)
+        # for all methods, set origin to that returned by the best-fitting plane
+        self.set_uid_origin_x(xuid, fit_origin[0])
+        self.set_uid_origin_y(xuid, fit_origin[1])
+        self.set_uid_origin_z(xuid, fit_origin[2])
+        # now fit origin, strike and dip if the 'dipping' option is selected
+        if any([fit_method == "dipping", fit_method == "vertical"]):
+            if fit_normal[2] > 0:
                 # force cross-section plane to dip with geological convention, i.e. normal vector points downwards
-                normal = -normal
+                fit_normal = -fit_normal
             if fit_method == "vertical":
-                # force normal to be horizontal -> dip = 90 deg
-                normal[0] /= np_sqrt(normal[0] ** 2 + normal[1] ** 2)
-                normal[1] /= np_sqrt(normal[0] ** 2 + normal[1] ** 2)
-                normal[2] = 0
-            strike = (np_rad2deg(np_arctan2(normal[0], normal[1])) - 90) % 360
-            dip = 90 - np_rad2deg(np_arcsin(-normal[2]))
-            # set normal, strike and dip in XSection
+                # force fit_normal to be horizontal -> dip = 90 deg
+                fit_normal[0] /= np_sqrt(fit_normal[0] ** 2 + fit_normal[1] ** 2)
+                fit_normal[1] /= np_sqrt(fit_normal[0] ** 2 + fit_normal[1] ** 2)
+                fit_normal[2] = 0
+            # calculate strike and dip from fit_normal vector oriented downwards, i.e. as pole to plane
+            strike = (
+                np_float32(
+                    np_rad2deg(
+                        np_arctan2(np_float64(fit_normal[0]), np_float64(fit_normal[1]))
+                    )
+                    + 90
+                )
+                % 360
+            )
+            dip = 90 - np_rad2deg(np_arcsin(np_float64(-fit_normal[2])))
+            # set strike and dip in XSection
             self.set_uid_strike(xuid, strike)
             self.set_uid_dip(xuid, dip)
-            self.set_uid_origin_x(origin[0])
-            self.set_uid_origin_y(origin[1])
-            self.set_uid_origin_z(origin[2])
-
+        # Reset data model (maybe not necessary but seems a good idea)
+        self.modelReset.emit()
         # now for all options we resize the cross-section frame, length, height and origin to fit the child entities
-        append_points_X = append_points[:, 0]
-        append_points_Y = append_points[:, 1]
-        append_points_Z = append_points[:, 2]
         append_points_U, append_points_V = self.world2plane(
-            section_uid=xuid, X=append_points_X, Y=append_points_Y, Z=append_points_Z
+            section_uid=xuid,
+            X=append_points[:, 0],
+            Y=append_points[:, 1],
+            Z=append_points[:, 2],
         )
         max_U = max(append_points_U)
         min_U = min(append_points_U)
         max_V = max(append_points_V)
         min_V = min(append_points_V)
-        print(
-            "min_U: ",
-            min_U,
-            " - min_V: ",
-            min_V,
-            " - max_U: ",
-            max_U,
-            " - max_V: ",
-            max_V,
-        )
         new_length = max_U - min_U
         new_height = max_V - min_V
-        print("new_length: ", new_length, " - new_height: ", new_height)
-
-        # strike_vct = self.get_uid_strike_vect(section_uid=xuid)
-        # dip_vct = self.get_uid_dip_vect(section_uid=xuid)
-        # print("strike_vct: ", strike_vct)
-        # print("dip_vct: ", dip_vct)
-        # # here we shift the origin of the cross-section by vector summation of a vector with
-        # # components U along strike and V along dip
-        # del_U = min_U * strike_vct
-        # del_V = min_V * dip_vct
-        # print("del_U: ", del_U)
-        # print("del_V: ", del_V)
-        # new_origin = origin + del_U
-
-        new_origin = self.plane2world(section_uid=xuid, U=min_U, V=min_V, as_arr=True)
-
-        print("(old) origin: ", origin, " - new_origin: ", new_origin)
-
+        shift_origin = self.plane2world(section_uid=xuid, U=min_U, V=min_V, as_arr=True)
         self.set_uid_length(xuid, new_length)
         self.set_uid_width(xuid, new_height)
-        self.set_uid_origin_x(xuid, new_origin[0])
-        self.set_uid_origin_y(xuid, new_origin[1])
-        self.set_uid_origin_z(xuid, new_origin[2])
-
-        print("setting parameters done")
-
+        self.set_uid_origin_x(xuid, shift_origin[0])
+        self.set_uid_origin_y(xuid, shift_origin[1])
+        self.set_uid_origin_z(xuid, shift_origin[2])
         self.set_geometry(uid=xuid)
-
-        print("setting geometry done")
-
         # Reset data model
         self.modelReset.emit()
-
-        print("model reset done")
-
         # Emit a list of uids, even if the entity is just one
-        print("emitting list of uids", [xuid], " with self: ", self)
         self.parent.signals.geom_modified.emit([xuid], self)
-
-        print("signal emitted")
-
-        return xuid
 
         # optionally here at the end we could ensure all child entities are exactly aligned with the
         # cross-section plane by projecting them along the normal vector - not yet implemented
+
+        return xuid

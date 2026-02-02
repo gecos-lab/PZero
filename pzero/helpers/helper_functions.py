@@ -25,6 +25,8 @@ from numpy import sqrt as np_sqrt
 from numpy import square as np_square
 from numpy import std as np_std
 from numpy import sum as np_sum
+from numpy import float32 as np_float32
+from numpy import float64 as np_float64
 
 
 def auto_sep(filename):
@@ -203,13 +205,16 @@ def best_fitting_plane(points, equation=False):
 
     """
 
-    w, v = PCA(points)
+    points64 = np_float64(points)
+    del points
+
+    w, v = PCA(points64)
 
     #: the normal to the plane is the last eigenvector (lower correlation)
     normal = v[:, 2]
 
     #: get center point of the plane (mean)
-    point = np_mean(points, axis=0)
+    point = np_mean(points64, axis=0)
 
     if equation:
         a, b, c = normal
