@@ -154,6 +154,11 @@ def well2vtk(self, path=None):
                 annotation_obj.auto_cells()
                 annotation_obj.set_field_data(name=col, data=mrk_data)
                 ann_list.append(annotation_obj)
+
+                # also add as marker to the well object
+                well_obj.add_marker_data(
+                    name=col, mrk_pos=mrk_pos.reshape(-1, 3), mrk_data=mrk_data
+                )
         else:
             prop = prop.set_index("MD")
             for col in prop.columns:
@@ -167,7 +172,15 @@ def well2vtk(self, path=None):
                     idx = np_argmin(np_abs(arr - row))
                     # value = prop_clean.loc[row]
                     xyz[i, :] = points_arr[idx, :]
-                well_obj.add_trace_data(name=f"{col}", tr_data=tr_data, xyz=xyz)
+                
+                # We do NOT add as trace data anymore because sparse data (markers)
+                # causes crashes when plotted as splines (mismatch points vs values).
+                # well_obj.add_trace_data(name=f"{col}", tr_data=tr_data, xyz=xyz)
+                
+                # only add as marker to the well object, for labeling
+                well_obj.add_marker_data(
+                    name=col, mrk_pos=xyz, mrk_data=tr_data
+                )
 
     trace_keys = well_obj.get_trace_names()
     components = []

@@ -250,3 +250,10 @@ class WellCollection(BaseCollection):
     def set_uid_well_name(self, uid=None, name=None):
         """Set value(s) stored in dataframe (as pointer) from uid.."""
         self.df.loc[self.df["uid"] == uid, "name"] = name
+
+    def get_uid_marker_names(self, uid: str = None) -> list:
+        """Get list of marker property names for a given well uid."""
+        vtk_obj = self.get_uid_vtk_obj(uid)
+        if hasattr(vtk_obj, "get_marker_names"):
+            return vtk_obj.get_marker_names()
+        return []

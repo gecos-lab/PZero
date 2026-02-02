@@ -696,12 +696,16 @@ class ViewVTK(BaseView):
                 show_property = None
                 self.plotter.remove_actor(f"{uid}_prop")
             elif show_property == "X":
+                self.plotter.remove_actor(f"{uid}_prop")
                 show_property = plot_entity.points_X
             elif show_property == "Y":
+                self.plotter.remove_actor(f"{uid}_prop")
                 show_property = plot_entity.points_Y
             elif show_property == "Z":
+                self.plotter.remove_actor(f"{uid}_prop")
                 show_property = plot_entity.points_Z
             elif show_property == "MD":
+                self.plotter.remove_actor(f"{uid}_prop")
                 show_property = plot_entity.get_point_data(data_key="MD")
             elif isinstance(
                 show_property, str

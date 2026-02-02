@@ -709,6 +709,7 @@ class CustomTreeWidget(QTreeWidget):
 
         self.emit_checkbox_toggled()
 
+
     def toggle_with_menu(self, position):
         """
         Provides functionality to toggle the states of checkboxes for selected
@@ -735,8 +736,16 @@ class CustomTreeWidget(QTreeWidget):
             self.view, "show_mesh_slicer_dialog"
         ):
             open_mesh_slicer_action = menu.addAction("Open Mesh Slicer")
+        
         well_view_actions = self._create_well_view_mode_menu(menu)
+        
+        # New: Add Labels submenu
+        well_labels_actions = None
+        if self._can_show_labels():
+             well_labels_actions = self._create_show_labels_submenu(menu, item)
+
         action = menu.exec_(self.viewport().mapToGlobal(position))
+        
         if action == toggle_action:
             for item in self.selectedItems():
                 new_state = (
@@ -746,13 +755,64 @@ class CustomTreeWidget(QTreeWidget):
                 self.update_child_check_states(item, new_state)
                 self.update_parent_check_states(item)
             self.emit_checkbox_toggled()
+        
         if action == open_mesh_slicer_action:
             self._open_mesh_slicer_for_item(item)
+            
         if well_view_actions:
             if action == well_view_actions.get("trace"):
                 self._set_borehole_view_mode("trace")
             elif action == well_view_actions.get("cylinder"):
                 self._set_borehole_view_mode("cylinder")
+
+        if well_labels_actions:
+             for name, act in well_labels_actions.items():
+                if action == act:
+                    property_name = name if name != "None" else None
+                    self._show_well_labels(item, property_name)
+
+    def _create_show_labels_submenu(self, parent_menu, item):
+        uid = self.get_item_uid(item)
+        if not uid:
+             return None
+        
+        try:
+             marker_names = self.view.parent.well_coll.get_uid_marker_names(uid)
+        except AttributeError:
+             return None
+             
+        if not marker_names:
+             return None
+
+        parent_menu.addSeparator()
+        submenu = parent_menu.addMenu("Show Labels")
+        action_group = QActionGroup(submenu)
+        action_group.setExclusive(True)
+
+        actions = {}
+        none_action = submenu.addAction("None")
+        none_action.setCheckable(True)
+        # We don't easily know current state so we default to unchecked or leave it logic-less for now
+        # Ideally we'd check if any labels are currently shown.
+        none_action.setChecked(True) # Default to None being checked? OR try to find out.
+        action_group.addAction(none_action)
+        actions["None"] = none_action
+
+        for name in marker_names:
+            action = submenu.addAction(name)
+            action.setCheckable(True)
+            action_group.addAction(action)
+            actions[name] = action
+            
+        return actions
+
+    def _can_show_labels(self):
+        return getattr(self.collection, "collection_name", None) == "well_coll" and hasattr(self.view, "show_markers")
+
+    def _show_well_labels(self, item, property_name):
+        uid = self.get_item_uid(item)
+        if uid:
+            self.view.show_markers(uid, property_name)
 
     def _create_well_view_mode_menu(self, parent_menu):
         """
