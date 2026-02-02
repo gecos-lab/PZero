@@ -249,7 +249,6 @@ def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
 
     def cancel_option():
         """Clear the objects_qt dictionary if Cancel button is clicked"""
-        # This function has to be implemented before creating and calling the QEventLoop
         objects_qt.clear()
         return
 
@@ -1066,12 +1065,12 @@ class ShapefileAssignmentDialog(QMainWindow):
         # Header row
         row = 1
         header_pzero = QLabel("<b>PZero Property</b>")
-        header_arrow = QLabel("<b>←</b>")
-        header_arrow.setAlignment(Qt.AlignCenter)
+        #header_arrow = QLabel("<b>←</b>")
+        #header_arrow.setAlignment(Qt.AlignCenter)
         header_shapefile = QLabel("<b>Shapefile Column</b>")
         main_layout.addWidget(header_pzero, row, 0)
-        main_layout.addWidget(header_arrow, row, 1)
-        main_layout.addWidget(header_shapefile, row, 2)
+        #main_layout.addWidget(header_arrow, row, 1)
+        main_layout.addWidget(header_shapefile, row, 1)
         row += 1
 
         # Create combo boxes for each field
@@ -1084,8 +1083,8 @@ class ShapefileAssignmentDialog(QMainWindow):
         # Required fields
         for field in self.required_fields:
             label = QLabel(f"<b>{field} *</b>")
-            arrow_label = QLabel("←")
-            arrow_label.setAlignment(Qt.AlignCenter)
+            #arrow_label = QLabel("←")
+            #arrow_label.setAlignment(Qt.AlignCenter)
             combo = QComboBox()
             combo.addItems(shapefile_columns)
             combo.setObjectName(f"combo_{field}")
@@ -1094,8 +1093,8 @@ class ShapefileAssignmentDialog(QMainWindow):
             )
 
             main_layout.addWidget(label, row, 0)
-            main_layout.addWidget(arrow_label, row, 1)
-            main_layout.addWidget(combo, row, 2)
+#            main_layout.addWidget(arrow_label, row, 1)
+            main_layout.addWidget(combo, row, 1)
             self.combo_boxes[field] = combo
             self.field_labels[field] = label
             row += 1
@@ -1107,8 +1106,8 @@ class ShapefileAssignmentDialog(QMainWindow):
 
         for field in self.optional_fields:
             label = QLabel(f"{field}")
-            arrow_label = QLabel("←")
-            arrow_label.setAlignment(Qt.AlignCenter)
+            #arrow_label = QLabel("←")
+            #arrow_label.setAlignment(Qt.AlignCenter)
             combo = QComboBox()
             combo.addItems(shapefile_columns)
             combo.setObjectName(f"combo_{field}")
@@ -1117,8 +1116,8 @@ class ShapefileAssignmentDialog(QMainWindow):
             )
 
             main_layout.addWidget(label, row, 0)
-            main_layout.addWidget(arrow_label, row, 1)
-            main_layout.addWidget(combo, row, 2)
+            #.addWidget(arrow_label, row, 1)
+            main_layout.addWidget(combo, row, 1)
             self.combo_boxes[field] = combo
             self.field_labels[field] = label
             row += 1

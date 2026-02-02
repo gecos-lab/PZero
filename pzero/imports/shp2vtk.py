@@ -53,7 +53,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
     elif geom_type == "Point":
         topology_type = "Point"
     else:
-        print(
+        self.print_terminal(
             f"Only Point and Line geometries can be imported. Found: {geom_type} - aborting."
         )
         return
@@ -75,7 +75,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
 
     # If user cancelled, abort import
     if attribute_mapping is None:
-        print("Import cancelled by user.")
+        self.print_terminal("Import cancelled by user.")
         return
 
     # Split mapping into properties vs orientation-related fields
@@ -259,7 +259,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     self.geol_coll.add_entity_from_dict(curr_obj_dict)
                     del curr_obj_dict
             else:
-                print(
+                self.print_terminal(
                     "Incomplete data. Feature property is required but not found in mapping."
                 )
     elif collection == "Fluid contacts":
@@ -470,7 +470,7 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 if curr_obj_dict["vtk_obj"].points_number > 0:
                     self.backgrnd_coll.add_entity_from_dict(curr_obj_dict)
                 else:
-                    print("Empty object")
+                    self.print_terminal("Empty object")
                 del curr_obj_dict
             # Points
         elif gdf.geom_type[0] == "Point":
