@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QApplication,
     QFormLayout,
+    QScrollArea,   # <-- aggiunto per la scroll area
 )
 
 from laspy import open as lp_open
@@ -294,36 +295,60 @@ def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
 
 def input_checkbox_dialog(title="title", label="label", choice_list=None):
     """Open a dialog with a text line explaining the widget, followed by a list of non-exclusive checkboxes."""
+    # Create main window widget that will host the scroll area
     widget = QWidget()
     widget.setWindowTitle(title)
-    # Define a grid layout
-    gridLayout = QGridLayout(widget)
+
+    # Create a scroll area to host the list of checkboxes
+    scroll = QScrollArea(widget)
+    scroll.setWidgetResizable(True)
+    scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+    # Content widget that actually receives the checkboxes in a grid layout
+    content = QWidget()
+    gridLayout = QGridLayout(content)
+    scroll.setWidget(content)
+
+    # Place the scroll area inside a top-level layout so buttons can be placed below it
+    from PySide6.QtWidgets import QVBoxLayout
+
+    main_layout = QVBoxLayout(widget)
+    main_layout.addWidget(scroll)
+
     objects_qt = {}
     i = 0
     # Insert QLabel to explain the reason of the choice
     label_line = QLabel(widget)
     label_line.setText(label)
     gridLayout.addWidget(label_line, 1, 1)
+    i = 1
     # FOR loop that builds checkboxes according to the choice_list
     for element in choice_list:
         # Create dynamic variables.
         objects_qt[element] = [None, None]
         # Create QCheckBoxes.
-        objects_qt[element][0] = QCheckBox(widget)
+        objects_qt[element][0] = QCheckBox(content)
         objects_qt[element][0].setText(element)  # set text for the checkbox
-        gridLayout.addWidget(objects_qt[element][0], i + 2, 1)
+        gridLayout.addWidget(objects_qt[element][0], i + 1, 1)
         i += 1
-    # Create OK Button, add it to the grid layout an set name and state
-    button_ok = QPushButton(widget)
-    gridLayout.addWidget(button_ok, i + 3, 1)
+
+    # Create a horizontal area for OK/Cancel buttons (below the scroll area)
+    from PySide6.QtWidgets import QHBoxLayout
+
+    button_layout = QHBoxLayout()
+    # Create OK Button, add it to the button layout and set name and state
+    button_ok = QPushButton("OK", widget)
     button_ok.setAutoDefault(True)
-    button_ok.setText("OK")
-    # Cancel Button, add it to the grid layout an set name and state
-    button_cancel = QPushButton(widget)
-    gridLayout.addWidget(button_cancel, i + 3, 2)
+    button_layout.addWidget(button_ok)
+    # Cancel Button, add it to the button layout and set name and state
+    button_cancel = QPushButton("Cancel", widget)
     button_cancel.setAutoDefault(True)
-    button_cancel.setText("Cancel")
+    button_layout.addWidget(button_cancel)
+
+    main_layout.addLayout(button_layout)
+
     # Show the widget.
+    widget.resize(400, 300)
     widget.show()
 
     def cancel_option():
@@ -335,13 +360,9 @@ def input_checkbox_dialog(title="title", label="label", choice_list=None):
     # A QEventLoop is created. Signals and connections are created. QEventLoop is executed. When button is clicked,
     # the QEventLoop.quit() will be called to close the widget and the loop. Attention: it's not a linear path in the code
     loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
-    button_ok.clicked.connect(
-        loop.quit
-    )  # Response to clicking the Collect PushButton. End the QEventLoop
+    button_ok.clicked.connect(loop.quit)  # End the QEventLoop on OK
     button_cancel.clicked.connect(cancel_option)  # Clear the widget
-    button_cancel.clicked.connect(
-        loop.quit
-    )  # Response to clicking the Cancel PushButton. End the QEventLoop
+    button_cancel.clicked.connect(loop.quit)  # End the QEventLoop on Cancel
     loop.exec_()  # Execute the QEventLoop
 
     # When the QEventLoop is closed, the typed text is collected
