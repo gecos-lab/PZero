@@ -1,0 +1,101 @@
+name: Deploy and Release
+
+on:
+    push:
+      tags:
+        - v*.*.*
+
+jobs:
+    # Specify the reusable workflow
+    testing:
+      uses: ./.github/old_workflow/release-testing.yml
+
+    deploy:
+        strategy:
+            matrix:
+              # OS we can use to run jobs
+              os: [windows-latest, ubuntu-latest, macos-latest]
+
+        defaults:
+          run:
+            shell: bash -el {0}
+        permissions:
+          checks: write
+          pull-requests: write
+
+        runs-on: ${{ matrix.os }}
+        # Requiring one or more reusable old_workflow in needs
+        needs: [testing]
+
+        # Steps for deploying a release
+        steps:
+            - name: Checkout Repo
+              uses: actions/checkout@v3
+
+            - name: Install Conda Env
+              # Use the following if condition to generate os-specific envs
+              # if: ${{ matrix.os == 'macos-latest' }}
+              # if: ${{ matrix.os != 'macos-latest' }}
+              uses: conda-incubator/setup-miniconda@v2
+              with:
+                mamba-version: "*"
+                channels: conda-forge,defaults
+                channel-priority: true
+                activate-environment: pzero
+                environment-file: envs/pzero-env-from-history.yml
+                python-version: 3.11
+                auto-activate-base: false
+
+            - name: Check Conda Dependencies
+              run: |
+                conda info
+                conda list
+
+            - name: Make executable - Windows
+              if: ${{ matrix.os == 'windows-latest' }}
+              run: |
+                conda activate pzero
+                pyinstaller pzero-windows.spec
+                ls
+
+            - name: Make executable - Linux
+              if: ${{ matrix.os == 'ubuntu-latest' }}
+              run: |
+                conda activate pzero
+                pyinstaller pzero-linux.spec
+                ls
+
+            - name: Make executable - MacOS
+              if: ${{ matrix.os == 'macos-latest' }}
+              run: |
+                conda activate pzero
+                pyinstaller pzero-macos.spec
+                ls
+
+            - name: check path
+              run: |
+                cd installers
+                ls
+
+            - name: Upload Windows Build
+              if: ${{ matrix.os == 'windows-latest' }}
+              uses: actions/upload-artifact@v3
+              with:
+                 name: ${{ matrix.os }} build
+                 path: installers/PZero_Windows/pzero.exe
+
+
+            - name: Upload Ubuntu Build
+              if: ${{ matrix.os == 'ubuntu-latest' }}
+              uses: actions/upload-artifact@v3
+              with:
+                 name: ${{ matrix.os }} build
+                 path: installers/PZero_Linux/pzero
+
+
+            - name: Upload MacOs Build
+              if: ${{ matrix.os == 'macos-latest' }}
+              uses: actions/upload-artifact@v3
+              with:
+                 name: ${{ matrix.os }} build
+                 path: installers/PZero_Darwin/pzero

@@ -1,31 +1,39 @@
 """image_collection.py
 PZero© Andrea Bistacchi"""
 
-from uuid import uuid4
-
-from numpy import set_printoptions as np_set_printoptions
-
-from pandas import set_option as pd_set_option
-
 from .DIM_collection import DIMCollection
-
-# Options to print Pandas dataframes in console for testing.
-pd_desired_width = 800
-pd_max_columns = 20
-pd_show_precision = 4
-pd_max_colwidth = 80
-pd_set_option("display.width", pd_desired_width)
-np_set_printoptions(linewidth=pd_desired_width)
-pd_set_option("display.max_columns", pd_max_columns)
-pd_set_option("display.precision", pd_show_precision)
-pd_set_option("display.max_colwidth", pd_max_colwidth)
 
 
 class ImageCollection(DIMCollection):
     """Collection for all image entities and their metadata."""
+
     def __init__(self, parent=None, *args, **kwargs):
         super(ImageCollection, self).__init__(parent, *args, **kwargs)
         # Initialize properties required by the abstract superclass.
+        self.entity_dict = {
+            "uid": "",
+            "name": "undef",
+            "scenario": "undef",
+            "parent_uid": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "topology": "undef",
+            "vtk_obj": None,
+            "properties_names": [],
+            "properties_components": [],
+            "properties_types": [],
+        }
+
+        self.entity_dict_types = {
+            "uid": str,
+            "name": str,
+            "scenario": str,
+            "parent_uid": str,
+            "topology": str,
+            "vtk_obj": object,
+            "properties_names": list,
+            "properties_components": list,
+            "properties_types": list,
+        }
+
         self.valid_topologies = [
             "MapImage",
             "XsImage",
@@ -33,9 +41,9 @@ class ImageCollection(DIMCollection):
             "Image3D",
         ]
 
-        self.collection_name = 'image'
+        self.collection_name = "image_coll"
 
-        self.default_colormap = 'gray'
+        self.default_colormap = "gray"
 
         self.initialize_df()
 

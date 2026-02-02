@@ -12,8 +12,8 @@ from pzero.entities_factory import TriSurf
 
 def vtk2dxf(self=None, out_dir_name=None):
     """Exports all triangulated surfaces to a collection of DXF 3DFACE objects and border polyline3d."""
-    #Create DXF container.
-    #Add entities.
+    # Create DXF container.
+    # Add entities.
     list_uids = []
     list_names = []
     for uid in self.geol_coll.df["uid"]:
@@ -55,7 +55,7 @@ def vtk2dxf(self=None, out_dir_name=None):
                 boun_layer = dxf_out.layers.get(layer_b)
                 boun_layer.rgb = (R, G, B)
 
-                #3D faces
+                # 3D faces
                 for c in range(vtk_entity.GetNumberOfCells()):
                     face_points = numpy_support.vtk_to_numpy(
                         vtk_entity.GetCell(c).GetPoints().GetData()
@@ -67,7 +67,7 @@ def vtk2dxf(self=None, out_dir_name=None):
                             face_points, dxfattribs={"layer": layer, "color": 256}
                         )
 
-                #border -> https://lorensen.github.io/VTKExamples/site/Python/Meshes/BoundaryEdges/
+                # border -> https://lorensen.github.io/VTKExamples/site/Python/Meshes/BoundaryEdges/
                 vtk_border = vtk_entity.get_clean_boundary()
 
                 xyz_b = numpy_support.vtk_to_numpy(vtk_border.GetPoints().GetData())
@@ -131,7 +131,7 @@ def vtk2dxf(self=None, out_dir_name=None):
                 ].values[0]
             )
             vtk_entity = self.boundary_coll.get_uid_vtk_obj(uid)
-            #3D faces
+            # 3D faces
             for i in range(vtk_entity.GetNumberOfCells()):
                 face_points = numpy_support.vtk_to_numpy(
                     vtk_entity.GetCell(i).GetPoints().GetData()
@@ -186,7 +186,7 @@ def vtk2dxf(self=None, out_dir_name=None):
 
     complete_list = pd_DataFrame({"uids": list_uids, "features": list_names})
     complete_list.to_csv(f"{out_dir_name}/exported_object_list.csv", index=False)
-    #Save DXF file.
+    # Save DXF file.
     # out_file_name = (str(out_dir_name) + "/3dface_border.dxf")
     # out_file_name = (str(out_dir_name) + "/3dface_border_attributes.dxf")
     # print("Writing DXF... please wait.")

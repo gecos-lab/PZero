@@ -5,6 +5,7 @@ from sys import argv, exit, platform
 
 from PySide6.QtWidgets import QApplication, QSplashScreen
 from PySide6.QtGui import QPixmap
+
 # from PySide6.QtCore import Qt
 
 # if hasattr(Qt, 'AA_EnableHighDpiScaling'):
@@ -22,13 +23,13 @@ app = QApplication(argv)
 # if platform == 'darwin':
 # elif platform == 'win32':
 # elif platform == 'linux':
-app.setStyle('Fusion')
+app.setStyle("Fusion")
 # app.setStyle('windows11')
 # app.setStyle('windowsvista')
 # app.setStyle('windows')
 
 # Display splash screen before doing anything else
-splash_image = QPixmap("./images/splash_image.jpg")
+splash_image = QPixmap("_internal/pzero_splash.png")
 splash = QSplashScreen(splash_image)
 splash.show()
 

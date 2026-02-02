@@ -9,6 +9,7 @@ import os
 
 from pzero.entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid
 
+
 def pyvista2vtk(self):
     """
     Read various file formats handled by PyVista and add, to the appropriate collection, all the pointset, polyline, triangulated
@@ -38,7 +39,7 @@ def pyvista2vtk(self):
     #           VTK_BEZIER_CURVE = 75, VTK_BEZIER_TRIANGLE = 76, VTK_BEZIER_QUADRILATERAL = 77, VTK_BEZIER_TETRAHEDRON = 78,
     #           VTK_BEZIER_HEXAHEDRON = 79, VTK_BEZIER_WEDGE = 80, VTK_BEZIER_PYRAMID = 81, VTK_NUMBER_OF_CELL_TYPES
 
-    #Get topology (CellType) of first cell in object - THEN ASSUMES ALL CELLS ARE OF THE SAME TYPE
+    # Get topology (CellType) of first cell in object - THEN ASSUMES ALL CELLS ARE OF THE SAME TYPE
     # Select and open input file
     in_file_name = QFileDialog.getOpenFileName(
         self, "Import entities from PyVista-supported file"
@@ -55,7 +56,9 @@ def pyvista2vtk(self):
             # Get topology (CellType) of first cell in object
             cell_type = curr_obj.GetCellType(0)
         except Exception as e:
-            self.print_terminal(f"pyvista2vtk - entity topology not recognized ERROR: {e}")
+            self.print_terminal(
+                f"pyvista2vtk - entity topology not recognized ERROR: {e}"
+            )
             return  # Exit the function if reading fails
 
         # If curr_obj is a recognized topology, assign to PZero class

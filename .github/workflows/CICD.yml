@@ -1,0 +1,130 @@
+# PZero
+# Continuous Integration/Continuous Deployment
+# run tests on multiploe OS's -> create semantic relese -> deply executables for multiploe OS's with PyInstaller
+name: CICD
+
+# Runs on push on the main branch, that actually occurs only after a pull request is accepted or a push to the main branch is made directly.
+on:
+  push:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies and run old_tests
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
+          pytest
+
+  release:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    outputs:
+      version: ${{ steps.semantic.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.TOKEN }}
+      - name: Python Semantic Release
+        uses: python-semantic-release/python-semantic-release@master
+        id: semantic
+        with:
+          github_token: ${{ secrets.TOKEN }}
+
+  deploy:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            arch: x86_64
+          - os: macos-latest
+            arch: arm64
+          - os: ubuntu-latest
+          - os: windows-latest
+    needs: release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build executable MacOS
+        if: runner.os == 'macOS'
+        run: |
+          if [ "${{ matrix.arch }}" = "x86_64" ]; then
+            arch -x86_64 pip3 install --upgrade pip
+            arch -x86_64 pip3 install -r requirements.txt
+            arch -x86_64 pip3 install pyinstaller
+            arch -x86_64 pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --hidden-import=pyogrio._geometry --collect-all rasterio pzero.py --name pzero-macOS-${{ matrix.arch }} --add-data "_internal/pzero_splash.png:."
+          else
+            python3 -m pip install --upgrade pip
+            pip install -r requirements.txt
+            pip install pyinstaller
+            pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --hidden-import=pyogrio._geometry --collect-all rasterio pzero.py --name pzero-macOS-${{ matrix.arch }} --add-data "_internal/pzero_splash.png:."
+          fi
+        env:
+          ARCHFLAGS: "-arch ${{ matrix.arch }}"
+      - name: Build executable Ubuntu
+        if: runner.os == 'Linux'
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+          pyinstaller --onedir --windowed --hidden-import=pyogrio._geometry --collect-all rasterio pzero.py --name pzero-Ubuntu --add-data "_internal/pzero_splash.png:."
+      - name: Build executable Windows
+        if: runner.os == 'Windows'
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller=6.15.0
+          pyinstaller --onedir --windowed --hidden-import=pyogrio._geometry --collect-all rasterio pzero.py --name pzero-Windows --icon="_internal/pzero.ico" --add-data "_internal/pzero.ico;." --add-data "_internal/pzero_splash.png;."
+      - name: Zip executable (Unix/MacOS)
+        if: runner.os != 'Windows'
+        run: |
+          cd dist
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            zip -r pzero-macOS-${{ matrix.arch }}.zip pzero-macOS-${{ matrix.arch }}/*
+          else
+            zip -r pzero-Ubuntu.zip pzero-Ubuntu/*
+          fi
+        shell: bash
+      - name: Zip executable (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd dist
+          Compress-Archive -Path "pzero-Windows/*" -DestinationPath "pzero-Windows.zip"
+        shell: pwsh
+      - name: Upload executable
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            file="dist/pzero-macOS-${{ matrix.arch }}.zip"
+          elif [ "${{ runner.os }}" = "Linux" ]; then
+            file="dist/pzero-Ubuntu.zip"          
+          else
+            file="dist/pzero-Windows.zip"
+          fi
+          gh release upload --clobber --repo $GITHUB_REPOSITORY v${{ needs.release.outputs.version }} "$file"
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.TOKEN }}

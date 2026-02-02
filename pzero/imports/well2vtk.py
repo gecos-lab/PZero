@@ -1,7 +1,7 @@
 """well2vtk.py by Gabriele Benedetti
 PZero© Andrea Bistacchi
 --------
-Convert well data (csv, ags ...) in vtk objects.
+Convert well data (csv, ags ...) to vtk objects.
 
 """
 
@@ -11,8 +11,6 @@ from uuid import uuid4
 
 from pandas import read_excel as pd_read_excel
 from pandas import unique as pd_unique
-# from pandas import read_csv as pd_read_csv
-# from pandas import isna as pd_isna
 
 from numpy import abs as np_abs
 from numpy import append as np_append
@@ -65,7 +63,6 @@ def well2vtk(self, path=None):
     del prop_df["GEOMETRY"]
 
     arr = well_obj.trace.get_point_data(data_key="MD")
-    # print(arr)
     points = well_obj.trace.points_number
     ann_list = []
     well_uid = str(uuid4())
@@ -84,8 +81,6 @@ def well2vtk(self, path=None):
                     for row, (start, end, value) in prop.iterrows():
                         start_idx = np_argmin(np_abs(arr - start))
                         end_idx = np_argmin(np_abs(arr - end))
-                        # print(key)
-                        # print(len(curve_copy.points[start_idx:end_idx]))
 
                         if key == "GEOLOGY":
                             marker_pos = well_obj.trace.points[start_idx, :].reshape(
@@ -103,7 +98,7 @@ def well2vtk(self, path=None):
                             marker_obj_dict["name"] = f"marker_{value}"
                             marker_obj_dict["role"] = "top"
                             marker_obj_dict["feature"] = value
-                            marker_obj_dict["x_section"] = well_uid
+                            marker_obj_dict["parent_uid"] = well_uid
                             marker_obj_dict["vtk_obj"] = marker_obj
                             self.geol_coll.add_entity_from_dict(marker_obj_dict)
                             color_R = (
@@ -135,8 +130,6 @@ def well2vtk(self, path=None):
                 for row, (start, end, value) in prop.iterrows():
                     start_idx = np_argmin(np_abs(arr - start))
                     end_idx = np_argmin(np_abs(arr - end))
-                    # print(key)
-                    # print(len(curve_copy.points[start_idx:end_idx]))
                     tr_data[start_idx:end_idx] = value
                     # tr_data.insert(0,0)
             well_obj.add_trace_data(
@@ -197,9 +190,7 @@ def well2vtk(self, path=None):
             components.append(annotation.trace.get_point_data_shape(key)[1])
             types.append(annotation.trace.get_point_data_type(key))
 
-        annotation_obj_attributes = deepcopy(
-            BackgroundCollection().entity_dict
-        )
+        annotation_obj_attributes = deepcopy(BackgroundCollection().entity_dict)
         annotation_obj_attributes["uid"] = str(uuid4())
         annotation_obj_attributes["name"] = name
         annotation_obj_attributes["topology"] = "VertexSet"
@@ -212,9 +203,7 @@ def well2vtk(self, path=None):
         annotation_obj_attributes["borehole"] = bore_obj_attributes["uid"]
 
         annotation_obj_attributes["vtk_obj"] = annotation
-        self.backgrnd_coll.add_entity_from_dict(
-            entity_dict=annotation_obj_attributes
-        )
+        self.backgrnd_coll.add_entity_from_dict(entity_dict=annotation_obj_attributes)
     # paths = in_file_name
 
     # data_paths = paths[1]
@@ -331,7 +320,7 @@ def well2vtk(self, path=None):
     #     # marker_obj_attributes['properties_names'] = []
     #     # marker_obj_attributes['properties_components'] = []
     #     # marker_obj_attributes['properties_types'] = []
-    #     # marker_obj_attributes['x_section'] = curr_obj_attributes['uid']
+    #     # marker_obj_attributes['parent_uid'] = curr_obj_attributes['uid']
     #     # marker_obj_attributes['vtk_obj'] = well_marker
 
     #     # self.geol_coll.add_entity_from_dict(entity_dict=marker_obj_attributes)

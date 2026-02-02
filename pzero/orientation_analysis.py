@@ -17,7 +17,7 @@ from pzero.helpers.helper_dialogs import multiple_input_dialog
 
 from .helpers.helper_functions import freeze_gui
 
-#-----IN THE FUTURE add functions for orientation analysis.-----
+# -----IN THE FUTURE add functions for orientation analysis.-----
 
 
 def strikes2dip_directions(strikes=None):
@@ -119,6 +119,7 @@ def set_normals(self):
     and aborts if the input entities are not homogeneous.
     """
     from .entities_factory import TriSurf, VertexSet, XsVertexSet, XsPolyLine
+
     # Check if some vtkPolyData is selected.
     if self.selected_uids:
         if self.shown_table == "tabGeology":
@@ -131,7 +132,9 @@ def set_normals(self):
                     if not isinstance(
                         self.geol_coll.get_uid_vtk_obj(uid), (VertexSet, XsVertexSet)
                     ):
-                        self.print_terminal("Setting normals failed: all entities must be of the same type.")
+                        self.print_terminal(
+                            "Setting normals failed: all entities must be of the same type."
+                        )
                         return
                 # Choose Dip/Direction property names. If list is empty return.
                 property_name_list = self.geol_coll.get_uid_properties_names(
@@ -165,17 +168,21 @@ def set_normals(self):
                         dir_name=updt_dict["dir_name"],
                     )
                     self.prop_legend.update_widget(self)
-                    self.print_terminal("Normals set on vertex set ", uid)
+                    self.print_terminal("Normals set on vertex set " + uid)
                 self.print_terminal("All Normals set.")
             # Case for TriSurf and XsPolyLine where Normal are calculated from geometry
             elif isinstance(
-                    self.geol_coll.get_uid_vtk_obj(self.selected_uids[0]),
-                    (TriSurf, XsPolyLine),
+                self.geol_coll.get_uid_vtk_obj(self.selected_uids[0]),
+                (TriSurf, XsPolyLine),
             ):
                 self.print_terminal("Normals on TriSurf or XsPolyLine.")
                 for uid in self.selected_uids:
-                    if not isinstance(self.geol_coll.get_uid_vtk_obj(uid), (TriSurf, XsPolyLine)):
-                        self.print_terminal("Setting normals failed: all entities must be of the same type.")
+                    if not isinstance(
+                        self.geol_coll.get_uid_vtk_obj(uid), (TriSurf, XsPolyLine)
+                    ):
+                        self.print_terminal(
+                            "Setting normals failed: all entities must be of the same type."
+                        )
                         return
                 for uid in self.selected_uids:
                     self.geol_coll.append_uid_property(
@@ -183,36 +190,36 @@ def set_normals(self):
                     )
                     self.geol_coll.get_uid_vtk_obj(uid).vtk_set_normals()
                     self.prop_legend.update_widget(self)
-                    self.print_terminal("Normals set on TriSurf or XsPolyLine", uid)
+                    self.print_terminal("Normals set on TriSurf or XsPolyLine" + uid)
                     obj = self.geol_coll.get_uid_vtk_obj(uid)
                     normals = obj.get_property("Normals")
-                    print(f"UID {uid}:")
-                    print('getproperties', normals)
-                    for n in normals:
-                        print("Normals: X={0}, Y={1}, Z={2}".format(n[0], n[1], n[2]))
+                    # self.print_terminal(f"UID {uid}:")
+                    # self.print_terminal("getproperties", normals)
+                    # for n in normals:
+                    #     self.print_terminal("Normals: X={0}, Y={1}, Z={2}".format(n[0], n[1], n[2]))
 
                 self.print_terminal("All Normals set.")
             else:
-                print(
+                self.print_terminal(
                     "Only VertexSet, XsVertexSet, XsPolyLine and TriSurf entities can be processed."
                 )
 
         elif self.shown_table == "tabDOMs":
-            print("Calculating normals for Point Cloud")
+            self.print_terminal("Calculating normals for Point Cloud")
             for uid in self.selected_uids:
                 self.dom_coll.append_uid_property(
                     uid=uid, property_name="Normals", property_components=3
                 )
                 self.dom_coll.get_uid_vtk_obj(uid).vtk_set_normals()
                 self.prop_legend.update_widget(self)
-                print(self.prop_legend_df)
-            print("Done")
+                # self.print_terminal(self.prop_legend_df)
+            self.print_terminal("Done")
         else:
-            print(
+            self.print_terminal(
                 "Normals can be calculated only on geological entities and Point Clouds (at the moment)."
             )
     else:
-        print("No input data selected.")
+        self.print_terminal("No input data selected.")
 
 
 def get_dip_dir_vectors(normals=None, az=False):

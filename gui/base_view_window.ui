@@ -60,264 +60,126 @@
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>626</width>
-          <height>168</height>
+          <width>470</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
-         <string>Geology &gt; Geology</string>
+         <string>Geology</string>
         </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_2">
-         <item>
-          <widget class="QTreeWidget" name="GeologyTreeWidget">
-           <column>
-            <property name="text">
-             <string notr="true">1</string>
-            </property>
-           </column>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-       <widget class="QWidget" name="GeologyTopologyTreePage">
-        <property name="geometry">
-         <rect>
-          <x>0</x>
-          <y>0</y>
-          <width>98</width>
-          <height>74</height>
-         </rect>
-        </property>
-        <attribute name="label">
-         <string>Geology &gt; Topology</string>
-        </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_3">
-         <item>
-          <widget class="QTreeWidget" name="GeologyTopologyTreeWidget">
-           <column>
-            <property name="text">
-             <string notr="true">1</string>
-            </property>
-           </column>
-          </widget>
-         </item>
-        </layout>
+        <layout class="QVBoxLayout" name="GeologyTreeLayout"/>
        </widget>
        <widget class="QWidget" name="FluidsTreePage">
         <property name="geometry">
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>98</width>
-          <height>74</height>
+          <width>470</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
-         <string>Fluids &gt; Fluids</string>
+         <string>Fluids</string>
         </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_4">
-         <item>
-          <widget class="QTreeWidget" name="FluidsTreeWidget">
-           <column>
-            <property name="text">
-             <string notr="true">1</string>
-            </property>
-           </column>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-       <widget class="QWidget" name="FluidsTopologyTreePage">
-        <property name="geometry">
-         <rect>
-          <x>0</x>
-          <y>0</y>
-          <width>98</width>
-          <height>74</height>
-         </rect>
-        </property>
-        <attribute name="label">
-         <string>Fluids &gt; Topology</string>
-        </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_5">
-         <item>
-          <widget class="QTreeWidget" name="FluidsTopologyTreeWidget">
-           <column>
-            <property name="text">
-             <string notr="true">1</string>
-            </property>
-           </column>
-          </widget>
-         </item>
-        </layout>
+        <layout class="QVBoxLayout" name="FluidsTreeLayout"/>
        </widget>
        <widget class="QWidget" name="BackgroundsTreePage">
         <property name="geometry">
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>98</width>
-          <height>74</height>
+          <width>470</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
-         <string>Background &gt; Background</string>
+         <string>Background</string>
         </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_6">
-         <item>
-          <widget class="QTreeWidget" name="BackgroundsTreeWidget">
-           <column>
-            <property name="text">
-             <string notr="true">1</string>
-            </property>
-           </column>
-          </widget>
-         </item>
-        </layout>
+        <layout class="QVBoxLayout" name="BackgroundsTreeLayout"/>
        </widget>
-       <widget class="QWidget" name="BackgroundsTopologyTreePage">
+       <widget class="QWidget" name="DOMsTreePage">
         <property name="geometry">
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>98</width>
-          <height>74</height>
-         </rect>
-        </property>
-        <attribute name="label">
-         <string>Background &gt; Topology</string>
-        </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_7">
-         <item>
-          <widget class="QTreeWidget" name="BackgroundsTopologyTreeWidget">
-           <column>
-            <property name="text">
-             <string notr="true">1</string>
-            </property>
-           </column>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-       <widget class="QWidget" name="DOMsTablePage">
-        <property name="geometry">
-         <rect>
-          <x>0</x>
-          <y>0</y>
-          <width>98</width>
-          <height>74</height>
+          <width>470</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
          <string>DEMs and DOMs</string>
         </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_8">
-         <item>
-          <widget class="QTableWidget" name="DOMsTableWidget"/>
-         </item>
-        </layout>
+        <layout class="QVBoxLayout" name="DOMsTreeLayout"/>
        </widget>
-       <widget class="QWidget" name="ImagesTablePage">
+       <widget class="QWidget" name="ImagesTreePage">
         <property name="geometry">
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>98</width>
-          <height>74</height>
+          <width>470</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
          <string>Images</string>
         </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_9">
-         <item>
-          <widget class="QTableWidget" name="ImagesTableWidget"/>
-         </item>
-        </layout>
+        <layout class="QVBoxLayout" name="ImagesTreeLayout"/>
        </widget>
-       <widget class="QWidget" name="Mesh3DTablePage">
+       <widget class="QWidget" name="Mesh3DTreePage">
         <property name="geometry">
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>98</width>
-          <height>74</height>
+          <width>470</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
          <string>Meshes and Grids</string>
         </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_10">
-         <item>
-          <widget class="QTableWidget" name="Mesh3DTableWidget"/>
-         </item>
-        </layout>
+        <layout class="QVBoxLayout" name="Mesh3DTreeLayout"/>
        </widget>
-       <widget class="QWidget" name="BoundariesTablePage">
+       <widget class="QWidget" name="BoundariesTreePage">
         <property name="geometry">
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>98</width>
-          <height>74</height>
+          <width>470</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
          <string>Boundaries</string>
         </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_11">
-         <item>
-          <widget class="QTableWidget" name="BoundariesTableWidget"/>
-         </item>
-        </layout>
+        <layout class="QVBoxLayout" name="BoundariesTreeLayout"/>
        </widget>
        <widget class="QWidget" name="XSectionTreePage">
         <property name="geometry">
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>98</width>
-          <height>74</height>
+          <width>470</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
          <string>X Sections</string>
         </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_12">
-         <item>
-          <widget class="QTreeWidget" name="XSectionTreeWidget">
-           <column>
-            <property name="text">
-             <string notr="true">1</string>
-            </property>
-           </column>
-          </widget>
-         </item>
-        </layout>
+        <layout class="QVBoxLayout" name="XSectionTreeLayout"/>
        </widget>
        <widget class="QWidget" name="WellsTreePage">
         <property name="geometry">
          <rect>
           <x>0</x>
           <y>0</y>
-          <width>98</width>
-          <height>74</height>
+          <width>470</width>
+          <height>258</height>
          </rect>
         </property>
         <attribute name="label">
          <string>Wells</string>
         </attribute>
-        <layout class="QVBoxLayout" name="verticalLayout_13">
-         <item>
-          <widget class="QTreeWidget" name="WellsTreeWidget">
-           <column>
-            <property name="text">
-             <string notr="true">1</string>
-            </property>
-           </column>
-          </widget>
-         </item>
-        </layout>
+        <layout class="QVBoxLayout" name="WellsTreeLayout"/>
        </widget>
       </widget>
      </widget>

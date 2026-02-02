@@ -2,8 +2,11 @@
 PZero© Andrea Bistacchi"""
 
 # from PySide6.QtCore import QAbstractTableModel, Qt, QVariant, QSortFilterProxyModel, QObject, pyqtSignal
-from PySide6.QtCore import QAbstractTableModel, Qt, QSortFilterProxyModel, QObject
-from PySide6.QtCore import Signal as pyqtSignal
+from PySide6.QtCore import (
+    QAbstractTableModel,
+    Qt,
+    QSortFilterProxyModel,
+)
 
 from abc import abstractmethod, ABC
 
@@ -16,36 +19,10 @@ from numpy import intp as np_intp
 from vtkmodules.vtkCommonDataModel import vtkDataObject
 
 
-class CollectionSignals(QObject):
-    """
-    This class is necessary since non-Qt classes cannot emit Qt signals. Therefore, we create a generic
-    CollectionSignals() Qt object, that will include all signals used by collections. These will be used according
-    to the following pattern:
-
-    self.signals = CollectionSignals()
-
-    self.signals.specific_signal.emit(some_message)
-
-    etc.
-
-    Basically in this way, instead of using inheritance, we add all signals with a qick move by composition.
-    """
-
-    added = pyqtSignal(list)
-    removed = pyqtSignal(list)
-    geom_modified = pyqtSignal(list)  # this includes topology modified
-    data_keys_modified = pyqtSignal(list)
-    data_val_modified = pyqtSignal(list)
-    metadata_modified = pyqtSignal(list)
-    legend_color_modified = pyqtSignal(list)
-    legend_thick_modified = pyqtSignal(list)
-    legend_point_size_modified = pyqtSignal(list)
-    legend_opacity_modified = pyqtSignal(list)
-
-
 class BaseCollection(ABC):
     """Abstract class used as a base for all collections, implemented with ABC in order to
     set a mandatory standard for all subclasses with the @abstractmethod decorator."""
+
     def __init__(self, parent=None, *args, **kwargs):
         super(BaseCollection, self).__init__(*args, **kwargs)
         # Import reference to parent = the project, otherwise it is difficult
@@ -57,7 +34,7 @@ class BaseCollection(ABC):
         # because .... _____________EXPLAIN WHY HERE!
 
         self._parent = parent
-        self._collection_name: str = ''
+        self._collection_name: str = ""
 
         self._entity_dict: dict = dict()
         self._entity_dict_types: dict = dict()
@@ -67,15 +44,16 @@ class BaseCollection(ABC):
 
         self._df: pd_DataFrame = pd_DataFrame()
         self._editable_columns_names: list = list()
+        self._selected_uids: list = list()  # list of selected uids
 
         self._table_model = BaseTableModel(self.parent, self)
-
-        self._signals = CollectionSignals()
 
     # =========================== Abstract (obligatory) methods ================================
 
     @abstractmethod
-    def add_entity_from_dict(self, entity_dict: pd_DataFrame = None, color: np_ndarray = None):
+    def add_entity_from_dict(
+        self, entity_dict: pd_DataFrame = None, color: np_ndarray = None
+    ):
         """Add entity to collection from dictionary."""
         pass
 
@@ -86,14 +64,7 @@ class BaseCollection(ABC):
 
     @abstractmethod
     def clone_entity(self, uid: str = None) -> str:
-        """Clone an entity. Take care since this sends signals immediately (?)."""
-        pass
-
-    @abstractmethod
-    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
-        """Replace the vtk object of a given uid with another vtkobject."""
-        # ============ CAN BE UNIFIED AS COMMON METHOD OF THE ABSTRACT COLLECTION WHEN SIGNALS WILL BE UNIFIED ==========
-        # ============ NOT CLEAR HOW TO DEAL WITH COLLECTIONS OF IMMUTABLE VTKs (images, DOMs, meshes, etc.) ==========
+        """Clone an entity. Take care since this sends signals immediately. To be implemented in subclasses."""
         pass
 
     @abstractmethod
@@ -115,33 +86,35 @@ class BaseCollection(ABC):
         pass
 
     @abstractmethod
-    def set_uid_legend(self,
-                       uid: str = None,
-                       color_R: float = None,
-                       color_G: float = None,
-                       color_B: float = None,
-                       line_thick: float = None,
-                       point_size: float = None,
-                       opacity: float = None,
-                       ):
+    def set_uid_legend(
+        self,
+        uid: str = None,
+        color_R: float = None,
+        color_G: float = None,
+        color_B: float = None,
+        line_thick: float = None,
+        point_size: float = None,
+        opacity: float = None,
+    ):
         """Set legend properties from uid. Take care since this resets the legend for all similar objects."""
         pass
 
     # =================================== Common properties ================================================
 
     @property
-    def signals(self):
-        return self._signals
-
-    @property
     def parent(self):
         """Get the parent of the Collection."""
         return self._parent
 
-    @parent.setter
-    def parent(self, parent):
-        """Set the parent of the Collection."""
-        self._parent = parent
+    @property
+    def collection_name(self) -> str:
+        """Get the collection name."""
+        return self._collection_name
+
+    @collection_name.setter
+    def collection_name(self, collection_name) -> str:
+        """Get the collection name."""
+        self._collection_name = collection_name
 
     @property
     def entity_dict(self) -> dict:
@@ -204,24 +177,12 @@ class BaseCollection(ABC):
         self._df = df
 
     @property
-    def collection_name(self) -> str:
-        """Get the collection name."""
-        return self._collection_name
+    def selected_uids(self):
+        return self._selected_uids
 
-    @collection_name.setter
-    def collection_name(self, name: str):
-        """Set the collection name."""
-        self._collection_name = name
-
-    # @property
-    # def coll_type_name(self) -> str:
-    #     """Helper property to get the full collection type column name for the given collection."""
-    #     return f'{self.collection_name}_type'
-
-    # @property
-    # def coll_feature_name(self) -> str:
-    #     """Helper property to get the full collection feature column name for the given collection."""
-    #     return f'{self.collection_name}_feature'
+    @selected_uids.setter
+    def selected_uids(self, selected_uids: list):
+        self._selected_uids = selected_uids
 
     @property
     def entity_dict_keys(self) -> list:
@@ -254,11 +215,6 @@ class BaseCollection(ABC):
         """Get the table model."""
         return self._table_model
 
-    # @table_model.setter
-    # def table_model(self, table_model):
-    #     """Set the table model."""
-    #     self._table_model = table_model
-
     @property
     def proxy_table_model(self) -> QSortFilterProxyModel:
         """Get the proxy table model, used i.e. when sorting rows in the table view."""
@@ -273,14 +229,12 @@ class BaseCollection(ABC):
 
     # =================================== Common methods ================================================
 
-    def initialize_df(self):
-        """Initialize Pandas dataframe."""
-        self.df = pd_DataFrame(columns=self.entity_dict_keys)
+    def print_terminal(self, string=None):
+        return self.parent.print_terminal(string=string)
 
-    def get_topology_uids(self, topology: str = None) -> list:
-        """Get list of uids of a given topology."""
-        # Use the query method in the future?
-        return self.df.loc[self.df["topology"] == topology, "uid"].to_list()
+    def initialize_df(self):
+        """Initialize Pandas dataframe. Must be called in the subclass constructor."""
+        self.df = pd_DataFrame(columns=self.entity_dict_keys)
 
     def get_uid_name(self, uid: str = None) -> str:
         """Get value(s) stored in dataframe (as pointer) from uid."""
@@ -295,6 +249,11 @@ class BaseCollection(ABC):
         """Get a list of uids corresponding to a given name."""
         # Use the query method in the future?
         return self.df.loc[self.df["name"] == name, "uid"].to_list()
+
+    def get_topology_uids(self, topology: str = None) -> list:
+        """Get list of uids of a given topology."""
+        # Use the query method in the future?
+        return self.df.loc[self.df["topology"] == topology, "uid"].to_list()
 
     def get_uid_topology(self, uid: str = None) -> str:
         """Get value topological type from uid."""
@@ -329,7 +288,9 @@ class BaseCollection(ABC):
         # Use the query method in the future?
         return self.df.loc[self.df["uid"] == uid, "properties_components"].values[0]
 
-    def set_uid_properties_components(self, uid: str = None, properties_components: list = None):
+    def set_uid_properties_components(
+        self, uid: str = None, properties_components: list = None
+    ):
         """Set properties componentes from uid. This is a LIST and "at" must be used!"""
         row = self.df[self.df["uid"] == uid].index.values[0]
         self.df.at[row, "properties_components"] = properties_components
@@ -337,16 +298,16 @@ class BaseCollection(ABC):
     def get_uid_x_section(self, uid: str = None) -> str:
         """Get xsection uid from uid."""
         # Use the query method in the future?
-        return self.df.loc[self.df["uid"] == uid, "x_section"].values[0]
+        return self.df.loc[self.df["uid"] == uid, "parent_uid"].values[0]
 
-    def set_uid_x_section(self, uid: str = None, x_section: str = None):
+    def set_uid_x_section(self, uid: str = None, parent_uid: str = None):
         """Set xsection uid from uid."""
-        self.df.loc[self.df["uid"] == uid, "x_section"] = x_section
+        self.df.loc[self.df["uid"] == uid, "parent_uid"] = parent_uid
 
     def get_xuid_uid(self, xuid: str = None) -> list:
         """Get the uids of the geological objects for the corresponding xsec uid"""
         # Use the query method in the future?
-        return self.df.loc[self.df["x_section"] == xuid, "uid"].to_list()
+        return self.df.loc[self.df["parent_uid"] == xuid, "uid"].to_list()
 
     def get_uid_vtk_obj(self, uid: str = None) -> vtkDataObject:
         """Get vtk object from uid."""
@@ -357,7 +318,12 @@ class BaseCollection(ABC):
         """Set vtk object from uid."""
         self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_obj
 
-    def append_uid_property(self, uid: str = None, property_name: str = None, property_components: str = None):
+    def append_uid_property(
+        self,
+        uid: str = None,
+        property_name: str = None,
+        property_components: str = None,
+    ):
         """Add property name and components to an uid and create empty property on vtk object.
         For some reason here list.append(new_element) does not work"""
         old_properties_names = self.get_uid_properties_names(uid=uid)
@@ -372,7 +338,7 @@ class BaseCollection(ABC):
             data_key=property_name, dimension=property_components
         )
         # IN THE FUTURE add cell data.
-        self.signals.metadata_modified.emit([uid])
+        self.parent.signals.metadata_modified.emit([uid], self)
 
     def remove_uid_property(self, uid: str = None, property_name: str = None):
         """Remove property name and components from an uid and remove property on vtk object.
@@ -388,13 +354,17 @@ class BaseCollection(ABC):
         )
         self.get_uid_vtk_obj(uid=uid).remove_point_data(data_key=property_name)
         # IN THE FUTURE add cell data.
-        self.signals.data_keys_modified([uid])
+        self.parent.signals.data_keys_removed.emit([uid], self)
 
-    def get_uid_property_shape(self, uid: str = None, property_name: str = None) -> tuple:
+    def get_uid_property_shape(
+        self, uid: str = None, property_name: str = None
+    ) -> tuple:
         """Returns the shape of the property data array."""
         return self.get_uid_vtk_obj(uid).get_point_data_shape(property_name)
 
-    def get_uid_property(self, uid: str = None, property_name: str = None) -> np_ndarray:
+    def get_uid_property(
+        self, uid: str = None, property_name: str = None
+    ) -> np_ndarray:
         """Returns an array with property data."""
         return self.get_uid_vtk_obj(uid).get_point_data(property_name)
 
@@ -405,12 +375,82 @@ class BaseCollection(ABC):
         ].to_dict("records")
         return legend_dict[0]
 
+    def filter_uids(self, query: str = None, uids: list = None):
+        return list(
+            set(self.df.query(query)["uid"].tolist())
+            - (set(self.df.query(query)["uid"].tolist()) - set(uids))
+        )
+
+    def select_all(self):
+        """Select all entities in the collection."""
+        self.selected_uids = self.get_uids
+
+    def deselect_all(self):
+        """Deselect all entities in the collection."""
+        self.selected_uids = []
+
+    def select_uids(self, uids: list = None):
+        """Select entities by uid list."""
+        self.selected_uids = uids
+
+    def deselect_uids(self, uids: list = None):
+        """Deselect entities by uid list."""
+        self.selected_uids = list(set(self.selected_uids) - set(uids))
+
+    def replace_vtk(self, uid: str = None, vtk_object: vtkDataObject = None):
+        """Replace the vtk object of a given uid with another vtkobject."""
+        if isinstance(
+            vtk_object, type(self.df.loc[self.df["uid"] == uid, "vtk_obj"].values[0])
+        ):
+            # Replace old properties names and components with new ones
+            old_props = self.df.loc[self.df["uid"] == uid, "properties_names"].values[0]
+            old_comps = self.df.loc[
+                self.df["uid"] == uid, "properties_components"
+            ].values[0]
+
+            new_keys = vtk_object.point_data_keys
+
+            current_props = []
+            current_components = []
+
+            for key in new_keys:
+                this_components = vtk_object.get_point_data_shape(key)[1]
+                current_props.append(key)
+                current_components.append(this_components)
+
+            self.df.loc[self.df["uid"] == uid, "properties_names"].values[
+                0
+            ] = current_props
+            self.df.loc[self.df["uid"] == uid, "properties_components"].values[
+                0
+            ] = current_components
+
+            # Replace the vtk object
+            self.df.loc[self.df["uid"] == uid, "vtk_obj"] = vtk_object
+
+            # Update project legend, views and trees
+            self.parent.prop_legend.update_widget(self.parent)
+
+            if any(prop not in current_props for prop in old_props):
+                # this means that at least one prop is included in old_props and not in current_props, so it was removed
+                self.parent.signals.data_keys_removed.emit([uid], self)
+            if any(prop not in old_props for prop in current_props):
+                # this means that at least one prop is included in current_props and not in old_props, so it was added
+                self.parent.signals.data_keys_added.emit([uid], self)
+
+            self.parent.signals.geom_modified.emit([uid], self)
+        else:
+            self.parent.print_terminal(
+                "ERROR - replace_vtk with vtk of a different type not allowed."
+            )
+
     # =================== Common QT methods slightly adapted to the data source ====================================
 
 
 class BaseTableModel(QAbstractTableModel):
     """BaseTableModel inherits from QAbstractTableModel setting a few methods and
     the data connection to the Pandas dataframe self.collection.df."""
+
     def __init__(self, parent=None, collection: BaseCollection = None, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         # Initialize just parent (the project) and the collection.
@@ -425,9 +465,9 @@ class BaseTableModel(QAbstractTableModel):
 
     def data(self, index, qt_role):
         """Data is updated on the fly:
-           .row() index points to an entity in the collection
-           .column() index points to an element in the list created on the fly
-           based on the column headers stored in the dictionary."""
+        .row() index points to an entity in the collection
+        .column() index points to an element in the list created on the fly
+        based on the column headers stored in the dictionary."""
         if qt_role == Qt.DisplayRole:
             value = self.collection.df.iloc[index.row(), index.column()]
             return str(value)
@@ -467,7 +507,7 @@ class BaseTableModel(QAbstractTableModel):
                 uid = self.collection.df.iloc[index.row(), 0]
                 self.collection.attr_modified_update_legend_table()
                 # a list of uids is emitted, even if the entity is just one
-                self.collection.signals.metadata_modified.emit([uid])
+                self.parent.signals.metadata_modified.emit([uid], self.collection)
                 return True
         # return QVariant()
         return None
