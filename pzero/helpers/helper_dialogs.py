@@ -38,7 +38,7 @@ from pzero.ui.import_window_ui import Ui_ImportOptionsWindow
 from pzero.ui.navigator_window_ui import Ui_NavWindow
 from pzero.ui.preview_window_ui import Ui_PreviewWindow
 from .helper_functions import auto_sep
-
+from difflib import SequenceMatcher
 
 def options_dialog(
     title=None, message=None, yes_role="Yes", no_role="No", reject_role=None
