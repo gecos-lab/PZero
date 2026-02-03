@@ -21,6 +21,7 @@ from numpy import mean as np_mean
 from pzero.entities_factory import PolyLine, TriSurf
 from pzero.helpers.helper_dialogs import general_input_dialog
 from .AbstractCollection import BaseCollection
+from pyvista import Line as pv_Line
 
 
 def compute_pca_boundary(parent):
@@ -1476,8 +1477,225 @@ def boundary_from_points(self, vector):
         boundary_dict["vtk_obj"].append_cell(np_array([0, 1, 3]))
         boundary_dict["vtk_obj"].append_cell(np_array([1, 2, 3]))
     uid = self.parent.boundary_coll.add_entity_from_dict(entity_dict=boundary_dict)
+    try:
+        for view in self.parent.view_dict.values():
+            if hasattr(view, "add_all_entities"):
+                view.add_all_entities()
+    except Exception:
+        pass
     # Un-Freeze QT interface
     self.enable_actions()
+
+
+def boundary_from_three_points(self, vector):
+    """Create a new Boundary from three points (orthogonal edges)"""
+    boundary_dict = deepcopy(self.parent.boundary_coll.entity_dict)
+    # Freeze QT interface.
+    self.disable_actions()
+    self.plotter.untrack_click_position(side="left")
+
+    p1 = np_array(vector.p1, dtype=float)
+    p2 = np_array(vector.p2, dtype=float)
+    delta_xy = p2[:2] - p1[:2]
+    length = np.linalg.norm(delta_xy)
+    if length == 0:
+        self.print_terminal(" -- Boundary from 3 points: first two points are coincident -- ")
+        self.enable_actions()
+        return
+
+    # Show the first line segment (p1 -> p2) while placing the third point
+    first_line = pv_Line((p1[0], p1[1], p1[2]), (p2[0], p2[1], p2[2]))
+    first_actor_name = f"boundary_first_line_{uuid_uuid4()}"
+    self.plotter.add_mesh(
+        first_line,
+        color="red",
+        line_width=5,
+        name=first_actor_name,
+        pickable=False,
+    )
+
+    # Build orthogonal live guide line through p2
+    perp_unit = np_array([-delta_xy[1], delta_xy[0]]) / length
+    guide_line = pv_Line((p2[0], p2[1], p2[2]), (p2[0], p2[1], p2[2]))
+    guide_actor_name = f"boundary_ortho_guide_{uuid_uuid4()}"
+    self.plotter.add_mesh(
+        guide_line,
+        color="red",
+        line_width=5,
+        name=guide_actor_name,
+        pickable=False,
+    )
+
+    self.print_terminal(" -- Click third point on the orthogonal guide line -- ")
+
+    interactor = self.plotter.iren.interactor
+
+    def update_live_line(obj=None, event=None):
+        try:
+            x, y = interactor.GetEventPosition()
+            renderer = self.plotter.renderer
+            renderer.SetDisplayPoint(x, y, 0)
+            renderer.DisplayToWorld()
+            world = np_array(renderer.GetWorldPoint(), dtype=float)
+            if world[3] != 0:
+                world = world / world[3]
+            p_raw = np_array([world[0], world[1], p2[2]], dtype=float)
+        except Exception:
+            return
+        t = (p_raw[0] - p2[0]) * perp_unit[0] + (p_raw[1] - p2[1]) * perp_unit[1]
+        p_proj = np_array(
+            [p2[0] + perp_unit[0] * t, p2[1] + perp_unit[1] * t, p2[2]]
+        )
+        guide_line.points = np_array(
+            [[p2[0], p2[1], p2[2]], [p_proj[0], p_proj[1], p_proj[2]]]
+        )
+        guide_line.Modified()
+        try:
+            self.plotter.render()
+        except Exception:
+            pass
+
+    mouse_move_id = interactor.AddObserver("MouseMoveEvent", update_live_line)
+
+    def end_third_point(event):
+        self.plotter.untrack_click_position(side="left")
+        try:
+            interactor.RemoveObserver(mouse_move_id)
+        except Exception:
+            pass
+        try:
+            self.plotter.remove_actor(first_actor_name)
+        except Exception:
+            pass
+        try:
+            self.plotter.remove_actor(guide_actor_name)
+        except Exception:
+            pass
+
+        if event is None:
+            self.enable_actions()
+            return
+
+        p3_raw = np_array(event, dtype=float)
+        # Project third point onto orthogonal line through p2 (map XY)
+        t = (p3_raw[0] - p2[0]) * perp_unit[0] + (p3_raw[1] - p2[1]) * perp_unit[1]
+        p3 = np_array([p2[0] + perp_unit[0] * t, p2[1] + perp_unit[1] * t, p2[2]])
+
+        boundary_dict_in = {
+            "warning": [
+                "Boundary from 3 points",
+                "Build new Boundary from a user-drawn line and a third point constrained to\n"
+                "an orthogonal guide line. Two orthogonal edges define the boundary box.\n"
+                "Once picked, values can be modified from keyboard.",
+                "QLabel",
+            ],
+            "name": ["Insert Boundary name", "new_boundary", "QLineEdit"],
+            "p1_x": ["Insert point 1 X coord", p1[0], "QLineEdit"],
+            "p1_y": ["Insert point 1 Y coord", p1[1], "QLineEdit"],
+            "p2_x": ["Insert point 2 X coord", p2[0], "QLineEdit"],
+            "p2_y": ["Insert point 2 Y coord", p2[1], "QLineEdit"],
+            "p3_x": ["Insert point 3 X coord", p3[0], "QLineEdit"],
+            "p3_y": ["Insert point 3 Y coord", p3[1], "QLineEdit"],
+            "top": ["Insert top", 1000.0, "QLineEdit"],
+            "bottom": ["Insert bottom", -1000.0, "QLineEdit"],
+            "activatevolume": [
+                "volumeyn",
+                "Do not create volume. Create horizontal parallelogram at Z=0 meters",
+                "QCheckBox",
+            ],
+        }
+
+        boundary_dict_updt = general_input_dialog(
+            title="New Boundary from 3 points", input_dict=boundary_dict_in
+        )
+        if boundary_dict_updt is None:
+            self.enable_actions()
+            return
+
+        # Check if other Boundaries with the same name exist. If so, add suffix to make the name unique.
+        while True:
+            if boundary_dict_updt["name"] in self.parent.boundary_coll.get_names:
+                boundary_dict_updt["name"] = boundary_dict_updt["name"] + "_0"
+            else:
+                break
+
+        # Check if top and bottom fields are empty.
+        if boundary_dict_updt["top"] is None:
+            boundary_dict_updt["top"] = 1000.0
+            boundary_dict_updt["bottom"] = -1000.0
+        if boundary_dict_updt["top"] == boundary_dict_updt["bottom"]:
+            boundary_dict_updt["top"] = boundary_dict_updt["top"] + 1.0
+
+        # Enforce orthogonality after possible manual edits
+        p1_xy = np_array([boundary_dict_updt["p1_x"], boundary_dict_updt["p1_y"]], dtype=float)
+        p2_xy = np_array([boundary_dict_updt["p2_x"], boundary_dict_updt["p2_y"]], dtype=float)
+        p3_xy = np_array([boundary_dict_updt["p3_x"], boundary_dict_updt["p3_y"]], dtype=float)
+        delta_xy_local = p2_xy - p1_xy
+        length_local = np.linalg.norm(delta_xy_local)
+        if length_local == 0:
+            self.print_terminal(" -- Boundary from 3 points: point 1 and point 2 are coincident -- ")
+            self.enable_actions()
+            return
+        perp_unit_local = np_array([-delta_xy_local[1], delta_xy_local[0]]) / length_local
+        t_local = (p3_xy[0] - p2_xy[0]) * perp_unit_local[0] + (p3_xy[1] - p2_xy[1]) * perp_unit_local[1]
+        p3_xy = p2_xy + perp_unit_local * t_local
+        p4_xy = p1_xy + (p3_xy - p2_xy)
+
+        boundary_dict["name"] = boundary_dict_updt["name"]
+
+        if boundary_dict_updt["activatevolume"] == "check":
+            # Build rectangular polyline at Z=0 meters (orthogonal, oriented).
+            boundary_dict["topology"] = "PolyLine"
+            boundary_dict["vtk_obj"] = PolyLine()
+            boundary_dict["vtk_obj"].points = [
+                (p1_xy[0], p1_xy[1], 0.0),
+                (p2_xy[0], p2_xy[1], 0.0),
+                (p3_xy[0], p3_xy[1], 0.0),
+                (p4_xy[0], p4_xy[1], 0.0),
+                (p1_xy[0], p1_xy[1], 0.0),
+            ]
+            boundary_dict["vtk_obj"].auto_cells()
+        else:
+            # Build Boundary as volume.
+            boundary_dict["topology"] = "TriSurf"
+            boundary_dict["vtk_obj"] = TriSurf()
+            nodes = vtkPoints()
+            # Bottom face
+            nodes.InsertPoint(0, p1_xy[0], p1_xy[1], boundary_dict_updt["bottom"])
+            nodes.InsertPoint(1, p2_xy[0], p2_xy[1], boundary_dict_updt["bottom"])
+            nodes.InsertPoint(2, p3_xy[0], p3_xy[1], boundary_dict_updt["bottom"])
+            nodes.InsertPoint(3, p4_xy[0], p4_xy[1], boundary_dict_updt["bottom"])
+            # Top face
+            nodes.InsertPoint(4, p1_xy[0], p1_xy[1], boundary_dict_updt["top"])
+            nodes.InsertPoint(5, p2_xy[0], p2_xy[1], boundary_dict_updt["top"])
+            nodes.InsertPoint(6, p3_xy[0], p3_xy[1], boundary_dict_updt["top"])
+            nodes.InsertPoint(7, p4_xy[0], p4_xy[1], boundary_dict_updt["top"])
+            boundary_dict["vtk_obj"].SetPoints(nodes)
+            # Faces
+            boundary_dict["vtk_obj"].append_cell(np_array([0, 1, 2]))
+            boundary_dict["vtk_obj"].append_cell(np_array([0, 2, 3]))
+            boundary_dict["vtk_obj"].append_cell(np_array([4, 6, 5]))
+            boundary_dict["vtk_obj"].append_cell(np_array([4, 7, 6]))
+            boundary_dict["vtk_obj"].append_cell(np_array([0, 1, 4]))
+            boundary_dict["vtk_obj"].append_cell(np_array([1, 4, 5]))
+            boundary_dict["vtk_obj"].append_cell(np_array([1, 2, 5]))
+            boundary_dict["vtk_obj"].append_cell(np_array([2, 5, 6]))
+            boundary_dict["vtk_obj"].append_cell(np_array([2, 3, 6]))
+            boundary_dict["vtk_obj"].append_cell(np_array([3, 6, 7]))
+            boundary_dict["vtk_obj"].append_cell(np_array([3, 0, 7]))
+            boundary_dict["vtk_obj"].append_cell(np_array([0, 7, 4]))
+
+        self.parent.boundary_coll.add_entity_from_dict(entity_dict=boundary_dict)
+        try:
+            for view in self.parent.view_dict.values():
+                if hasattr(view, "add_all_entities"):
+                    view.add_all_entities()
+        except Exception:
+            pass
+        # Un-Freeze QT interface
+        self.enable_actions()
+
+    self.plotter.track_click_position(side="left", callback=end_third_point)
 
 
 class BoundaryCollection(BaseCollection):

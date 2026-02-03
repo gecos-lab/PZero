@@ -34,7 +34,12 @@ from ..entities_factory import (
 )
 from ..orientation_analysis import get_dip_dir_vectors
 from ..collections.xsection_collection import section_from_azimuth
-from ..collections.boundary_collection import boundary_from_points, boundary_from_pca, boundary_from_obb
+from ..collections.boundary_collection import (
+    boundary_from_points,
+    boundary_from_three_points,
+    boundary_from_pca,
+    boundary_from_obb,
+)
 
 
 class ViewMap(View2D):
@@ -68,6 +73,12 @@ class ViewMap(View2D):
             lambda: self.vector_by_mouse(boundary_from_points)
         )
         self.menuCreate.addAction(self.boundaryFromPointsButton)
+
+        self.boundaryFromThreePointsButton = QAction("Boundary from 3 points", self)
+        self.boundaryFromThreePointsButton.triggered.connect(
+            lambda: self.vector_by_mouse(boundary_from_three_points)
+        )
+        self.menuCreate.addAction(self.boundaryFromThreePointsButton)
 
         self.boundaryFromPCAButton = QAction("Boundary from PCA", self)
         self.boundaryFromPCAButton.triggered.connect(
