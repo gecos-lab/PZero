@@ -57,12 +57,7 @@ class ViewVTK(BaseView):
 
         # then add new code specific to this class
         # Import line drawing functions here to avoid circular imports
-        from ..two_d_lines import draw_line, edit_line, extend_line, draw_line_3d
-        
-        # Add line creation and editing tools for all VTK views
-        self.drawLineButton = QAction("Draw line", self)
-        self.drawLineButton.triggered.connect(lambda: draw_line(self))
-        self.menuCreate.addAction(self.drawLineButton)
+        from ..two_d_lines import edit_line, extend_line, draw_line_3d
         
         # Add 3D-specific line drawing tool that uses point picking
         self.drawLine3DButton = QAction("Draw line (3D mode)", self)
