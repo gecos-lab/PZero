@@ -2842,6 +2842,36 @@ class WellTrace(PolyLine):
         well_trace_copy.DeepCopy(self)
         return well_trace_copy
 
+    def get_marker_names(self):
+        field_data = self.get_field_data_keys()
+        name_list = []
+        for data in field_data:
+            if "marker" in data:
+                if "pmarker" in data:
+                    pass
+                else:
+                    name = data.split("_", 1)[1]
+                    name_list.append(name)
+            # Check for generic trace properties that have position data (p{name})
+            elif data.startswith("p") and not data.startswith("pmarker") and not data == "pname" and not data == "pMD":
+                name = data[1:] # remove 'p'
+                # check if corresponding data exists
+                if name in field_data:
+                     name_list.append(name)
+        return name_list
+
+    def plot_markers(self, prop):
+        if f"pmarker_{prop}" in self.get_field_data_keys():
+            prop_pos = self.get_field_data(f"pmarker_{prop}").reshape(-1, 3)
+            prop_data = self.get_field_data(f"marker_{prop}")
+        elif f"p{prop}" in self.get_field_data_keys():
+             prop_pos = self.get_field_data(f"p{prop}").reshape(-1, 3)
+             prop_data = self.get_field_data(prop)
+        else:
+             return [None, None]
+             
+        return [prop_pos, prop_data]
+
     def create_trace(self, xyz_trace, name=None):
         # lines = pv_helpers.lines_from_points(xyz_trace)
         lines = pv_spline(xyz_trace)
@@ -2865,22 +2895,19 @@ class WellTrace(PolyLine):
 
         # temp.plot()
         if method == "trace":
-            # camera = self.parent.plotter.camera
             filter = vtkArcPlotter()
             filter.SetInputData(temp)
-            # arc_p.SetCamera(camera)
             filter.SetRadius(1.30)
             filter.SetHeight(2.50)
-            # filter.UseDefaultNormalOn()
-            filter.SetCamera(camera)
+            filter.UseDefaultNormalOn()
             filter.SetDefaultNormal(0, 1, 0)
-            # filter.Update()
         elif method == "cylinder":
             filter = vtkTubeFilter()
             filter.SetInputData(temp)
             filter.SetRadius(0.5)
             filter.SetNumberOfSides(100)
             filter.SetVaryRadiusToVaryRadiusByScalar()
+            filter.CappingOn()
             # filter.Update()
         mapper = vtkPolyDataMapper()
         mapper.SetInputConnection(filter.GetOutputPort())
