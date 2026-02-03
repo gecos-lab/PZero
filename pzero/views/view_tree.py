@@ -739,10 +739,10 @@ class CustomTreeWidget(QTreeWidget):
         
         well_view_actions = self._create_well_view_mode_menu(menu)
         
-        # New: Add Labels submenu
-        well_labels_actions = None
+        # Add Labels submenu (Background collection only)
+        background_labels_actions = None
         if self._can_show_labels():
-             well_labels_actions = self._create_show_labels_submenu(menu, item)
+            background_labels_actions = self._create_show_labels_submenu(menu, item)
 
         action = menu.exec_(self.viewport().mapToGlobal(position))
         
@@ -765,24 +765,24 @@ class CustomTreeWidget(QTreeWidget):
             elif action == well_view_actions.get("cylinder"):
                 self._set_borehole_view_mode("cylinder")
 
-        if well_labels_actions:
-             for name, act in well_labels_actions.items():
+        if background_labels_actions:
+            for name, act in background_labels_actions.items():
                 if action == act:
                     property_name = name if name != "None" else None
-                    self._show_well_labels(item, property_name)
+                    self._show_background_labels(item, property_name)
 
     def _create_show_labels_submenu(self, parent_menu, item):
         uid = self.get_item_uid(item)
         if not uid:
-             return None
-        
+            return None
+
         try:
-             marker_names = self.view.parent.well_coll.get_uid_marker_names(uid)
-        except AttributeError:
-             return None
-             
-        if not marker_names:
-             return None
+            object_name = self.collection.get_uid_name(uid)
+        except Exception:
+            object_name = (item.text(1) or item.text(0) or "").strip()
+
+        if not object_name:
+            return None
 
         parent_menu.addSeparator()
         submenu = parent_menu.addMenu("Show Labels")
@@ -794,25 +794,31 @@ class CustomTreeWidget(QTreeWidget):
         none_action.setCheckable(True)
         # We don't easily know current state so we default to unchecked or leave it logic-less for now
         # Ideally we'd check if any labels are currently shown.
-        none_action.setChecked(True) # Default to None being checked? OR try to find out.
+        none_action.setChecked(True)  # Default to None being checked? OR try to find out.
         action_group.addAction(none_action)
         actions["None"] = none_action
 
-        for name in marker_names:
-            action = submenu.addAction(name)
-            action.setCheckable(True)
-            action_group.addAction(action)
-            actions[name] = action
+        action = submenu.addAction(object_name)
+        action.setCheckable(True)
+        action_group.addAction(action)
+        actions[object_name] = action
             
         return actions
 
     def _can_show_labels(self):
-        return getattr(self.collection, "collection_name", None) == "well_coll" and hasattr(self.view, "show_markers")
+        return (
+            getattr(self.collection, "collection_name", None) == "backgrnd_coll"
+            and hasattr(self.view, "show_labels")
+        )
 
-    def _show_well_labels(self, item, property_name):
+    def _show_background_labels(self, item, property_name):
         uid = self.get_item_uid(item)
         if uid:
-            self.view.show_markers(uid, property_name)
+            self.view.show_labels(
+                uid=uid,
+                coll_name="backgrnd_coll",
+                show_property=property_name,
+            )
 
     def _create_well_view_mode_menu(self, parent_menu):
         """
