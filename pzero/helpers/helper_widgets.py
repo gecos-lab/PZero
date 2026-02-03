@@ -140,6 +140,54 @@ class Tracer3D:
         self.line_actor = None
         self.temp_line_actor = None
         self.point_actors = []
+
+    def _compute_point_radius(self, point):
+        """Compute a screen-consistent radius that scales down when zooming in."""
+        import math
+
+        try:
+            renderer = self._parent.plotter.renderer
+            camera = renderer.GetActiveCamera()
+            bounds = renderer.ComputeVisiblePropBounds()
+            scene_size = max(
+                bounds[1] - bounds[0],
+                bounds[3] - bounds[2],
+                bounds[5] - bounds[4],
+            )
+            # Determine viewport height in pixels
+            try:
+                render_window = renderer.GetRenderWindow()
+                _, height_px = render_window.GetSize()
+            except Exception:
+                _, height_px = renderer.GetSize()
+            height_px = max(height_px, 1)
+
+            if camera.GetParallelProjection():
+                parallel_scale = camera.GetParallelScale() or (scene_size * 0.5)
+                world_per_pixel = (2.0 * parallel_scale) / height_px
+            else:
+                cam_pos = camera.GetPosition()
+                dist = math.sqrt(
+                    (cam_pos[0] - point[0]) ** 2
+                    + (cam_pos[1] - point[1]) ** 2
+                    + (cam_pos[2] - point[2]) ** 2
+                )
+                view_angle = camera.GetViewAngle()
+                world_per_pixel = (
+                    2.0 * dist * math.tan(math.radians(view_angle * 0.5))
+                ) / height_px
+
+            desired_px = 4.0
+            radius = world_per_pixel * desired_px
+
+            if scene_size > 0:
+                min_radius = scene_size * 0.001
+                max_radius = scene_size * 0.02
+                radius = min(max(radius, min_radius), max_radius)
+
+            return radius
+        except Exception:
+            return None
         
     def add_point(self, point):
         """Add a point to the line being drawn."""
@@ -153,12 +201,18 @@ class Tracer3D:
         self.points.append(point)
         
         # Calculate appropriate sphere radius based on scene bounds
-        try:
-            bounds = self._parent.plotter.renderer.ComputeVisiblePropBounds()
-            scene_size = max(bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4])
-            sphere_radius = scene_size * 0.01  # 1% of scene size
-        except:
-            sphere_radius = 10  # Fallback radius
+        sphere_radius = self._compute_point_radius(point)
+        if not sphere_radius:
+            try:
+                bounds = self._parent.plotter.renderer.ComputeVisiblePropBounds()
+                scene_size = max(
+                    bounds[1] - bounds[0],
+                    bounds[3] - bounds[2],
+                    bounds[5] - bounds[4],
+                )
+                sphere_radius = scene_size * 0.01  # 1% of scene size
+            except Exception:
+                sphere_radius = 10  # Fallback radius
         
         # Add a sphere at the point location for visual feedback
         sphere = pv.Sphere(radius=sphere_radius, center=point, theta_resolution=16, phi_resolution=16)
