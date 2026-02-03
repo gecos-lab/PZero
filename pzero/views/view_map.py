@@ -71,13 +71,13 @@ class ViewMap(View2D):
 
         self.boundaryFromPCAButton = QAction("Boundary from PCA", self)
         self.boundaryFromPCAButton.triggered.connect(
-            lambda: self.vector_by_mouse(boundary_from_pca)
+            lambda: boundary_from_pca(self)
         )
         self.menuCreate.addAction(self.boundaryFromPCAButton)
 
         self.boundaryFromOBBButton = QAction("Boundary from OBB", self)
         self.boundaryFromOBBButton.triggered.connect(
-            lambda: self.vector_by_mouse(boundary_from_obb)
+            lambda: boundary_from_obb(self)
         )
         self.menuCreate.addAction(self.boundaryFromOBBButton)
 

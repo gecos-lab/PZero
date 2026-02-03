@@ -84,6 +84,275 @@ from .entities_factory import (
 from .helpers.helper_functions import freeze_gui
 
 
+def get_boundary_obb_transform(boundary_coll, boundary_uid):
+    """
+    Get OBB transformation parameters from a boundary if available.
+    
+    Returns a dict with:
+        - 'has_obb': bool - whether the boundary has OBB transformation data
+        - 'angle': float - rotation angle in radians (around Z axis)
+        - 'translation': ndarray - translation vector [tx, ty] in local (rotated) space
+        - 'center': ndarray - center of the oriented bounding box [cx, cy]
+        
+    The transformation to align OBB with axes is:
+        1. Translate to center: p' = p - center
+        2. Rotate by -angle: p'' = R(-angle) @ p'
+        
+    The inverse transformation (from axis-aligned back to OBB) is:
+        1. Rotate by angle: p' = R(angle) @ p''
+        2. Translate from center: p = p' + center
+    """
+    from numpy import mean as np_mean
+    from numpy import arctan2 as np_arctan2
+    from numpy import linalg as np_linalg
+    from numpy import array as np_array
+    from numpy import cos as np_cos
+    from numpy import sin as np_sin
+    
+    vtk_obj = boundary_coll.get_uid_vtk_obj(boundary_uid)
+    
+    # Check if boundary has OBB properties
+    property_names = boundary_coll.get_uid_properties_names(boundary_uid)
+    
+    if "obb_angle" not in property_names:
+        return {"has_obb": False}
+    
+    # Get OBB angle from point data (it's the same for all points)
+    obb_angle = vtk_obj.get_point_data("obb_angle")[0]
+    
+    # Get OBB translation if available
+    obb_translation = None
+    if "obb_translation" in property_names:
+        obb_translation = vtk_obj.get_point_data("obb_translation")[0]
+    
+    # Calculate center from boundary points (XY only)
+    points = vtk_obj.points
+    center_xy = np_array([np_mean(points[:, 0]), np_mean(points[:, 1])])
+    
+    return {
+        "has_obb": True,
+        "angle": float(obb_angle),
+        "translation": obb_translation,
+        "center": center_xy
+    }
+
+
+def transform_points_to_aligned(points_df, obb_info):
+    """
+    Transform points from OBB-oriented space to axis-aligned space.
+    
+    The OBB algorithm stores the angle such that:
+    - The rotation matrix R = [[cos(angle), sin(angle)], [-sin(angle), cos(angle)]]
+      transforms points from world space to aligned (local) space.
+    - This is the same as rotating by -angle using standard convention.
+    
+    Args:
+        points_df: DataFrame with X, Y, Z columns (and optionally nx, ny, nz for normals)
+        obb_info: dict from get_boundary_obb_transform
+        
+    Returns:
+        DataFrame with transformed coordinates
+    """
+    from numpy import cos as np_cos
+    from numpy import sin as np_sin
+    from numpy import array as np_array
+    
+    if not obb_info["has_obb"]:
+        return points_df
+    
+    angle = obb_info["angle"]
+    center = obb_info["center"]
+    
+    # The OBB uses rotation matrix: [[cos(angle), sin(angle)], [-sin(angle), cos(angle)]]
+    # This rotates from world to local (aligned) space
+    c, s = np_cos(angle), np_sin(angle)
+    R_to_local = np_array([[c, s], [-s, c]])
+    
+    # Transform XY coordinates: first center, then rotate to local
+    xy = points_df[["X", "Y"]].values
+    xy_centered = xy - center
+    xy_rotated = (R_to_local @ xy_centered.T).T
+    
+    # Update dataframe
+    transformed_df = points_df.copy()
+    transformed_df["X"] = xy_rotated[:, 0]
+    transformed_df["Y"] = xy_rotated[:, 1]
+    # Z remains unchanged
+    
+    # Transform normals if present (only rotation, no translation)
+    if "nx" in points_df.columns and "ny" in points_df.columns:
+        nxy = points_df[["nx", "ny"]].values
+        nxy_rotated = (R_to_local @ nxy.T).T
+        transformed_df["nx"] = nxy_rotated[:, 0]
+        transformed_df["ny"] = nxy_rotated[:, 1]
+        # nz remains unchanged
+    
+    return transformed_df
+
+
+def transform_vtk_to_obb(vtk_obj, obb_info, voxet_world_origin=None):
+    """
+    Transform a VTK object from axis-aligned (local) space back to OBB-oriented (world) space.
+    
+    The vtkContourFilter outputs surfaces using: origin + index * spacing
+    but does NOT apply the direction matrix rotation. So the surface is at the
+    correct translated position but not rotated.
+    
+    We need to rotate around the voxet's world origin point.
+    
+    Args:
+        vtk_obj: VTK PolyData object (TriSurf, etc.)
+        obb_info: dict from get_boundary_obb_transform
+        voxet_world_origin: The origin of the voxet in world space (for rotation pivot)
+        
+    Returns:
+        Transformed VTK object (modified in place)
+    """
+    from numpy import cos as np_cos
+    from numpy import sin as np_sin
+    from numpy import array as np_array
+    from numpy import mean as np_mean
+    
+    if not obb_info["has_obb"]:
+        return vtk_obj
+    
+    angle = obb_info["angle"]
+    center = obb_info["center"]
+    
+    # Rotation matrix from local to world
+    c, s = np_cos(angle), np_sin(angle)
+    R_to_world = np_array([[c, -s], [s, c]])
+    
+    # Get points from VTK object
+    points = vtk_obj.points
+    if points is None or len(points) == 0:
+        return vtk_obj
+    
+    xy = points[:, :2]
+    
+    # If voxet_world_origin is provided, use it as rotation pivot
+    # Otherwise use the center from obb_info
+    if voxet_world_origin is not None:
+        pivot = np_array([voxet_world_origin[0], voxet_world_origin[1]])
+    else:
+        pivot = center
+    
+    # Rotate around the pivot point:
+    # 1. Translate to pivot
+    # 2. Rotate
+    # 3. Translate back
+    xy_centered = xy - pivot
+    xy_rotated = (R_to_world @ xy_centered.T).T
+    xy_final = xy_rotated + pivot
+    
+    # Update points in VTK object
+    points[:, 0] = xy_final[:, 0]
+    points[:, 1] = xy_final[:, 1]
+    # Z remains unchanged
+    
+    vtk_obj.points = points
+    
+    return vtk_obj
+
+
+def transform_voxet_to_obb(voxet, obb_info, original_origin, original_spacing, original_dimensions):
+    """
+    Transform a Voxet from axis-aligned space back to OBB-oriented space.
+    This is more complex as voxets are structured grids.
+    
+    For voxets, we need to transform the origin and keep track of orientation.
+    Note: VTK ImageData doesn't support arbitrary orientation, so for now
+    we store the transformation and apply it when extracting surfaces.
+    
+    Args:
+        voxet: Voxet object
+        obb_info: dict from get_boundary_obb_transform
+        original_origin: original origin before OBB alignment
+        original_spacing: spacing values
+        original_dimensions: dimension values
+        
+    Returns:
+        Transformed Voxet with OBB metadata
+    """
+    from numpy import cos as np_cos
+    from numpy import sin as np_sin
+    from numpy import array as np_array
+    from numpy import full as np_full
+    from numpy import tile as np_tile
+    
+    if not obb_info["has_obb"]:
+        return voxet
+    
+    angle = obb_info["angle"]
+    center = obb_info["center"]
+    
+    # Store OBB transformation info as field data on the voxet
+    n_points = voxet.points_number
+    
+    # Add obb_angle as point data
+    voxet.set_point_data(
+        data_key="obb_angle",
+        attribute_matrix=np_full(n_points, angle, dtype=np_float32)
+    )
+    
+    # Add obb_center as point data  
+    voxet.set_point_data(
+        data_key="obb_center",
+        attribute_matrix=np_tile(center, (n_points, 1)).astype(np_float32)
+    )
+    
+    return voxet
+
+
+def get_aligned_bounds_from_obb(boundary_coll, boundary_uid, obb_info):
+    """
+    Get axis-aligned bounding box after transforming OBB boundary to local space.
+    
+    Uses the same rotation convention as transform_points_to_aligned:
+    R_to_local = [[cos(angle), sin(angle)], [-sin(angle), cos(angle)]]
+    
+    Returns:
+        tuple: (origin_x, origin_y, origin_z, max_x, max_y, max_z)
+    """
+    from numpy import min as np_min
+    from numpy import max as np_max
+    from numpy import cos as np_cos
+    from numpy import sin as np_sin
+    from numpy import array as np_array
+    
+    vtk_obj = boundary_coll.get_uid_vtk_obj(boundary_uid)
+    points = vtk_obj.points
+    
+    if not obb_info["has_obb"]:
+        # Return standard axis-aligned bounds
+        bounds = vtk_obj.GetBounds()
+        return bounds[0], bounds[2], bounds[4], bounds[1], bounds[3], bounds[5]
+    
+    angle = obb_info["angle"]
+    center = obb_info["center"]
+    
+    # Use the same rotation matrix as in OBB computation: R_to_local
+    c, s = np_cos(angle), np_sin(angle)
+    R_to_local = np_array([[c, s], [-s, c]])
+    
+    # Transform XY coordinates to local (aligned) space
+    xy = points[:, :2]
+    xy_centered = xy - center
+    xy_rotated = (R_to_local @ xy_centered.T).T
+    
+    # Get bounds in aligned space
+    origin_x = np_min(xy_rotated[:, 0])
+    origin_y = np_min(xy_rotated[:, 1])
+    origin_z = np_min(points[:, 2])
+    max_x = np_max(xy_rotated[:, 0])
+    max_y = np_max(xy_rotated[:, 1])
+    max_z = np_max(points[:, 2])
+    
+    return origin_x, origin_y, origin_z, max_x, max_y, max_z
+    
+    return origin_x, origin_y, origin_z, max_x, max_y, max_z
+
+
 @freeze_gui
 def interpolation_delaunay_2d(self):
     """The vtkDelaunay2D object takes vtkPointSet (or any of its subclasses) as input and
@@ -451,10 +720,26 @@ def implicit_model_loop_structural(self):
     boundary_uid = self.boundary_coll.df.loc[
         self.boundary_coll.df["name"] == options_dict["boundary"], "uid"
     ].values[0]
-    origin_x = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[0]
-    origin_y = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[2]
-    maximum_x = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[1]
-    maximum_y = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[3]
+    
+    # Automatically check if boundary has OBB transformation
+    obb_info = get_boundary_obb_transform(self.boundary_coll, boundary_uid)
+    use_obb_alignment = obb_info["has_obb"]
+    
+    if use_obb_alignment:
+        self.print_terminal(f"-> OBB boundary detected. Rotation angle: {np_around(obb_info['angle'] * 180 / np_pi, 2)} degrees")
+        self.print_terminal("-> Transforming data to axis-aligned coordinate system...")
+        # Get aligned bounds from OBB boundary
+        origin_x, origin_y, origin_z_temp, maximum_x, maximum_y, maximum_z_temp = get_aligned_bounds_from_obb(
+            self.boundary_coll, boundary_uid, obb_info
+        )
+        # Transform input data to aligned coordinates
+        all_input_data_df = transform_points_to_aligned(all_input_data_df, obb_info)
+        self.print_terminal(f"-> Data transformed. New aligned bounds: X[{origin_x:.2f}, {maximum_x:.2f}], Y[{origin_y:.2f}, {maximum_y:.2f}]")
+    else:
+        origin_x = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[0]
+        origin_y = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[2]
+        maximum_x = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[1]
+        maximum_y = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[3]
     if (
         self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[4]
         == self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()[5]
@@ -620,12 +905,58 @@ def implicit_model_loop_structural(self):
     voxet_dict["properties_components"] = [1]
     # Create new instance of Voxet() class
     voxet_dict["vtk_obj"] = Voxet()
-    # Set origin, dimensions and spacing of the output Voxet.
-    voxet_dict["vtk_obj"].origin = [
+    
+    # Calculate origin in aligned space (cell centers)
+    aligned_origin = [
         origin_x + spacing_x / 2,
         origin_y + spacing_y / 2,
         origin_z + spacing_z / 2,
     ]
+    
+    # If OBB alignment was used, transform Voxet back to world space
+    if use_obb_alignment:
+        from numpy import array as np_array
+        from vtk import vtkMatrix3x3
+        
+        angle = obb_info["angle"]
+        center = obb_info["center"]
+        
+        # Create the inverse rotation matrix (from local to world)
+        # R_to_world = [[cos(angle), -sin(angle), 0], [sin(angle), cos(angle), 0], [0, 0, 1]]
+        c, s = np_cos(angle), np_sin(angle)
+        
+        # Transform the origin from aligned space to world space
+        origin_xy = np_array([aligned_origin[0], aligned_origin[1]])
+        R_to_world_2d = np_array([[c, -s], [s, c]])
+        origin_world_xy = (R_to_world_2d @ origin_xy) + center
+        
+        world_origin = [
+            origin_world_xy[0],
+            origin_world_xy[1],
+            aligned_origin[2]  # Z unchanged
+        ]
+        
+        # Set the direction matrix for the Voxet (3x3 rotation matrix)
+        direction_matrix = vtkMatrix3x3()
+        direction_matrix.SetElement(0, 0, c)
+        direction_matrix.SetElement(0, 1, -s)
+        direction_matrix.SetElement(0, 2, 0)
+        direction_matrix.SetElement(1, 0, s)
+        direction_matrix.SetElement(1, 1, c)
+        direction_matrix.SetElement(1, 2, 0)
+        direction_matrix.SetElement(2, 0, 0)
+        direction_matrix.SetElement(2, 1, 0)
+        direction_matrix.SetElement(2, 2, 1)
+        
+        voxet_dict["vtk_obj"].origin = world_origin
+        voxet_dict["vtk_obj"].direction_matrix = direction_matrix
+        # Store world_origin for surface transformation later
+        voxet_world_origin = world_origin
+        self.print_terminal(f"-> Voxet transformed to OBB orientation")
+    else:
+        voxet_dict["vtk_obj"].origin = aligned_origin
+        voxet_world_origin = None
+    
     voxet_dict["vtk_obj"].dimensions = dimensions
     voxet_dict["vtk_obj"].spacing = spacing
     # print(voxet_dict)
@@ -684,6 +1015,13 @@ def implicit_model_loop_structural(self):
         surf_dict["scenario"] = scenario
         surf_dict["vtk_obj"] = TriSurf()
         surf_dict["vtk_obj"].ShallowCopy(iso_surface.GetOutput())
+        
+        # vtkContourFilter does NOT apply the direction matrix to its output,
+        # so we need to manually transform the isosurface from aligned space to OBB world space
+        if use_obb_alignment:
+            surf_dict["vtk_obj"] = transform_vtk_to_obb(surf_dict["vtk_obj"], obb_info, voxet_world_origin)
+            self.print_terminal(f"-> iso-surface transformed to OBB coordinate system")
+        
         surf_dict["vtk_obj"].Modified()
         if isinstance(surf_dict["vtk_obj"].points, np_ndarray):
             if len(surf_dict["vtk_obj"].points) > 0:

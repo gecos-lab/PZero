@@ -8,6 +8,7 @@ from uuid import uuid4 as uuid_uuid4
 
 from numpy import array as np_array
 from numpy import ndarray as np_ndarray
+from numpy import float32 as np_float32
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import set_option as pd_set_option
@@ -307,10 +308,51 @@ def boundary_from_pca(self):
         center_x = np_mean(original_corners[:, 0])
         center_y = np_mean(original_corners[:, 1])
         
-        # Scale corners relative to center
-        scaled_corners = original_corners.copy()
-        scaled_corners[:, 0] = center_x + (scaled_corners[:, 0] - center_x) * width_scale
-        scaled_corners[:, 1] = center_y + (scaled_corners[:, 1] - center_y) * height_scale
+        # To scale correctly, we need to transform to local coordinates (un-rotated)
+        # Calculate rotation angle using similar logic to get_boundary_orientation_info
+        # We know it's a rectangle because it comes from PCA/OBB
+        p0 = original_corners[0]
+        p1 = original_corners[1]
+        p3 = original_corners[3]
+        
+        edge1 = p1 - p0
+        edge2 = p3 - p0
+        
+        # Find the primary edge (longest one) for consistent orientation
+        edge1_len = np.linalg.norm(edge1) # using np.linalg from numpy import
+        edge2_len = np.linalg.norm(edge2)
+        
+        if edge1_len >= edge2_len:
+            primary_edge = edge1
+        else:
+            primary_edge = edge2
+        
+        # Calculate rotation angle
+        rotation_angle = np.arctan2(primary_edge[1], primary_edge[0])
+        
+        # Rotation matrices
+        c, s = np.cos(-rotation_angle), np.sin(-rotation_angle)
+        R_inv = np_array(((c, -s), (s, c))) # Rotate to align with axes
+        
+        c, s = np.cos(rotation_angle), np.sin(rotation_angle)
+        R = np.array(((c, -s), (s, c))) # Rotate back
+        
+        # Center points
+        centered_points = original_corners - np_array([center_x, center_y])
+        
+        # Rotate to local frame
+        local_points = np.dot(centered_points, R_inv.T)
+        
+        # Apply scaling in local aligned frame
+        scaled_local = local_points.copy()
+        scaled_local[:, 0] *= width_scale
+        scaled_local[:, 1] *= height_scale
+        
+        # Rotate back to global frame
+        scaled_centered = np.dot(scaled_local, R.T)
+        
+        # Add center back
+        scaled_corners = scaled_centered + np.array([center_x, center_y])
         
         corners_xy = scaled_corners
         return scaled_corners
@@ -626,63 +668,35 @@ def boundary_from_pca(self):
     self.enable_actions()
 
 def compute_obb_boundary(parent):
-    """Compute oriented bounding box from all data using covariance matrix approach"""
+    """Compute true minimum area oriented bounding box from all data using convex hull and rotating axes."""
     from numpy import concatenate as np_concatenate
     from numpy import mean as np_mean
-    from numpy import cov as np_cov
     from numpy import min as np_min
     from numpy import max as np_max
-    from numpy.linalg import eig as np_eig
     from numpy import dot as np_dot
-    from numpy import column_stack as np_column_stack
+    from numpy import array as np_array
+    from scipy.spatial import ConvexHull
     
     # Collect all points from all collections
     all_points = []
     
-    # Get points from geological collection
-    try:
-        for uid in parent.geol_coll.get_uids:
-            vtk_obj = parent.geol_coll.get_uid_vtk_obj(uid)
-            if hasattr(vtk_obj, 'points') and isinstance(vtk_obj.points, np_ndarray):
-                all_points.append(vtk_obj.points)
-    except:
-        pass
-    
-    # Get points from fluid collection  
-    try:
-        for uid in parent.fluid_coll.get_uids:
-            vtk_obj = parent.fluid_coll.get_uid_vtk_obj(uid)
-            if hasattr(vtk_obj, 'points') and isinstance(vtk_obj.points, np_ndarray):
-                all_points.append(vtk_obj.points)
-    except:
-        pass
-        
-    # Get points from background collection
-    try:
-        for uid in parent.backgrnd_coll.get_uids:
-            vtk_obj = parent.backgrnd_coll.get_uid_vtk_obj(uid)
-            if hasattr(vtk_obj, 'points') and isinstance(vtk_obj.points, np_ndarray):
-                all_points.append(vtk_obj.points)
-    except:
-        pass
-        
-    # Get points from well collection
-    try:
-        for uid in parent.well_coll.get_uids:
-            vtk_obj = parent.well_coll.get_uid_vtk_obj(uid)
-            if hasattr(vtk_obj, 'points') and isinstance(vtk_obj.points, np_ndarray):
-                all_points.append(vtk_obj.points)
-    except:
-        pass
-        
-    # Get points from domain collection
-    try:
-        for uid in parent.dom_coll.get_uids:
-            vtk_obj = parent.dom_coll.get_uid_vtk_obj(uid)
-            if hasattr(vtk_obj, 'points') and isinstance(vtk_obj.points, np_ndarray):
-                all_points.append(vtk_obj.points)
-    except:
-        pass
+    # helper to get points from collection
+    def get_points(coll):
+        pts = []
+        try:
+            for uid in coll.get_uids:
+                vtk_obj = coll.get_uid_vtk_obj(uid)
+                if hasattr(vtk_obj, 'points') and isinstance(vtk_obj.points, np_ndarray):
+                    pts.append(vtk_obj.points)
+        except:
+            pass
+        return pts
+
+    all_points.extend(get_points(parent.geol_coll))
+    all_points.extend(get_points(parent.fluid_coll))
+    all_points.extend(get_points(parent.backgrnd_coll))
+    all_points.extend(get_points(parent.well_coll))
+    all_points.extend(get_points(parent.dom_coll))
     
     if not all_points:
         return None, None, None
@@ -693,58 +707,82 @@ def compute_obb_boundary(parent):
     # Use only X,Y coordinates for 2D OBB (map view)
     xy_points = combined_points[:, :2]
     
-    # Compute centroid
-    centroid = np_mean(xy_points, axis=0)
+    # Compute Convex Hull
+    try:
+        hull = ConvexHull(xy_points)
+        hull_points = xy_points[hull.vertices]
+    except:
+        # Fallback to AABB if hull fails (e.g. collinear points)
+        min_x, min_y = np_min(xy_points, axis=0)
+        max_x, max_y = np_max(xy_points, axis=0)
+        corners = np_array([[min_x, min_y], [max_x, min_y], [max_x, max_y], [min_x, max_y]])
+        return corners, np_max(combined_points[:, 2]), np_min(combined_points[:, 2])
+
+    # Minimum Area Bounding Box (MABB) algorithm
+    min_area = float('inf')
+    best_corners = None
+    best_angle = 0.0
+    best_translation = np_array([0.0, 0.0])
     
-    # Center the points
-    centered_points = xy_points - centroid
+    for i in range(len(hull_points)):
+        # Edge between hull_points[i] and hull_points[(i+1)%len(hull_points)]
+        p1 = hull_points[i]
+        p2 = hull_points[(i+1) % len(hull_points)]
+        edge = p2 - p1
+        
+        # Angle of the edge
+        angle = np.arctan2(edge[1], edge[0])
+        
+        # Rotation matrix to align edge with X-axis
+        rotation = np_array([
+            [np.cos(angle), np.sin(angle)],
+            [-np.sin(angle), np.cos(angle)]
+        ])
+        
+        # Rotate points
+        rotated_points = np_dot(xy_points, rotation.T)
+        
+        # Axis-aligned bounding box in rotated space
+        min_r = np_min(rotated_points, axis=0)
+        max_r = np_max(rotated_points, axis=0)
+        
+        # Add 10% margin
+        range_r = max_r - min_r
+        margin = range_r * 0.1
+        min_r_ext = min_r - margin
+        max_r_ext = max_r + margin
+        
+        area = (max_r_ext[0] - min_r_ext[0]) * (max_r_ext[1] - min_r_ext[1])
+        
+        if area < min_area:
+            min_area = area
+            best_angle = angle
+            # Translation vector is the min corner in rotated (local) space
+            best_translation = min_r_ext
+            # Corners in rotated space
+            corners_r = np_array([
+                [min_r_ext[0], min_r_ext[1]],
+                [max_r_ext[0], min_r_ext[1]],
+                [max_r_ext[0], max_r_ext[1]],
+                [min_r_ext[0], max_r_ext[1]]
+            ])
+            # Rotate back to original space
+            best_corners = np_dot(corners_r, rotation)
+            # Store the LOCAL-space translation (min corner in rotated space)
+            # This is needed because transformation is: rotate first, then translate
+            best_local_translation = min_r_ext.copy()
     
-    # Compute covariance matrix
-    cov_matrix = np_cov(centered_points.T)
-    
-    # Get eigenvalues and eigenvectors
-    eigenvalues, eigenvectors = np_eig(cov_matrix)
-    
-    # Sort eigenvectors by eigenvalues (descending order)
-    from numpy import argsort as np_argsort
-    idx = np_argsort(eigenvalues)[::-1]
-    eigenvalues = eigenvalues[idx]
-    eigenvectors = eigenvectors[:, idx]
-    
-    # Project points onto the principal axes
-    projected_points = np_dot(centered_points, eigenvectors)
-    
-    # Find the extent in the projected space
-    min_proj = np_array([np_min(projected_points[:, 0]), np_min(projected_points[:, 1])])
-    max_proj = np_array([np_max(projected_points[:, 0]), np_max(projected_points[:, 1])])
-    
-    # Add some margin (10% of range)
-    range_proj = max_proj - min_proj
-    margin = range_proj * 0.1
-    min_proj_extended = min_proj - margin
-    max_proj_extended = max_proj + margin
-    
-    # Create corner points in the projected space (oriented rectangle)
-    corners_proj = np_array([
-        [min_proj_extended[0], min_proj_extended[1]],  # corner 0
-        [max_proj_extended[0], min_proj_extended[1]],  # corner 1 
-        [max_proj_extended[0], max_proj_extended[1]],  # corner 2
-        [min_proj_extended[0], max_proj_extended[1]]   # corner 3
-    ])
-    
-    # Transform corners back to original coordinate space
-    corners_xy = np_dot(corners_proj, eigenvectors.T) + centroid
-    
+    # Return the local-space translation (min_r_ext) - NOT the real-world corner
+    # The transformation order is: rotate -> translate (forward), translate -> inverse rotate (inverse)
+            
     # Get Z extent from all points
     z_min = np_min(combined_points[:, 2])
     z_max = np_max(combined_points[:, 2])
-    z_range = z_max - z_min
-    z_margin = z_range * 0.1
+    z_margin = (z_max - z_min) * 0.1
     z_bottom = z_min - z_margin
     z_top = z_max + z_margin
     
-    # Return the four corners of the oriented rectangle plus Z extent
-    return corners_xy, z_top, z_bottom
+    return best_corners, z_top, z_bottom, best_angle, best_local_translation
 
 def boundary_from_obb(self):
     """Create a new Boundary from OBB (Oriented Bounding Box) analysis of all data"""
@@ -763,7 +801,7 @@ def boundary_from_obb(self):
         return
     
     # Extract OBB results
-    corners_xy, top, bottom = obb_result
+    corners_xy, top, bottom, obb_angle, obb_translation = obb_result
     
     # Create enhanced dialog with OBB compute button and size controls
     from PySide6.QtWidgets import (QWidget, QGridLayout, QLabel, QLineEdit, QCheckBox, 
@@ -922,10 +960,51 @@ def boundary_from_obb(self):
         center_x = np_mean(original_corners[:, 0])
         center_y = np_mean(original_corners[:, 1])
         
-        # Scale corners relative to center
-        scaled_corners = original_corners.copy()
-        scaled_corners[:, 0] = center_x + (scaled_corners[:, 0] - center_x) * width_scale
-        scaled_corners[:, 1] = center_y + (scaled_corners[:, 1] - center_y) * height_scale
+        # To scale correctly, we need to transform to local coordinates (un-rotated)
+        # Calculate rotation angle using similar logic to get_boundary_orientation_info
+        # We know it's a rectangle because it comes from PCA/OBB
+        p0 = original_corners[0]
+        p1 = original_corners[1]
+        p3 = original_corners[3]
+        
+        edge1 = p1 - p0
+        edge2 = p3 - p0
+        
+        # Find the primary edge (longest one) for consistent orientation
+        edge1_len = np.linalg.norm(edge1)
+        edge2_len = np.linalg.norm(edge2)
+        
+        if edge1_len >= edge2_len:
+            primary_edge = edge1
+        else:
+            primary_edge = edge2
+        
+        # Calculate rotation angle
+        rotation_angle = np.arctan2(primary_edge[1], primary_edge[0])
+        
+        # Rotation matrices
+        c, s = np.cos(-rotation_angle), np.sin(-rotation_angle)
+        R_inv = np_array(((c, -s), (s, c))) # Rotate to align with axes
+        
+        c, s = np.cos(rotation_angle), np.sin(rotation_angle)
+        R = np.array(((c, -s), (s, c))) # Rotate back
+        
+        # Center points
+        centered_points = original_corners - np_array([center_x, center_y])
+        
+        # Rotate to local frame
+        local_points = np.dot(centered_points, R_inv.T)
+        
+        # Apply scaling in local aligned frame
+        scaled_local = local_points.copy()
+        scaled_local[:, 0] *= width_scale
+        scaled_local[:, 1] *= height_scale
+        
+        # Rotate back to global frame
+        scaled_centered = np.dot(scaled_local, R.T)
+        
+        # Add center back
+        scaled_corners = scaled_centered + np.array([center_x, center_y])
         
         corners_xy = scaled_corners
         return scaled_corners
@@ -1077,11 +1156,13 @@ def boundary_from_obb(self):
     
     # OBB compute button
     def compute_obb_callback():
-        nonlocal corners_xy, top, bottom, original_corners
+        nonlocal corners_xy, top, bottom, original_corners, obb_angle, obb_translation
         new_result = compute_obb_boundary(self.parent)
         if new_result[0] is not None:
-            corners_xy, new_top, new_bottom = new_result
+            corners_xy, new_top, new_bottom, new_angle, new_translation = new_result
             original_corners = corners_xy.copy()  # Update original reference
+            obb_angle = new_angle
+            obb_translation = new_translation
             top_edit.setText(f"{new_top:.2f}")
             bottom_edit.setText(f"{new_bottom:.2f}")
             top = new_top
@@ -1231,6 +1312,32 @@ def boundary_from_obb(self):
             boundary_dict["vtk_obj"].auto_cells()
         
         uid = self.parent.boundary_coll.add_entity_from_dict(entity_dict=boundary_dict)
+        
+        # Store OBB transformation properties on the boundary
+        from numpy import full as np_full, tile as np_tile
+        n_points = boundary_dict["vtk_obj"].points_number
+        
+        # Add obb_angle property
+        self.parent.boundary_coll.append_uid_property(
+            uid=uid, 
+            property_name="obb_angle",
+            property_components=1
+        )
+        self.parent.boundary_coll.get_uid_vtk_obj(uid).set_point_data(
+            data_key="obb_angle",
+            attribute_matrix=np_full(n_points, obb_angle, dtype=np_float32)
+        )
+        
+        # Add obb_translation property
+        self.parent.boundary_coll.append_uid_property(
+            uid=uid,
+            property_name="obb_translation",
+            property_components=2
+        )
+        self.parent.boundary_coll.get_uid_vtk_obj(uid).set_point_data(
+            data_key="obb_translation",
+            attribute_matrix=np_tile(obb_translation, (n_points, 1)).astype(np_float32)
+        )
     
     else:
         # Updating existing boundary - it was already updated in the preview
@@ -1386,6 +1493,8 @@ class BoundaryCollection(BaseCollection):
             "parent_uid": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "topology": "undef",
             "vtk_obj": None,
+            "properties_names": [],
+            "properties_components": [],
         }
 
         self.entity_dict_types = {
@@ -1395,6 +1504,8 @@ class BoundaryCollection(BaseCollection):
             "parent_uid": str,
             "topology": str,
             "vtk_obj": object,
+            "properties_names": list,
+            "properties_components": list,
         }
 
         self.valid_topologies = ["PolyLine", "TriSurf", "XsPolyLine"]
