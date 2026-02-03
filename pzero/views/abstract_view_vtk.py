@@ -1083,6 +1083,55 @@ class ViewVTK(BaseView):
             self.plotter.camera_position = camera_position
         return this_actor
 
+    def plot_PC_3D(
+        self,
+        uid=None,
+        plot_entity=None,
+        visible=None,
+        color_RGB=None,
+        show_property=None,
+        color_bar_range=None,
+        show_property_title=None,
+        plot_rgb_option=None,
+        point_size=1.0,
+        points_as_spheres=True,
+        opacity=1.0,
+    ):
+        """Plot point clouds in any VTK view (2D/3D)."""
+        if not self.actors_df.empty:
+            # Preserve camera to avoid resets when redrawing.
+            camera_position = self.plotter.camera_position
+        if show_property is not None and plot_rgb_option is None:
+            show_property_cmap = self.parent.prop_legend_df.loc[
+                self.parent.prop_legend_df["property_name"] == show_property_title,
+                "colormap",
+            ].values[0]
+        else:
+            show_property_cmap = None
+        this_actor = self.plotter.add_points(
+            plot_entity,
+            name=uid,
+            style="points",
+            point_size=point_size,
+            render_points_as_spheres=points_as_spheres,
+            color=color_RGB,
+            scalars=show_property,
+            n_colors=256,
+            clim=color_bar_range,
+            flip_scalars=False,
+            interpolate_before_map=True,
+            cmap=show_property_cmap,
+            scalar_bar_args=None,
+            rgb=plot_rgb_option,
+            show_scalar_bar=False,
+            opacity=opacity,
+        )
+        if not visible:
+            this_actor.SetVisibility(False)
+        if not self.actors_df.empty:
+            self.plotter.camera_position = camera_position
+        return this_actor
+
     def actor_in_table(self, sel_uid=None):
         """Method used to highlight in the main project table view a list of selected actors."""
         if sel_uid:

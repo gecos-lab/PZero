@@ -2,6 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 from os import path as os_path
+from difflib import SequenceMatcher
 
 from PySide6.QtCore import QEventLoop, Qt, QAbstractTableModel
 from PySide6.QtGui import QColor
@@ -660,6 +661,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
         super(import_dialog, self).__init__(parent, *args, **kwargs)
         self.setupUi(self)
+        self.args = None
 
         self.parent = parent
         # self.action = (self.sender())  #  Name of the action menu from which the import function was called.
