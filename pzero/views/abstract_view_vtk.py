@@ -61,10 +61,6 @@ class ViewVTK(BaseView):
         # Import line drawing functions here to avoid circular imports
         from ..two_d_lines import draw_line_3d
         
-        # Add 3D-specific line drawing tool that uses point picking
-        self.drawLine3DButton = QAction("Draw line (3D mode)", self)
-        self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
-        self.menuCreate.addAction(self.drawLine3DButton)
 
         self.zoomActive = QAction("Zoom to active", self)
         self.zoomActive.triggered.connect(self.zoom_active)

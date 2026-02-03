@@ -72,7 +72,6 @@ class ViewMap(View2D):
             lambda: self.vector_by_mouse(boundary_from_points)
         )
         self.menuCreate.addAction(self.boundaryFromPointsButton)
-
         self.boundaryFromThreePointsButton = QAction("Boundary from 3 points", self)
         self.boundaryFromThreePointsButton.triggered.connect(
             lambda: self.vector_by_mouse(boundary_from_three_points)
@@ -86,7 +85,6 @@ class ViewMap(View2D):
         self.menuCreate.addAction(self.boundaryFromOBBButton)
 
     # ================================  Methods required by BaseView(), (re-)implemented here =========================
-
     def show_actor_with_property(
         self, uid=None, coll_name=None, show_property=None, visible=None
     ):

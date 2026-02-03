@@ -111,6 +111,17 @@ class View3D(ViewVTK):
         # append code from superclass
         super().initialize_menu_tools()
 
+        # Remove 2D line drawing from 3D view (use "Draw line (3D mode)" instead)
+        if hasattr(self, "drawLineButton"):
+            self.drawLineButton.setEnabled(False)
+            self.drawLineButton.setVisible(False)
+            if hasattr(self, "menuCreate"):
+                self.menuCreate.removeAction(self.drawLineButton)
+
+        # Ensure any inherited 3D line action is removed before re-adding it here
+        if hasattr(self, "drawLine3DButton") and hasattr(self, "menuCreate"):
+            self.menuCreate.removeAction(self.drawLine3DButton)
+
         # then add new code specific to this class
         self.saveHomeView = QAction("Save home view", self)
         self.saveHomeView.triggered.connect(self.save_home_view)
@@ -119,6 +130,14 @@ class View3D(ViewVTK):
         self.zoomHomeView = QAction("Zoom to home", self)
         self.zoomHomeView.triggered.connect(self.zoom_home_view)
         self.menuView.insertAction(self.zoomActive, self.zoomHomeView)
+
+        # Add 3D-specific line drawing tool that uses point picking
+        from ..two_d_lines import draw_line_3d
+        # proper connection to the action
+        self.drawLine3DButton = QAction("Draw line (3D mode)", self)
+        self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
+        self.menuCreate.addAction(self.drawLine3DButton)
+        
 
         self.menuBoreTraceVis = QMenu("Borehole visualization methods", self)
 
@@ -2887,6 +2906,22 @@ class View3D(ViewVTK):
         """Add mesh slicer to the menu tools."""
         # Call parent's initialize_menu_tools first to ensure menus and toolbars are created
         super().initialize_menu_tools()
+
+        # Remove 2D line drawing from 3D view (use "Draw line (3D mode)" instead)
+        if hasattr(self, "drawLineButton"):
+            self.drawLineButton.setEnabled(False)
+            self.drawLineButton.setVisible(False)
+            if hasattr(self, "menuCreate"):
+                self.menuCreate.removeAction(self.drawLineButton)
+
+        # Re-add 3D line drawing with point-picking (ensure proper connection)
+        if hasattr(self, "drawLine3DButton") and hasattr(self, "menuCreate"):
+            self.menuCreate.removeAction(self.drawLine3DButton)
+        from ..two_d_lines import draw_line_3d
+
+        self.drawLine3DButton = QAction("Draw line (3D mode)", self)
+        self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
+        self.menuCreate.addAction(self.drawLine3DButton)
 
         # Create Mesh Tools menu if it doesn't exist
         if not hasattr(self, "menuMeshTools"):
