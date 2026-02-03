@@ -66,6 +66,7 @@ from pzero.helpers.helper_dialogs import (
     input_text_dialog,
     input_combo_dialog,
     input_checkbox_dialog,
+    options_dialog,
     tic,
     toc,
     progress_dialog,
@@ -1860,19 +1861,14 @@ def project_2_dem(self):
     #         print(" -- Error input type: only PolyLine type -- ")
     #         return
     # Ask if the tool replaces the input entities, or if they shall be preserved
-    replace_on_off = input_text_dialog(
+    replace_on_off = options_dialog(
         title="Project to Surface",
-        label="Replace Original Entities? (YES/NO)",
-        default_text="YES",
+        message="Replace Original Entities?",
+        yes_role="Yes",
+        no_role="No",
+        reject_role=None,
     )
     if replace_on_off is None:
-        return
-    if (
-        replace_on_off.lower() != "yes"
-        and replace_on_off.lower() != "y"
-        and replace_on_off.lower() != "no"
-        and replace_on_off.lower() != "n"
-    ):
         return
     # Ask for the DOM (/DEM), source of the projection
     dom_list_uids = self.dom_coll.get_uids
@@ -1913,54 +1909,121 @@ def project_2_dem(self):
         cancel_txt=None,
         parent=self,
     )
+    # Track UIDs to update at the end
+    updated_uids = []
+
     for uid in input_uids:
-        # Create a new instance of vtkProjectedTerrainPath
+        # Determine which entity to project
+        if replace_on_off == 1:  # No - first create a copy, then project only the copy
+            # Create a copy of the original entity (not projected)
+            obj_dict = deepcopy(self.geol_coll.entity_dict)
+            obj_dict["uid"] = None  # Will generate new uid
+            obj_dict["name"] = f"{self.geol_coll.get_uid_name(uid)}_proj_DEM"
+            obj_dict["feature"] = self.geol_coll.get_uid_feature(uid)
+            obj_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
+            obj_dict["role"] = self.geol_coll.get_uid_role(uid)
+            obj_dict["topology"] = self.geol_coll.get_uid_topology(uid)
+            obj_dict["properties_names"] = self.geol_coll.get_uid_properties_names(uid)
+            obj_dict["properties_components"] = (
+                self.geol_coll.get_uid_properties_components(uid)
+            )
+
+            # Create VTK object and copy geometry from original
+            if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
+                obj_dict["vtk_obj"] = PolyLine()
+            elif isinstance(self.geol_coll.get_uid_vtk_obj(uid), Attitude):
+                obj_dict["vtk_obj"] = Attitude()
+            elif isinstance(self.geol_coll.get_uid_vtk_obj(uid), VertexSet):
+                obj_dict["vtk_obj"] = VertexSet()
+
+            obj_dict["vtk_obj"].DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
+
+            # Add the copy to collection
+            if obj_dict["vtk_obj"].points_number > 0:
+                new_uid = self.geol_coll.add_entity_from_dict(obj_dict)
+                uid_to_project = new_uid
+            else:
+                self.print_terminal(" -- empty object -- ")
+                prgs_bar.add_one()
+                continue
+        else:  # Yes - project original entity directly
+            uid_to_project = uid
+
+        # Now project the target entity (either original or the new copy)
         projection = vtkPointInterpolator2D()
-        projection.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
+        projection.SetInputData(self.geol_coll.get_uid_vtk_obj(uid_to_project))
         projection.SetSourceData(self.dom_coll.get_uid_vtk_obj(dom_uid))
         projection.SetKernel(vtkVoronoiKernel())
         projection.SetNullPointsStrategyToClosestPoint()
         projection.SetZArrayName("elevation")
         projection.Update()
-        # Create deepcopy of the geological entity dictionary.
-        obj_dict = deepcopy(self.geol_coll.entity_dict)
-        if replace_on_off == "YES" or replace_on_off == "yes" or replace_on_off == "y":
-            obj_dict["uid"] = uid
-        elif replace_on_off == "NO" or replace_on_off == "no" or replace_on_off == "n":
-            obj_dict["uid"] = None
-        obj_dict["name"] = f"{self.geol_coll.get_uid_name(uid)}_proj_DEM"
-        obj_dict["feature"] = self.geol_coll.get_uid_feature(uid)
-        obj_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
-        obj_dict["role"] = self.geol_coll.get_uid_role(uid)
-        obj_dict["topology"] = self.geol_coll.get_uid_topology(uid)
-        if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
-            obj_dict["vtk_obj"] = PolyLine()
-        elif isinstance(
-            self.geol_coll.get_uid_vtk_obj(uid), Attitude
-        ):  # Attitude class needs to go away
-            obj_dict["vtk_obj"] = Attitude()
-        elif isinstance(self.geol_coll.get_uid_vtk_obj(uid), VertexSet):
-            obj_dict["vtk_obj"] = VertexSet()
 
-        # ShallowCopy is the way to copy the new entity into the instance created at the beginning
-        obj_dict["vtk_obj"].ShallowCopy(projection.GetOutput())
-        obj_dict["vtk_obj"].points[:, 2] = obj_dict["vtk_obj"].get_point_data(
-            "elevation"
-        )
-        obj_dict["vtk_obj"].Modified()
-        if obj_dict["vtk_obj"] is None:
-            return
-        if replace_on_off == "NO" or replace_on_off == "no" or replace_on_off == "n":
-            if obj_dict["vtk_obj"].points_number > 0:
-                self.geol_coll.add_entity_from_dict(obj_dict)
-            else:
-                self.print_terminal(" -- empty object -- ")
-        else:
-            self.geol_coll.replace_vtk(uid=uid, vtk_object=obj_dict["vtk_obj"])
-            self.geol_coll.set_uid_name(uid=uid, name=obj_dict["name"])
-            self.signals.geom_modified.emit([uid], self.geol_coll)
-        self.signals.metadata_modified.emit([uid], self.geol_coll)
+        # Create temporary object to hold projected geometry
+        projected_obj = None
+        if isinstance(self.geol_coll.get_uid_vtk_obj(uid_to_project), PolyLine):
+            projected_obj = PolyLine()
+        elif isinstance(self.geol_coll.get_uid_vtk_obj(uid_to_project), Attitude):
+            projected_obj = Attitude()
+        elif isinstance(self.geol_coll.get_uid_vtk_obj(uid_to_project), VertexSet):
+            projected_obj = VertexSet()
+
+        if projected_obj is None:
+            self.print_terminal(f" -- Unknown object type for uid {uid_to_project} -- ")
+            prgs_bar.add_one()
+            continue
+
+        # Apply projection - use DeepCopy to ensure complete copy of geometry
+        projected_obj.DeepCopy(projection.GetOutput())
+        # Update Z coordinates with elevation data - recreate points array to ensure VTK recognizes the change
+        elevation = projected_obj.get_point_data("elevation")
+        new_points = projected_obj.points.copy()
+        new_points[:, 2] = elevation
+        projected_obj.points = new_points
+        # Force update of internal VTK structures
+        projected_obj.Modified()
+
+        if projected_obj.points_number == 0:
+            self.print_terminal(" -- empty object after projection -- ")
+            prgs_bar.add_one()
+            continue
+
+        # Update the entity with projected geometry
+        # Note: replace_vtk already emits geom_modified signal
+        self.geol_coll.replace_vtk(uid=uid_to_project, vtk_object=projected_obj)
+
+        # Update entity name
+        if replace_on_off == 1:  # No - set name for new entity
+            self.geol_coll.set_uid_name(
+                uid=uid_to_project, name=f"{self.geol_coll.get_uid_name(uid)}_proj_DEM"
+            )
+        else:  # Yes - set name for original entity
+            self.geol_coll.set_uid_name(
+                uid=uid_to_project, name=f"{self.geol_coll.get_uid_name(uid)}_proj_DEM"
+            )
+
+        updated_uids.append(uid_to_project)
         prgs_bar.add_one()
+
+    prgs_bar.close()
+
+    # Emit metadata_modified signal for name changes (geom_modified already emitted by replace_vtk)
+    if updated_uids:
+        self.signals.metadata_modified.emit(updated_uids, self.geol_coll)
+
+    # Force render in all views to ensure visual update
+    from pzero.views.dock_window import DockWindow
+    dock_windows = self.findChildren(DockWindow)
+    for dock in dock_windows:
+        if hasattr(dock, "canvas") and hasattr(dock.canvas, "plotter"):
+            try:
+                dock.canvas.plotter.render()
+            except Exception:
+                pass  # Ignore if render fails
+
+    # Clear selection in all views after projection
+    for dock in dock_windows:
+        if hasattr(dock, "canvas") and hasattr(dock.canvas, "clear_selection"):
+            dock.canvas.clear_selection()
 
 
 @freeze_gui
