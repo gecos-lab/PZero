@@ -364,10 +364,21 @@ class CustomTreeWidget(QTreeWidget):
             #             property_combo.setItemData(
             #                 property_combo.findText(prop_), prop_
             #             )
+            is_dom_point_cloud = (
+                getattr(self.collection, "collection_name", None) == "dom_coll"
+                and row.get("topology") == "PCDom"
+            )
             for prop, prop_comp in zip(row[self.prop_label], row[self.prop_comp_label]):
                 # property_combo.addItem(prop)
                 # property_combo.setItemData(property_combo.findText(prop), prop)
                 if prop_comp > 1:
+                    if is_dom_point_cloud and prop == "RGB" and prop_comp >= 3:
+                        rgb_total = "RGB total"
+                        if property_combo.findText(rgb_total) < 0:
+                            property_combo.addItem(rgb_total)
+                            property_combo.setItemData(
+                                property_combo.count() - 1, rgb_total
+                            )
                     for i in range(prop_comp):
                         prop_ = prop + f"[{i}]"
                         property_combo.addItem(prop_)
@@ -394,11 +405,12 @@ class CustomTreeWidget(QTreeWidget):
                 )
 
         # set to property currently recorded as shown in self.view.actors_df
-        index = property_combo.findText(
-            self.view.actors_df.loc[
-                self.view.actors_df["uid"] == uid, "show_property"
-            ].values[0]
-        )
+        shown_property = self.view.actors_df.loc[
+            self.view.actors_df["uid"] == uid, "show_property"
+        ].values[0]
+        index = property_combo.findText(shown_property)
+        if index < 0 and shown_property == "RGB":
+            index = property_combo.findText("RGB total")
         if index >= 0:
             property_combo.setCurrentIndex(index)
 

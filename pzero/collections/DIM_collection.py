@@ -48,6 +48,7 @@ class DIMCollection(BaseCollection):
         self.modelReset.emit()
         # Update properties colormaps if needed. This is generally necessary just for images,
         # but it is worth adding it here for a more general behaviour with no relevant computational cost.
+        refresh_prop_legend = False
         for i in range(len(entity_dict["properties_names"])):
             if entity_dict["properties_components"][i] == 1:
                 property_name = entity_dict["properties_names"][i]
@@ -69,7 +70,11 @@ class DIMCollection(BaseCollection):
                         ],
                         ignore_index=True,
                     )
-                    self.parent.prop_legend.update_widget(self.parent)
+                    refresh_prop_legend = True
+        if entity_dict["properties_names"]:
+            refresh_prop_legend = True
+        if refresh_prop_legend:
+            self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the
         # entity is just one, for future compatibility
         self.parent.signals.entities_added.emit([entity_dict["uid"]], self)

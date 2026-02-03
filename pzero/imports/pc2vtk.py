@@ -3,8 +3,6 @@ PZero© Andrea Bistacchi"""
 
 from os import path as os_path
 
-from copy import deepcopy
-
 from uuid import uuid4
 
 from laspy import read as lp_read
@@ -14,22 +12,101 @@ from numpy import column_stack as np_column_stack
 from numpy import shape as np_shape
 from numpy import uint8 as np_uint8
 from numpy import where as np_where
-
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv
 from pandas import to_numeric as pd_to_numeric
+from re import sub as re_sub
 
 from vtk import vtkPoints
 from vtkmodules.util.numpy_support import numpy_to_vtk
-
 from pzero.collections.dom_collection import DomCollection
 from pzero.entities_factory import PCDom
+
+
+COORDINATE_ALIASES = {
+    "X": (
+        "easting",
+        "east",
+        "longitude",
+        "lon",
+        "utm_e",
+        "utme",
+        "coordx",
+        "xcoord",
+        "xcoordinate",
+    ),
+    "Y": (
+        "northing",
+        "north",
+        "latitude",
+        "lat",
+        "utm_n",
+        "utmn",
+        "coordy",
+        "ycoord",
+        "ycoordinate",
+    ),
+    "Z": (
+        "elevation",
+        "height",
+        "altitude",
+        "depth",
+        "coordz",
+        "zcoord",
+        "zcoordinate",
+    ),
+}
+
+
+def _sanitize_column_name(column_name: str) -> str:
+    """Sanitize a column name by stripping non-alphanumeric characters."""
+    return re_sub(r"[^a-z0-9]", "", column_name.lower())
+
+
+def _match_coordinate_column(available_columns, axis: str) -> str | None:
+    """
+    Try to find a column corresponding to the requested axis.
+
+    It matches exact aliases after stripping non-alphanumeric characters.
+    """
+    search_terms = (axis,) + COORDINATE_ALIASES.get(axis, tuple())
+    sanitized_columns = {
+        col_name: _sanitize_column_name(col_name) for col_name in available_columns
+    }
+    for term in search_terms:
+        sanitized_term = _sanitize_column_name(term)
+        for column_name, sanitized_column in sanitized_columns.items():
+            if sanitized_column == sanitized_term:
+                return column_name
+    return None
+
+
+def _normalise_coordinate_columns(input_df: pd_DataFrame) -> tuple[list[str], dict]:
+    """Rename coordinate columns to the canonical X, Y, Z labels when possible."""
+    rename_map = {}
+    remaining_columns = list(input_df.columns)
+
+    for axis in ("X", "Y", "Z"):
+        if axis in input_df.columns:
+            if axis in remaining_columns:
+                remaining_columns.remove(axis)
+            continue
+        matched_column = _match_coordinate_column(remaining_columns, axis)
+        if matched_column:
+            rename_map[matched_column] = axis
+            remaining_columns.remove(matched_column)
+
+    if rename_map:
+        input_df.rename(columns=rename_map, inplace=True)
+
+    missing_axes = [axis for axis in ("X", "Y", "Z") if axis not in input_df.columns]
+    return missing_axes, rename_map
 
 
 def pc2vtk(
     in_file_name, col_names, row_range, header_row, usecols, delimiter, self=None
 ):
-    print("1. Reading and importing file")
+    self.parent.print_terminal("Reading and importing file")
 
     basename = os_path.basename(in_file_name)
     _, ext = os_path.splitext(basename)
@@ -91,7 +168,7 @@ def pc2vtk(
             names=col_names,
         )
 
-    print("2. Checking the data")
+    self.parent.print_terminal("Checking the data")
 
     #  Check if in the whole dataset there are NaNs text and such
     val_check = input_df.apply(
@@ -99,16 +176,35 @@ def pc2vtk(
     )
 
     if not val_check.all():
-        print("Invalid values in data set, not importing.")
+        self.parent.print_terminal("Invalid values in data set, not importing.")
     else:
-        print("3. Creating PointCloud")
+        self.parent.print_terminal("Creating PointCloud")
 
         # Correcting input data by subtracting an equal value approximated to the hundreds (53932.4325 -> 53932.4325 - 53900.0000 = 32.4325). Can be always applied since for numbers < 100 the approximation is always 0.
+        print("input_df shape:", input_df.shape)
+        if input_df.empty:
+            self.parent.print_terminal("Empty dataframe")
 
-        offset = input_df.loc[0, ["X", "Y"]].round(-2)
+        missing_axes, renamed_axes = _normalise_coordinate_columns(input_df)
+        if renamed_axes:
+            rename_summary = ", ".join(
+                f"{source}->{target}" for source, target in renamed_axes.items()
+            )
+            self.parent.print_terminal(
+                f"Detected coordinate columns: {rename_summary}"
+            )
+        if missing_axes:
+            missing_summary = ", ".join(missing_axes)
+            self.parent.print_terminal(
+                f"Missing coordinate columns ({missing_summary}). "
+                "Please assign them in the import dialog."
+            )
+            return
 
-        input_df["X"] -= offset[0]
-        input_df["Y"] -= offset[1]
+        offset = input_df[["X", "Y"]].iloc[0].round(-2)
+
+        input_df["X"] -= offset["X"]
+        input_df["Y"] -= offset["Y"]
 
         XYZ = numpy_to_vtk(
             np_column_stack(
@@ -129,15 +225,53 @@ def pc2vtk(
         if not input_df.empty:
             if "Red" in input_df.columns:
                 point_cloud.init_point_data("RGB", 3)
-                # print(properties_df)
-                if self.check255Box.isChecked():
-                    RGB = np_array(
-                        [input_df["Red"], input_df["Green"], input_df["Blue"]]
-                    ).T.astype(np_uint8)
+
+                # Auto-normalize RGB to uint8 [0,255]
+                r = input_df["Red"].astype(float)
+                g = input_df["Green"].astype(float)
+                b = input_df["Blue"].astype(float)
+
+                rgb_min = float(min(r.min(), g.min(), b.min()))
+                rgb_max = float(max(r.max(), g.max(), b.max()))
+
+                # Decide conversion strategy
+                converted_msg = None
+
+                if rgb_max <= 1.0:
+                    # Assume [0,1] floats -> scale to [0,255]
+                    r = (r * 255.0).round()
+                    g = (g * 255.0).round()
+                    b = (b * 255.0).round()
+                    converted_msg = "RGB floating-point: scaled to 0–255 and converted to 8-bit."
+                elif rgb_max <= 255.0 and rgb_min >= 0.0:
+                    # Already in 0–255 range, nothing to do except cast
+                    converted_msg = None
+                elif rgb_max <= 65535.0 and rgb_min >= 0.0:
+                    # Likely 16-bit -> downscale to 8-bit
+                    r = (r / 257.0).round()
+                    g = (g / 257.0).round()
+                    b = (b / 257.0).round()
+                    converted_msg = "RGB 16-bit detected: downscaled to 8-bit (0–255)."
                 else:
-                    RGB = np_array(
-                        [input_df["Red"], input_df["Green"], input_df["Blue"]]
-                    ).T
+                    # Generic normalization: scale min->0, max->255 to preserve contrast, then clip
+                    # Avoid division by zero
+                    span = rgb_max - rgb_min if rgb_max > rgb_min else 1.0
+                    r = ((r - rgb_min) * 255.0 / span).round()
+                    g = ((g - rgb_min) * 255.0 / span).round()
+                    b = ((b - rgb_min) * 255.0 / span).round()
+                    converted_msg = "RGB out of range: normalized to 8-bit (contrast-preserving)."
+
+                # Clip and cast to uint8
+                from numpy import clip as np_clip
+
+                r = np_clip(r, 0, 255).astype(np_uint8)
+                g = np_clip(g, 0, 255).astype(np_uint8)
+                b = np_clip(b, 0, 255).astype(np_uint8)
+
+                if converted_msg:
+                    self.parent.print_terminal(converted_msg)
+
+                RGB = np_array([r.values, g.values, b.values]).T
 
                 point_cloud.set_point_data("RGB", RGB)
 
@@ -163,7 +297,7 @@ def pc2vtk(
                 point_cloud.set_point_data(property, input_df[property].values)
                 # point_cloud.set_point_data(property,properties_value)
 
-        print("4. Adding PC to project")
+        self.parent.print_terminal("Adding PC to project")
         # point_cloud.ShallowCopy(pv_PD)
         point_cloud.Modified()
         properties_names = point_cloud.point_data_keys
@@ -176,20 +310,31 @@ def pc2vtk(
 
         # point_cloud.generate_point_set()
 
-        # Create dictionary.
-        curr_obj_attributes = deepcopy(DomCollection.entity_dict)
-        curr_obj_attributes["uid"] = str(uuid4())
-        point_cloud.Modified()
-        curr_obj_attributes["name"] = basename
-        curr_obj_attributes["topology"] = "PCDom"
-        curr_obj_attributes["textures"] = []
-        curr_obj_attributes["properties_names"] = properties_names
-        curr_obj_attributes["properties_components"] = properties_components
-        curr_obj_attributes["properties_types"] = properties_types
-        curr_obj_attributes["vtk_obj"] = point_cloud
+        # # Create dictionary.
+        # curr_obj_attributes = deepcopy(DomCollection.entity_dict)
+        # curr_obj_attributes["uid"] = str(uuid4())
+        # point_cloud.Modified()
+        # curr_obj_attributes["name"] = basename
+        # curr_obj_attributes["topology"] = "PCDom"
+        # curr_obj_attributes["textures"] = []
+        # curr_obj_attributes["properties_names"] = properties_names
+        # curr_obj_attributes["properties_components"] = properties_components
+        # curr_obj_attributes["properties_types"] = properties_types
+        # curr_obj_attributes["vtk_obj"] = point_cloud
+
+        curr_obj_attributes = {
+            "uid": str(uuid4()),
+            "name": os_path.basename(in_file_name),
+            "topology": "PCDom",
+            "textures": [],
+            "properties_names": properties_names,
+            "properties_components": properties_components,
+            "properties_types": properties_types,
+            "vtk_obj": point_cloud,
+        }
         # Add to entity collection.
         self.parent.dom_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
         # Cleaning.
         del input_df
         del point_cloud
-        print("Done!")
+        self.parent.print_terminal("Process completed")

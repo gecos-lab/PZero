@@ -6,6 +6,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QAbstractItemView
 
 # numpy import____
+from numpy import column_stack as np_column_stack
 from numpy import ndarray as np_ndarray
 
 # VTK imports incl. VTK-Numpy interface____
@@ -47,10 +48,57 @@ from ..entities_factory import (
 class ViewVTK(BaseView):
     """Abstract class used as a base for all classes using the VTK/PyVista plotting canvas."""
 
+    RGB_TOTAL_PROPERTY = "RGB total"
+
     def __init__(self, *args, **kwargs):
         super(ViewVTK, self).__init__(*args, **kwargs)
 
     # ================================  General methods shared by all views - built incrementally =====================
+
+    def _get_point_cloud_rgb_total(self, plot_entity):
+        """Return a Nx3 RGB array for point-cloud rendering, if available.
+
+        Supports either a vector 'RGB' array or separate scalar arrays named
+        'RGB[0]', 'RGB[1]', 'RGB[2]'.
+        """
+        if plot_entity is None:
+            return None
+
+        try:
+            if "RGB" in plot_entity.point_data_keys:
+                rgb = plot_entity.get_point_data("RGB")
+                if (
+                    isinstance(rgb, np_ndarray)
+                    and (
+                        (
+                            rgb.ndim == 2
+                            and rgb.shape[1] >= 3
+                            and rgb.shape[0] == plot_entity.points_number
+                        )
+                        or (
+                            rgb.ndim == 1
+                            and plot_entity.points_number == 1
+                            and rgb.shape[0] >= 3
+                        )
+                    )
+                ):
+                    if rgb.ndim == 1:
+                        return rgb[:3].reshape((1, 3))
+                    return rgb[:, :3]
+        except Exception:
+            pass
+
+        try:
+            keys = ("RGB[0]", "RGB[1]", "RGB[2]")
+            if all(key in plot_entity.point_data_keys for key in keys):
+                r = plot_entity.get_point_data(keys[0])
+                g = plot_entity.get_point_data(keys[1])
+                b = plot_entity.get_point_data(keys[2])
+                return np_column_stack((r, g, b))
+        except Exception:
+            pass
+
+        return None
 
     def initialize_menu_tools(self):
         """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
@@ -568,15 +616,20 @@ class ViewVTK(BaseView):
             if isinstance(plot_entity.points, np_ndarray):
                 # This check is needed to avoid errors when trying to plot an empty
                 # PolyData, just created at the beginning of a digitizing session.
+                show_property_value = None
                 if show_property == "none" or show_property is None:
-                    show_property_value = None
+                    pass
+                elif show_property == self.RGB_TOTAL_PROPERTY:
+                    show_property_value = self._get_point_cloud_rgb_total(plot_entity)
+                    if show_property_value is not None:
+                        plot_rgb_option = True
                 elif show_property == "X":
                     show_property_value = plot_entity.points_X
                 elif show_property == "Y":
                     show_property_value = plot_entity.points_Y
                 elif show_property == "Z":
                     show_property_value = plot_entity.points_Z
-                elif show_property[-1] == "]":
+                elif isinstance(show_property, str) and show_property.endswith("]"):
                     # We can identify multicomponents properties such as RGB[0] or Normals[0] by
                     # taking the last character of the property name ("]").
                     # Get the start and end index of the [n_component]
@@ -586,22 +639,26 @@ class ViewVTK(BaseView):
                     original_prop = show_property[:pos1]
                     # Get the column index (the n_component value)
                     index = int(show_property[pos1 + 1 : pos2])
-                    show_property_value = plot_entity.get_point_data(original_prop)[
-                        :, index
-                    ]
+                    try:
+                        show_property_value = plot_entity.get_point_data(original_prop)[
+                            :, index
+                        ]
+                    except Exception:
+                        show_property_value = None
                 else:
-                    n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[
-                        self.parent.dom_coll.get_uid_properties_names(uid).index(
-                            show_property
-                        )
-                    ]
-                    # Get the n of components for the given property. If it's > 1 then do stuff depending
-                    # on the type of property (e.g. show_rgb_option -> True if the property is RGB).
-                    if n_comp > 1:
+                    try:
+                        prop_names = self.parent.dom_coll.get_uid_properties_names(uid)
+                        prop_index = prop_names.index(show_property)
+                        n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[
+                            prop_index
+                        ]
                         show_property_value = plot_entity.get_point_data(show_property)
-                        plot_rgb_option = True
+                    except Exception:
+                        show_property_value = None
                     else:
-                        show_property_value = plot_entity.get_point_data(show_property)
+                        # Get the n of components for the given property. If it's > 1 then treat it as RGB(A).
+                        if n_comp > 1:
+                            plot_rgb_option = True
             this_actor = self.plot_PC_3D(
                 uid=uid,
                 plot_entity=new_plot,
@@ -893,6 +950,54 @@ class ViewVTK(BaseView):
         dialog.exec()
 
     # ================================  Methods specific to VTK views =================================================
+
+    def plot_PC_3D(
+        self,
+        uid=None,
+        plot_entity=None,
+        visible=None,
+        color_RGB=None,
+        show_property=None,
+        color_bar_range=None,
+        show_property_title=None,
+        plot_rgb_option=None,
+        point_size=1.0,
+        points_as_spheres=True,
+        opacity=1.0,
+    ):
+        """Plot point clouds in PyVista interactive plotter."""
+        if not self.actors_df.empty:
+            camera_position = self.plotter.camera_position
+        if show_property is not None and plot_rgb_option is None:
+            show_property_cmap = self.parent.prop_legend_df.loc[
+                self.parent.prop_legend_df["property_name"] == show_property_title,
+                "colormap",
+            ].values[0]
+        else:
+            show_property_cmap = None
+        this_actor = self.plotter.add_points(
+            plot_entity,
+            name=uid,
+            style="points",
+            point_size=point_size,
+            render_points_as_spheres=points_as_spheres,
+            color=color_RGB,
+            scalars=show_property,
+            n_colors=256,
+            clim=color_bar_range,
+            flip_scalars=False,
+            interpolate_before_map=True,
+            cmap=show_property_cmap,
+            scalar_bar_args=None,
+            rgb=plot_rgb_option,
+            show_scalar_bar=False,
+            opacity=opacity,
+        )
+        if not visible:
+            this_actor.SetVisibility(False)
+        if not self.actors_df.empty:
+            self.plotter.camera_position = camera_position
+        return this_actor
 
     def plot_mesh(
         self,
