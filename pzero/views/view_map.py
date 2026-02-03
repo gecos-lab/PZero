@@ -37,7 +37,6 @@ from ..collections.xsection_collection import section_from_azimuth
 from ..collections.boundary_collection import (
     boundary_from_points,
     boundary_from_three_points,
-    boundary_from_pca,
     boundary_from_obb,
 )
 
@@ -79,12 +78,6 @@ class ViewMap(View2D):
             lambda: self.vector_by_mouse(boundary_from_three_points)
         )
         self.menuCreate.addAction(self.boundaryFromThreePointsButton)
-
-        self.boundaryFromPCAButton = QAction("Boundary from PCA", self)
-        self.boundaryFromPCAButton.triggered.connect(
-            lambda: boundary_from_pca(self)
-        )
-        self.menuCreate.addAction(self.boundaryFromPCAButton)
 
         self.boundaryFromOBBButton = QAction("Boundary from OBB", self)
         self.boundaryFromOBBButton.triggered.connect(
