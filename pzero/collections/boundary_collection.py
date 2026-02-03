@@ -703,6 +703,8 @@ def boundary_from_three_points(self, vector):
         self.enable_actions()
         return
 
+    from pyvista import lines_from_points as pv_lines_from_points
+
     # Show the first line segment (p1 -> p2) while placing the third point
     first_line = pv_Line((p1[0], p1[1], p1[2]), (p2[0], p2[1], p2[2]))
     first_actor_name = f"boundary_first_line_{uuid_uuid4()}"
@@ -711,6 +713,27 @@ def boundary_from_three_points(self, vector):
         color="red",
         line_width=5,
         name=first_actor_name,
+        pickable=False,
+    )
+
+    # Initialize rectangle outline (degenerate until third point moves)
+    rect_points = np_array(
+        [
+            [p1[0], p1[1], p1[2]],
+            [p2[0], p2[1], p2[2]],
+            [p2[0], p2[1], p2[2]],
+            [p1[0], p1[1], p1[2]],
+            [p1[0], p1[1], p1[2]],
+        ],
+        dtype=float,
+    )
+    rect_line = pv_lines_from_points(rect_points, close=False)
+    rect_actor_name = f"boundary_rect_preview_{uuid_uuid4()}"
+    self.plotter.add_mesh(
+        rect_line,
+        color="red",
+        line_width=5,
+        name=rect_actor_name,
         pickable=False,
     )
 
@@ -746,10 +769,22 @@ def boundary_from_three_points(self, vector):
         p_proj = np_array(
             [p2[0] + perp_unit[0] * t, p2[1] + perp_unit[1] * t, p2[2]]
         )
+        p4 = np_array([p1[0] + (p_proj[0] - p2[0]), p1[1] + (p_proj[1] - p2[1]), p1[2]])
         guide_line.points = np_array(
             [[p2[0], p2[1], p2[2]], [p_proj[0], p_proj[1], p_proj[2]]]
         )
         guide_line.Modified()
+        rect_line.points = np_array(
+            [
+                [p1[0], p1[1], p1[2]],
+                [p2[0], p2[1], p2[2]],
+                [p_proj[0], p_proj[1], p_proj[2]],
+                [p4[0], p4[1], p4[2]],
+                [p1[0], p1[1], p1[2]],
+            ],
+            dtype=float,
+        )
+        rect_line.Modified()
         try:
             self.plotter.render()
         except Exception:
@@ -765,6 +800,10 @@ def boundary_from_three_points(self, vector):
             pass
         try:
             self.plotter.remove_actor(first_actor_name)
+        except Exception:
+            pass
+        try:
+            self.plotter.remove_actor(rect_actor_name)
         except Exception:
             pass
         try:
