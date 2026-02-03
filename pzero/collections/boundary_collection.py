@@ -1622,6 +1622,7 @@ def boundary_from_three_points(self, vector):
         # Check if top and bottom fields are empty.
         if boundary_dict_updt["top"] is None:
             boundary_dict_updt["top"] = 1000.0
+        if boundary_dict_updt["bottom"] is None:
             boundary_dict_updt["bottom"] = -1000.0
         if boundary_dict_updt["top"] == boundary_dict_updt["bottom"]:
             boundary_dict_updt["top"] = boundary_dict_updt["top"] + 1.0
@@ -1640,6 +1641,9 @@ def boundary_from_three_points(self, vector):
         t_local = (p3_xy[0] - p2_xy[0]) * perp_unit_local[0] + (p3_xy[1] - p2_xy[1]) * perp_unit_local[1]
         p3_xy = p2_xy + perp_unit_local * t_local
         p4_xy = p1_xy + (p3_xy - p2_xy)
+        # Store OBB-like orientation (angle in radians) so LoopStructural can align the model.
+        # Convention must match compute_obb_boundary / get_boundary_obb_transform.
+        obb_angle = float(np.arctan2(delta_xy_local[1], delta_xy_local[0]))
 
         boundary_dict["name"] = boundary_dict_updt["name"]
 
@@ -1685,7 +1689,22 @@ def boundary_from_three_points(self, vector):
             boundary_dict["vtk_obj"].append_cell(np_array([3, 0, 7]))
             boundary_dict["vtk_obj"].append_cell(np_array([0, 7, 4]))
 
-        self.parent.boundary_coll.add_entity_from_dict(entity_dict=boundary_dict)
+        uid = self.parent.boundary_coll.add_entity_from_dict(entity_dict=boundary_dict)
+        # Add OBB angle metadata (same pattern used by boundary_from_obb) so oriented boundaries
+        # are correctly handled by LoopStructural alignment logic.
+        try:
+            from numpy import full as np_full
+            n_points = boundary_dict["vtk_obj"].points_number
+            self.parent.boundary_coll.append_uid_property(
+                uid=uid, property_name="obb_angle", property_components=1
+            )
+            self.parent.boundary_coll.get_uid_vtk_obj(uid).set_point_data(
+                data_key="obb_angle",
+                attribute_matrix=np_full(n_points, obb_angle, dtype=np_float32),
+            )
+        except Exception:
+            # If anything goes wrong, continue without OBB metadata (boundary still exists).
+            pass
         try:
             for view in self.parent.view_dict.values():
                 if hasattr(view, "add_all_entities"):
