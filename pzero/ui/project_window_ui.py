@@ -171,6 +171,8 @@ class Ui_ProjectWindow(object):
         self.actionHistogramView.setObjectName("actionHistogramView")
         self.actionHelp = QAction(ProjectWindow)
         self.actionHelp.setObjectName("actionHelp")
+        self.actionCheckForUpdates = QAction(ProjectWindow)
+        self.actionCheckForUpdates.setObjectName("actionCheckForUpdates")
         self.actionAbout = QAction(ProjectWindow)
         self.actionAbout.setObjectName("actionAbout")
         self.actionShowInfoOnEntities = QAction(ProjectWindow)
@@ -441,6 +443,7 @@ class Ui_ProjectWindow(object):
         self.menuWindows.addAction(self.actionXYPlotView)
         self.menuWindows.addAction(self.actionHistogramView)
         self.menuHelp.addAction(self.actionHelp)
+        self.menuHelp.addAction(self.actionCheckForUpdates)
         self.menuHelp.addAction(self.actionAbout)
         self.menuPointClouds.addAction(self.actionBuildOctree)
         self.menuPointClouds.addAction(self.actionDecimatePointCloud)
@@ -636,6 +639,9 @@ class Ui_ProjectWindow(object):
         )
         self.actionHelp.setText(
             QCoreApplication.translate("ProjectWindow", "PZero Help", None)
+        )
+        self.actionCheckForUpdates.setText(
+            QCoreApplication.translate("ProjectWindow", "Check for Updates", None)
         )
         self.actionAbout.setText(
             QCoreApplication.translate("ProjectWindow", "About PZero", None)

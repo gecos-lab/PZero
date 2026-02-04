@@ -12,9 +12,9 @@ from numpy import pi as np_pi
 from numpy import sin as np_sin
 
 from PySide6.QtCore import Signal as pyqtSignal
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, QUrl
 from PySide6.QtWidgets import QMainWindow, QMessageBox
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QDesktopServices
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv
@@ -284,6 +284,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionListCRS.triggered.connect(lambda: CRS_list(self))
 
         """Help actions -> slots"""
+        self.actionHelp.triggered.connect(self.open_help_url)
+        self.actionCheckForUpdates.triggered.connect(self.open_release_url)
         self.actionAbout.triggered.connect(self.show_about_dialog)
 
     def closeEvent(self, event):
@@ -375,7 +377,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         dialog.setLayout(layout)
         dialog.exec()
 
+    def open_help_url(self):
+        QDesktopServices.openUrl(QUrl("https://github.com/gecos-lab/PZero/wiki"))
 
+    def open_release_url(self):
+        QDesktopServices.openUrl(QUrl("https://github.com/gecos-lab/PZero/releases"))
     """Methods used to manage the entities shown in tables."""
 
     @property
