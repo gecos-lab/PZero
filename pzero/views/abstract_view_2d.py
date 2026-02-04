@@ -138,7 +138,6 @@ class View2D(ViewVTK):
 
     # ================================  Methods required by ViewVTK(), (re-)implemented here ==========================
 
-
     def show_qt_canvas(self):
         """Show the Qt Window."""
         self.show()

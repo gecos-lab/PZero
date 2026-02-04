@@ -93,10 +93,10 @@ def draw_line(self):
         line_dict["vtk_obj"] = XsPolyLine(
             x_section_uid=self.this_x_section_uid, parent=self.parent
         )
-    elif isinstance(self, View3D):
-        line_dict["topology"] = "PolyLine"
-        line_dict["x_section"] = ""
-        line_dict["vtk_obj"] = PolyLine()
+    # elif isinstance(self, View3D):
+    #     line_dict["topology"] = "PolyLine"
+    #     line_dict["parent_uid"] = ""
+    #     line_dict["vtk_obj"] = PolyLine()
     tracer = Tracer(self)
     tracer.EnabledOn()
     self.plotter.track_click_position(
@@ -228,7 +228,6 @@ def draw_line_3d(self):
         line_dict[key] = line_dict_updt[key]
     
     line_dict["topology"] = "PolyLine"
-    line_dict["x_section"] = ""
     line_dict["vtk_obj"] = PolyLine()
     
     # Create and enable the 3D tracer
@@ -1676,9 +1675,9 @@ def left_right(self, uid=None):
     # elif isinstance(self, ViewXsection):
     elif isinstance(self, ViewXsection):
         U_line, V_line = self.parent.geol_coll.get_uid_vtk_obj(uid).world2plane()
-    elif isinstance(self, View3D):
-        # For 3D view, left-right orientation is not meaningful, so return early
-        return
+    # elif isinstance(self, View3D):
+    #     # For 3D view, left-right orientation is not meaningful, so return early
+    #     return
     else:
         return
     if U_line[0] > U_line[-1]:  # reverse if right-to-left

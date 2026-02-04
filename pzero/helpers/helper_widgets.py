@@ -4,10 +4,27 @@ PZero© Andrea Bistacchi"""
 from math import degrees, atan2, sqrt, asin
 
 from numpy import array as np_array
+from numpy import ndarray as np_ndarray
 from numpy import flip as np_flip
 
-from pyvista import lines_from_points as pv_line_from_points
+import pyvista as pv
+import numpy as np
+
+import pyvista as pv
+import numpy as np
+
+import pyvista as pv
+import numpy as np
+
+import pyvista as pv
+import numpy as np
+
+import math
+
+from pyvista import lines_from_points as pv_lines_from_points
 from pyvista import wrap as pv_wrap
+from pyvista import Sphere as pv_Sphere
+
 
 from vtkmodules.vtkCommonCore import vtkCommand
 from vtkmodules.vtkInteractionWidgets import (
@@ -85,7 +102,7 @@ class Vector(vtkContourWidget):
                 self.deltas[0] ** 2 + self.deltas[1] ** 2 + self.deltas[2] ** 2
             )
             self.azimuth = degrees(atan2(self.deltas[0], self.deltas[1])) % 360
-            self.line = pv_line_from_points(np_array([self.p1, self.p2]))
+            self.line = pv_lines_from_points(np_array([self.p1, self.p2]))
             # self.points = np_array(pld.GetPoints().GetData())[:2, :]
             self.dip = degrees(asin(abs(self.deltas[2] / self.length))) % 90
 
@@ -143,7 +160,6 @@ class Tracer3D:
 
     def _compute_point_radius(self, point):
         """Compute a screen-consistent radius that scales down when zooming in."""
-        import math
 
         try:
             renderer = self._parent.plotter.renderer
@@ -191,11 +207,9 @@ class Tracer3D:
         
     def add_point(self, point):
         """Add a point to the line being drawn."""
-        import pyvista as pv
-        import numpy as np
         
         # Convert to tuple if needed
-        if isinstance(point, np.ndarray):
+        if isinstance(point, np_ndarray):
             point = tuple(point)
         
         self.points.append(point)
@@ -215,7 +229,7 @@ class Tracer3D:
                 sphere_radius = 10  # Fallback radius
         
         # Add a sphere at the point location for visual feedback
-        sphere = pv.Sphere(radius=sphere_radius, center=point, theta_resolution=16, phi_resolution=16)
+        sphere = pv_Sphere(radius=sphere_radius, center=point, theta_resolution=16, phi_resolution=16)
         actor = self._parent.plotter.add_mesh(
             sphere, color='red', opacity=0.9, pickable=False, lighting=True
         )
@@ -229,8 +243,6 @@ class Tracer3D:
         
     def _update_line(self):
         """Update the line visualization."""
-        import pyvista as pv
-        import numpy as np
         
         # Remove old line actor
         if self.line_actor:
@@ -240,15 +252,13 @@ class Tracer3D:
                 pass
         
         # Create new line from all points
-        line = pv.lines_from_points(np.array(self.points))
+        line = pv_lines_from_points(np_array(self.points))
         self.line_actor = self._parent.plotter.add_mesh(
             line, color='yellow', line_width=5, pickable=False, lighting=False
         )
         
     def update_temp_line(self, current_pos):
         """Show a temporary line from the last point to current mouse position."""
-        import pyvista as pv
-        import numpy as np
         
         if len(self.points) == 0:
             return
@@ -261,7 +271,7 @@ class Tracer3D:
                 pass
         
         # Create temp line from last point to current position
-        temp_line = pv.lines_from_points(np.array([self.points[-1], current_pos]))
+        temp_line = pv_lines_from_points(np_array([self.points[-1], current_pos]))
         self.temp_line_actor = self._parent.plotter.add_mesh(
             temp_line, color='gray', line_width=1, opacity=0.5, pickable=False
         )
@@ -269,14 +279,11 @@ class Tracer3D:
         
     def get_polydata(self):
         """Get the final polydata object."""
-        import pyvista as pv
-        import numpy as np
-        
         if len(self.points) < 2:
             return None
         
         # Create polydata from points
-        line = pv.lines_from_points(np.array(self.points))
+        line = pv_lines_from_points(np_array(self.points))
         return line
 
 
@@ -363,7 +370,7 @@ class Editor(vtkContourWidget):
         )
         points = line.points
         p_flip = np_flip(points, axis=0)
-        # line = pv.lines_from_points(p_flip)
+        # line = pv_lines_from_points(p_flip)
         self.GetContourRepresentation().ClearAllNodes()
         for point in p_flip:
             self.GetContourRepresentation().AddNodeAtWorldPosition(point)

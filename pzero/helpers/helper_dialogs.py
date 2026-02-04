@@ -1,6 +1,8 @@
 """helper_dialogs.py
 PZero© Andrea Bistacchi"""
 
+from difflib import SequenceMatcher
+
 from os import path as os_path
 
 from PySide6.QtCore import QEventLoop, Qt, QAbstractTableModel
@@ -20,9 +22,9 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QTableWidgetItem,
     QHeaderView,
-    QApplication,
     QFormLayout,
-    QScrollArea,   # <-- aggiunto per la scroll area
+    QScrollArea,
+    QVBoxLayout,
 )
 
 from laspy import open as lp_open
@@ -38,7 +40,6 @@ from pzero.ui.import_window_ui import Ui_ImportOptionsWindow
 from pzero.ui.navigator_window_ui import Ui_NavWindow
 from pzero.ui.preview_window_ui import Ui_PreviewWindow
 from .helper_functions import auto_sep
-from difflib import SequenceMatcher
 
 def options_dialog(
     title=None, message=None, yes_role="Yes", no_role="No", reject_role=None
@@ -253,6 +254,7 @@ def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
 
     def cancel_option():
         """Clear the objects_qt dictionary if Cancel button is clicked"""
+        # This function has to be implemented before creating and calling the QEventLoop
         objects_qt.clear()
         return
 
@@ -316,8 +318,6 @@ def input_checkbox_dialog(
     scroll.setWidget(content)
 
     # Place the scroll area inside a top-level layout so buttons can be placed below it
-    from PySide6.QtWidgets import QVBoxLayout
-
     main_layout = QVBoxLayout(widget)
     main_layout.addWidget(scroll)
 
@@ -357,15 +357,13 @@ def input_checkbox_dialog(
     button_ok = QPushButton(widget)
     gridLayout.addWidget(button_ok, i + 3, 1)
     button_ok.setAutoDefault(True)
-    button_layout.addWidget(button_ok)
-    # Cancel Button, add it to the button layout and set name and state
-    button_cancel = QPushButton("Cancel", widget)
+    button_ok.setText("OK")
+    # Cancel Button, add it to the grid layout an set name and state
+    button_cancel = QPushButton(widget)
+    gridLayout.addWidget(button_cancel, i + 3, 2)
     button_cancel.setAutoDefault(True)
-    button_layout.addWidget(button_cancel)
-
-    main_layout.addLayout(button_layout)
-
-    # Show the widget.
+    button_cancel.setText("Cancel")
+    # Show the widget, resized thank to the scroll function.
     widget.resize(400, 300)
     widget.show()
 
@@ -378,9 +376,13 @@ def input_checkbox_dialog(
     # A QEventLoop is created. Signals and connections are created. QEventLoop is executed. When button is clicked,
     # the QEventLoop.quit() will be called to close the widget and the loop. Attention: it's not a linear path in the code
     loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
-    button_ok.clicked.connect(loop.quit)  # End the QEventLoop on OK
+    button_ok.clicked.connect(
+        loop.quit
+    )  # Response to clicking the Collect PushButton. End the QEventLoop
     button_cancel.clicked.connect(cancel_option)  # Clear the widget
-    button_cancel.clicked.connect(loop.quit)  # End the QEventLoop on Cancel
+    button_cancel.clicked.connect(
+        loop.quit
+    )  # Response to clicking the Cancel PushButton. End the QEventLoop
     loop.exec_()  # Execute the QEventLoop
 
     # When the QEventLoop is closed, the output ir returned as a list if multiple checkboxes are checked,
