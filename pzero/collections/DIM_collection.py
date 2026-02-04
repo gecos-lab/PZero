@@ -71,8 +71,8 @@ class DIMCollection(BaseCollection):
                         ignore_index=True,
                     )
                     refresh_prop_legend = True
-        # if entity_dict["properties_names"]:
-        #     refresh_prop_legend = True
+        if entity_dict["properties_names"]:
+            refresh_prop_legend = True
         if refresh_prop_legend:
             self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the

@@ -37,9 +37,7 @@ from .helpers.helper_widgets import Editor, Tracer, Tracer3D
 from .helpers.helper_functions import freeze_gui
 from .entities_factory import PolyLine, XsPolyLine
 
-from .views.dock_window import ViewMap, ViewXsection
-from .views.view_3d import View3D
-
+from .views.view_map import ViewMap; from .views.view_xsection import ViewXsection
 
 def draw_line(self):
     def end_digitize(event, input_dict):
@@ -253,8 +251,8 @@ def edit_line(self):
             vtk_obj = XsPolyLine(
                 x_section_uid=self.this_x_section_uid, parent=self.parent
             )
-        elif isinstance(self, View3D):
-            vtk_obj = PolyLine()
+        # elif isinstance(self, View3D):
+        #     vtk_obj = PolyLine()
         vtk_obj.ShallowCopy(traced_pld)
         self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
         editor.EnabledOff()
@@ -426,8 +424,8 @@ def extend_line(self):
             vtk_obj = XsPolyLine(
                 x_section_uid=self.this_x_section_uid, parent=self.parent
             )
-        elif isinstance(self, View3D):
-            vtk_obj = PolyLine()
+        # elif isinstance(self, View3D):
+        #         vtk_obj = PolyLine()
         vtk_obj.ShallowCopy(traced_pld)
 
         self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
