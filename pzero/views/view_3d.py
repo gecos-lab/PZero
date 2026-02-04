@@ -64,6 +64,7 @@ from ..helpers.helper_dialogs import (
 from ..helpers.helper_functions import best_fitting_plane, gen_frame
 from ..collections.geological_collection import GeologicalCollection
 from ..entities_factory import PolyData, Attitude
+from ..two_d_lines import draw_line_3d
 
 
 class View3D(ViewVTK):
@@ -132,7 +133,6 @@ class View3D(ViewVTK):
         self.menuView.insertAction(self.zoomActive, self.zoomHomeView)
 
         # Add 3D-specific line drawing tool that uses point picking
-        from ..two_d_lines import draw_line_3d
         # proper connection to the action
         self.drawLine3DButton = QAction("Draw line (3D mode)", self)
         self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))

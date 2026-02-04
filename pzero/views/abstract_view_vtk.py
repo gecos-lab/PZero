@@ -106,8 +106,6 @@ class ViewVTK(BaseView):
         super().initialize_menu_tools()
 
         # then add new code specific to this class
-        # Import line drawing functions here to avoid circular imports
-        from ..two_d_lines import draw_line_3d
         
 
         self.zoomActive = QAction("Zoom to active", self)
@@ -237,8 +235,8 @@ class ViewVTK(BaseView):
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
         """Set actor uid visible or invisible (visible = True or False)"""
-        if uid not in self.actors_df["uid"].to_list():
-            return
+        # if uid not in self.actors_df["uid"].to_list():
+        #     return
         collection = self.actors_df.loc[
             self.actors_df["uid"] == uid, "collection"
         ].values[0]

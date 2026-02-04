@@ -1,38 +1,48 @@
 """boundary_collection.py
 PZero© Andrea Bistacchi"""
 
-from vtkmodules.vtkCommonDataModel import vtkDataObject
-
 from copy import deepcopy
+
 from uuid import uuid4 as uuid_uuid4
+
+from vtkmodules.vtkCommonDataModel import vtkDataObject
+from vtk import vtkPoints
 
 from numpy import array as np_array
 from numpy import ndarray as np_ndarray
 from numpy import float32 as np_float32
+from numpy import arctan2 as np_arctan2
+from numpy import cos as np_cos
+from numpy import sin as np_sin
+from numpy import linalg as np_linalg
+from numpy import concatenate as np_concatenate
+from numpy import mean as np_mean
+from numpy import min as np_min
+from numpy import max as np_max
+from numpy import dot as np_dot
+from numpy import full as np_full
+from numpy import tile as np_tile
+
+from scipy.spatial import ConvexHull
 
 from pandas import DataFrame as pd_DataFrame
-from pandas import set_option as pd_set_option
 from pandas import concat as pd_concat
-import numpy as np
-from vtk import vtkPoints
-# import np_mean
-from numpy import mean as np_mean
+
+from pyvista import Line as pv_Line
+from pyvista import lines_from_points as pv_lines_from_points
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (QWidget, QGridLayout, QLabel, QLineEdit, QCheckBox,
+                               QPushButton, QVBoxLayout, QSlider, QSpinBox,
+                               QGroupBox, QComboBox, QApplication)
 
 from pzero.entities_factory import PolyLine, TriSurf
-from pzero.helpers.helper_dialogs import general_input_dialog
+from pzero.helpers.helper_dialogs import general_input_dialog, message_dialog
 from .AbstractCollection import BaseCollection
-from pyvista import Line as pv_Line
 
 
 def compute_obb_boundary(parent):
     """Compute true minimum area oriented bounding box from all data using convex hull and rotating axes."""
-    from numpy import concatenate as np_concatenate
-    from numpy import mean as np_mean
-    from numpy import min as np_min
-    from numpy import max as np_max
-    from numpy import dot as np_dot
-    from numpy import array as np_array
-    from scipy.spatial import ConvexHull
     
     # Collect all points from all collections
     all_points = []
@@ -88,12 +98,12 @@ def compute_obb_boundary(parent):
         edge = p2 - p1
         
         # Angle of the edge
-        angle = np.arctan2(edge[1], edge[0])
+        angle = np_arctan2(edge[1], edge[0])
         
         # Rotation matrix to align edge with X-axis
         rotation = np_array([
-            [np.cos(angle), np.sin(angle)],
-            [-np.sin(angle), np.cos(angle)]
+            [np_cos(angle), np_sin(angle)],
+            [-np_sin(angle), np_cos(angle)]
         ])
         
         # Rotate points
@@ -152,7 +162,6 @@ def boundary_from_obb(self):
     obb_result = compute_obb_boundary(self.parent)
     
     if obb_result[0] is None:
-        from pzero.helpers.helper_dialogs import message_dialog
         message_dialog(title="OBB Boundary Error", message="No data found to compute OBB boundary.")
         self.enable_actions()
         return
@@ -161,16 +170,10 @@ def boundary_from_obb(self):
     corners_xy, top, bottom, obb_angle, obb_translation = obb_result
     
     # Create enhanced dialog with OBB compute button and size controls
-    from PySide6.QtWidgets import (QWidget, QGridLayout, QLabel, QLineEdit, QCheckBox, 
-                                   QPushButton, QVBoxLayout, QSlider, QHBoxLayout, QSpinBox,
-                                   QGroupBox)
-    from PySide6.QtCore import Qt
-    
     # Store original OBB dimensions for scaling
     original_corners = corners_xy.copy()
     
-    # Calculate original dimensions for scaling reference  
-    from numpy import max as np_max, min as np_min
+    # Calculate original dimensions for scaling reference
     obb_width = np_max(corners_xy[:, 0]) - np_min(corners_xy[:, 0])
     obb_height = np_max(corners_xy[:, 1]) - np_min(corners_xy[:, 1])
     
@@ -191,7 +194,6 @@ def boundary_from_obb(self):
     basic_layout = QGridLayout(basic_group)
     
     # Boundary selection dropdown
-    from PySide6.QtWidgets import QComboBox
     boundary_combo = QComboBox()
     boundary_combo.addItem("Create New Boundary", "new")
     
@@ -328,8 +330,8 @@ def boundary_from_obb(self):
         edge2 = p3 - p0
         
         # Find the primary edge (longest one) for consistent orientation
-        edge1_len = np.linalg.norm(edge1)
-        edge2_len = np.linalg.norm(edge2)
+        edge1_len = np_linalg.norm(edge1)
+        edge2_len = np_linalg.norm(edge2)
         
         if edge1_len >= edge2_len:
             primary_edge = edge1
@@ -337,20 +339,20 @@ def boundary_from_obb(self):
             primary_edge = edge2
         
         # Calculate rotation angle
-        rotation_angle = np.arctan2(primary_edge[1], primary_edge[0])
+        rotation_angle = np_arctan2(primary_edge[1], primary_edge[0])
         
         # Rotation matrices
-        c, s = np.cos(-rotation_angle), np.sin(-rotation_angle)
+        c, s = np_cos(-rotation_angle), np_sin(-rotation_angle)
         R_inv = np_array(((c, -s), (s, c))) # Rotate to align with axes
         
-        c, s = np.cos(rotation_angle), np.sin(rotation_angle)
-        R = np.array(((c, -s), (s, c))) # Rotate back
+        c, s = np_cos(rotation_angle), np_sin(rotation_angle)
+        R = np_array(((c, -s), (s, c))) # Rotate back
         
         # Center points
         centered_points = original_corners - np_array([center_x, center_y])
         
         # Rotate to local frame
-        local_points = np.dot(centered_points, R_inv.T)
+        local_points = np_dot(centered_points, R_inv.T)
         
         # Apply scaling in local aligned frame
         scaled_local = local_points.copy()
@@ -358,10 +360,10 @@ def boundary_from_obb(self):
         scaled_local[:, 1] *= height_scale
         
         # Rotate back to global frame
-        scaled_centered = np.dot(scaled_local, R.T)
+        scaled_centered = np_dot(scaled_local, R.T)
         
         # Add center back
-        scaled_corners = scaled_centered + np.array([center_x, center_y])
+        scaled_corners = scaled_centered + np_array([center_x, center_y])
         
         corners_xy = scaled_corners
         return scaled_corners
@@ -418,7 +420,6 @@ def boundary_from_obb(self):
     dialog.show()
     
     # Process events until dialog is closed
-    from PySide6.QtWidgets import QApplication
     while dialog.isVisible():
         QApplication.processEvents()
     
@@ -515,7 +516,6 @@ def boundary_from_obb(self):
         uid = self.parent.boundary_coll.add_entity_from_dict(entity_dict=boundary_dict)
         
         # Store OBB transformation properties on the boundary
-        from numpy import full as np_full, tile as np_tile
         n_points = boundary_dict["vtk_obj"].points_number
         
         # Add obb_angle property
@@ -549,7 +549,7 @@ def boundary_from_obb(self):
     self.enable_actions()
 
 def boundary_from_points(self, vector):
-    """Create a new Boundary from a vector"""
+    """Create a new Boundary from a vector with two end points"""
     boundary_dict = deepcopy(self.parent.boundary_coll.entity_dict)
     # Freeze QT interface.
     self.disable_actions()
@@ -677,12 +677,12 @@ def boundary_from_points(self, vector):
         boundary_dict["vtk_obj"].append_cell(np_array([0, 1, 3]))
         boundary_dict["vtk_obj"].append_cell(np_array([1, 2, 3]))
     uid = self.parent.boundary_coll.add_entity_from_dict(entity_dict=boundary_dict)
-    try:
-        for view in self.parent.view_dict.values():
-            if hasattr(view, "add_all_entities"):
-                view.add_all_entities()
-    except Exception:
-        pass
+    # try:
+    #     for view in self.parent.view_dict.values():
+    #         if hasattr(view, "add_all_entities"):
+    #             view.add_all_entities()
+    # except Exception:
+    #     pass
     # Un-Freeze QT interface
     self.enable_actions()
 
@@ -697,13 +697,11 @@ def boundary_from_three_points(self, vector):
     p1 = np_array(vector.p1, dtype=float)
     p2 = np_array(vector.p2, dtype=float)
     delta_xy = p2[:2] - p1[:2]
-    length = np.linalg.norm(delta_xy)
+    length = np_linalg.norm(delta_xy)
     if length == 0:
         self.print_terminal(" -- Boundary from 3 points: first two points are coincident -- ")
         self.enable_actions()
         return
-
-    from pyvista import lines_from_points as pv_lines_from_points
 
     # Show the first line segment (p1 -> p2) while placing the third point
     first_line = pv_Line((p1[0], p1[1], p1[2]), (p2[0], p2[1], p2[2]))
@@ -871,7 +869,7 @@ def boundary_from_three_points(self, vector):
         p2_xy = np_array([boundary_dict_updt["p2_x"], boundary_dict_updt["p2_y"]], dtype=float)
         p3_xy = np_array([boundary_dict_updt["p3_x"], boundary_dict_updt["p3_y"]], dtype=float)
         delta_xy_local = p2_xy - p1_xy
-        length_local = np.linalg.norm(delta_xy_local)
+        length_local = np_linalg.norm(delta_xy_local)
         if length_local == 0:
             self.print_terminal(" -- Boundary from 3 points: point 1 and point 2 are coincident -- ")
             self.enable_actions()
@@ -882,7 +880,7 @@ def boundary_from_three_points(self, vector):
         p4_xy = p1_xy + (p3_xy - p2_xy)
         # Store OBB-like orientation (angle in radians) so LoopStructural can align the model.
         # Convention must match compute_obb_boundary / get_boundary_obb_transform.
-        obb_angle = float(np.arctan2(delta_xy_local[1], delta_xy_local[0]))
+        obb_angle = float(np_arctan2(delta_xy_local[1], delta_xy_local[0]))
 
         boundary_dict["name"] = boundary_dict_updt["name"]
 
@@ -932,7 +930,6 @@ def boundary_from_three_points(self, vector):
         # Add OBB angle metadata (same pattern used by boundary_from_obb) so oriented boundaries
         # are correctly handled by LoopStructural alignment logic.
         try:
-            from numpy import full as np_full
             n_points = boundary_dict["vtk_obj"].points_number
             self.parent.boundary_coll.append_uid_property(
                 uid=uid, property_name="obb_angle", property_components=1
@@ -969,7 +966,7 @@ class BoundaryCollection(BaseCollection):
             "parent_uid": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "topology": "undef",
             "vtk_obj": None,
-            "properties_names": [],
+            "properties_names": [],  # at the moment this is used to store OBB rotation -> use a dynamic property instead
             "properties_components": [],
         }
 
