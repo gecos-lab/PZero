@@ -283,6 +283,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         self.actionListCRS.triggered.connect(lambda: CRS_list(self))
 
+        """Help actions -> slots"""
+        self.actionAbout.triggered.connect(self.show_about_dialog)
+
     def closeEvent(self, event):
         """Re-implement the standard closeEvent method of QWidget and ask (1) to save project, and (2) for confirmation to quit."""
         reply = QMessageBox.question(
@@ -333,6 +336,45 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.TextTerminal.appendPlainText(string)
         except:
             self.TextTerminal.appendPlainText("error printing in terminal")
+
+    def show_about_dialog(self):
+        from PySide6.QtWidgets import QDialog, QLabel, QVBoxLayout
+        from PySide6.QtGui import QPixmap
+        from PySide6.QtCore import Qt
+        import os
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("About PZero")
+        dialog.setFixedWidth(420)
+
+        layout = QVBoxLayout(dialog)
+
+        # Logo
+        image_path = QPixmap("images/Gecos_logo.jpg")
+        logo_label = QLabel()
+        pixmap = QPixmap(image_path)
+
+        if not pixmap.isNull():
+            logo_label.setPixmap(pixmap.scaledToWidth(220, Qt.SmoothTransformation))
+            logo_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(logo_label)
+
+        # Text
+        text_label = QLabel(
+            "<b>PZero</b> © 2020 Andrea Bistacchi<br><br>"
+            "Released under the <b>GNU AGPLv3</b> license.<br><br>"
+            "PZero is a Python open-source 3D geological modelling application "
+            "supporting explicit surface interpolation, advanced implicit modelling, "
+            "and standard geomodelling data management and analysis workflows."
+        )
+        text_label.setWordWrap(True)
+        text_label.setAlignment(Qt.AlignCenter)
+
+        layout.addWidget(text_label)
+
+        dialog.setLayout(layout)
+        dialog.exec()
+
 
     """Methods used to manage the entities shown in tables."""
 
