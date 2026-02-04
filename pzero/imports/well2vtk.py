@@ -225,8 +225,8 @@ def well2vtk(self, path=None):
 
         annotation_obj_attributes["properties_names"] = ann_keys
         annotation_obj_attributes["properties_components"] = components
-        annotation_obj_attributes["properties_types"] = types
-        annotation_obj_attributes["borehole"] = bore_obj_attributes["uid"]
+        # annotation_obj_attributes["properties_types"] = types
+        annotation_obj_attributes["parent_uid"] = bore_obj_attributes["uid"]
 
         annotation_obj_attributes["vtk_obj"] = annotation
         self.backgrnd_coll.add_entity_from_dict(entity_dict=annotation_obj_attributes)

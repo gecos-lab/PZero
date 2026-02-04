@@ -1,7 +1,7 @@
 """image2vtk.py
 PZero© Andrea Bistacchi"""
 
-import os
+from os import path as os_path
 
 from uuid import uuid4
 
@@ -109,7 +109,7 @@ def geo_image2vtk(self=None, in_file_name=None):
         # Create dictionary
         curr_obj_dict = {
             "uid": str(uuid4()),
-            "name": os.path.basename(in_file_name),
+            "name": os_path.basename(in_file_name),
             "topology": "MapImage",
             "parent_uid": None,
             "vtk_obj": map_image,
@@ -203,7 +203,7 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
         # Create dictionary
         curr_obj_dict = {
             "uid": str(uuid4()),
-            "name": os.path.basename(in_file_name),
+            "name": os_path.basename(in_file_name),
             "topology": "XsImage",
             "parent_uid": x_section_uid,
             "vtk_obj": xs_image,
