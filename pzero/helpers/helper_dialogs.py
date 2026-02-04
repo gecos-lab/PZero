@@ -774,6 +774,38 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         try:
             _, extension = os_path.splitext(path)
+            # Auto-set end row to last available line (max_rows - 1)
+            max_rows = None
+            if extension in (".las", ".laz"):
+                try:
+                    with lp_open(path) as f:
+                        max_rows = int(f.header.point_count)
+                except Exception:
+                    max_rows = None
+            else:
+                try:
+                    line_count = 0
+                    last_byte = b""
+                    with open(path, "rb") as f:
+                        while True:
+                            chunk = f.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            line_count += chunk.count(b"\n")
+                            last_byte = chunk[-1:]
+                    if line_count == 0 and os_path.getsize(path) > 0:
+                        max_rows = 1
+                    elif last_byte and last_byte != b"\n":
+                        max_rows = line_count + 1
+                    else:
+                        max_rows = line_count
+                except Exception:
+                    max_rows = None
+
+            if max_rows and max_rows > 0:
+                end_row = max(max_rows - 1, 0)
+                self.import_options_dict["EndRowspinBox"] = end_row
+                self.EndRowspinBox.setValue(end_row)
 
             if (
                 extension == ".las" or extension == ".laz"
