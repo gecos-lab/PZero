@@ -34,7 +34,7 @@ from ..entities_factory import (
 )
 from ..orientation_analysis import get_dip_dir_vectors
 from ..collections.xsection_collection import section_from_strike
-from ..collections.boundary_collection import boundary_from_points
+from ..collections.boundary_collection import boundary_from_points, boundary_from_three_points, boundary_from_obb
 
 
 class ViewMap(View2D):
