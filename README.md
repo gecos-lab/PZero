@@ -5,12 +5,11 @@
 
 ***PZero*** © 2020 by Andrea Bistacchi, released under [GNU AGPLv3 license](LICENSE.txt).
 
-&nbsp;
 <p align="center">
    <img src="images/pzero_logo.png"/>
 </p>
-&nbsp;
-&nbsp;
+
+
 
 ##
 ***PZero*** is a Python open-source 3D geological modelling application, leveraging various libraries, with a user-friendly graphical user interface allowing to perform most standard geomodelling data management and analysis tasks, explicit surface interpolation, and advanced implicit interpolation.
