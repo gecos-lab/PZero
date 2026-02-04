@@ -71,8 +71,31 @@ class DIMCollection(BaseCollection):
                         ignore_index=True,
                     )
                     refresh_prop_legend = True
-        if entity_dict["properties_names"]:
-            refresh_prop_legend = True
+            elif entity_dict["properties_components"][i] == 3:
+                for j in range(3):
+                    property_name = (
+                        entity_dict["properties_names"][i] + f"[{j}]"
+                    )
+                    if self.parent.prop_legend_df.loc[
+                        self.parent.prop_legend_df["property_name"]
+                        == property_name
+                    ].empty:
+                        # New Pandas >= 2.0.0
+                        self.parent.prop_legend_df = pd_concat(
+                            [
+                                self.parent.prop_legend_df,
+                                pd_DataFrame(
+                                    [
+                                        {
+                                            "property_name": property_name,
+                                            "colormap": self.default_colormap,
+                                        }
+                                    ]
+                                ),
+                            ],
+                            ignore_index=True,
+                        )
+                        refresh_prop_legend = True
         if refresh_prop_legend:
             self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the
