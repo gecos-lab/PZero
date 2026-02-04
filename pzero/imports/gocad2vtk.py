@@ -735,103 +735,106 @@ def gocad2vtk_section(
     self.print_terminal(f"Entities imported: {str(entity_counter)}")
 
     if not append_opt:
-        # Re-orient XSection only if it is a new one.
-        # Create a vtkAppendPolyData filter to merge all input vtk objects.
-        vtkappend = vtkAppendPolyData()
-        for uid in input_uids:
-            vtkappend.AddInputData(self.geol_coll.get_uid_vtk_obj(uid))
-        vtkappend.Update()
-        append_points = WrapDataObject(vtkappend.GetOutput()).Points
-
-        # Fit new XSection plane.
-        # new_xs_plane = Plane()
-        # new_xs_plane_origin = reference((0., 0., 0.))
-        # new_test = new_xs_plane.ComputeBestFittingPlane(append_points, new_xs_plane_origin, new_xs_plane_normal)
-        origin, normal = best_fitting_plane(append_points)
-        del vtkappend
-        del append_points
-        if normal[1] > 0:
-            # force NW-SE and SW-NE XSections -> azimuth in 2nd and 1st quadrant
-            normal = -normal
-        # force normal to be horizontal -> dip = 90 deg
-        normal[2] = 0
-        normal[0] /= np_sqrt(normal[0] ** 2 + normal[1] ** 2)
-        normal[1] /= np_sqrt(normal[0] ** 2 + normal[1] ** 2)
-        azimuth = np_rad2deg(np_arctan2(normal[0], normal[1])) - 90
-        if azimuth < 0:
-            azimuth += 360
-        # set normal, azimuth and dip in XSection
-        self.xsect_coll.set_uid_normal_x(x_section_uid, normal[0])
-        self.xsect_coll.set_uid_normal_y(x_section_uid, normal[1])
-        self.xsect_coll.set_uid_normal_z(x_section_uid, 0.0)
-        self.xsect_coll.set_uid_azimuth(x_section_uid, azimuth)
+        self.xsect_coll.fit_to_entities(self, xuid=None, fit_method="vertical")
     else:
-        # Get normal and origin from XSection if it is an old one.
-        normal = (
-            self.xsect_coll.get_uid_normal_x(x_section_uid),
-            self.xsect_coll.get_uid_normal_y(x_section_uid),
-            self.xsect_coll.get_uid_normal_z(x_section_uid),
+        reset_frame = options_dialog(
+            title="Legend frame",
+            message="Reset frame of cross-section to entities?",
+            yes_role="Yes",
+            no_role="No",
+            reject_role=None,
         )
-        origin = (
-            (
-                self.xsect_coll.get_uid_base_x(x_section_uid)
-                + self.xsect_coll.get_uid_end_x(x_section_uid)
-            )
-            / 2,
-            (
-                self.xsect_coll.get_uid_base_y(x_section_uid)
-                + self.xsect_coll.get_uid_end_y(x_section_uid)
-            )
-            / 2,
-            (
-                self.xsect_coll.get_uid_top(x_section_uid)
-                + self.xsect_coll.get_uid_bottom(x_section_uid)
-            )
-            / 2,
-        )
-        azimuth = self.xsect_coll.get_uid_azimuth(x_section_uid)
+        if reset_frame == 0:
+            self.xsect_coll.fit_to_entities(self, xuid=None, fit_method="frame")
 
-    # # In any case, project (force) new entities to section plane
-    # for uid in input_uids:
-    #     project2plane = vtkProjectPointsToPlane()
-    #     project2plane.SetProjectionTypeToSpecifiedPlane()
-    #     project2plane.SetNormal(normal)
-    #     project2plane.SetOrigin(origin)
-    #     project2plane.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
-    #     # ShallowCopy is the way to copy the new entity into the instance created at the beginning
-    #     self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "vtk_obj"].tolist()[0].ShallowCopy(project2plane.GetOutput())
-
-    # Create a vtkAppendPolyData filter to merge all vtk objects belonging to this XSection,
-    # including new and old entities for in case entities are appended to an old XSection.
-    vtkappend_all = vtkAppendPolyData()
-    for uid in self.geol_coll.df.loc[
-        self.geol_coll.df["parent_uid"] == x_section_uid, "uid"
-    ].tolist():
-        vtkappend_all.AddInputData(self.geol_coll.get_uid_vtk_obj(uid))
-    vtkappend_all.Update()
-    append_points_all = WrapDataObject(vtkappend_all.GetOutput()).Points
-    self.xsect_coll.set_uid_base_x(x_section_uid, min(append_points_all[:, 0]))
-    self.xsect_coll.set_uid_end_x(x_section_uid, max(append_points_all[:, 0]))
-    if azimuth <= 90:
-        # case for 1st quadrant
-        self.xsect_coll.set_uid_base_y(x_section_uid, min(append_points_all[:, 1]))
-        self.xsect_coll.set_uid_end_y(x_section_uid, max(append_points_all[:, 1]))
-    else:
-        # case for 2nd quadrant
-        self.xsect_coll.set_uid_base_y(x_section_uid, max(append_points_all[:, 1]))
-        self.xsect_coll.set_uid_end_y(x_section_uid, min(append_points_all[:, 1]))
-    self.xsect_coll.set_length(x_section_uid)
-    height_buffer = (max(append_points_all[:, 2]) - min(append_points_all[:, 2])) * 0.05
-    self.xsect_coll.set_uid_top(
-        x_section_uid, max(append_points_all[:, 2]) + height_buffer
-    )
-    self.xsect_coll.set_uid_bottom(
-        x_section_uid, min(append_points_all[:, 2]) - height_buffer
-    )
-    self.xsect_coll.set_width(x_section_uid)
-    del vtkappend_all
-    del append_points_all
-    self.xsect_coll.set_from_table(uid=x_section_uid)
+    # if not append_opt:
+    #     # Re-orient XSection only if it is a new one.
+    #     # Create a vtkAppendPolyData filter to merge all input vtk objects.
+    #     vtkappend = vtkAppendPolyData()
+    #     for uid in input_uids:
+    #         vtkappend.AddInputData(self.geol_coll.get_uid_vtk_obj(uid))
+    #     vtkappend.Update()
+    #     append_points = WrapDataObject(vtkappend.GetOutput()).Points
+    #
+    #     # Fit new XSection plane.
+    #     # new_xs_plane = Plane()
+    #     # new_xs_plane_origin = reference((0., 0., 0.))
+    #     # new_test = new_xs_plane.ComputeBestFittingPlane(append_points, new_xs_plane_origin, new_xs_plane_normal)
+    #     origin, normal = best_fitting_plane(append_points)
+    #     del vtkappend
+    #     del append_points
+    #     if normal[1] > 0:
+    #         # force NW-SE and SW-NE XSections -> strike in 2nd and 1st quadrant
+    #         normal = -normal
+    #     # force normal to be horizontal -> dip = 90 deg
+    #     normal[2] = 0
+    #     normal[0] /= np_sqrt(normal[0] ** 2 + normal[1] ** 2)
+    #     normal[1] /= np_sqrt(normal[0] ** 2 + normal[1] ** 2)
+    #     strike = np_rad2deg(np_arctan2(normal[0], normal[1])) - 90
+    #     if strike < 0:
+    #         strike += 360
+    #     # set normal, strike and dip in XSection
+    #     self.xsect_coll.set_uid_normal_x(x_section_uid, normal[0])
+    #     self.xsect_coll.set_uid_normal_y(x_section_uid, normal[1])
+    #     self.xsect_coll.set_uid_normal_z(x_section_uid, 0.0)
+    #     self.xsect_coll.set_uid_strike(x_section_uid, strike)
+    # else:
+    #     # Get normal and origin from XSection if it is an old one.
+    #     normal = (
+    #         self.xsect_coll.get_uid_normal_x(x_section_uid),
+    #         self.xsect_coll.get_uid_normal_y(x_section_uid),
+    #         self.xsect_coll.get_uid_normal_z(x_section_uid),
+    #     )
+    #     origin = (
+    #         self.xsect_coll.get_uid_origin_x(x_section_uid),
+    #         self.xsect_coll.get_uid_origin_y(x_section_uid),
+    #         self.xsect_coll.get_uid_origin_z(x_section_uid),
+    #     )
+    #     strike = self.xsect_coll.get_uid_strike(x_section_uid)
+    #
+    # # # In any case, project (force) new entities to section plane
+    # # for uid in input_uids:
+    # #     project2plane = vtkProjectPointsToPlane()
+    # #     project2plane.SetProjectionTypeToSpecifiedPlane()
+    # #     project2plane.SetNormal(normal)
+    # #     project2plane.SetOrigin(origin)
+    # #     project2plane.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
+    # #     # ShallowCopy is the way to copy the new entity into the instance created at the beginning
+    # #     self.geol_coll.df.loc[self.geol_coll.df["uid"] == uid, "vtk_obj"].tolist()[0].ShallowCopy(project2plane.GetOutput())
+    #
+    # # Create a vtkAppendPolyData filter to merge all vtk objects belonging to this XSection,
+    # # including new and old entities in case entities are appended to an old XSection.
+    # vtkappend_all = vtkAppendPolyData()
+    # for uid in self.geol_coll.df.loc[
+    #     self.geol_coll.df["parent_uid"] == x_section_uid, "uid"
+    # ].tolist():
+    #     vtkappend_all.AddInputData(self.geol_coll.get_uid_vtk_obj(uid))
+    # vtkappend_all.Update()
+    # append_points_all = WrapDataObject(vtkappend_all.GetOutput()).Points
+    # self.xsect_coll.set_uid_origin_x(x_section_uid, min(append_points_all[:, 0]))
+    # # self.xsect_coll.set_uid_end_x(x_section_uid, max(append_points_all[:, 0]))
+    # if strike <= 90:
+    #     # case for 1st quadrant
+    #     self.xsect_coll.set_uid_origin_y(x_section_uid, min(append_points_all[:, 1]))
+    #     # self.xsect_coll.set_uid_end_y(x_section_uid, max(append_points_all[:, 1]))
+    # else:
+    #     # case for 2nd quadrant
+    #     self.xsect_coll.set_uid_origin_y(x_section_uid, max(append_points_all[:, 1]))
+    #     # self.xsect_coll.set_uid_end_y(x_section_uid, min(append_points_all[:, 1]))
+    # self.xsect_coll.set_length(
+    #     x_section_uid
+    # )  # THIS MUST BE REIMPLEMENTED _____________________________
+    # height_buffer = (max(append_points_all[:, 2]) - min(append_points_all[:, 2])) * 0.05
+    # self.xsect_coll.set_uid_top(
+    #     x_section_uid, max(append_points_all[:, 2]) + height_buffer
+    # )
+    # self.xsect_coll.set_uid_bottom(
+    #     x_section_uid, min(append_points_all[:, 2]) - height_buffer
+    # )
+    # self.xsect_coll.set_width(x_section_uid)
+    # del vtkappend_all
+    # del append_points_all
+    # self.xsect_coll.set_from_table(uid=x_section_uid)
 
 
 def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):

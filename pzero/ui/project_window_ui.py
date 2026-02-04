@@ -87,8 +87,8 @@ class Ui_ProjectWindow(object):
         self.actionImportSHP.setObjectName("actionImportSHP")
         self.actionImportDEM = QAction(ProjectWindow)
         self.actionImportDEM.setObjectName("actionImportDEM")
-        self.actionImportOrthoImage = QAction(ProjectWindow)
-        self.actionImportOrthoImage.setObjectName("actionImportOrthoImage")
+        self.actionImportMapImage = QAction(ProjectWindow)
+        self.actionImportMapImage.setObjectName("actionImportMapImage")
         self.actionImportXSectionImage = QAction(ProjectWindow)
         self.actionImportXSectionImage.setObjectName("actionImportXSectionImage")
         self.actionImportWellData = QAction(ProjectWindow)
@@ -405,7 +405,7 @@ class Ui_ProjectWindow(object):
         self.menuFile.addAction(self.actionImportPyVista)
         self.menuFile.addAction(self.actionImportSHP)
         self.menuFile.addAction(self.actionImportDEM)
-        self.menuFile.addAction(self.actionImportOrthoImage)
+        self.menuFile.addAction(self.actionImportMapImage)
         self.menuFile.addAction(self.actionImportXSectionImage)
         self.menuFile.addAction(self.actionImportWellData)
         self.menuFile.addAction(self.actionImportSEGY)
@@ -509,8 +509,8 @@ class Ui_ProjectWindow(object):
         self.actionImportDEM.setText(
             QCoreApplication.translate("ProjectWindow", "Import DEM", None)
         )
-        self.actionImportOrthoImage.setText(
-            QCoreApplication.translate("ProjectWindow", "Import OrthoImage", None)
+        self.actionImportMapImage.setText(
+            QCoreApplication.translate("ProjectWindow", "Import Map Image", None)
         )
         self.actionImportXSectionImage.setText(
             QCoreApplication.translate("ProjectWindow", "Import X-section Image", None)

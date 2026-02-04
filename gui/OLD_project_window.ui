@@ -551,7 +551,7 @@
     <addaction name="actionImportVedo"/>
     <addaction name="actionImportSHP"/>
     <addaction name="actionImportDEM"/>
-    <addaction name="actionImportOrthoImage"/>
+    <addaction name="actionImportMapImage"/>
     <addaction name="actionImportXsectionImage"/>
     <addaction name="actionImportWellData"/>
     <addaction name="actionImportSEGY"/>
@@ -745,9 +745,9 @@
     <string>Import DEM</string>
    </property>
   </action>
-  <action name="actionImportOrthoImage">
+  <action name="actionImportMapImage">
    <property name="text">
-    <string>Import OrthoImage</string>
+    <string>Import MapImage</string>
    </property>
   </action>
   <action name="actionEditEntityRemove">

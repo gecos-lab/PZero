@@ -7,6 +7,10 @@ from copy import deepcopy
 
 from datetime import datetime
 
+from numpy import cos as np_cos
+from numpy import pi as np_pi
+from numpy import sin as np_sin
+
 from PySide6.QtCore import Signal as pyqtSignal
 from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QMainWindow, QMessageBox
@@ -212,7 +216,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportPC.triggered.connect(self.import_PC)
         self.actionImportSHP.triggered.connect(self.import_SHP)
         self.actionImportDEM.triggered.connect(self.import_DEM)
-        self.actionImportOrthoImage.triggered.connect(self.import_mapimage)
+        self.actionImportMapImage.triggered.connect(self.import_mapimage)
         self.actionImportXSectionImage.triggered.connect(self.import_xsimage)
         self.actionImportWellData.triggered.connect(self.import_welldata)
         self.actionImportSEGY.triggered.connect(self.import_SEGY)
@@ -1715,22 +1719,107 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 # reindex new_dom_coll_df to catch any problem with non-consecutive indices
                 new_xsect_coll_df.reset_index(drop=True, inplace=True)
                 if not new_xsect_coll_df.empty:
-                    # keep this workaround until x-section table is simplified by removing redundant columns ______________
-                    if not "width" in new_xsect_coll_df:
-                        new_xsect_coll_df.insert(
-                            15,
-                            "width",
-                            new_xsect_coll_df.top - new_xsect_coll_df.bottom,
-                        )
-                        self.print_terminal("column width added to xsect table")
+                    if not "height" in new_xsect_coll_df:
+                        # case for old projects before simplification of cross-section collection columns
+                        if "azimuth" in new_xsect_coll_df.columns:
+                            new_xsect_coll_df.rename(
+                                columns={"azimuth": "strike"}, inplace=True
+                            )
+                            self.print_terminal(
+                                "column azimuth renamed as strike in x-section table"
+                            )
+                        if not "parent_uid" in new_xsect_coll_df.columns:
+                            new_xsect_coll_df["parent_uid"] = new_xsect_coll_df["uid"]
+                            self.print_terminal(
+                                "column top renamed as origin_z in x-section table"
+                            )
+
+                        if not "width" in new_xsect_coll_df:
+                            # case for very old projects, before the introduction of inclined cross-sections
+                            # these sections have the base point on top
+                            if "base_x" in new_xsect_coll_df.columns:
+                                new_xsect_coll_df.rename(
+                                    columns={"base_x": "origin_x"}, inplace=True
+                                )
+                                self.print_terminal(
+                                    "column base_x renamed as origin_x in x-section table"
+                                )
+                            if "base_y" in new_xsect_coll_df.columns:
+                                new_xsect_coll_df.rename(
+                                    columns={"base_y": "origin_y"}, inplace=True
+                                )
+                                self.print_terminal(
+                                    "column base_y renamed as origin_y in x-section table"
+                                )
+                            if "top" in new_xsect_coll_df.columns:
+                                new_xsect_coll_df.insert(
+                                    15,
+                                    "height",
+                                    abs(new_xsect_coll_df.top - new_xsect_coll_df.bottom),
+                                )
+                                self.print_terminal("column height added to xsect table")
+                            if "top" in new_xsect_coll_df.columns:
+                                if "bottom" in new_xsect_coll_df.columns:
+                                    new_xsect_coll_df.loc[new_xsect_coll_df["bottom"] > new_xsect_coll_df["top"], "top"] = new_xsect_coll_df["bottom"]
+                                new_xsect_coll_df.rename(
+                                    columns={"top": "origin_z"}, inplace=True
+                                )
+                                self.print_terminal(
+                                    "column top renamed as origin_z in x-section table"
+                                )
+                        else:
+                            # case for intermediate age projects, after the introduction of inclined cross-sections,
+                            # but before columns simplification,
+                            # these sections have the base point on bottom, that must be projected to the
+                            # top along dip, and width was ok, and must be renames to height
+                            new_xsect_coll_df.rename(
+                                columns={"width": "height"}, inplace=True
+                            )
+                            self.print_terminal(
+                                "column width renamed as height in x-section table"
+                            )
+                            new_xsect_coll_df.rename(
+                                columns={"base_x": "origin_x"}, inplace=True
+                            )
+                            self.print_terminal(
+                                "column base_x renamed as origin_x in x-section table"
+                            )
+                            new_xsect_coll_df.rename(
+                                columns={"base_y": "origin_y"}, inplace=True
+                            )
+                            self.print_terminal(
+                                "column base_y renamed as origin_y in x-section table"
+                            )
+                            new_xsect_coll_df.rename(
+                                columns={"base_z": "origin_z"}, inplace=True
+                            )
+                            self.print_terminal(
+                                "column base_z renamed as origin_z in x-section table"
+                            )
+                            new_xsect_coll_df["origin_x"] += (
+                                new_xsect_coll_df["height"]
+                                * np_cos(new_xsect_coll_df["dip"] * np_pi / 180)
+                                * np_cos((new_xsect_coll_df["strike"] + 180 % 360) * np_pi / 180)
+                            )
+                            new_xsect_coll_df["origin_y"] += (
+                                new_xsect_coll_df["height"]
+                                * np_cos(new_xsect_coll_df["dip"] * np_pi / 180)
+                                * np_sin((new_xsect_coll_df["strike"] + 180 % 360) * np_pi / 180)
+                            )
+                            new_xsect_coll_df["origin_z"] += (
+                                new_xsect_coll_df["height"]
+                                * np_sin(new_xsect_coll_df["dip"] * np_pi / 180)
+                            )
 
                     for new_column in new_xsect_coll_df.columns.values.tolist():
+                        # drop columns not included in the standard dictionary
                         if new_column not in self.xsect_coll.df.columns.values.tolist():
                             new_xsect_coll_df.drop(new_column, axis=1, inplace=True)
-                            self.print_terminal(
-                                f"column {new_column} removed from xsect table"
-                            )
+                        self.print_terminal(
+                            f"column {new_column} removed from xsect table"
+                        )
                     for column in self.xsect_coll.df.columns.values.tolist():
+                        # add missing columns with default values
                         if column not in new_xsect_coll_df.columns.values.tolist():
                             missing_column = pd_DataFrame(
                                 [{column: self.xsect_coll.entity_dict[column]}]
@@ -1748,6 +1837,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     # reorder columns
                     new_xsect_coll_df = new_xsect_coll_df[self.xsect_coll.df.columns]
 
+                    # finally, set the imported dataframe into the project dataframe
                     self.xsect_coll.df = new_xsect_coll_df
 
                 for uid in self.xsect_coll.df["uid"].tolist():
@@ -2578,7 +2668,28 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             # Update legend.
             self.prop_legend.update_widget(parent=self)
 
-        except:
+
+        except BaseException as e:
+            # Get current system exception
+            import sys
+            import traceback
+
+            ex_type, ex_value, ex_traceback = sys.exc_info()
+
+            # Extract unformatter stack traces as tuples
+            trace_back = traceback.extract_tb(ex_traceback)
+
+            # Format stacktrace
+            stack_trace = list()
+
+            for trace in trace_back:
+                stack_trace.append(
+                    "File : %s , Line : %d, Func.Name : %s, Message : %s" % (trace[0], trace[1], trace[2], trace[3]))
+
+            print("Exception type : %s " % ex_type.__name__)
+            print("Exception message : %s" % ex_value)
+            print("Stack trace : %s" % stack_trace)
+
             self.print_terminal("Error - tried to open invalid project.")
 
     # ---- Methods used to import entities from other file formats. ----

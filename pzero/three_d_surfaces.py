@@ -1666,7 +1666,7 @@ def intersection_xs(self):
                             (cutter_bounds[1] - cutter_bounds[0]) ** 2
                             + (cutter_bounds[3] - cutter_bounds[2]) ** 2
                         ) / (dim_W - 1)
-                        azimuth = self.xsect_coll.get_uid_azimuth(xsect_uid)
+                        strike = self.xsect_coll.get_uid_strike(xsect_uid)
                         # The direction matrix is a 3x3 transformation matrix supporting scaling and rotation.
                         # (double  	e00,
                         # double  	e01,
@@ -1677,53 +1677,53 @@ def intersection_xs(self):
                         # double  	e20,
                         # double  	e21,
                         # double  	e22)
-                        if azimuth <= 90:
+                        if strike <= 90:
                             origin = [
                                 cutter_bounds[0],
                                 cutter_bounds[2],
                                 cutter_bounds[4],
                             ]
                             direction_matrix = [
-                                np_sin(azimuth * np_pi / 180),
+                                np_sin(strike * np_pi / 180),
                                 0,
-                                -(np_cos(azimuth * np_pi / 180)),
-                                np_cos(azimuth * np_pi / 180),
+                                -(np_cos(strike * np_pi / 180)),
+                                np_cos(strike * np_pi / 180),
                                 0,
-                                np_sin(azimuth * np_pi / 180),
+                                np_sin(strike * np_pi / 180),
                                 0,
                                 1,
                                 0,
                             ]
-                        elif azimuth <= 180:
+                        elif strike <= 180:
                             origin = [
                                 cutter_bounds[1],
                                 cutter_bounds[2],
                                 cutter_bounds[4],
                             ]
                             direction_matrix = [
-                                -(np_sin(azimuth * np_pi / 180)),
+                                -(np_sin(strike * np_pi / 180)),
                                 0,
-                                -(np_cos(azimuth * np_pi / 180)),
-                                -(np_cos(azimuth * np_pi / 180)),
+                                -(np_cos(strike * np_pi / 180)),
+                                -(np_cos(strike * np_pi / 180)),
                                 0,
-                                np_sin(azimuth * np_pi / 180),
+                                np_sin(strike * np_pi / 180),
                                 0,
                                 1,
                                 0,
                             ]
-                        elif azimuth <= 270:
+                        elif strike <= 270:
                             origin = [
                                 cutter_bounds[0],
                                 cutter_bounds[2],
                                 cutter_bounds[4],
                             ]
                             direction_matrix = [
-                                -(np_sin(azimuth * np_pi / 180)),
+                                -(np_sin(strike * np_pi / 180)),
                                 0,
-                                -(np_cos(azimuth * np_pi / 180)),
-                                -(np_cos(azimuth * np_pi / 180)),
+                                -(np_cos(strike * np_pi / 180)),
+                                -(np_cos(strike * np_pi / 180)),
                                 0,
-                                np_sin(azimuth * np_pi / 180),
+                                np_sin(strike * np_pi / 180),
                                 0,
                                 1,
                                 0,
@@ -1735,12 +1735,12 @@ def intersection_xs(self):
                                 cutter_bounds[4],
                             ]
                             direction_matrix = [
-                                np_sin(azimuth * np_pi / 180),
+                                np_sin(strike * np_pi / 180),
                                 0,
-                                -(np_cos(azimuth * np_pi / 180)),
-                                np_cos(azimuth * np_pi / 180),
+                                -(np_cos(strike * np_pi / 180)),
+                                np_cos(strike * np_pi / 180),
                                 0,
-                                np_sin(azimuth * np_pi / 180),
+                                np_sin(strike * np_pi / 180),
                                 0,
                                 1,
                                 0,
@@ -1842,7 +1842,7 @@ def intersection_xs(self):
 def project_2_dem(self):
     """vtkProjectedTerrainPath projects an input polyline onto a terrain image.
     HOW TO USE: at the moment, as vtkProjectedTerrainPath takes vtkImageData as input, we need to import
-    DEM file also as OrthoImage (--> as vtkImageData) and to use this entity as source data for the
+    DEM file also as MapImage (--> as vtkImageData) and to use this entity as source data for the
     projection"""
     # self.print_terminal("Vertical Projection: project target lines onto a terrain image")
     if self.shown_table != "tabGeology":
@@ -1892,7 +1892,7 @@ def project_2_dem(self):
     #     dem_to_image.Update()
     #     print("dem_to_image ", dem_to_image)
     #     print("dem_to_image.GetOutput() ", dem_to_image.GetOutput())
-    #     Ask for the Orthoimage, source of the projection
+    #     Ask for the MapImage, source of the projection
     #     image_list_uids = self.image_coll.get_uids()
     #     image_list_names = []
     #     for uid in image_list_uids:
@@ -2082,18 +2082,25 @@ def project_2_xs(self):
         proj_plunge = -proj_plunge
     # Check for projection trend parallel to cross section.
     if (
-        abs(self.xsect_coll.get_uid_azimuth(xs_uid) - proj_trend) < 10.0
-        or abs(self.xsect_coll.get_uid_azimuth(xs_uid) - 180.0 - proj_trend) < 10.0
+        abs(self.xsect_coll.get_uid_strike(xs_uid) - proj_trend) < 10.0
+        or abs(self.xsect_coll.get_uid_strike(xs_uid) - 180.0 - proj_trend) < 10.0
     ):
         self.print_terminal(
             "Plunge too close to being parallel to XSection (angle < 10°)"
         )
         return
-    # Get cross section start and end points (float64 needed for "t" afterwards).
-    xa = np_float64(self.xsect_coll.get_uid_base_x(xs_uid))
-    ya = np_float64(self.xsect_coll.get_uid_base_y(xs_uid))
-    xb = np_float64(self.xsect_coll.get_uid_end_x(xs_uid))
-    yb = np_float64(self.xsect_coll.get_uid_end_y(xs_uid))
+    # # Get cross section start and end points (float64 needed for "t" afterwards).
+    # xa = np_float64(self.xsect_coll.get_uid_origin_x(xs_uid))
+    # ya = np_float64(self.xsect_coll.get_uid_origin_y(xs_uid))
+    # xb = np_float64(self.xsect_coll.get_uid_end_x(xs_uid))
+    # yb = np_float64(self.xsect_coll.get_uid_end_y(xs_uid))
+    # Get cross section origin and normals (float64 needed for "t" afterwards).
+    ox = np_float64(self.xsect_coll.get_uid_origin_x(xs_uid))
+    oy = np_float64(self.xsect_coll.get_uid_origin_y(xs_uid))
+    oz = np_float64(self.xsect_coll.get_uid_origin_z(xs_uid))
+    nx = np_float64(self.xsect_coll.get_uid_normal_x(xs_uid))
+    ny = np_float64(self.xsect_coll.get_uid_normal_y(xs_uid))
+    nz = np_float64(self.xsect_coll.get_uid_normal_z(xs_uid))
 
     # Calculate projection direction cosines (float64 needed for "t" afterwards).
     alpha = np_float64(
@@ -2137,9 +2144,10 @@ def project_2_xs(self):
         xo = out_vtk.points_X.astype(np_float64)
         yo = out_vtk.points_Y.astype(np_float64)
         zo = out_vtk.points_Z.astype(np_float64)
-        t = (-xo * (yb - ya) - yo * (xa - xb) - ya * xb + yb * xa) / (
-            alpha * (yb - ya) + beta * (xa - xb)
-        )
+        # t = (-xo * (yb - ya) - yo * (xa - xb) - ya * xb + yb * xa) / (
+        #     alpha * (yb - ya) + beta * (xa - xb)
+        # )
+        t = (nx * (ox - xo) + ny * (oy - yo) + nz * (oz - zo)) / (nx * alpha + ny * beta + nz * gamma)
 
         out_vtk.points_X[:] = (xo + alpha * t).astype(np_float32)
         out_vtk.points_Y[:] = (yo + beta * t).astype(np_float32)

@@ -296,9 +296,12 @@ def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
     return output_dict
 
 
-def input_checkbox_dialog(title="title", label="label", choice_list=None):
-    """Open a dialog with a text line explaining the widget, followed by a list of non-exclusive checkboxes."""
-    # Create main window widget that will host the scroll area
+def input_checkbox_dialog(
+    title="title", label="label", choice_list=None, exclusive=False
+):
+    """Open a dialog with a text line explaining the widget, followed by a list of checkboxes.
+    If exclusive=True, only one checkbox can be selected at a time (radio button behavior).
+    """
     widget = QWidget()
     widget.setWindowTitle(title)
 
@@ -324,7 +327,14 @@ def input_checkbox_dialog(title="title", label="label", choice_list=None):
     label_line = QLabel(widget)
     label_line.setText(label)
     gridLayout.addWidget(label_line, 1, 1)
-    i = 1
+
+    def handle_checkbox_click(clicked_element):
+        """Handle exclusive checkbox behavior"""
+        if exclusive and objects_qt[clicked_element][0].isChecked():
+            for element in choice_list:
+                if element != clicked_element:
+                    objects_qt[element][0].setChecked(False)
+
     # FOR loop that builds checkboxes according to the choice_list
     for element in choice_list:
         # Create dynamic variables.
@@ -332,15 +342,20 @@ def input_checkbox_dialog(title="title", label="label", choice_list=None):
         # Create QCheckBoxes.
         objects_qt[element][0] = QCheckBox(content)
         objects_qt[element][0].setText(element)  # set text for the checkbox
-        gridLayout.addWidget(objects_qt[element][0], i + 1, 1)
+        if exclusive:
+            objects_qt[element][0].clicked.connect(
+                lambda checked, el=element: handle_checkbox_click(el)
+            )
+        gridLayout.addWidget(objects_qt[element][0], i + 2, 1)
         i += 1
 
-    # Create a horizontal area for OK/Cancel buttons (below the scroll area)
-    from PySide6.QtWidgets import QHBoxLayout
+    # Set the first checkbox as checked if exclusive is True
+    if exclusive and choice_list:
+        objects_qt[choice_list[0]][0].setChecked(True)
 
-    button_layout = QHBoxLayout()
-    # Create OK Button, add it to the button layout and set name and state
-    button_ok = QPushButton("OK", widget)
+    # Create OK Button, add it to the grid layout an set name and state
+    button_ok = QPushButton(widget)
+    gridLayout.addWidget(button_ok, i + 3, 1)
     button_ok.setAutoDefault(True)
     button_layout.addWidget(button_ok)
     # Cancel Button, add it to the button layout and set name and state
@@ -368,15 +383,20 @@ def input_checkbox_dialog(title="title", label="label", choice_list=None):
     button_cancel.clicked.connect(loop.quit)  # End the QEventLoop on Cancel
     loop.exec_()  # Execute the QEventLoop
 
-    # When the QEventLoop is closed, the typed text is collected
+    # When the QEventLoop is closed, the output ir returned as a list if multiple checkboxes are checked,
+    # or as a string if only one checkbox is checked, and None if Cancel is pressed or nothing is checked.
     if not objects_qt:
         return
     else:
-        output_dict = []
+        output_list = []
         for element in choice_list:
             if objects_qt[element][0].isChecked():
-                output_dict.append(element)
-    return output_dict
+                output_list.append(element)
+        if len(output_list) == 1:
+            output = output_list[0]
+        else:
+            output = output_list
+    return output
 
 
 def general_input_dialog(title="title", input_dict=None):

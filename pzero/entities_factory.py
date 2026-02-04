@@ -1130,10 +1130,10 @@ class XsVertexSet(VertexSet):
     def points_xs_app_dip(self):
         """Returns apparent dip as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
-            xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+            xs_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
             app_dip = np_arctan(
                 np_tan(self.points_map_dip * np_pi / 180)
-                * np_cos((self.points_map_dip_azimuth - xs_azimuth) * np_pi / 180)
+                * np_cos((self.points_map_dip_azimuth - xs_strike) * np_pi / 180)
                 * 180
                 / np_pi
             )
@@ -1145,10 +1145,10 @@ class XsVertexSet(VertexSet):
     def points_xs_app_plunge(self):
         """Returns apparent plunge as Numpy array for map plotting if points have Lineations property."""
         if "Lineations" in self.point_data_keys:
-            xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+            xs_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
             app_plunge = np_arctan(
                 np_tan(self.points_map_plunge * np_pi / 180)
-                * np_cos((self.points_map_trend - xs_azimuth) * np_pi / 180)
+                * np_cos((self.points_map_trend - xs_strike) * np_pi / 180)
                 * 180
                 / np_pi
             )
@@ -1194,10 +1194,10 @@ class XsPolyLine(PolyLine):
     def points_xs_app_dip(self):
         """Returns apparent dip as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
-            xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+            xs_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
             app_dip = np_arctan(
                 np_tan(self.points_map_dip * np_pi / 180)
-                * np_cos((self.points_map_dip_azimuth - xs_azimuth) * np_pi / 180)
+                * np_cos((self.points_map_dip_azimuth - xs_strike) * np_pi / 180)
                 * 180
                 / np_pi
             )
@@ -1209,10 +1209,10 @@ class XsPolyLine(PolyLine):
     def points_xs_app_plunge(self):
         """Returns apparent plunge as Numpy array for map plotting if points have Lineations property."""
         if "Lineations" in self.point_data_keys:
-            xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+            xs_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
             app_plunge = np_arctan(
                 np_tan(self.points_map_plunge * np_pi / 180)
-                * np_cos((self.points_map_trend - xs_azimuth) * np_pi / 180)
+                * np_cos((self.points_map_trend - xs_strike) * np_pi / 180)
                 * 180
                 / np_pi
             )
@@ -1340,10 +1340,10 @@ class XsTriSurf(TriSurf):
     def points_xs_app_dip(self):
         """Returns apparent dip as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
-            xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+            xs_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
             app_dip = np_arctan(
                 np_tan(self.points_map_dip * np_pi / 180)
-                * np_cos((self.points_map_dip_azimuth - xs_azimuth) * np_pi / 180)
+                * np_cos((self.points_map_dip_azimuth - xs_strike) * np_pi / 180)
                 * 180
                 / np_pi
             )
@@ -1355,10 +1355,10 @@ class XsTriSurf(TriSurf):
     def points_xs_app_plunge(self):
         """Returns apparent plunge as Numpy array for map plotting if points have Lineations property."""
         if "Lineations" in self.point_data_keys:
-            xs_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
+            xs_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
             app_plunge = np_arctan(
                 np_tan(self.points_map_plunge * np_pi / 180)
-                * np_cos((self.points_map_trend - xs_azimuth) * np_pi / 180)
+                * np_cos((self.points_map_trend - xs_strike) * np_pi / 180)
                 * 180
                 / np_pi
             )
@@ -1748,79 +1748,79 @@ class XsVoxet(Voxet):
     def rows_n(self):
         return self.GetDimensions()[1]
 
-    @property
-    def xs_bounds(self):
-        """Returns a list with W_min, W_max, Z_min, Z_max in the cross section reference frame"""
-        x_section_base_x = self.parent.xsect_coll.get_uid_base_x(self.x_section_uid)
-        x_section_base_y = self.parent.xsect_coll.get_uid_base_y(self.x_section_uid)
-        x_section_end_x = self.parent.xsect_coll.get_uid_end_x(self.x_section_uid)
-        x_section_end_y = self.parent.xsect_coll.get_uid_end_y(self.x_section_uid)
-        x_section_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
-        if (0 <= x_section_azimuth <= 90) or (180 < x_section_azimuth <= 270):
-            sense_min = np_sign(
-                (self.bounds[0] - x_section_base_x)
-                * (x_section_end_x - x_section_base_x)
-                + (self.bounds[2] - x_section_base_y)
-                * (x_section_end_y - x_section_base_y)
-            )
-            sense_max = np_sign(
-                (self.bounds[1] - x_section_base_x)
-                * (x_section_end_x - x_section_base_x)
-                + (self.bounds[3] - x_section_base_y)
-                * (x_section_end_y - x_section_base_y)
-            )
-            W_min = (
-                np_sqrt(
-                    (self.bounds[0] - x_section_base_x) ** 2
-                    + (self.bounds[2] - x_section_base_y) ** 2
-                )
-                * sense_min
-            )
-            W_max = (
-                np_sqrt(
-                    (self.bounds[1] - x_section_base_x) ** 2
-                    + (self.bounds[3] - x_section_base_y) ** 2
-                )
-                * sense_max
-            )
-        else:
-            sense_min = np_sign(
-                (self.bounds[0] - x_section_base_x)
-                * (x_section_end_x - x_section_base_x)
-                + (self.bounds[3] - x_section_base_y)
-                * (x_section_end_y - x_section_base_y)
-            )
-            sense_max = np_sign(
-                (self.bounds[1] - x_section_base_x)
-                * (x_section_end_x - x_section_base_x)
-                + (self.bounds[2] - x_section_base_y)
-                * (x_section_end_y - x_section_base_y)
-            )
-            W_min = (
-                np_sqrt(
-                    (self.bounds[0] - x_section_base_x) ** 2
-                    + (self.bounds[3] - x_section_base_y) ** 2
-                )
-                * sense_min
-            )
-            W_max = (
-                np_sqrt(
-                    (self.bounds[1] - x_section_base_x) ** 2
-                    + (self.bounds[2] - x_section_base_y) ** 2
-                )
-                * sense_max
-            )
-        Z_min = self.bounds[4]
-        Z_max = self.bounds[5]
-        if W_min > W_max:
-            W_tmp = W_max
-            W_max = W_min
-            W_min = W_tmp
-        if Z_min > Z_max:
-            Z_tmp = Z_max
-            Z_max = Z_min
-            Z_min = Z_tmp
-        return [W_min, W_max, Z_min, Z_max]
+    # @property
+    # def xs_bounds(self):
+    #     """Returns a list with W_min, W_max, Z_min, Z_max in the cross section reference frame"""
+    #     x_section_origin_x = self.parent.xsect_coll.get_uid_origin_x(self.x_section_uid)
+    #     x_section_origin_y = self.parent.xsect_coll.get_uid_origin_y(self.x_section_uid)
+    #     x_section_end_x = self.parent.xsect_coll.get_uid_end_x(self.x_section_uid)
+    #     x_section_end_y = self.parent.xsect_coll.get_uid_end_y(self.x_section_uid)
+    #     x_section_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
+    #     if (0 <= x_section_strike <= 90) or (180 < x_section_strike <= 270):
+    #         sense_min = np_sign(
+    #             (self.bounds[0] - x_section_origin_x)
+    #             * (x_section_end_x - x_section_origin_x)
+    #             + (self.bounds[2] - x_section_origin_y)
+    #             * (x_section_end_y - x_section_origin_y)
+    #         )
+    #         sense_max = np_sign(
+    #             (self.bounds[1] - x_section_origin_x)
+    #             * (x_section_end_x - x_section_origin_x)
+    #             + (self.bounds[3] - x_section_origin_y)
+    #             * (x_section_end_y - x_section_origin_y)
+    #         )
+    #         W_min = (
+    #             np_sqrt(
+    #                 (self.bounds[0] - x_section_origin_x) ** 2
+    #                 + (self.bounds[2] - x_section_origin_y) ** 2
+    #             )
+    #             * sense_min
+    #         )
+    #         W_max = (
+    #             np_sqrt(
+    #                 (self.bounds[1] - x_section_origin_x) ** 2
+    #                 + (self.bounds[3] - x_section_origin_y) ** 2
+    #             )
+    #             * sense_max
+    #         )
+    #     else:
+    #         sense_min = np_sign(
+    #             (self.bounds[0] - x_section_origin_x)
+    #             * (x_section_end_x - x_section_origin_x)
+    #             + (self.bounds[3] - x_section_origin_y)
+    #             * (x_section_end_y - x_section_origin_y)
+    #         )
+    #         sense_max = np_sign(
+    #             (self.bounds[1] - x_section_origin_x)
+    #             * (x_section_end_x - x_section_origin_x)
+    #             + (self.bounds[2] - x_section_origin_y)
+    #             * (x_section_end_y - x_section_origin_y)
+    #         )
+    #         W_min = (
+    #             np_sqrt(
+    #                 (self.bounds[0] - x_section_origin_x) ** 2
+    #                 + (self.bounds[3] - x_section_origin_y) ** 2
+    #             )
+    #             * sense_min
+    #         )
+    #         W_max = (
+    #             np_sqrt(
+    #                 (self.bounds[1] - x_section_origin_x) ** 2
+    #                 + (self.bounds[2] - x_section_origin_y) ** 2
+    #             )
+    #             * sense_max
+    #         )
+    #     Z_min = self.bounds[4]
+    #     Z_max = self.bounds[5]
+    #     if W_min > W_max:
+    #         W_tmp = W_max
+    #         W_max = W_min
+    #         W_min = W_tmp
+    #     if Z_min > Z_max:
+    #         Z_tmp = Z_max
+    #         Z_max = Z_min
+    #         Z_min = Z_tmp
+    #     return [W_min, W_max, Z_min, Z_max]
 
     def image_data(self, show_property=None):
         # _____________________ THERE WAS A NOTE SAYING "CHECK THIS" BUT IT IS PROBABLY OK
@@ -2509,8 +2509,22 @@ class MapImage(Image):
 
     @property
     def frame(self):
-        """Create rectangular frame to be textured.
-        .bounds is a list with xmin, xmax, ymin, ymax, zmin, zmax."""
+        """
+        Create rectangular frame to be textured, recalling that
+        - in image coords the origin is upper left
+        - .bounds is a list with xmin [0], xmax [1], ymin [2], ymax [3], zmin [4], zmax [5].
+
+        xmin,ymax ------ xmax,ymax
+            |                |
+            |                |
+        xmin,ymin ------ xmax,ymin
+
+        [0],[3] ------ [1],[3]
+           |              |
+           |              |
+        [0],[2] ------ [1],[2]
+
+        """
         points = np_array(
             [
                 [self.bounds[0], self.bounds[3], self.bounds[4]],
@@ -2557,95 +2571,110 @@ class XsImage(Image):
     def rows_n(self):
         return self.V_n
 
-    @property
-    def xs_bounds(self):
-        """Returns a list with W_min, W_max, Z_min, Z_max in the cross section reference frame"""
-        x_section_base_x = self.parent.xsect_coll.get_uid_base_x(self.x_section_uid)
-        x_section_base_y = self.parent.xsect_coll.get_uid_base_y(self.x_section_uid)
-        x_section_end_x = self.parent.xsect_coll.get_uid_end_x(self.x_section_uid)
-        x_section_end_y = self.parent.xsect_coll.get_uid_end_y(self.x_section_uid)
-        x_section_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
-        if (0 <= x_section_azimuth <= 90) or (180 < x_section_azimuth <= 270):
-            sense_min = np_sign(
-                (self.bounds[0] - x_section_base_x)
-                * (x_section_end_x - x_section_base_x)
-                + (self.bounds[2] - x_section_base_y)
-                * (x_section_end_y - x_section_base_y)
-            )
-            sense_max = np_sign(
-                (self.bounds[1] - x_section_base_x)
-                * (x_section_end_x - x_section_base_x)
-                + (self.bounds[3] - x_section_base_y)
-                * (x_section_end_y - x_section_base_y)
-            )
-            W_min = (
-                np_sqrt(
-                    (self.bounds[0] - x_section_base_x) ** 2
-                    + (self.bounds[2] - x_section_base_y) ** 2
-                )
-                * sense_min
-            )
-            W_max = (
-                np_sqrt(
-                    (self.bounds[1] - x_section_base_x) ** 2
-                    + (self.bounds[3] - x_section_base_y) ** 2
-                )
-                * sense_max
-            )
-        else:
-            sense_min = np_sign(
-                (self.bounds[0] - x_section_base_x)
-                * (x_section_end_x - x_section_base_x)
-                + (self.bounds[3] - x_section_base_y)
-                * (x_section_end_y - x_section_base_y)
-            )
-            sense_max = np_sign(
-                (self.bounds[1] - x_section_base_x)
-                * (x_section_end_x - x_section_base_x)
-                + (self.bounds[2] - x_section_base_y)
-                * (x_section_end_y - x_section_base_y)
-            )
-            W_min = (
-                np_sqrt(
-                    (self.bounds[0] - x_section_base_x) ** 2
-                    + (self.bounds[3] - x_section_base_y) ** 2
-                )
-                * sense_min
-            )
-            W_max = (
-                np_sqrt(
-                    (self.bounds[1] - x_section_base_x) ** 2
-                    + (self.bounds[2] - x_section_base_y) ** 2
-                )
-                * sense_max
-            )
-        Z_min = self.bounds[4]
-        Z_max = self.bounds[5]
-        if W_min > W_max:
-            W_tmp = W_max
-            W_max = W_min
-            W_min = W_tmp
-        if Z_min > Z_max:
-            Z_tmp = Z_max
-            Z_max = Z_min
-            Z_min = Z_tmp
-        return [W_min, W_max, Z_min, Z_max]
+    # @property
+    # def xs_bounds(self):
+    #     """Returns a list with W_min, W_max, Z_min, Z_max in the cross section reference frame"""
+    #     x_section_origin_x = self.parent.xsect_coll.get_uid_origin_x(self.x_section_uid)
+    #     x_section_origin_y = self.parent.xsect_coll.get_uid_origin_y(self.x_section_uid)
+    #     x_section_end_x = self.parent.xsect_coll.get_uid_end_x(self.x_section_uid)
+    #     x_section_end_y = self.parent.xsect_coll.get_uid_end_y(self.x_section_uid)
+    #     x_section_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
+    #     if (0 <= x_section_strike <= 90) or (180 < x_section_strike <= 270):
+    #         sense_min = np_sign(
+    #             (self.bounds[0] - x_section_origin_x)
+    #             * (x_section_end_x - x_section_origin_x)
+    #             + (self.bounds[2] - x_section_origin_y)
+    #             * (x_section_end_y - x_section_origin_y)
+    #         )
+    #         sense_max = np_sign(
+    #             (self.bounds[1] - x_section_origin_x)
+    #             * (x_section_end_x - x_section_origin_x)
+    #             + (self.bounds[3] - x_section_origin_y)
+    #             * (x_section_end_y - x_section_origin_y)
+    #         )
+    #         W_min = (
+    #             np_sqrt(
+    #                 (self.bounds[0] - x_section_origin_x) ** 2
+    #                 + (self.bounds[2] - x_section_origin_y) ** 2
+    #             )
+    #             * sense_min
+    #         )
+    #         W_max = (
+    #             np_sqrt(
+    #                 (self.bounds[1] - x_section_origin_x) ** 2
+    #                 + (self.bounds[3] - x_section_origin_y) ** 2
+    #             )
+    #             * sense_max
+    #         )
+    #     else:
+    #         sense_min = np_sign(
+    #             (self.bounds[0] - x_section_origin_x)
+    #             * (x_section_end_x - x_section_origin_x)
+    #             + (self.bounds[3] - x_section_origin_y)
+    #             * (x_section_end_y - x_section_origin_y)
+    #         )
+    #         sense_max = np_sign(
+    #             (self.bounds[1] - x_section_origin_x)
+    #             * (x_section_end_x - x_section_origin_x)
+    #             + (self.bounds[2] - x_section_origin_y)
+    #             * (x_section_end_y - x_section_origin_y)
+    #         )
+    #         W_min = (
+    #             np_sqrt(
+    #                 (self.bounds[0] - x_section_origin_x) ** 2
+    #                 + (self.bounds[3] - x_section_origin_y) ** 2
+    #             )
+    #             * sense_min
+    #         )
+    #         W_max = (
+    #             np_sqrt(
+    #                 (self.bounds[1] - x_section_origin_x) ** 2
+    #                 + (self.bounds[2] - x_section_origin_y) ** 2
+    #             )
+    #             * sense_max
+    #         )
+    #     Z_min = self.bounds[4]
+    #     Z_max = self.bounds[5]
+    #     if W_min > W_max:
+    #         W_tmp = W_max
+    #         W_max = W_min
+    #         W_min = W_tmp
+    #     if Z_min > Z_max:
+    #         Z_tmp = Z_max
+    #         Z_max = Z_min
+    #         Z_min = Z_tmp
+    #     return [W_min, W_max, Z_min, Z_max]
 
     @property
     def frame(self):
-        """Create rectangular frame to be textured."""
-        x_section_azimuth = self.parent.xsect_coll.get_uid_azimuth(self.x_section_uid)
-        if 0 <= x_section_azimuth <= 90:
+        """
+        Create rectangular frame to be textured, recalling that
+        - in image coords the origin is upper left
+        - .bounds is a list with xmin [0], xmax [1], ymin [2], ymax [3], zmin [4], zmax [5].
+
+        xmin,ymax ------ xmax,ymax
+            |                |
+            |                |
+        xmin,ymin ------ xmax,ymin
+
+        [0],[3] ------ [1],[3]
+           |              |
+           |              |
+        [0],[2] ------ [1],[2]
+
+        """
+        x_section_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
+        if 0 <= x_section_strike <= 90:
             left_x = self.bounds[0]
             left_y = self.bounds[2]
             right_x = self.bounds[1]
             right_y = self.bounds[3]
-        elif 90 < x_section_azimuth <= 180:
+        elif 90 < x_section_strike <= 180:
             left_x = self.bounds[0]
             left_y = self.bounds[3]
             right_x = self.bounds[1]
             right_y = self.bounds[2]
-        elif 180 < x_section_azimuth <= 270:
+        elif 180 < x_section_strike <= 270:
             left_x = self.bounds[1]
             left_y = self.bounds[3]
             right_x = self.bounds[0]
@@ -2657,13 +2686,13 @@ class XsImage(Image):
             right_y = self.bounds[3]
         bottom = self.bounds[4]
         top = self.bounds[5]
-        # Points
+        # Sort points
         points = np_array(
             [
-                [left_x, left_y, bottom],
                 [left_x, left_y, top],
                 [right_x, right_y, top],
                 [right_x, right_y, bottom],
+                [left_x, left_y, bottom],
             ]
         )
         # Rectangular face and frame.
