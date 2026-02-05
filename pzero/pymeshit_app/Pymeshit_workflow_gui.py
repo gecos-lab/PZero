@@ -1380,17 +1380,23 @@ class MeshItWorkflowGUI(QWidget):
         return refined_count
 
     def _init_mesh_refine_table(self):
-        # Table for Refine & Mesh per-surface mesh target size
-        from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QTableWidget, QTableWidgetItem
+        # Table for Refine & Mesh per-surface mesh settings
+        from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView
         if not hasattr(self, 'mesh_length_by_surface'):
             self.mesh_length_by_surface = {}
+        if not hasattr(self, 'hull_method_by_surface'):
+            self.hull_method_by_surface = {}
+        if not hasattr(self, 'tri_method_by_surface'):
+            self.tri_method_by_surface = {}
         self._mesh_table_updating = False
 
-        self.mesh_refine_group = QGroupBox("Per-Surface Mesh Density (Target Size)")
+        self.mesh_refine_group = QGroupBox("Per-Surface Mesh Settings")
         lay = QVBoxLayout(self.mesh_refine_group)
-        self.mesh_refine_table = QTableWidget(0, 2, self.mesh_refine_group)
-        self.mesh_refine_table.setHorizontalHeaderLabels(["Surface", "Target Size"])
-        self.mesh_refine_table.horizontalHeader().setStretchLastSection(True)
+        self.mesh_refine_table = QTableWidget(0, 4, self.mesh_refine_group)
+        self.mesh_refine_table.setHorizontalHeaderLabels(["Surface", "Target Size", "Hull Method", "Tri Method"])
+        header = self.mesh_refine_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        header.setStretchLastSection(True)
         self.mesh_refine_table.verticalHeader().setVisible(False)
         self.mesh_refine_table.setEditTriggers(
             QAbstractItemView.EditTrigger.DoubleClicked |
@@ -1403,11 +1409,18 @@ class MeshItWorkflowGUI(QWidget):
         self._refresh_mesh_refine_table()
 
     def _refresh_mesh_refine_table(self):
-        # Populate rows for all non-WELL datasets
-        from PySide6.QtWidgets import QTableWidgetItem
+        # Populate rows for all non-WELL datasets with target size, hull method, and tri method
+        from PySide6.QtWidgets import QTableWidgetItem, QComboBox
         from PySide6.QtCore import Qt
         if not hasattr(self, 'mesh_refine_table'):
             return
+
+        # Initialize per-surface settings dictionaries if not present
+        if not hasattr(self, 'hull_method_by_surface'):
+            self.hull_method_by_surface = {}
+        if not hasattr(self, 'tri_method_by_surface'):
+            self.tri_method_by_surface = {}
+
         self._mesh_table_updating = True
         self.mesh_refine_table.setRowCount(0)
         for idx, ds in enumerate(self.datasets):
@@ -1433,14 +1446,80 @@ class MeshItWorkflowGUI(QWidget):
             row = self.mesh_refine_table.rowCount()
             self.mesh_refine_table.insertRow(row)
 
+            # Column 0: Surface name (read-only)
             item_name = QTableWidgetItem(name)
             item_name.setFlags(item_name.flags() & ~Qt.ItemIsEditable)
             item_name.setData(Qt.UserRole, idx)  # store dataset index
             self.mesh_refine_table.setItem(row, 0, item_name)
 
+            # Column 1: Target size (editable)
             item_val = QTableWidgetItem(f"{value:.6g}")
             self.mesh_refine_table.setItem(row, 1, item_val)
+
+            # Column 2: Hull method combo box
+            hull_combo = QComboBox()
+            hull_combo.addItem("Auto", "auto")
+            hull_combo.addItem("Delaunay 2D", "delaunay")
+            hull_combo.addItem("Alpha Shape 2D", "alpha_shape_2d")
+            hull_combo.addItem("Angular Gap 3D", "angular_gap")
+            # Get current hull method for this surface
+            current_hull = self.hull_method_by_surface.get(idx, "auto")
+            hull_index = hull_combo.findData(current_hull)
+            if hull_index >= 0:
+                hull_combo.setCurrentIndex(hull_index)
+            hull_combo.currentIndexChanged.connect(lambda i, r=row: self._on_table_hull_method_changed(r, i))
+            self.mesh_refine_table.setCellWidget(row, 2, hull_combo)
+
+            # Column 3: Triangulation method combo box
+            tri_combo = QComboBox()
+            tri_combo.addItem("Auto", "auto")
+            tri_combo.addItem("Standard CDT", "standard")
+            tri_combo.addItem("Multi-Patch", "multipatch")
+            # Get current tri method for this surface
+            current_tri = self.tri_method_by_surface.get(idx, "auto")
+            tri_index = tri_combo.findData(current_tri)
+            if tri_index >= 0:
+                tri_combo.setCurrentIndex(tri_index)
+            tri_combo.currentIndexChanged.connect(lambda i, r=row: self._on_table_tri_method_changed(r, i))
+            self.mesh_refine_table.setCellWidget(row, 3, tri_combo)
+
         self._mesh_table_updating = False
+
+    def _on_table_hull_method_changed(self, row, combo_index):
+        """Handle hull method combo box change in the per-surface table"""
+        from PySide6.QtCore import Qt
+        if self._mesh_table_updating:
+            return
+        item_name = self.mesh_refine_table.item(row, 0)
+        if not item_name:
+            return
+        try:
+            ds_idx = int(item_name.data(Qt.UserRole))
+            combo = self.mesh_refine_table.cellWidget(row, 2)
+            if combo:
+                hull_method = combo.currentData()
+                self.hull_method_by_surface[ds_idx] = hull_method
+                logger.info(f"Set hull method for surface {ds_idx} to '{hull_method}'")
+        except Exception as e:
+            logger.warning(f"Error setting hull method: {e}")
+
+    def _on_table_tri_method_changed(self, row, combo_index):
+        """Handle triangulation method combo box change in the per-surface table"""
+        from PySide6.QtCore import Qt
+        if self._mesh_table_updating:
+            return
+        item_name = self.mesh_refine_table.item(row, 0)
+        if not item_name:
+            return
+        try:
+            ds_idx = int(item_name.data(Qt.UserRole))
+            combo = self.mesh_refine_table.cellWidget(row, 3)
+            if combo:
+                tri_method = combo.currentData()
+                self.tri_method_by_surface[ds_idx] = tri_method
+                logger.info(f"Set tri method for surface {ds_idx} to '{tri_method}'")
+        except Exception as e:
+            logger.warning(f"Error setting tri method: {e}")
 
     def _on_mesh_refine_cell_changed(self, row, col):
         # Persist edits into self.mesh_length_by_surface
@@ -2886,7 +2965,11 @@ class MeshItWorkflowGUI(QWidget):
         stats_layout.addWidget(self.hull_area_label)
         
         control_layout.addWidget(stats_group)
-        
+
+        # Per-surface hull method table
+        self._init_hull_per_surface_table()
+        control_layout.addWidget(self.hull_per_surface_group)
+
         # High-quality figure export button
         self.hull_export_figure_btn = QPushButton("Export Figure")
         self.hull_export_figure_btn.clicked.connect(lambda: self._show_generic_figure_export_dialog('hulls'))
@@ -2964,8 +3047,189 @@ class MeshItWorkflowGUI(QWidget):
         method = self.mesh_tri_method_combo.currentData()
         # Enable fold angle threshold only for multi-patch method
         self.mesh_fold_angle_threshold_spin.setEnabled(method == "multipatch")
-    
-    
+
+    # =========================================================================
+    # PER-SURFACE HULL METHOD TABLE (Compute Hull Tab)
+    # =========================================================================
+    def _init_hull_per_surface_table(self):
+        """Initialize the per-surface hull method table for the Compute Hull tab."""
+        from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QTableWidget, QHeaderView, QSizePolicy
+
+        if not hasattr(self, 'hull_method_by_surface'):
+            self.hull_method_by_surface = {}
+        self._hull_table_updating = False
+
+        self.hull_per_surface_group = QGroupBox("Per-Surface Hull Method")
+        lay = QVBoxLayout(self.hull_per_surface_group)
+
+        self.hull_per_surface_table = QTableWidget(0, 2, self.hull_per_surface_group)
+        self.hull_per_surface_table.setHorizontalHeaderLabels(["Surface", "Hull Method"])
+
+        header = self.hull_per_surface_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        header.setStretchLastSection(True)
+
+        self.hull_per_surface_table.verticalHeader().setVisible(False)
+        self.hull_per_surface_table.setMinimumHeight(150)
+        self.hull_per_surface_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.hull_per_surface_table.setAlternatingRowColors(True)
+
+        lay.addWidget(self.hull_per_surface_table)
+
+        self._refresh_hull_per_surface_table()
+
+    def _refresh_hull_per_surface_table(self):
+        """Populate the per-surface hull method table with combo boxes."""
+        from PySide6.QtWidgets import QTableWidgetItem, QComboBox
+        from PySide6.QtCore import Qt
+
+        if not hasattr(self, 'hull_per_surface_table'):
+            return
+        if not hasattr(self, 'hull_method_by_surface'):
+            self.hull_method_by_surface = {}
+
+        self._hull_table_updating = True
+        self.hull_per_surface_table.setRowCount(0)
+
+        for idx, ds in enumerate(self.datasets):
+            if ds.get('type') in ('WELL', 'polyline'):
+                continue
+            name = ds.get('name', f"Surface_{idx}")
+
+            row = self.hull_per_surface_table.rowCount()
+            self.hull_per_surface_table.insertRow(row)
+
+            # Column 0: Surface name (read-only)
+            item_name = QTableWidgetItem(name)
+            item_name.setFlags(item_name.flags() & ~Qt.ItemIsEditable)
+            item_name.setData(Qt.UserRole, idx)
+            self.hull_per_surface_table.setItem(row, 0, item_name)
+
+            # Column 1: Hull method combo box
+            hull_combo = QComboBox()
+            hull_combo.addItem("Auto (Use Global)", "auto")
+            hull_combo.addItem("Delaunay 2D", "delaunay")
+            hull_combo.addItem("Alpha Shape 2D", "alpha_shape_2d")
+            hull_combo.addItem("Angular Gap 3D", "angular_gap")
+
+            current_hull = self.hull_method_by_surface.get(idx, "auto")
+            hull_index = hull_combo.findData(current_hull)
+            if hull_index >= 0:
+                hull_combo.setCurrentIndex(hull_index)
+            hull_combo.currentIndexChanged.connect(lambda i, r=row: self._on_hull_table_method_changed(r, i))
+            self.hull_per_surface_table.setCellWidget(row, 1, hull_combo)
+
+        self._hull_table_updating = False
+
+    def _on_hull_table_method_changed(self, row, combo_index):
+        """Handle hull method combo box change in the per-surface table."""
+        from PySide6.QtCore import Qt
+        if self._hull_table_updating:
+            return
+        item_name = self.hull_per_surface_table.item(row, 0)
+        if not item_name:
+            return
+        try:
+            ds_idx = int(item_name.data(Qt.UserRole))
+            combo = self.hull_per_surface_table.cellWidget(row, 1)
+            if combo:
+                hull_method = combo.currentData()
+                self.hull_method_by_surface[ds_idx] = hull_method
+                logger.info(f"Set hull method for surface {ds_idx} to '{hull_method}'")
+        except Exception as e:
+            logger.warning(f"Error setting hull method: {e}")
+
+    # =========================================================================
+    # PER-SURFACE TRIANGULATION METHOD TABLE (Triangulation Tab)
+    # =========================================================================
+    def _init_tri_per_surface_table(self):
+        """Initialize the per-surface triangulation method table for the Triangulation tab."""
+        from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QTableWidget, QHeaderView, QSizePolicy
+
+        if not hasattr(self, 'tri_method_by_surface'):
+            self.tri_method_by_surface = {}
+        self._tri_table_updating = False
+
+        self.tri_per_surface_group = QGroupBox("Per-Surface Triangulation Method")
+        lay = QVBoxLayout(self.tri_per_surface_group)
+
+        self.tri_per_surface_table = QTableWidget(0, 2, self.tri_per_surface_group)
+        self.tri_per_surface_table.setHorizontalHeaderLabels(["Surface", "Tri Method"])
+
+        header = self.tri_per_surface_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        header.setStretchLastSection(True)
+
+        self.tri_per_surface_table.verticalHeader().setVisible(False)
+        self.tri_per_surface_table.setMinimumHeight(150)
+        self.tri_per_surface_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.tri_per_surface_table.setAlternatingRowColors(True)
+
+        lay.addWidget(self.tri_per_surface_table)
+
+        self._refresh_tri_per_surface_table()
+
+    def _refresh_tri_per_surface_table(self):
+        """Populate the per-surface triangulation method table with combo boxes."""
+        from PySide6.QtWidgets import QTableWidgetItem, QComboBox
+        from PySide6.QtCore import Qt
+
+        if not hasattr(self, 'tri_per_surface_table'):
+            return
+        if not hasattr(self, 'tri_method_by_surface'):
+            self.tri_method_by_surface = {}
+
+        self._tri_table_updating = True
+        self.tri_per_surface_table.setRowCount(0)
+
+        for idx, ds in enumerate(self.datasets):
+            if ds.get('type') in ('WELL', 'polyline'):
+                continue
+            name = ds.get('name', f"Surface_{idx}")
+
+            row = self.tri_per_surface_table.rowCount()
+            self.tri_per_surface_table.insertRow(row)
+
+            # Column 0: Surface name (read-only)
+            item_name = QTableWidgetItem(name)
+            item_name.setFlags(item_name.flags() & ~Qt.ItemIsEditable)
+            item_name.setData(Qt.UserRole, idx)
+            self.tri_per_surface_table.setItem(row, 0, item_name)
+
+            # Column 1: Triangulation method combo box
+            tri_combo = QComboBox()
+            tri_combo.addItem("Auto (Use Global)", "auto")
+            tri_combo.addItem("Standard CDT", "standard")
+            tri_combo.addItem("Multi-Patch", "multipatch")
+
+            current_tri = self.tri_method_by_surface.get(idx, "auto")
+            tri_index = tri_combo.findData(current_tri)
+            if tri_index >= 0:
+                tri_combo.setCurrentIndex(tri_index)
+            tri_combo.currentIndexChanged.connect(lambda i, r=row: self._on_tri_table_method_changed(r, i))
+            self.tri_per_surface_table.setCellWidget(row, 1, tri_combo)
+
+        self._tri_table_updating = False
+
+    def _on_tri_table_method_changed(self, row, combo_index):
+        """Handle triangulation method combo box change in the per-surface table."""
+        from PySide6.QtCore import Qt
+        if self._tri_table_updating:
+            return
+        item_name = self.tri_per_surface_table.item(row, 0)
+        if not item_name:
+            return
+        try:
+            ds_idx = int(item_name.data(Qt.UserRole))
+            combo = self.tri_per_surface_table.cellWidget(row, 1)
+            if combo:
+                tri_method = combo.currentData()
+                self.tri_method_by_surface[ds_idx] = tri_method
+                logger.info(f"Set tri method for surface {ds_idx} to '{tri_method}'")
+        except Exception as e:
+            logger.warning(f"Error setting tri method: {e}")
+
+
     def _setup_segment_tab(self):
         """Sets up the segmentation tab with controls and visualization area"""
         # Main layout for the tab
@@ -3198,6 +3462,9 @@ class MeshItWorkflowGUI(QWidget):
         stats_layout.addWidget(self.uniformity_label) # Added for completeness
         control_layout.addWidget(stats_group) # Added for completeness
 
+        # Per-surface triangulation method table
+        self._init_tri_per_surface_table()
+        control_layout.addWidget(self.tri_per_surface_group)
 
         # Export button (remain the same)
         # ... (export_btn setup remains the same) ...
@@ -3391,38 +3658,6 @@ class MeshItWorkflowGUI(QWidget):
         if not hasattr(self, 'triple_points'):
             self.triple_points = []
 
-    def _init_mesh_refine_table(self):
-        # Table for Refine & Mesh per-surface mesh target size
-        from PySide6.QtWidgets import QGroupBox, QVBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView, QSizePolicy
-        if not hasattr(self, 'mesh_length_by_surface'):
-            self.mesh_length_by_surface = {}
-
-        self._mesh_table_updating = False
-
-        self.mesh_refine_group = QGroupBox("Per-Surface Mesh Density (Target Size)")
-        lay = QVBoxLayout(self.mesh_refine_group)
-
-        self.mesh_refine_table = QTableWidget(0, 2, self.mesh_refine_group)
-        self.mesh_refine_table.setHorizontalHeaderLabels(["Surface", "Target Size"])
-
-        header = self.mesh_refine_table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.Interactive)
-        header.setStretchLastSection(True)
-
-        self.mesh_refine_table.verticalHeader().setVisible(False)
-        self.mesh_refine_table.setEditTriggers(
-            QAbstractItemView.EditTrigger.DoubleClicked |
-            QAbstractItemView.EditTrigger.EditKeyPressed
-        )
-        # Professional sizing
-        self.mesh_refine_table.setMinimumHeight(220)
-        self.mesh_refine_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.mesh_refine_table.setAlternatingRowColors(True)
-
-        self.mesh_refine_table.cellChanged.connect(self._on_mesh_refine_cell_changed)
-        lay.addWidget(self.mesh_refine_table)
-
-        self._refresh_mesh_refine_table()
     def _setup_refine_mesh_tab(self):
         """Three-pane layout with Actions → Mesh Settings → Per‑Surface stacked on the left."""
         from PySide6.QtWidgets import (
@@ -7023,44 +7258,78 @@ class MeshItWorkflowGUI(QWidget):
             logger.error(f"Error during length-based refinement: {e}", exc_info=True)
             return
         # Step 3: Refine hull with interpolation (corrects hull geometry)
-        if not preserve_angular_gap_hull:
-            try:
-                config = {
-                    'interp': self.mesh_interp_combo.currentText(),
-                    'smoothing': float(self.mesh_smoothing_input.value())
-                }
-                for temp_surface_idx, temp_surface in enumerate(temp_model.surfaces):
-                    if hasattr(temp_surface, 'convex_hull') and len(temp_surface.convex_hull) >= 3:
-                        raw_hull_points = [Vector3D(p.x, p.y, p.z, point_type=getattr(p, "point_type", "DEFAULT")) for p in temp_surface.convex_hull]
-                        original_idx = temp_model.original_indices_map.get(
-                            next((k for k, v in temp_model.surface_original_to_temp_idx_map.items() if v == temp_surface_idx), None)
+        # For surfaces using angular-gap hull, skip 2D projection refinement to preserve 3D shape
+        try:
+            config = {
+                'interp': self.mesh_interp_combo.currentText(),
+                'smoothing': float(self.mesh_smoothing_input.value())
+            }
+            config_3d = {
+                'k_neighbors': 20,
+                'interp': self.mesh_interp_combo.currentText(),
+                'smoothing': float(self.mesh_smoothing_input.value())
+            }
+
+            for temp_surface_idx, temp_surface in enumerate(temp_model.surfaces):
+                if not hasattr(temp_surface, 'convex_hull') or len(temp_surface.convex_hull) < 3:
+                    continue
+
+                raw_hull_points = [Vector3D(p.x, p.y, p.z, point_type=getattr(p, "point_type", "DEFAULT")) for p in temp_surface.convex_hull]
+                original_idx = temp_model.original_indices_map.get(
+                    next((k for k, v in temp_model.surface_original_to_temp_idx_map.items() if v == temp_surface_idx), None)
+                )
+
+                if original_idx is None or 'points' not in self.datasets[original_idx]:
+                    continue
+
+                scattered_points = [Vector3D(p[0], p[1], p[2]) for p in self.datasets[original_idx]['points']]
+
+                # Check per-surface hull method - skip 2D refinement for angular_gap surfaces
+                surface_hull_method = self.hull_method_by_surface.get(original_idx, "auto")
+                # Handle both "angular" and "angular_gap" values (from different tables)
+                use_angular_gap = (surface_hull_method in ("angular_gap", "angular"))
+
+                # Also check if global setting was angular_gap and surface is using global
+                if surface_hull_method in ("auto", "global"):
+                    hull_method_combo = getattr(self, 'hull_method_combo', None)
+                    if hull_method_combo and hull_method_combo.currentData() == "angular_gap":
+                        use_angular_gap = True
+
+                if use_angular_gap or preserve_angular_gap_hull:
+                    # Use 3D hull refinement to preserve angular-gap hull shape
+                    logger.info(f"Using 3D hull refinement for surface {original_idx} to preserve angular-gap hull shape.")
+                    try:
+                        from Pymeshit.intersection_utils import refine_hull_3d_along_surface
+                        refined_hull_3d = refine_hull_3d_along_surface(
+                            raw_hull_points, scattered_points, config_3d
                         )
-                        if original_idx is not None and 'points' in self.datasets[original_idx]:
-                            scattered_points = [Vector3D(p[0], p[1], p[2]) for p in self.datasets[original_idx]['points']]
-                            refined_hull_3d = refine_hull_with_interpolation(
-                                raw_hull_points, scattered_points, config
-                            )
+                        temp_surface.convex_hull = refined_hull_3d
+                        logger.info(f"3D hull refinement complete for surface {temp_surface_idx}")
+                    except Exception as e:
+                        logger.warning(f"3D hull refinement failed for surface {temp_surface_idx}: {e}")
+                        # Keep original hull rather than distorting it
+                else:
+                    # Standard 2D projection refinement for flat surfaces
+                    refined_hull_3d = refine_hull_with_interpolation(
+                        raw_hull_points, scattered_points, config
+                    )
 
-                        # Step 4: Create refined Vector3D objects preserving point types
-                        refined_hull_points = []
-                        for i, (orig_pt, refined_3d) in enumerate(zip(raw_hull_points, refined_hull_3d)):
-                            # If refined_3d is already a Vector3D, just copy it
-                            if isinstance(refined_3d, Vector3D):
-                                refined_pt = Vector3D(refined_3d.x, refined_3d.y, refined_3d.z)
-                            else:
-                                refined_pt = Vector3D(refined_3d[0], refined_3d[1], refined_3d[2])
-                            # Preserve original point type information
-                            refined_pt.point_type = getattr(orig_pt, 'point_type', 'DEFAULT')
-                            if hasattr(orig_pt, 'type'):
-                                refined_pt.type = orig_pt.type
-                            refined_hull_points.append(refined_pt)
+                    # Create refined Vector3D objects preserving point types
+                    refined_hull_points = []
+                    for i, (orig_pt, refined_3d) in enumerate(zip(raw_hull_points, refined_hull_3d)):
+                        if isinstance(refined_3d, Vector3D):
+                            refined_pt = Vector3D(refined_3d.x, refined_3d.y, refined_3d.z)
+                        else:
+                            refined_pt = Vector3D(refined_3d[0], refined_3d[1], refined_3d[2])
+                        refined_pt.point_type = getattr(orig_pt, 'point_type', 'DEFAULT')
+                        if hasattr(orig_pt, 'type'):
+                            refined_pt.type = orig_pt.type
+                        refined_hull_points.append(refined_pt)
 
-                        temp_surface.convex_hull = refined_hull_points
-            except Exception as e:
-                logger.error(f"Error during hull refinement: {e}", exc_info=True)
-                return
-        else:
-            logger.info("Skipping hull interpolation refinement for Multi-Patch to preserve angular-gap hull shape.")
+                    temp_surface.convex_hull = refined_hull_points
+        except Exception as e:
+            logger.error(f"Error during hull refinement: {e}", exc_info=True)
+            return
         # Step 4: Align intersections to hulls (defines hull topology)
         try:
             for temp_surface_list_idx in range(len(temp_model.surfaces)):
@@ -7298,21 +7567,26 @@ class MeshItWorkflowGUI(QWidget):
                 if per_surface_target <= 1e-9:
                     per_surface_target = max(1.0, unified_target)
 
+                # Get per-surface tri method (fallback to global if not set or "auto")
+                surface_tri_method = self.tri_method_by_surface.get(s_idx, "auto") if hasattr(self, 'tri_method_by_surface') else "auto"
+                if surface_tri_method == "auto":
+                    surface_tri_method = mesh_tri_method  # Use global setting
+
                 cfg = {
                     "target_size": per_surface_target,
                     "min_angle":  float(self.mesh_min_angle_input.value()),
                     "max_area":   float(per_surface_target) ** 2 * 1.5,
                     "interp":     self.mesh_interp_combo.currentText(),
                     "smoothing":  float(self.mesh_smoothing_input.value()),
-                    "tri_method": mesh_tri_method,  # NEW - for folded surfaces
-                    "fold_angle_threshold": mesh_fold_angle_threshold,  # NEW
+                    "tri_method": surface_tri_method,  # Per-surface tri method
+                    "fold_angle_threshold": mesh_fold_angle_threshold,
                 }
                 
                 # Prepare data including segments (explicit boundary constraints)
                 pts3d, seg_arr, holes = self._build_plc_from_selection(s_idx)
 
-                # Check if multi-patch triangulation is requested
-                if mesh_tri_method == "multipatch":
+                # Check if multi-patch triangulation is requested for this surface
+                if surface_tri_method == "multipatch":
                     logger.info(f"Using Multi-Patch triangulation for conforming mesh '{name}' (fold_angle={mesh_fold_angle_threshold}°)")
                     
                     # Use retrieved points and segments (ensure float64 points)
@@ -7324,11 +7598,15 @@ class MeshItWorkflowGUI(QWidget):
                     # Get original mesh vertices from first triangulation for fold detection
                     # This provides dense reference points when constraint points are sparse
                     reference_pts = None
+                    reference_tris = None
                     tri_result = ds.get('triangulation_result', {})
                     if 'vertices' in tri_result and len(tri_result['vertices']) > 0:
                         reference_pts = np.asarray(tri_result['vertices'], dtype=float)
                         logger.info(f"Using {len(reference_pts)} reference points from original triangulation for fold detection")
-                    
+                    if 'triangles' in tri_result and len(tri_result['triangles']) > 0:
+                        reference_tris = np.asarray(tri_result['triangles'], dtype=int)
+                        logger.info(f"Using {len(reference_tris)} reference triangles for topology guidance")
+
                     if len(all_pts) >= 4:
                         triangulator = DirectTriangleWrapper(
                             gradient=float(self.mesh_gradient_input.value()),
@@ -7340,7 +7618,9 @@ class MeshItWorkflowGUI(QWidget):
                             segments=seg_arr, # Pass explicit segments
                             fold_angle_threshold=mesh_fold_angle_threshold,
                             uniform=self.mesh_uniform_checkbox.isChecked(),
-                            reference_points_3d=reference_pts  # Use original mesh for fold detection
+                            reference_points_3d=reference_pts,  # Use original mesh for fold detection
+                            reference_triangles=reference_tris,  # Use original mesh topology
+                            auto_select_method=True  # Enable hybrid: auto-select CDT vs multi-patch based on surface geometry
                         )
                         
                         if tri_res and 'vertices' in tri_res and 'triangles' in tri_res:
@@ -8723,10 +9003,26 @@ class MeshItWorkflowGUI(QWidget):
             logger.warning("Dataset '%s' has < 3 points, skipping hull computation.", ds.get('name'))
             return False
 
-        # Get the selected hull method from the dropdown
-        hull_method = getattr(self, 'hull_method_combo', None)
-        method = hull_method.currentData() if hull_method else "delaunay"
-        
+        # Get per-surface hull method first, then fall back to global combo
+        method = None  # Will be set below
+
+        # Check per-surface setting first (from hull_per_surface_table in Compute Hull tab)
+        if hasattr(self, 'hull_method_by_surface') and dataset_index in self.hull_method_by_surface:
+            surface_hull_method = self.hull_method_by_surface[dataset_index]
+            # "global" means use global combo; others are direct method names
+            if surface_hull_method not in ("global", "auto"):
+                method = surface_hull_method  # Already internal name: delaunay, alpha_shape_2d, angular_gap
+
+        # If no per-surface override, use global combo
+        if method is None:
+            hull_method_combo = getattr(self, 'hull_method_combo', None)
+            if hull_method_combo:
+                method = hull_method_combo.currentData() or "delaunay"
+            else:
+                method = "delaunay"
+
+        logger.info(f"Hull computation for dataset {dataset_index} using method='{method}'")
+
         # Get sensitivity/alpha parameter
         # For Angular Gap: "sensitivity"
         # For Alpha Shapes: "alpha_factor"
@@ -9902,14 +10198,29 @@ segmentation, triangulation, and visualization.
         uniform = self.uniform_checkbox.isChecked()
         interp_label = self.interp_combo.currentText() if hasattr(self, "interp_combo") else "Thin Plate Spline (TPS)"
         smoothing = float(self.interp_smoothing_input.value()) if hasattr(self, "interp_smoothing_input") else 0.0
-        
-        # Get triangulation method from dropdown (NEW - for folded surfaces)
-        tri_method = "standard"
+
+        # Get triangulation method - check per-surface setting first, then global
+        tri_method = None
         fold_angle_threshold = 120.0
-        if hasattr(self, 'tri_method_combo'):
-            tri_method = self.tri_method_combo.currentData() or "standard"
+
+        # Check per-surface setting first (from tri_per_surface_table in Triangulation tab)
+        if hasattr(self, 'tri_method_by_surface') and dataset_index in self.tri_method_by_surface:
+            surface_tri_method = self.tri_method_by_surface[dataset_index]
+            # "global" means use global combo; others are direct method names
+            if surface_tri_method not in ("global", "auto"):
+                tri_method = surface_tri_method
+
+        # If no per-surface override, check global setting
+        if tri_method is None:
+            if hasattr(self, 'tri_method_combo'):
+                tri_method = self.tri_method_combo.currentData() or "standard"
+            else:
+                tri_method = "standard"
+
         if hasattr(self, 'fold_angle_threshold_spin'):
             fold_angle_threshold = self.fold_angle_threshold_spin.value()
+
+        logger.info(f"Triangulating '{dataset_name}' with method='{tri_method}'")
 
         try:
             import numpy as np
@@ -10030,7 +10341,8 @@ segmentation, triangulation, and visualization.
                     fold_angle_threshold=fold_angle_threshold,
                     uniform=uniform,
                     interpolator=interp_label,
-                    smoothing=smoothing
+                    smoothing=smoothing,
+                    auto_select_method=True  # Enable hybrid: auto-select CDT vs multi-patch
                 )
                 
                 if tri_res and 'vertices' in tri_res and 'triangles' in tri_res:
@@ -10978,6 +11290,11 @@ segmentation, triangulation, and visualization.
             self._refresh_well_refine_table()
         if hasattr(self, '_refresh_mesh_well_refine_table'):
             self._refresh_mesh_well_refine_table()
+        # Refresh per-surface hull and triangulation tables
+        if hasattr(self, '_refresh_hull_per_surface_table'):
+            self._refresh_hull_per_surface_table()
+        if hasattr(self, '_refresh_tri_per_surface_table'):
+            self._refresh_tri_per_surface_table()
     def _rename_dataset(self, dataset_index):
         """Rename a dataset"""
         if not (0 <= dataset_index < len(self.datasets)):
@@ -13341,6 +13658,11 @@ segmentation, triangulation, and visualization.
             self._refresh_well_refine_table()
         if hasattr(self, '_refresh_mesh_well_refine_table'):
             self._refresh_mesh_well_refine_table()
+        # Refresh per-surface hull and triangulation tables
+        if hasattr(self, '_refresh_hull_per_surface_table'):
+            self._refresh_hull_per_surface_table()
+        if hasattr(self, '_refresh_tri_per_surface_table'):
+            self._refresh_tri_per_surface_table()
 
         if current_tab_widget == self.file_tab:
             self._visualize_all_points()

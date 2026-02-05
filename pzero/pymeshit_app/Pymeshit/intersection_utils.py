@@ -1854,11 +1854,20 @@ def refine_hull_with_interpolation(raw_hull_points: List[Vector3D],
             use_sklearn_pca = False
         
         logger.info(f"Refining hull with {len(raw_hull_points)} points using {len(scattered_data_points)} scattered data points")
-        
+
         # Convert scattered data to numpy arrays
         scattered_3d = np.array([[p.x, p.y, p.z] for p in scattered_data_points])
         hull_3d = np.array([[p.x, p.y, p.z] for p in raw_hull_points])
-        
+
+        # Subsample scattered data if too large for TPS (TPS is O(n³))
+        MAX_TPS_POINTS = 2000  # Limit for reasonable TPS performance
+        original_scattered_count = len(scattered_3d)
+        if len(scattered_3d) > MAX_TPS_POINTS:
+            logger.info(f"Subsampling scattered data from {len(scattered_3d)} to {MAX_TPS_POINTS} points for TPS performance")
+            # Use stratified sampling to maintain spatial distribution
+            indices = np.random.choice(len(scattered_3d), MAX_TPS_POINTS, replace=False)
+            scattered_3d = scattered_3d[indices]
+
         # Step 1: Perform PCA on scattered data to establish local 2D coordinate system
         if use_sklearn_pca:
             pca = PCA(n_components=3)
@@ -2020,6 +2029,253 @@ def refine_hull_with_interpolation(raw_hull_points: List[Vector3D],
         logger.error(f"Error during hull interpolation refinement: {e}", exc_info=True)
         logger.warning("Hull refinement failed - returning original hull points")
         return raw_hull_points
+
+
+def refine_hull_3d_along_surface(raw_hull_points: List[Vector3D],
+                                  scattered_data_points: List[Vector3D],
+                                  config: Dict = None,
+                                  triangle_mesh: Dict = None) -> List[Vector3D]:
+    """
+    3D hull refinement that works along the actual folded surface geometry.
+
+    Unlike refine_hull_with_interpolation() which uses 2D projection (failing on folded
+    surfaces), this function works directly in 3D by:
+    1. For each hull point, finding nearest reference points
+    2. Building a local triangulation from those points
+    3. Projecting the hull point onto the nearest triangle
+    4. Using barycentric interpolation for exact position
+
+    This preserves the fold geometry because each hull point is refined locally
+    using only nearby reference points, avoiding the need for global 2D projection.
+
+    Args:
+        raw_hull_points: Original 3D boundary points
+        scattered_data_points: Full cloud of 3D scattered data points for the surface
+        config: Optional configuration dictionary
+        triangle_mesh: Optional pre-computed mesh dict with 'vertices' and 'triangles'
+
+    Returns:
+        Refined hull points lying on the local surface approximation
+    """
+    from scipy.spatial import cKDTree, Delaunay
+    import numpy as np
+
+    if not raw_hull_points or not scattered_data_points:
+        logger.warning("Empty hull or scattered data points for 3D hull refinement")
+        return raw_hull_points
+
+    if len(scattered_data_points) < 4:
+        logger.warning("Insufficient scattered data for 3D hull refinement")
+        return raw_hull_points
+
+    try:
+        logger.info(f"3D hull refinement: {len(raw_hull_points)} hull points, "
+                   f"{len(scattered_data_points)} reference points")
+
+        # Convert to numpy arrays
+        hull_3d = np.array([[p.x, p.y, p.z] for p in raw_hull_points])
+        scattered_3d = np.array([[p.x, p.y, p.z] for p in scattered_data_points])
+
+        # Build k-d tree for finding nearest neighbors
+        tree = cKDTree(scattered_3d)
+
+        # Configuration parameters
+        k_neighbors = config.get('k_neighbors', 20) if config else 20
+        k_neighbors = min(k_neighbors, len(scattered_data_points) - 1)
+        k_neighbors = max(k_neighbors, 4)  # Minimum for triangulation
+
+        refined_hull_3d = hull_3d.copy()
+
+        for i, hull_pt in enumerate(hull_3d):
+            try:
+                # Find k nearest neighbors
+                dists, indices = tree.query(hull_pt, k=k_neighbors)
+
+                # Get the local neighborhood points
+                local_pts = scattered_3d[indices]
+
+                # Project local points to a local 2D plane for triangulation
+                # Use SVD to find the best-fit plane
+                centroid = np.mean(local_pts, axis=0)
+                centered = local_pts - centroid
+
+                try:
+                    u, s, vh = np.linalg.svd(centered, full_matrices=False)
+                    # vh[0] and vh[1] are the principal directions in the plane
+                    # vh[2] is the normal
+                    u_axis = vh[0]
+                    v_axis = vh[1]
+                    normal = vh[2]
+                except np.linalg.LinAlgError:
+                    # SVD failed, skip this point
+                    continue
+
+                # Project local points to 2D
+                local_2d = np.column_stack([
+                    np.dot(centered, u_axis),
+                    np.dot(centered, v_axis)
+                ])
+
+                # Project hull point to the same 2D space
+                hull_centered = hull_pt - centroid
+                hull_2d = np.array([np.dot(hull_centered, u_axis), np.dot(hull_centered, v_axis)])
+
+                # Create local Delaunay triangulation
+                if len(local_pts) >= 4:
+                    try:
+                        tri = Delaunay(local_2d)
+                    except:
+                        continue
+
+                    # Find which triangle contains the hull point (or nearest triangle)
+                    simplex_idx = tri.find_simplex(hull_2d)
+
+                    if simplex_idx >= 0:
+                        # Hull point is inside a triangle - use barycentric interpolation
+                        simplex = tri.simplices[simplex_idx]
+                        tri_pts_2d = local_2d[simplex]
+                        tri_pts_3d = local_pts[simplex]
+
+                        # Compute barycentric coordinates
+                        bary = _compute_barycentric(hull_2d, tri_pts_2d)
+
+                        if bary is not None and np.all(bary >= -0.1):  # Allow small negative for edge cases
+                            # Interpolate 3D position using barycentric weights
+                            bary = np.clip(bary, 0, 1)  # Clamp for safety
+                            bary = bary / np.sum(bary)  # Normalize
+                            refined_pos = np.sum(tri_pts_3d * bary[:, np.newaxis], axis=0)
+                            refined_hull_3d[i] = refined_pos
+                    else:
+                        # Hull point is outside triangulation - find nearest triangle
+                        # and project to it
+                        best_dist = float('inf')
+                        best_pos = hull_pt
+
+                        for simplex in tri.simplices:
+                            tri_pts_2d = local_2d[simplex]
+                            tri_pts_3d = local_pts[simplex]
+
+                            # Find closest point on triangle edge
+                            closest_2d, closest_3d = _closest_point_on_triangle(
+                                hull_2d, tri_pts_2d, tri_pts_3d
+                            )
+
+                            dist = np.linalg.norm(hull_2d - closest_2d)
+                            if dist < best_dist:
+                                best_dist = dist
+                                best_pos = closest_3d
+
+                        refined_hull_3d[i] = best_pos
+
+            except Exception as e:
+                logger.debug(f"Failed to refine hull point {i}: {e}")
+                # Keep original position
+                continue
+
+        # Create refined Vector3D objects preserving point types
+        refined_hull_points = []
+        for i, (orig_pt, refined_3d_pt) in enumerate(zip(raw_hull_points, refined_hull_3d)):
+            refined_pt = Vector3D(refined_3d_pt[0], refined_3d_pt[1], refined_3d_pt[2])
+            # Preserve original point type information
+            refined_pt.point_type = getattr(orig_pt, 'point_type', 'DEFAULT')
+            if hasattr(orig_pt, 'type'):
+                refined_pt.type = orig_pt.type
+            refined_hull_points.append(refined_pt)
+
+        # Calculate refinement statistics
+        displacement_distances = [
+            np.linalg.norm(refined_hull_3d[i] - hull_3d[i])
+            for i in range(len(hull_3d))
+        ]
+        max_displacement = max(displacement_distances) if displacement_distances else 0.0
+        avg_displacement = np.mean(displacement_distances) if displacement_distances else 0.0
+
+        logger.info(f"3D hull refinement complete: max displacement = {max_displacement:.6f}, "
+                   f"avg displacement = {avg_displacement:.6f}")
+
+        return refined_hull_points
+
+    except Exception as e:
+        logger.error(f"Error during 3D hull refinement: {e}", exc_info=True)
+        logger.warning("3D hull refinement failed - returning original hull points")
+        return raw_hull_points
+
+
+def _compute_barycentric(point_2d: np.ndarray, triangle_2d: np.ndarray) -> np.ndarray:
+    """
+    Compute barycentric coordinates of a 2D point with respect to a 2D triangle.
+
+    Args:
+        point_2d: 2D point (x, y)
+        triangle_2d: 3x2 array of triangle vertices
+
+    Returns:
+        Barycentric coordinates (w0, w1, w2) or None if degenerate
+    """
+    v0 = triangle_2d[1] - triangle_2d[0]
+    v1 = triangle_2d[2] - triangle_2d[0]
+    v2 = point_2d - triangle_2d[0]
+
+    dot00 = np.dot(v0, v0)
+    dot01 = np.dot(v0, v1)
+    dot02 = np.dot(v0, v2)
+    dot11 = np.dot(v1, v1)
+    dot12 = np.dot(v1, v2)
+
+    denom = dot00 * dot11 - dot01 * dot01
+    if abs(denom) < 1e-12:
+        return None  # Degenerate triangle
+
+    inv_denom = 1.0 / denom
+    u = (dot11 * dot02 - dot01 * dot12) * inv_denom
+    v = (dot00 * dot12 - dot01 * dot02) * inv_denom
+    w = 1.0 - u - v
+
+    return np.array([w, u, v])
+
+
+def _closest_point_on_triangle(point_2d: np.ndarray, tri_2d: np.ndarray,
+                                tri_3d: np.ndarray) -> tuple:
+    """
+    Find the closest point on a triangle (in 2D) and return both 2D and 3D positions.
+
+    Args:
+        point_2d: 2D query point
+        tri_2d: 3x2 array of triangle vertices in 2D
+        tri_3d: 3x3 array of corresponding 3D positions
+
+    Returns:
+        Tuple of (closest_2d, closest_3d)
+    """
+    # Check each edge
+    best_dist = float('inf')
+    best_2d = point_2d
+    best_3d = np.mean(tri_3d, axis=0)
+
+    for i in range(3):
+        j = (i + 1) % 3
+        a_2d, b_2d = tri_2d[i], tri_2d[j]
+        a_3d, b_3d = tri_3d[i], tri_3d[j]
+
+        # Find closest point on segment
+        ab = b_2d - a_2d
+        ab_len = np.linalg.norm(ab)
+        if ab_len < 1e-12:
+            continue
+
+        t = np.dot(point_2d - a_2d, ab) / (ab_len * ab_len)
+        t = np.clip(t, 0, 1)
+
+        closest_2d = a_2d + t * ab
+        closest_3d = a_3d + t * (b_3d - a_3d)
+
+        dist = np.linalg.norm(point_2d - closest_2d)
+        if dist < best_dist:
+            best_dist = dist
+            best_2d = closest_2d
+            best_3d = closest_3d
+
+    return best_2d, best_3d
 
 
 def align_intersections_to_convex_hull(surface_idx: int, model):

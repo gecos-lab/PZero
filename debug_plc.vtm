@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<VTKFile type="vtkMultiBlockDataSet" version="1.0" byte_order="LittleEndian" header_type="UInt32" compressor="vtkZLibDataCompressor">
+  <vtkMultiBlockDataSet>
+    <DataSet index="0" name="Facets" file="debug_plc/debug_plc_0.vtp"/>
+    <DataSet index="1" name="Constraints" file="debug_plc/debug_plc_1.vtp"/>
+  </vtkMultiBlockDataSet>
+</VTKFile>
