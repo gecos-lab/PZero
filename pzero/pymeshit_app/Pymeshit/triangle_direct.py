@@ -1190,6 +1190,52 @@ class DirectTriangleWrapper:
                     # This ensures the mesh density is controlled by 'a' and not the dense input cloud.
                     if segs is not None and len(segs) > 0:
                         unique_indices = np.unique(segs.flatten())
+
+                        # Quality stabilization for coarse sizing:
+                        # when requested patch size is much coarser than native sample spacing,
+                        # add a sparse set of interior guide points so Triangle does not rely only
+                        # on boundary/constraint vertices.
+                        guide_points_added = 0
+                        try:
+                            if len(local_2d) > len(unique_indices) + 10:
+                                nn_k = min(8, len(local_2d))
+                                if nn_k >= 2:
+                                    local_tree = cKDTree(local_2d)
+                                    nn_dists, _ = local_tree.query(local_2d, k=nn_k)
+                                    if nn_dists.ndim == 1:
+                                        local_nn = float(np.median(nn_dists[np.isfinite(nn_dists)]))
+                                    else:
+                                        local_nn_vals = nn_dists[:, 1]
+                                        local_nn_vals = local_nn_vals[np.isfinite(local_nn_vals)]
+                                        local_nn = float(np.median(local_nn_vals)) if len(local_nn_vals) > 0 else 0.0
+                                else:
+                                    local_nn = 0.0
+
+                                if local_nn > 1e-12 and patch_base_size > local_nn * 1.5:
+                                    candidate_mask = np.ones(len(local_2d), dtype=bool)
+                                    candidate_mask[unique_indices] = False
+                                    candidate_idx = np.where(candidate_mask)[0]
+                                    if len(candidate_idx) > 0:
+                                        guide_spacing = max(local_nn * 1.5, patch_base_size * 0.8, 1e-8)
+                                        cells = np.floor(local_2d[candidate_idx] / guide_spacing).astype(np.int64)
+                                        _, first_in_cell = np.unique(cells, axis=0, return_index=True)
+                                        guide_idx = candidate_idx[np.sort(first_in_cell)]
+
+                                        max_guides = min(2000, max(200, int(len(unique_indices) * 2)))
+                                        if len(guide_idx) > max_guides:
+                                            step = max(1, int(np.ceil(len(guide_idx) / max_guides)))
+                                            guide_idx = guide_idx[::step][:max_guides]
+
+                                        if len(guide_idx) > 0:
+                                            unique_indices = np.unique(np.concatenate([unique_indices, guide_idx]))
+                                            guide_points_added = len(guide_idx)
+                                            self.logger.info(
+                                                f"Patch {i}: added {guide_points_added} interior guide points "
+                                                f"(local_nn={local_nn:.4f}, base_size={patch_base_size:.4f})"
+                                            )
+                        except Exception as e:
+                            self.logger.debug(f"Patch {i}: interior guide-point generation skipped ({e})")
+
                         old_to_new = {old: new for new, old in enumerate(unique_indices)}
                         remapped_indices_map = unique_indices
                         tri_vertices = local_2d[unique_indices]
@@ -1200,10 +1246,26 @@ class DirectTriangleWrapper:
                         remapped_indices_map = None
 
                     p_switch = 'p' if tri_segments is not None and len(tri_segments) > 0 else ''
-                    tri_options_list = [
+                    tri_options_list = []
+                    quality_switch = ""
+                    if getattr(self, "min_angle", None) is not None and self.min_angle > 0.0:
+                        quality_switch = f"q{float(self.min_angle):.1f}"
+
+                    # Prefer quality-constrained options first, then progressively relax.
+                    if quality_switch:
+                        tri_options_list.extend([
+                            f'{p_switch}zYY{quality_switch}a{area_constraint:.8f}',
+                            f'{p_switch}zY{quality_switch}a{area_constraint:.8f}',
+                            f'{p_switch}z{quality_switch}a{area_constraint:.8f}',
+                        ])
+
+                    tri_options_list.extend([
                         f'{p_switch}zYYa{area_constraint:.8f}',
                         f'{p_switch}za{area_constraint:.8f}',
-                    ]
+                    ])
+
+                    # Keep order but remove accidental duplicates.
+                    tri_options_list = list(dict.fromkeys(tri_options_list))
 
                     for tri_options in tri_options_list:
                         tri_input = {'vertices': tri_vertices}
@@ -1230,15 +1292,21 @@ class DirectTriangleWrapper:
                     self.logger.warning(f"All segment-based triangulations failed for patch {i}, trying without segments")
                     try:
                         # Use all local_2d points without segments
-                        fallback_opts = f'za{area_constraint:.8f}'
                         fallback_input = {'vertices': local_2d}
-                        result = tr.triangulate(fallback_input, fallback_opts)
-                        if result and 'vertices' in result and 'triangles' in result:
-                            result_vertices_2d = result['vertices']
-                            patch_triangles = result['triangles']
-                            used_opts = fallback_opts
-                            used_label = 'no_segments_fallback'
-                            remapped_indices_map = None  # Full cloud used
+                        fallback_opts_list = []
+                        if getattr(self, "min_angle", None) is not None and self.min_angle > 0.0:
+                            fallback_opts_list.append(f'zq{float(self.min_angle):.1f}a{area_constraint:.8f}')
+                        fallback_opts_list.append(f'za{area_constraint:.8f}')
+
+                        for fallback_opts in fallback_opts_list:
+                            result = tr.triangulate(fallback_input, fallback_opts)
+                            if result and 'vertices' in result and 'triangles' in result:
+                                result_vertices_2d = result['vertices']
+                                patch_triangles = result['triangles']
+                                used_opts = fallback_opts
+                                used_label = 'no_segments_fallback'
+                                remapped_indices_map = None  # Full cloud used
+                                break
                     except Exception as e:
                         self.logger.warning(f"Fallback triangulation also failed for patch {i}: {e}")
                 

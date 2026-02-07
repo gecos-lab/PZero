@@ -190,6 +190,7 @@ class Box:
         self.N1s = []  # Segments from intersection 1
         self.N2s = []  # Segments from intersection 2
         self.Box = [None] * 8  # Subboxes for octree subdivision
+        self._shared_stats = None  # Shared per-root stats for recursive intersection passes
     
     def calculate_center(self):
         """Calculate the center of the box"""
@@ -202,6 +203,7 @@ class Box:
         # Create 8 subboxes spanning the octants, octant means the 8 subboxes of the box
         for i in range(8):
             self.Box[i] = Box()
+            self.Box[i]._shared_stats = self._shared_stats
             
             # Set min coordinates based on octant
             self.Box[i].min.x = self.min.x if (i & 1) == 0 else self.center.x # if i is 0 or 1, set min.x to min.x, otherwise set it to center.x
@@ -287,6 +289,7 @@ class Box:
         Args:
             int_segments: A collection to store intersection segments
         """
+        sliver_len2 = 1e-14
         self.generate_subboxes()
         
         # Place triangles in appropriate subboxes
@@ -314,6 +317,11 @@ class Box:
                             # Use the optimized triangle-triangle intersection test
                             isectpt1, isectpt2 = tri_tri_intersect_with_isectline(tri1, tri2)
                             if isectpt1 and isectpt2:
+                                seg_len2 = (isectpt2 - isectpt1).length_squared()
+                                if seg_len2 < sliver_len2:
+                                    if self._shared_stats is not None:
+                                        self._shared_stats["sliver_skipped"] = self._shared_stats.get("sliver_skipped", 0) + 1
+                                    continue
                                 # Avoid duplicate segments
                                 append_non_existing_segment(int_segments, isectpt1, isectpt2)
     
@@ -830,6 +838,291 @@ def line_triangle_intersection(
     return None
 
 
+def _convex_hull_points_2d(points_2d: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+    """Return convex hull polygon vertices (CCW) for a 2D point cloud."""
+    pts = np.asarray(points_2d, dtype=float)
+    if pts.shape[0] < 3:
+        return pts
+
+    # Deduplicate by tolerance to avoid unstable hulls from repeated points.
+    scale = max(eps, 1e-15)
+    quantized = np.round(pts / scale).astype(np.int64)
+    _, unique_idx = np.unique(quantized, axis=0, return_index=True)
+    pts = pts[np.sort(unique_idx)]
+    if pts.shape[0] < 3:
+        return pts
+
+    pts_sorted = pts[np.lexsort((pts[:, 1], pts[:, 0]))]
+    pts_list = [tuple(p) for p in pts_sorted]
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    lower = []
+    for p in pts_list:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= eps:
+            lower.pop()
+        lower.append(p)
+
+    upper = []
+    for p in reversed(pts_list):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= eps:
+            upper.pop()
+        upper.append(p)
+
+    hull = lower[:-1] + upper[:-1]
+    if len(hull) < 3:
+        return pts_sorted
+    return np.asarray(hull, dtype=float)
+
+
+def _detect_quasi_planar_surface(surface, rel_tol: float = 1e-4, abs_tol: float = 1e-8) -> Optional[Dict[str, Any]]:
+    """Detect quasi-planar surfaces and return plane/basis metadata for slicing fallback."""
+    if not hasattr(surface, "vertices") or not surface.vertices:
+        return None
+
+    pts = np.asarray([[v.x, v.y, v.z] for v in surface.vertices], dtype=float)
+    if pts.shape[0] < 3:
+        return None
+
+    centroid = pts.mean(axis=0)
+    centered = pts - centroid
+
+    try:
+        _, _, vh = np.linalg.svd(centered, full_matrices=False)
+    except np.linalg.LinAlgError:
+        return None
+
+    normal = vh[-1]
+    normal_len = np.linalg.norm(normal)
+    if normal_len < 1e-14:
+        return None
+    normal = normal / normal_len
+
+    extent = float(np.linalg.norm(np.ptp(pts, axis=0)))
+    planarity_tol = max(abs_tol, rel_tol * max(extent, 1.0))
+    max_dist = float(np.max(np.abs(centered @ normal)))
+    if max_dist > planarity_tol:
+        return None
+
+    u_axis = vh[0]
+    u_len = np.linalg.norm(u_axis)
+    if u_len < 1e-14:
+        return None
+    u_axis = u_axis / u_len
+    v_axis = np.cross(normal, u_axis)
+    v_len = np.linalg.norm(v_axis)
+    if v_len < 1e-14:
+        return None
+    v_axis = v_axis / v_len
+
+    pts_2d = np.column_stack([centered @ u_axis, centered @ v_axis])
+    hull_2d = _convex_hull_points_2d(pts_2d)
+    if hull_2d.shape[0] < 3:
+        return None
+
+    return {
+        "origin": centroid,
+        "normal": normal,
+        "u_axis": u_axis,
+        "v_axis": v_axis,
+        "polygon_2d": hull_2d,
+        "planarity_tol": planarity_tol,
+        "max_dist": max_dist,
+    }
+
+
+def _triangle_plane_intersection_segment(
+    tri: Triangle, plane_origin: np.ndarray, plane_normal: np.ndarray, plane_eps: float
+) -> Optional[Tuple[Vector3D, Vector3D]]:
+    """Intersect one triangle with a plane and return the segment if it exists."""
+    tri_pts = [
+        np.asarray([tri.v1.x, tri.v1.y, tri.v1.z], dtype=float),
+        np.asarray([tri.v2.x, tri.v2.y, tri.v2.z], dtype=float),
+        np.asarray([tri.v3.x, tri.v3.y, tri.v3.z], dtype=float),
+    ]
+    dvals = [float(np.dot(p - plane_origin, plane_normal)) for p in tri_pts]
+    dvals = [0.0 if abs(d) <= plane_eps else d for d in dvals]
+
+    if (dvals[0] > 0.0 and dvals[1] > 0.0 and dvals[2] > 0.0) or (
+        dvals[0] < 0.0 and dvals[1] < 0.0 and dvals[2] < 0.0
+    ):
+        return None
+
+    candidates = []
+
+    def add_candidate(pt: np.ndarray):
+        for existing in candidates:
+            if np.linalg.norm(pt - existing) <= plane_eps:
+                return
+        candidates.append(pt)
+
+    edges = ((0, 1), (1, 2), (2, 0))
+    for i, j in edges:
+        p_i, p_j = tri_pts[i], tri_pts[j]
+        d_i, d_j = dvals[i], dvals[j]
+
+        # Coplanar edge - skip (rare in this workflow and produces unstable duplicates).
+        if d_i == 0.0 and d_j == 0.0:
+            continue
+        if d_i == 0.0:
+            add_candidate(p_i)
+            continue
+        if d_j == 0.0:
+            add_candidate(p_j)
+            continue
+        if d_i * d_j < 0.0:
+            t = d_i / (d_i - d_j)
+            add_candidate(p_i + (p_j - p_i) * t)
+
+    if len(candidates) < 2:
+        return None
+
+    # Choose farthest pair when >2 samples are present.
+    best_i, best_j = 0, 1
+    best_d2 = -1.0
+    for i in range(len(candidates)):
+        for j in range(i + 1, len(candidates)):
+            d2 = float(np.dot(candidates[j] - candidates[i], candidates[j] - candidates[i]))
+            if d2 > best_d2:
+                best_d2 = d2
+                best_i, best_j = i, j
+
+    p1 = candidates[best_i]
+    p2 = candidates[best_j]
+    return Vector3D(p1[0], p1[1], p1[2]), Vector3D(p2[0], p2[1], p2[2])
+
+
+def _clip_segment_to_convex_polygon_2d(
+    a: np.ndarray, b: np.ndarray, polygon: np.ndarray, eps: float = 1e-10
+) -> Optional[Tuple[float, float]]:
+    """Clip a 2D segment against a convex polygon; return parametric [t0, t1] on [0, 1]."""
+    poly = np.asarray(polygon, dtype=float)
+    if poly.shape[0] < 3:
+        return None
+
+    # Ensure CCW orientation.
+    area2 = float(np.sum(poly[:, 0] * np.roll(poly[:, 1], -1) - np.roll(poly[:, 0], -1) * poly[:, 1]))
+    if area2 < 0.0:
+        poly = poly[::-1]
+
+    d = b - a
+    t_enter = 0.0
+    t_exit = 1.0
+
+    for i in range(poly.shape[0]):
+        p0 = poly[i]
+        p1 = poly[(i + 1) % poly.shape[0]]
+        edge = p1 - p0
+
+        cross_ad = edge[0] * d[1] - edge[1] * d[0]        # cross(edge, d)
+        cross_aa = edge[0] * (a[1] - p0[1]) - edge[1] * (a[0] - p0[0])  # cross(edge, a-p0)
+
+        if abs(cross_ad) <= eps:
+            if cross_aa < -eps:
+                return None
+            continue
+
+        t_hit = (-eps - cross_aa) / cross_ad
+        if cross_ad > 0.0:
+            t_enter = max(t_enter, t_hit)
+        else:
+            t_exit = min(t_exit, t_hit)
+
+        if t_enter - t_exit > eps:
+            return None
+
+    t0 = max(0.0, t_enter)
+    t1 = min(1.0, t_exit)
+    if t1 - t0 <= eps:
+        return None
+    return t0, t1
+
+
+def _compute_planar_slicing_fallback_curves(
+    surface1,
+    tri1_list: List[Triangle],
+    surface2,
+    tri2_list: List[Triangle],
+    surface1_idx: int,
+    surface2_idx: int,
+    min_seg_len2: float = 1e-14,
+) -> List[List[Vector3D]]:
+    """
+    Fallback for fragmented tri-tri results:
+    If exactly one surface is quasi-planar, slice the other mesh by this plane and clip
+    to the planar footprint polygon.
+    """
+    plane1 = _detect_quasi_planar_surface(surface1)
+    plane2 = _detect_quasi_planar_surface(surface2)
+
+    # Use this fallback only when exactly one surface is quasi-planar.
+    if (plane1 is None and plane2 is None) or (plane1 is not None and plane2 is not None):
+        return []
+
+    if plane1 is not None:
+        plane_info = plane1
+        mesh_tris = tri2_list
+        plane_surface_idx = surface1_idx
+        mesh_surface_idx = surface2_idx
+    else:
+        plane_info = plane2
+        mesh_tris = tri1_list
+        plane_surface_idx = surface2_idx
+        mesh_surface_idx = surface1_idx
+
+    plane_origin = plane_info["origin"]
+    plane_normal = plane_info["normal"]
+    u_axis = plane_info["u_axis"]
+    v_axis = plane_info["v_axis"]
+    polygon_2d = plane_info["polygon_2d"]
+    plane_eps = max(plane_info["planarity_tol"], 1e-8)
+
+    logger.info(
+        f"Surface {surface1_idx}-{surface2_idx}: "
+        f"Trying planar slicing fallback (plane=surface {plane_surface_idx}, mesh=surface {mesh_surface_idx})"
+    )
+
+    clipped_segments = []
+    skipped_outside = 0
+    skipped_sliver = 0
+
+    def project_2d(p: Vector3D) -> np.ndarray:
+        vec = np.asarray([p.x, p.y, p.z], dtype=float) - plane_origin
+        return np.asarray([float(np.dot(vec, u_axis)), float(np.dot(vec, v_axis))], dtype=float)
+
+    for tri in mesh_tris:
+        seg = _triangle_plane_intersection_segment(tri, plane_origin, plane_normal, plane_eps)
+        if seg is None:
+            continue
+        a3, b3 = seg
+        a2 = project_2d(a3)
+        b2 = project_2d(b3)
+        t_clip = _clip_segment_to_convex_polygon_2d(a2, b2, polygon_2d, eps=1e-9)
+        if t_clip is None:
+            skipped_outside += 1
+            continue
+
+        t0, t1 = t_clip
+        dir3 = b3 - a3
+        c1 = a3 + dir3 * t0
+        c2 = a3 + dir3 * t1
+        if (c2 - c1).length_squared() <= min_seg_len2:
+            skipped_sliver += 1
+            continue
+        append_non_existing_segment(clipped_segments, c1, c2)
+
+    logger.info(
+        f"Surface {surface1_idx}-{surface2_idx}: "
+        f"Planar slicing fallback produced {len(clipped_segments)} segments "
+        f"(outside clipped: {skipped_outside}, slivers: {skipped_sliver})"
+    )
+
+    if not clipped_segments:
+        return []
+    return connect_intersection_segments(clipped_segments)
+
+
 def calculate_surface_surface_intersection(surface1_idx: int, surface2_idx: int, model):
     """
     Calculate intersections between two surfaces using spatial subdivision for efficiency.
@@ -937,10 +1230,14 @@ def calculate_surface_surface_intersection(surface1_idx: int, surface2_idx: int,
     
     # Container for intersection segments
     intersection_segments = []
+    extraction_sliver_skipped = 0
+    sliver_len2 = 1e-14
     
     # Use spatial subdivision to find intersections
     if box.too_much_tri():
+        box._shared_stats = {"sliver_skipped": 0}
         box.split_tri(intersection_segments)
+        extraction_sliver_skipped += box._shared_stats.get("sliver_skipped", 0)
     else:
         # Direct testing for small number of triangles
         for tri1 in box.T1s:
@@ -953,45 +1250,55 @@ def calculate_surface_surface_intersection(surface1_idx: int, surface2_idx: int,
                     segment_length_squared = (p2 - p1).length_squared()
                     
                     # Only accept intersections with meaningful length (not just point contacts)
-                    if segment_length_squared > 1e-20:
+                    if segment_length_squared > sliver_len2:
                         append_non_existing_segment(intersection_segments, p1, p2)
+                    else:
+                        extraction_sliver_skipped += 1
                 # Skip single point intersections - they're usually just edge contacts
+
+    logger.info(
+        f"Surface {surface1_idx}-{surface2_idx}: "
+        f"Skipped {extraction_sliver_skipped} sliver intersection segments during extraction"
+    )
     
-    # If we found any intersections, create an Intersection object
+    def curves_to_result(curves: List[List[Vector3D]]):
+        if not curves:
+            return None
+        if len(curves) == 1:
+            intersection = Intersection(surface1_idx, surface2_idx, False)
+            for point in curves[0]:
+                intersection.add_point(point)
+            return intersection
+        intersections = []
+        for curve in curves:
+            intersection = Intersection(surface1_idx, surface2_idx, False)
+            for point in curve:
+                intersection.add_point(point)
+            intersections.append(intersection)
+        return intersections
+
+    connected_curves = []
     if intersection_segments:
         logger.info(f"Surface {surface1_idx}-{surface2_idx}: Found {len(intersection_segments)} intersection segments")
         for i, seg in enumerate(intersection_segments):
             if len(seg) >= 2:
                 logger.info(f"  Segment {i}: ({seg[0].x:.3f},{seg[0].y:.3f},{seg[0].z:.3f}) -> ({seg[1].x:.3f},{seg[1].y:.3f},{seg[1].z:.3f})")
-        
-        # Connect intersection segments into continuous curves (like C++ does)
-        # Connect intersection segments into continuous curves (like C++ does)
         connected_curves = connect_intersection_segments(intersection_segments)
 
-        # Optional post-connection regularization (C++-like RefineByLength)
+    # If tri-tri yields fragmented/missing curves and one side is quasi-planar (e.g., borders),
+    # use plane slicing fallback which is robust to odd triangulation topology.
+    if len(connected_curves) != 1:
+        fallback_curves = _compute_planar_slicing_fallback_curves(
+            surface1, tri1_list, surface2, tri2_list, surface1_idx, surface2_idx
+        )
+        if fallback_curves and (not connected_curves or len(fallback_curves) < len(connected_curves)):
+            logger.info(
+                f"Surface {surface1_idx}-{surface2_idx}: "
+                f"Using planar slicing fallback ({len(connected_curves)} -> {len(fallback_curves)} curves)"
+            )
+            connected_curves = fallback_curves
 
-        # logger.info(f"Surface {surface1_idx}-{surface2_idx}: Connected into {len(connected_curves)} curves")
-        
-        # Return multiple intersection objects - one for each curve
-        # This matches the C++ behavior where each curve is a separate intersection
-        if len(connected_curves) == 1:
-            # Single curve - return as single intersection (backward compatibility)
-            intersection = Intersection(surface1_idx, surface2_idx, False)
-            for point in connected_curves[0]:
-                intersection.add_point(point)
-            return intersection
-        else:
-            # Multiple curves - return as list of intersections
-            # Note: This changes the return type, but it's necessary for correct visualization
-            intersections = []
-            for curve_idx, curve in enumerate(connected_curves):
-                intersection = Intersection(surface1_idx, surface2_idx, False)
-                for point in curve:
-                    intersection.add_point(point)
-                intersections.append(intersection)
-            return intersections
-    
-    return None
+    return curves_to_result(connected_curves)
 
 # ####################################################################
 # START OF MODIFIED SECTION 2: connect_intersection_segments
@@ -1006,13 +1313,17 @@ def connect_intersection_segments(segments, tolerance=1e-10):
         return []
     
     logger.info(f"Starting segment connection with {len(segments)} input segments")
+    sliver_len2 = 1e-14
+    tiny_curve_arc_len = 1e-6
+    sliver_skipped_validation = 0
+    tiny_curves_dropped = 0
     
     validated_points = []
     for i, segment in enumerate(segments):
         if len(segment) >= 2:
             p1, p2 = segment[0], segment[1]
-            if (p1 - p2).length_squared() < 1e-24:
-                logger.info(f"Segment {i} rejected: identical points")
+            if (p1 - p2).length_squared() < sliver_len2:
+                sliver_skipped_validation += 1
                 continue
             is_duplicate = False
             for j in range(0, len(validated_points), 2):
@@ -1036,12 +1347,15 @@ def connect_intersection_segments(segments, tolerance=1e-10):
     
     # Much stricter compatibility: avoid jumping to nearby but different lines
     def is_direction_compatible(tangent: Vector3D, candidate_vec: Vector3D, min_dot: float = 0.10) -> bool:
-        t_len = tangent.length()
-        c_len = candidate_vec.length()
-        if t_len < 1e-14 or c_len < 1e-14:
+        t_len2 = tangent.length_squared()
+        c_len2 = candidate_vec.length_squared()
+        # If current tangent is a sliver, do not enforce direction gating.
+        if t_len2 < sliver_len2:
+            return True
+        if c_len2 < sliver_len2:
             return False
-        t = tangent * (1.0 / t_len)
-        c = candidate_vec * (1.0 / c_len)
+        t = tangent * (1.0 / math.sqrt(t_len2))
+        c = candidate_vec * (1.0 / math.sqrt(c_len2))
         return t.dot(c) > min_dot
     curves = []
     curve_count = 0
@@ -1116,13 +1430,26 @@ def connect_intersection_segments(segments, tolerance=1e-10):
                 cleaned_curve.append(point)
         
         if len(cleaned_curve) >= 2:
-            curves.append(cleaned_curve)
-            logger.info(f"Curve {curve_count} completed: {len(cleaned_curve)} points, {extended_count} extensions")
-            logger.info(f"  Start: ({cleaned_curve[0].x:.3f},{cleaned_curve[0].y:.3f},{cleaned_curve[0].z:.3f})")
-            logger.info(f"  End: ({cleaned_curve[-1].x:.3f},{cleaned_curve[-1].y:.3f},{cleaned_curve[-1].z:.3f})")
+            arc_len = 0.0
+            for idx in range(1, len(cleaned_curve)):
+                arc_len += (cleaned_curve[idx] - cleaned_curve[idx - 1]).length()
+            if arc_len < tiny_curve_arc_len:
+                tiny_curves_dropped += 1
+                logger.info(f"Curve {curve_count} rejected: tiny arc length ({arc_len:.3e})")
+            else:
+                curves.append(cleaned_curve)
+                logger.info(f"Curve {curve_count} completed: {len(cleaned_curve)} points, {extended_count} extensions")
+                logger.info(f"  Start: ({cleaned_curve[0].x:.3f},{cleaned_curve[0].y:.3f},{cleaned_curve[0].z:.3f})")
+                logger.info(f"  End: ({cleaned_curve[-1].x:.3f},{cleaned_curve[-1].y:.3f},{cleaned_curve[-1].z:.3f})")
         else:
             logger.info(f"Curve {curve_count} rejected: too short after cleanup")
     
+    logger.info(
+        f"Segment connection stats: skipped {sliver_skipped_validation} sliver segments during validation"
+    )
+    logger.info(
+        f"Segment connection stats: dropped {tiny_curves_dropped} tiny curves after cleanup"
+    )
     logger.info(f"Segment connection complete: {len(curves)} curves created from original {len(segments)} segments")
     return curves
 # ##################################################################
