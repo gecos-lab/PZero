@@ -4,6 +4,9 @@ PZero© Andrea Bistacchi"""
 # PySide6 imports____
 from PySide6.QtGui import QAction
 
+# Standard library imports____
+from math import sqrt
+
 # numpy import____
 from numpy import array as np_array
 
@@ -74,6 +77,14 @@ class ViewXsection(View2D):
         super().initialize_menu_tools()
 
         # then add new code specific to this class
+        self.restoreGeographicOrientationButton = QAction(
+            "Restore Geographic Orientation", self
+        )
+        self.restoreGeographicOrientationButton.triggered.connect(
+            self.restore_geographic_orientation
+        )
+        self.menuView.addAction(self.restoreGeographicOrientationButton)
+
         self.horizMirrorButton = QAction("Mirror horizontal axes", self)
         self.horizMirrorButton.triggered.connect(self.horizontal_mirror)
         self.menuView.addAction(self.horizMirrorButton)
@@ -121,6 +132,59 @@ class ViewXsection(View2D):
         self.plotter.camera.focal_point = self.center
         self.plotter.camera.position = self.center + self.direction
         self.plotter.reset_camera()
+
+    def restore_geographic_orientation(self):
+        """Restore section camera to geographic reference orientation."""
+        section_plane = self.parent.xsect_coll.get_uid_vtk_plane(self.this_x_section_uid)
+        self.center = np_array(section_plane.GetOrigin())
+        self.direction = np_array(section_plane.GetNormal())
+
+        camera = self.plotter.camera
+        current_parallel_scale = getattr(camera, "parallel_scale", None)
+
+        dx = camera.position[0] - self.center[0]
+        dy = camera.position[1] - self.center[1]
+        dz = camera.position[2] - self.center[2]
+        distance = sqrt(dx * dx + dy * dy + dz * dz)
+        if distance == 0:
+            distance = 1.0
+
+        normal_norm = sqrt(
+            self.direction[0] * self.direction[0]
+            + self.direction[1] * self.direction[1]
+            + self.direction[2] * self.direction[2]
+        )
+        if normal_norm == 0:
+            return
+        normal = self.direction / normal_norm
+
+        # Keep vertical elevation up by projecting global Z onto the section plane.
+        up_vector = np_array([0.0, 0.0, 1.0])
+        z_dot_n = (
+            up_vector[0] * normal[0]
+            + up_vector[1] * normal[1]
+            + up_vector[2] * normal[2]
+        )
+        up_vector = up_vector - z_dot_n * normal
+        up_norm = sqrt(
+            up_vector[0] * up_vector[0]
+            + up_vector[1] * up_vector[1]
+            + up_vector[2] * up_vector[2]
+        )
+        if up_norm == 0:
+            up_vector = np_array([0.0, 1.0, 0.0])
+            up_norm = 1.0
+        up_vector = up_vector / up_norm
+
+        self.plotter.camera_position = [
+            tuple((self.center + normal * distance).tolist()),
+            tuple(self.center.tolist()),
+            tuple(up_vector.tolist()),
+        ]
+        if current_parallel_scale is not None:
+            camera.parallel_scale = current_parallel_scale
+
+        self.plotter.render()
 
     def fit_frame(self):
         """
