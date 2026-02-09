@@ -674,22 +674,38 @@ class XSectionCollection(BaseCollection):
         """Get XYZ world coordinates from UV cross-section plane coordinates."""
         # the following are strike, dip, normal unit vectors and the
         # position vector origin of the cross-section plane in world XYZ coordinates
-        strike_vct = np_float64(self.get_uid_strike_vect(section_uid=section_uid))
-        dip_vct = np_float64(self.get_uid_dip_vect(section_uid=section_uid))
-        origin = np_float64(self.get_uid_origin(uid=section_uid))
+        strike_vct = np_float64(self.get_uid_strike_vect(section_uid=section_uid)).reshape(
+            1, 3
+        )
+        dip_vct = np_float64(self.get_uid_dip_vect(section_uid=section_uid)).reshape(1, 3)
+        origin = np_float64(self.get_uid_origin(uid=section_uid)).reshape(1, 3)
+
+        U_arr = np_array(U, dtype=np_float64)
+        V_arr = np_array(V, dtype=np_float64)
+        if U_arr.shape != V_arr.shape:
+            raise ValueError("U and V must have the same shape in plane2world.")
+
+        U_flat = U_arr.reshape(-1, 1)
+        V_flat = V_arr.reshape(-1, 1)
         # the following is the vector from the origin of the cross-section plane
         # to the point UV, already in world XYZ coordinates
-        origin_2_point = strike_vct * U + dip_vct * V
+        origin_2_point = U_flat * strike_vct + V_flat * dip_vct
         # then we add the vector from the origin of the cross-section plane to
         # world coordinates origin (0,0,0), and we get the position in world XYZ coordinates
         XYZ = np_float32(origin_2_point + origin)
-        X = XYZ[0]
-        Y = XYZ[1]
-        Z = XYZ[2]
+
+        if U_arr.ndim == 0:
+            if as_arr:
+                return XYZ[0]
+            return XYZ[0, 0], XYZ[0, 1], XYZ[0, 2]
+
+        out_shape = U_arr.shape
+        X = XYZ[:, 0].reshape(out_shape)
+        Y = XYZ[:, 1].reshape(out_shape)
+        Z = XYZ[:, 2].reshape(out_shape)
         if as_arr:
-            return XYZ
-        else:
-            return X, Y, Z
+            return XYZ.reshape(out_shape + (3,))
+        return X, Y, Z
 
     def set_geometry(self, uid=None):
         """Given all parameters, sets the vtkPlane origin and normal properties, and builds the frame used for

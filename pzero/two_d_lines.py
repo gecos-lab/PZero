@@ -1044,7 +1044,15 @@ def resample_lines_distance(self):
         elif isinstance(self, ViewXsection):
             new_line["topology"] = "XsPolyLine"
             new_line["parent_uid"] = self.this_x_section_uid
-            inU, inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid).world2plane()
+            in_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid)
+            inU, inV = self.parent.xsect_coll.world2plane(
+                section_uid=self.this_x_section_uid,
+                X=in_vtk_obj.points_X,
+                Y=in_vtk_obj.points_Y,
+                Z=in_vtk_obj.points_Z,
+            )
+            inU = np_array(inU).reshape(-1)
+            inV = np_array(inV).reshape(-1)
         # Stack coordinates in two-columns matrix.
         inUV = np_column_stack((inU, inV))
         # Run the Shapely function.
@@ -1145,7 +1153,15 @@ def resample_lines_number_points(
         elif isinstance(self, ViewXsection):
             new_line["topology"] = "XsPolyLine"
             new_line["parent_uid"] = self.this_x_section_uid
-            inU, inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid).world2plane()
+            in_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid)
+            inU, inV = self.parent.xsect_coll.world2plane(
+                section_uid=self.this_x_section_uid,
+                X=in_vtk_obj.points_X,
+                Y=in_vtk_obj.points_Y,
+                Z=in_vtk_obj.points_Z,
+            )
+            inU = np_array(inU).reshape(-1)
+            inV = np_array(inV).reshape(-1)
         # Stack coordinates in two-columns matrix.
         inUV = np_column_stack((inU, inV))
         # Run the Shapely function.
@@ -1188,9 +1204,7 @@ def resample_lines_number_points(
             self.print_terminal(" -- Empty object -- ")
         # Deselect input line and emit uid as list to force redraw.
         self.clear_selection()
-        self.parent.geol_coll.signals.geom_modified.emit(
-            [current_uid], self.parent.geol_coll
-        )
+        self.parent.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
         self.print_terminal(
             f"Line {current_uid} resampled with number of points = {number_of_points}"
         )
