@@ -25,6 +25,9 @@ from pzero.entities_factory import PolyLine, VertexSet, Attitude
 from pzero.helpers.helper_dialogs import ShapefileAssignmentDialog
 from pzero.orientation_analysis import dip_directions2normals
 
+USER_DEFINED_FEATURE_TOKEN = "__user_defined_feature__"
+USER_DEFINED_FEATURE_COLUMN = "__pzero_user_defined_feature__"
+
 # Importer for SHP files and other GIS formats, to be improved IN THE FUTURE.
 # Known bugs for multi-part polylines.
 # Points not handled correctly.
@@ -77,6 +80,19 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
     if attribute_mapping is None:
         self.print_terminal("Import cancelled by user.")
         return
+
+    # Support an explicit user-defined feature value for all imported objects.
+    if attribute_mapping.get("feature") == USER_DEFINED_FEATURE_TOKEN:
+        user_feature_value = str(
+            attribute_mapping.get("feature_user_value", "undefined")
+        ).strip()
+        if not user_feature_value:
+            user_feature_value = "undefined"
+        feature_col_name = USER_DEFINED_FEATURE_COLUMN
+        while feature_col_name in gdf.columns:
+            feature_col_name = f"_{feature_col_name}"
+        gdf[feature_col_name] = user_feature_value
+        attribute_mapping["feature"] = feature_col_name
 
     # Split mapping into properties vs orientation-related fields
     # Build maps without mutating original

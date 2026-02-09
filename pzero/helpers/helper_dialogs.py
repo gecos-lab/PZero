@@ -1090,6 +1090,10 @@ class ShapefileAssignmentDialog(QMainWindow):
     """Dialog to assign shapefile attributes to PZero properties.
     Similar to import_dialog but simplified for shapefile data without preview table."""
 
+    USER_DEFINED_OPTION = "user defined"
+    USER_DEFINED_FEATURE_TOKEN = "__user_defined_feature__"
+    DEFAULT_USER_FEATURE = "undefined"
+
     def __init__(
         self,
         parent=None,
@@ -1107,6 +1111,7 @@ class ShapefileAssignmentDialog(QMainWindow):
         self.include_label = include_label
         self.attribute_mapping = {}
         self.result = None
+        self.feature_user_line = None
 
         # Define required and optional fields based on topology
         self.required_fields, self.optional_fields = self._get_field_definitions()
@@ -1152,9 +1157,11 @@ class ShapefileAssignmentDialog(QMainWindow):
         #header_arrow = QLabel("<b>←</b>")
         #header_arrow.setAlignment(Qt.AlignCenter)
         header_shapefile = QLabel("<b>Shapefile Column</b>")
+        header_manual = QLabel("<b>User Value</b>")
         main_layout.addWidget(header_pzero, row, 0)
         #main_layout.addWidget(header_arrow, row, 1)
         main_layout.addWidget(header_shapefile, row, 1)
+        main_layout.addWidget(header_manual, row, 2)
         row += 1
 
         # Create combo boxes for each field
@@ -1170,7 +1177,10 @@ class ShapefileAssignmentDialog(QMainWindow):
             #arrow_label = QLabel("←")
             #arrow_label.setAlignment(Qt.AlignCenter)
             combo = QComboBox()
-            combo.addItems(shapefile_columns)
+            if field == "feature":
+                combo.addItems(shapefile_columns + [self.USER_DEFINED_OPTION])
+            else:
+                combo.addItems(shapefile_columns)
             combo.setObjectName(f"combo_{field}")
             combo.currentTextChanged.connect(
                 lambda text, f=field, lbl=label: self._on_combo_changed(f, text, lbl)
@@ -1179,6 +1189,16 @@ class ShapefileAssignmentDialog(QMainWindow):
             main_layout.addWidget(label, row, 0)
 #            main_layout.addWidget(arrow_label, row, 1)
             main_layout.addWidget(combo, row, 1)
+            if field == "feature":
+                self.feature_user_line = QLineEdit()
+                self.feature_user_line.setObjectName("feature_user_defined_line")
+                self.feature_user_line.setPlaceholderText(self.DEFAULT_USER_FEATURE)
+                self.feature_user_line.setText(self.DEFAULT_USER_FEATURE)
+                self.feature_user_line.setEnabled(False)
+                self.feature_user_line.textChanged.connect(
+                    self._on_user_feature_text_changed
+                )
+                main_layout.addWidget(self.feature_user_line, row, 2)
             self.combo_boxes[field] = combo
             self.field_labels[field] = label
             row += 1
@@ -1202,6 +1222,9 @@ class ShapefileAssignmentDialog(QMainWindow):
             main_layout.addWidget(label, row, 0)
             #.addWidget(arrow_label, row, 1)
             main_layout.addWidget(combo, row, 1)
+            placeholder = QLabel("-")
+            placeholder.setAlignment(Qt.AlignCenter)
+            main_layout.addWidget(placeholder, row, 2)
             self.combo_boxes[field] = combo
             self.field_labels[field] = label
             row += 1
@@ -1233,14 +1256,57 @@ class ShapefileAssignmentDialog(QMainWindow):
                         self.combo_boxes[field].setCurrentText(shp_col)
                         self.attribute_mapping[field] = shp_col
                     break
+        # If no "feature" column exists, default to user-defined feature value.
+        feature_combo = self.combo_boxes.get("feature")
+        if feature_combo and feature_combo.currentText() == "<none>":
+            feature_combo.setCurrentText(self.USER_DEFINED_OPTION)
 
     def _on_combo_changed(self, field, text, label):
         """Handle combo box changes."""
+        if field == "feature":
+            if text == self.USER_DEFINED_OPTION:
+                if self.feature_user_line is not None:
+                    self.feature_user_line.setEnabled(True)
+                self.attribute_mapping["feature"] = self.USER_DEFINED_FEATURE_TOKEN
+                self.attribute_mapping["feature_user_value"] = (
+                    self._get_user_defined_feature_value()
+                )
+            elif text == "<none>":
+                if self.feature_user_line is not None:
+                    self.feature_user_line.setEnabled(False)
+                self.attribute_mapping.pop("feature", None)
+                self.attribute_mapping.pop("feature_user_value", None)
+            else:
+                if self.feature_user_line is not None:
+                    self.feature_user_line.setEnabled(False)
+                self.attribute_mapping["feature"] = text
+                self.attribute_mapping.pop("feature_user_value", None)
+            return
+
         if text == "<none>":
             if field in self.attribute_mapping:
                 del self.attribute_mapping[field]
         else:
             self.attribute_mapping[field] = text
+
+    def _get_user_defined_feature_value(self):
+        """Return normalized user-defined feature value with default fallback."""
+        if self.feature_user_line is None:
+            return self.DEFAULT_USER_FEATURE
+        feature_value = self.feature_user_line.text().strip()
+        return feature_value if feature_value else self.DEFAULT_USER_FEATURE
+
+    def _on_user_feature_text_changed(self, _text):
+        """Update mapping when user edits custom feature value."""
+        feature_combo = self.combo_boxes.get("feature")
+        if (
+            feature_combo
+            and feature_combo.currentText() == self.USER_DEFINED_OPTION
+        ):
+            self.attribute_mapping["feature"] = self.USER_DEFINED_FEATURE_TOKEN
+            self.attribute_mapping["feature_user_value"] = (
+                self._get_user_defined_feature_value()
+            )
 
     def _validate_and_accept(self):
         """Validate that all required fields are assigned before accepting."""
@@ -1279,6 +1345,12 @@ class ShapefileAssignmentDialog(QMainWindow):
 
     def accept(self):
         """Accept the dialog and return the mapping."""
+        feature_combo = self.combo_boxes.get("feature")
+        if feature_combo and feature_combo.currentText() == self.USER_DEFINED_OPTION:
+            self.attribute_mapping["feature"] = self.USER_DEFINED_FEATURE_TOKEN
+            self.attribute_mapping["feature_user_value"] = (
+                self._get_user_defined_feature_value()
+            )
         self.result = self.attribute_mapping.copy()
 
         self.close()
