@@ -26,20 +26,20 @@ class GFBCollection(BaseCollection):
             "uid": "",
             "name": "undef",
             "scenario": "undef",
-            "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "parent_uid": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "topology": "undef",
             "vtk_obj": None,
-            "role": "undef",
-            "feature": "undef",
             "properties_names": [],
             "properties_components": [],
+            "role": "undef",
+            "feature": "undef",
         }
 
         self.entity_dict_types = {
             "uid": str,
             "name": str,
             "scenario": str,
-            "x_section": str,  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
+            "parent_uid": str,  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "topology": str,
             "vtk_obj": object,
             "role": str,
@@ -163,7 +163,7 @@ class GFBCollection(BaseCollection):
         entity_dict["scenario"] = self.get_uid_scenario(uid)
         entity_dict["properties_names"] = self.get_uid_properties_names(uid)
         entity_dict["properties_components"] = self.get_uid_properties_components(uid)
-        entity_dict["x_section"] = self.get_uid_x_section(uid)
+        entity_dict["parent_uid"] = self.get_uid_x_section(uid)
         entity_dict["vtk_obj"] = self.get_uid_vtk_obj(uid).deep_copy()
         out_uid = self.add_entity_from_dict(entity_dict=entity_dict)
         return out_uid

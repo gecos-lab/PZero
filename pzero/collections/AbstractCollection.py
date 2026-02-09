@@ -298,16 +298,16 @@ class BaseCollection(ABC):
     def get_uid_x_section(self, uid: str = None) -> str:
         """Get xsection uid from uid."""
         # Use the query method in the future?
-        return self.df.loc[self.df["uid"] == uid, "x_section"].values[0]
+        return self.df.loc[self.df["uid"] == uid, "parent_uid"].values[0]
 
-    def set_uid_x_section(self, uid: str = None, x_section: str = None):
+    def set_uid_x_section(self, uid: str = None, parent_uid: str = None):
         """Set xsection uid from uid."""
-        self.df.loc[self.df["uid"] == uid, "x_section"] = x_section
+        self.df.loc[self.df["uid"] == uid, "parent_uid"] = parent_uid
 
     def get_xuid_uid(self, xuid: str = None) -> list:
         """Get the uids of the geological objects for the corresponding xsec uid"""
         # Use the query method in the future?
-        return self.df.loc[self.df["x_section"] == xuid, "uid"].to_list()
+        return self.df.loc[self.df["parent_uid"] == xuid, "uid"].to_list()
 
     def get_uid_vtk_obj(self, uid: str = None) -> vtkDataObject:
         """Get vtk object from uid."""

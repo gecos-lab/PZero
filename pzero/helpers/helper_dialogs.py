@@ -22,8 +22,9 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QTableWidgetItem,
     QHeaderView,
-    QApplication,
     QFormLayout,
+    QScrollArea,
+    QVBoxLayout,
 )
 
 from laspy import open as lp_open
@@ -39,7 +40,6 @@ from pzero.ui.import_window_ui import Ui_ImportOptionsWindow
 from pzero.ui.navigator_window_ui import Ui_NavWindow
 from pzero.ui.preview_window_ui import Ui_PreviewWindow
 from .helper_functions import auto_sep
-
 
 def options_dialog(
     title=None, message=None, yes_role="Yes", no_role="No", reject_role=None
@@ -198,7 +198,8 @@ def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
         gridLayout.addWidget(objects_qt[key][0], i + 1, 1)
         # Create QLineEdits and QComboBoxes.
         if isinstance(input_dict[key][1], list):
-            objects_qt[key][1] = QComboBox(widget, objectName=f"par_{key}")
+            objects_qt[key][1] = QComboBox(widget)
+            objects_qt[key][1].setObjectName(f"par_{key}")
             if len(input_dict[key]) == 3:
                 display_value = input_dict[key][2]
                 index = input_dict[key][1].index(display_value)
@@ -208,14 +209,16 @@ def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
             objects_qt[key][1].setEditable(True)
             objects_qt[key][1].setCurrentIndex(index)
         elif isinstance(input_dict[key][1], bool):
-            objects_qt[key][1] = QCheckBox(widget, objectName=f"par_{key}")
-            # objects_qt[key][1].setText(str(input_dict[key][0]))
+            objects_qt[key][1] = QCheckBox(widget)
+            objects_qt[key][1].setObjectName(f"par_{key}")
             objects_qt[key][1].setChecked(input_dict[key][1])
         elif isinstance(input_dict[key][1], int):
-            objects_qt[key][1] = QLineEdit(widget, objectName=f"par_{key}")
+            objects_qt[key][1] = QLineEdit(widget)
+            objects_qt[key][1].setObjectName(f"par_{key}")
             objects_qt[key][1].setText(str(input_dict[key][1]))
         elif isinstance(input_dict[key][1], float):
-            objects_qt[key][1] = QLineEdit(widget, objectName=f"par_{key}")
+            objects_qt[key][1] = QLineEdit(widget)
+            objects_qt[key][1].setObjectName(f"par_{key}")
             objects_qt[key][1].setText(str(input_dict[key][1]))
         # elif isinstance(input_dict[key][1], int):
         #     objects_qt[key][1] = QSpinBox(widget)
@@ -295,27 +298,61 @@ def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
     return output_dict
 
 
-def input_checkbox_dialog(title="title", label="label", choice_list=None):
-    """Open a dialog with a text line explaining the widget, followed by a list of non-exclusive checkboxes."""
+def input_checkbox_dialog(
+    title="title", label="label", choice_list=None, exclusive=False
+):
+    """Open a dialog with a text line explaining the widget, followed by a list of checkboxes.
+    If exclusive=True, only one checkbox can be selected at a time (radio button behavior).
+    """
     widget = QWidget()
     widget.setWindowTitle(title)
-    # Define a grid layout
-    gridLayout = QGridLayout(widget)
+
+    # Create a scroll area to host the list of checkboxes
+    scroll = QScrollArea(widget)
+    scroll.setWidgetResizable(True)
+    scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+    # Content widget that actually receives the checkboxes in a grid layout
+    content = QWidget()
+    gridLayout = QGridLayout(content)
+    scroll.setWidget(content)
+
+    # Place the scroll area inside a top-level layout so buttons can be placed below it
+    main_layout = QVBoxLayout(widget)
+    main_layout.addWidget(scroll)
+
     objects_qt = {}
     i = 0
     # Insert QLabel to explain the reason of the choice
     label_line = QLabel(widget)
     label_line.setText(label)
     gridLayout.addWidget(label_line, 1, 1)
+
+    def handle_checkbox_click(clicked_element):
+        """Handle exclusive checkbox behavior"""
+        if exclusive and objects_qt[clicked_element][0].isChecked():
+            for element in choice_list:
+                if element != clicked_element:
+                    objects_qt[element][0].setChecked(False)
+
     # FOR loop that builds checkboxes according to the choice_list
     for element in choice_list:
         # Create dynamic variables.
         objects_qt[element] = [None, None]
         # Create QCheckBoxes.
-        objects_qt[element][0] = QCheckBox(widget)
+        objects_qt[element][0] = QCheckBox(content)
         objects_qt[element][0].setText(element)  # set text for the checkbox
+        if exclusive:
+            objects_qt[element][0].clicked.connect(
+                lambda checked, el=element: handle_checkbox_click(el)
+            )
         gridLayout.addWidget(objects_qt[element][0], i + 2, 1)
         i += 1
+
+    # Set the first checkbox as checked if exclusive is True
+    if exclusive and choice_list:
+        objects_qt[choice_list[0]][0].setChecked(True)
+
     # Create OK Button, add it to the grid layout an set name and state
     button_ok = QPushButton(widget)
     gridLayout.addWidget(button_ok, i + 3, 1)
@@ -326,7 +363,8 @@ def input_checkbox_dialog(title="title", label="label", choice_list=None):
     gridLayout.addWidget(button_cancel, i + 3, 2)
     button_cancel.setAutoDefault(True)
     button_cancel.setText("Cancel")
-    # Show the widget.
+    # Show the widget, resized thank to the scroll function.
+    widget.resize(400, 300)
     widget.show()
 
     def cancel_option():
@@ -347,15 +385,20 @@ def input_checkbox_dialog(title="title", label="label", choice_list=None):
     )  # Response to clicking the Cancel PushButton. End the QEventLoop
     loop.exec_()  # Execute the QEventLoop
 
-    # When the QEventLoop is closed, the typed text is collected
+    # When the QEventLoop is closed, the output ir returned as a list if multiple checkboxes are checked,
+    # or as a string if only one checkbox is checked, and None if Cancel is pressed or nothing is checked.
     if not objects_qt:
         return
     else:
-        output_dict = []
+        output_list = []
         for element in choice_list:
             if objects_qt[element][0].isChecked():
-                output_dict.append(element)
-    return output_dict
+                output_list.append(element)
+        if len(output_list) == 1:
+            output = output_list[0]
+        else:
+            output = output_list
+    return output
 
 
 def general_input_dialog(title="title", input_dict=None):
@@ -572,42 +615,34 @@ class progress_dialog(QProgressDialog):
 
 
 class PCDataModel(QAbstractTableModel):
-    """Abstract table model that can be used to quickly display imported pc files data  from a pandas df. Taken from this stack overflow post https://stackoverflow.com/questions/31475965/fastest-way-to-populate-qtableview-from-pandas-data-frame"""
-
+    """Abstract table model showing a pandas DataFrame with highlighted columns."""
     def __init__(self, data, index_list, parent=None, *args, **kwargs):
         super(PCDataModel, self).__init__(*args, **kwargs)
-
-        self.data = data
+        self.df = data
         self.index_list = index_list
 
-    def columnCount(
-        self, parent=None
-    ):  #  the n of columns is = to the number of columns of the input data set (.shape[1])
-        return self.data.shape[1]
+    def columnCount(self, parent=None):
+        return self.df.shape[1]
 
-    def rowCount(
-        self, parent=None
-    ):  #  the n of rows is = to the number of rows of the input data set (.shape[0])
-        return self.data.shape[0]
+    def rowCount(self, parent=None):
+        return self.df.shape[0]
 
-    def data(self, index, qt_role):
-        # print(index.column())
-        if index.isValid():
-            if qt_role == Qt.DisplayRole:
-                return str(
-                    self.data.iloc[index.row(), index.column()]
-                )  # if qt_role == Qt.BackgroundRole and index.column() in self.index_list:  # return QColor(Qt.green)
-            if qt_role == Qt.BackgroundRole and index.column() in self.index_list:
-                return QColor(Qt.green)  #  Set the color
+    def data(self, index, role=Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        if role == Qt.DisplayRole:
+            return str(self.df.iloc[index.row(), index.column()])
+        if role == Qt.BackgroundRole and index.column() in self.index_list:
+            return QColor(Qt.green)
         return None
 
-    # Set header and index If the "container" is horizontal (orientation index 1) and has a display qt_role (index 0) (-> is the header of the table). If the "container" is vertical (orientation index 2) and has a display qt_role (index 0) (-> is the index of the table)."""
-
-    def headerData(self, col, orientation, qt_role):
-        if orientation == Qt.Horizontal and qt_role == Qt.DisplayRole:
-            return str(self.data.columns[col])  #  Set the header names
-        if orientation == Qt.Vertical and qt_role == Qt.DisplayRole:
-            return self.data.index[col]  #  Set the indexes
+    def headerData(self, section, orientation, role=Qt.DisplayRole):
+        if role != Qt.DisplayRole:
+            return None
+        if orientation == Qt.Horizontal:
+            return str(self.df.columns[section])
+        if orientation == Qt.Vertical:
+            return self.df.index[section]
         return None
 
 
@@ -631,7 +666,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
     }
 
     #   Different types of separators. By writing not using the symbol as a display we can avoid possible confusion between similar separators (e.g tab and space)-> the separator is auto assigned with the auto_sep function
-    sep_dict = {"<space>": " ", "<comma>": ",", "<semi-col>": ";", "<tab>": "   "}
+    sep_dict = {"<space>": " ", "<comma>": ",", "<semi-col>": ";", "<tab>": "\t"}
 
     def __init__(
         self,
@@ -739,6 +774,38 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         try:
             _, extension = os_path.splitext(path)
+            # Auto-set end row to last available line (max_rows - 1)
+            max_rows = None
+            if extension in (".las", ".laz"):
+                try:
+                    with lp_open(path) as f:
+                        max_rows = int(f.header.point_count)
+                except Exception:
+                    max_rows = None
+            else:
+                try:
+                    line_count = 0
+                    last_byte = b""
+                    with open(path, "rb") as f:
+                        while True:
+                            chunk = f.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            line_count += chunk.count(b"\n")
+                            last_byte = chunk[-1:]
+                    if line_count == 0 and os_path.getsize(path) > 0:
+                        max_rows = 1
+                    elif last_byte and last_byte != b"\n":
+                        max_rows = line_count + 1
+                    else:
+                        max_rows = line_count
+                except Exception:
+                    max_rows = None
+
+            if max_rows and max_rows > 0:
+                end_row = max(max_rows - 1, 0)
+                self.import_options_dict["EndRowspinBox"] = end_row
+                self.EndRowspinBox.setValue(end_row)
 
             if (
                 extension == ".las" or extension == ".laz"
@@ -814,20 +881,44 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         - offset: offset quantity to recenter the point cloud.
         """
 
-        path = self.import_options_dict["in_path"]
+        # Sync 'User defined'
+        try:
+            rows = self.AssignTable.rowCount()
+            for i in range(rows):
+                combo = self.AssignTable.cellWidget(i, 1)
+                line = self.AssignTable.cellWidget(i, 2)
+                if combo and combo.currentText() == "User defined":
+                    # normalize name
+                    name = line.text().strip() if line else ""
+                    if not name:
+                        name = f"user_{self.input_data_df.columns[i]}"
+                    elif not name.startswith("user_"):
+                        name = f"user_{name}"
+                    self.rename_dict[i] = name
+        except Exception:
+            pass
 
+        path = self.import_options_dict["in_path"]
         start_row = self.import_options_dict["StartRowspinBox"]
         end_row = self.import_options_dict["EndRowspinBox"]
-
         row_range = range(start_row, end_row)
-
         delimiter = self.import_options_dict["SeparatorcomboBox"]
 
-        clean_dict = {k: v for k, v in list(self.rename_dict.items()) if v != "N.a."}
+        # Build list filtering out N.a. entries
+        clean_dict = {}
+        for i, v in self.rename_dict.items():
+            if v == "N.a.":
+                continue
+            clean_dict[i] = v
+
+        if not clean_dict:
+            self.args = None
+            self.close()
+            self.loop.quit()
+            return
+
         col_names = list(clean_dict.values())
         index_list = list(clean_dict.keys())
-
-        # X and Y are not always called exactly like this and they can occupy other positions. The clean_dict is reverse searched (get the key using a given valdue) to obtain the index positions of the X Y columns in the raw df.
 
         self.args = [path, col_names, row_range, index_list, delimiter, self]
         self.close()
@@ -878,7 +969,11 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
 
         """
         sep = auto_sep(path)
-        self.SeparatorcomboBox.setCurrentIndex(list(self.sep_dict.values()).index(sep))
+        # Update UI combo to reflect detected separator if present
+        try:
+            self.SeparatorcomboBox.setCurrentIndex(list(self.sep_dict.values()).index(sep))
+        except ValueError:
+            pass
         df = pd_read_csv(path, sep=sep, nrows=50, engine="c", index_col=False)
         return df
 
@@ -924,85 +1019,282 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.AssignTable.setRowCount(len(col_names))
 
         for i, col in enumerate(col_names):
-            # To create the assign menu we cicle through the column names and assign the comboBox text to the corresponding rename_dict item if the item is contained in the default_attr_list
-            self.ColnameItem = QTableWidgetItem()
-            self.ColnameItem.setText(str(col_names[i]))
-            self.AttrcomboBox = QComboBox(self)
-            self.AttrcomboBox.setObjectName(f"AttrcomboBox_{i}")
-            self.AttrcomboBox.setEditable(False)
-            self.AttrcomboBox.addItems(self.default_attr_list)
-            self.AttrcomboBox.activated.connect(lambda: ass_value(self.AttrcomboBox))
-            self.ScalarnameLine = QLineEdit()
-            self.ScalarnameLine.setObjectName(f"ScalarnameLine_{i}")
-            self.ScalarnameLine.setEnabled(False)
-            self.ScalarnameLine.returnPressed.connect(lambda: ass_scalar())
-            self.AssignTable.setItem(i, 0, self.ColnameItem)
-            self.AssignTable.setCellWidget(i, 1, self.AttrcomboBox)
-            self.AssignTable.setCellWidget(i, 2, self.ScalarnameLine)
-            LineList.append(self.AssignTable.cellWidget(i, 2))
+            ColnameItem = QTableWidgetItem()
+            ColnameItem.setText(str(col_names[i]))
+            AttrcomboBox = QComboBox(self)
+            AttrcomboBox.setObjectName(f"AttrcomboBox_{i}")
+            AttrcomboBox.setEditable(False)
+            AttrcomboBox.addItems(self.default_attr_list)
 
+            # capture row index and combobox in lambda defaults to avoid late binding
+            AttrcomboBox.activated.connect(lambda _, idx=i, cb=AttrcomboBox: ass_value(idx, cb))
+
+            ScalarnameLine = QLineEdit()
+            ScalarnameLine.setObjectName(f"ScalarnameLine_{i}")
+            ScalarnameLine.setEnabled(False)
+            # Consider also focus loss in addition to returnPressed
+            ScalarnameLine.returnPressed.connect(lambda idx=i: ass_scalar(idx))
+            ScalarnameLine.editingFinished.connect(lambda idx=i: ass_scalar(idx))
+
+            self.AssignTable.setItem(i, 0, ColnameItem)
+            self.AssignTable.setCellWidget(i, 1, AttrcomboBox)
+            self.AssignTable.setCellWidget(i, 2, ScalarnameLine)
+            LineList.append(ScalarnameLine)
+
+            # initial selection
             if self.rename_dict[i] in self.default_attr_list:
                 self.AssignTable.cellWidget(i, 1).setCurrentText(self.rename_dict[i])
-            elif "user_" in self.rename_dict[i]:
+            elif isinstance(self.rename_dict[i], str) and self.rename_dict[i].startswith("user_"):
                 self.AssignTable.cellWidget(i, 1).setCurrentText("User defined")
                 self.AssignTable.cellWidget(i, 2).setEnabled(True)
                 self.AssignTable.cellWidget(i, 2).setText(self.rename_dict[i])
-
             else:
+                # keep as-is (will fallback to original column name at export time)
                 self.AssignTable.cellWidget(i, 1).setCurrentText("As is")
 
-            self.AssignTable.setCellWidget(i, 2, self.ScalarnameLine)
-            self.AssignTable.horizontalHeader().setSectionResizeMode(
-                0, QHeaderView.ResizeToContents
-            )
+            self.AssignTable.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
 
-        # self.resize(750, 600) # Set appropriate window size
-
-        def ass_value(attr):
-            """Get column and row of clicked widget in table"""
-            # sel_combo = self.sender()  #  Combobox @ row and column
-            sel_combo = attr  #  Combobox @ row and column
-            row = int(sel_combo.objectName().split("_")[1])
-            print(row)
-
-            # Use a dict to rename the columns. The keys are the column index of the original df while the values are the new names.
-
+        def ass_value(row, sel_combo):
             if sel_combo.currentText() == "User defined":
                 self.AssignTable.cellWidget(row, 2).setEnabled(True)
                 self.AssignTable.cellWidget(row, 2).setPlaceholderText("user_")
-
             elif sel_combo.currentText() == "As is":
                 self.rename_dict[row] = df.columns[row]
-                # self.AssignTable.cellWidget(row,2).clear()
                 self.AssignTable.cellWidget(row, 2).setEnabled(False)
             else:
-                items = list(self.rename_dict.values())
                 self.AssignTable.cellWidget(row, 2).clear()
                 self.AssignTable.cellWidget(row, 2).setEnabled(False)
-                if (
-                    sel_combo.currentText() in items
-                    and sel_combo.currentText() != "N.a."
-                ):
-                    print("Item already assigned")
-                else:
-                    self.rename_dict[row] = sel_combo.currentText()
+                self.rename_dict[row] = sel_combo.currentText()
+
             self.preview_file(self.input_data_df)
 
-        def ass_scalar():
-            clicked = QApplication.focusWidget().pos()
-            index = self.AssignTable.indexAt(clicked)
-            col = index.column()
-            row = index.row()
-            # This is the only way to choose the QLineEdit otherwise self.AssignTable.cellWidget(row,2) returns somehow a QWidget instad than a QLineEdit"""
+        def ass_scalar(row):
             sel_line = LineList[row]
-            scal_name = f"user_{sel_line.text()}"
+            raw = sel_line.text().strip()
+            # if empty, use a reasonable default
+            if not raw:
+                raw = df.columns[row]
+            # ensure prefix
+            scal_name = raw if raw.startswith("user_") else f"user_{raw}"
             self.rename_dict[row] = scal_name
             sel_line.setText(scal_name)
             self.preview_file(self.input_data_df)
 
+
     def close_ui(self):
         self.close()
         self.loop.quit()
+
+
+class ShapefileAssignmentDialog(QMainWindow):
+    """Dialog to assign shapefile attributes to PZero properties.
+    Similar to import_dialog but simplified for shapefile data without preview table."""
+
+    def __init__(
+        self,
+        parent=None,
+        shapefile_df=None,
+        topology_type=None,
+        include_label=False,
+        *args,
+        **kwargs,
+    ):
+        super(ShapefileAssignmentDialog, self).__init__(parent, *args, **kwargs)
+        self.loop = QEventLoop()
+        self.parent = parent
+        self.shapefile_df = shapefile_df
+        self.topology_type = topology_type
+        self.include_label = include_label
+        self.attribute_mapping = {}
+        self.result = None
+
+        # Define required and optional fields based on topology
+        self.required_fields, self.optional_fields = self._get_field_definitions()
+
+        self.setWindowTitle(f"Assign Shapefile Attributes - {topology_type}")
+        self.setup_ui()
+        self.auto_assign_attributes()
+
+    def _get_field_definitions(self):
+        """Define required and optional fields based on topology type."""
+        required = ["feature"]
+        optional = ["name", "role", "scenario"]
+
+        # label is only included when explicitly requested (e.g., Background data)
+        if self.include_label:
+            optional.append("label")
+
+        # Orientation fields ONLY for Point topology AND NOT for Background data
+        if self.topology_type == "Point" and not self.include_label:
+            # For Geology/Fluid points we need dip and either dip_dir OR dir
+            required.extend(["dip"])
+            optional.extend(["dip_dir", "dir"])
+
+        return required, optional
+
+    def setup_ui(self):
+        """Create the UI layout."""
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QGridLayout(central_widget)
+
+        # Instructions
+        instruction_label = QLabel(
+            f"<b>Assign shapefile attributes to PZero properties</b><br>"
+            f"Topology: {self.topology_type}<br>"
+            f"Required fields are marked with *"
+        )
+        main_layout.addWidget(instruction_label, 0, 0, 1, 3)
+
+        # Header row
+        row = 1
+        header_pzero = QLabel("<b>PZero Property</b>")
+        #header_arrow = QLabel("<b>←</b>")
+        #header_arrow.setAlignment(Qt.AlignCenter)
+        header_shapefile = QLabel("<b>Shapefile Column</b>")
+        main_layout.addWidget(header_pzero, row, 0)
+        #main_layout.addWidget(header_arrow, row, 1)
+        main_layout.addWidget(header_shapefile, row, 1)
+        row += 1
+
+        # Create combo boxes for each field
+        self.combo_boxes = {}
+        self.field_labels = {}  # Store labels to update them dynamically
+        self.user_defined_lines = {}
+
+        shapefile_columns = ["<none>"] + list(self.shapefile_df.columns)
+
+        # Required fields
+        for field in self.required_fields:
+            label = QLabel(f"<b>{field} *</b>")
+            #arrow_label = QLabel("←")
+            #arrow_label.setAlignment(Qt.AlignCenter)
+            combo = QComboBox()
+            combo.addItems(shapefile_columns)
+            combo.setObjectName(f"combo_{field}")
+            combo.currentTextChanged.connect(
+                lambda text, f=field, lbl=label: self._on_combo_changed(f, text, lbl)
+            )
+
+            main_layout.addWidget(label, row, 0)
+#            main_layout.addWidget(arrow_label, row, 1)
+            main_layout.addWidget(combo, row, 1)
+            self.combo_boxes[field] = combo
+            self.field_labels[field] = label
+            row += 1
+
+        # Optional fields
+        optional_separator = QLabel("<b>Optional fields:</b>")
+        main_layout.addWidget(optional_separator, row, 0, 1, 3)
+        row += 1
+
+        for field in self.optional_fields:
+            label = QLabel(f"{field}")
+            #arrow_label = QLabel("←")
+            #arrow_label.setAlignment(Qt.AlignCenter)
+            combo = QComboBox()
+            combo.addItems(shapefile_columns)
+            combo.setObjectName(f"combo_{field}")
+            combo.currentTextChanged.connect(
+                lambda text, f=field, lbl=label: self._on_combo_changed(f, text, lbl)
+            )
+
+            main_layout.addWidget(label, row, 0)
+            #.addWidget(arrow_label, row, 1)
+            main_layout.addWidget(combo, row, 1)
+            self.combo_boxes[field] = combo
+            self.field_labels[field] = label
+            row += 1
+
+        # Buttons
+        from PySide6.QtWidgets import QDialogButtonBox
+
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self._validate_and_accept)
+        button_box.rejected.connect(self.reject)
+        main_layout.addWidget(button_box, row, 0, 1, 3)
+
+        self.resize(600, 450)
+
+    def auto_assign_attributes(self):
+        """Auto-assign shapefile columns to PZero properties using exact (case-insensitive) match only."""
+        shapefile_columns = list(self.shapefile_df.columns)
+
+        # Combine required and optional for matching
+        all_fields = self.required_fields + self.optional_fields
+
+        # Exact, case-insensitive match only (no fuzzy, no char removal)
+        for shp_col in shapefile_columns:
+            clean_col = str(shp_col).strip().lower()
+            for field in all_fields:
+                if clean_col == field.strip().lower():
+                    current_assignment = self.combo_boxes[field].currentText()
+                    if current_assignment == "<none>":
+                        self.combo_boxes[field].setCurrentText(shp_col)
+                        self.attribute_mapping[field] = shp_col
+                    break
+
+    def _on_combo_changed(self, field, text, label):
+        """Handle combo box changes."""
+        if text == "<none>":
+            if field in self.attribute_mapping:
+                del self.attribute_mapping[field]
+        else:
+            self.attribute_mapping[field] = text
+
+    def _validate_and_accept(self):
+        """Validate that all required fields are assigned before accepting."""
+        missing_fields = []
+
+        for field in self.required_fields:
+            combo = self.combo_boxes[field]
+            if combo.currentText() == "<none>":
+                missing_fields.append(field)
+
+        if self.topology_type == "Point" and not self.include_label:
+            has_dip_dir = (
+                self.combo_boxes.get("dip_dir")
+                and self.combo_boxes["dip_dir"].currentText() != "<none>"
+            )
+            has_dir = (
+                self.combo_boxes.get("dir")
+                and self.combo_boxes["dir"].currentText() != "<none>"
+            )
+
+            if not (has_dip_dir or has_dir):
+                missing_fields.append("dip_dir or dir")
+
+        if missing_fields:
+            from PySide6.QtWidgets import QMessageBox
+
+            QMessageBox.warning(
+                self,
+                "Missing Required Fields",
+                f"The following required fields are not assigned:\n\n"
+                + "\n".join(f"- {field}" for field in missing_fields),
+            )
+            return
+
+        self.accept()
+
+    def accept(self):
+        """Accept the dialog and return the mapping."""
+        self.result = self.attribute_mapping.copy()
+
+        self.close()
+        self.loop.quit()
+
+    def reject(self):
+        """Reject the dialog."""
+        self.result = None
+        self.close()
+        self.loop.quit()
+
+    def exec(self):
+        """Execute the dialog and return the result."""
+        self.show()
+        self.loop.exec_()
+        return self.result
 
 
 class NavigatorWidget(QMainWindow, Ui_NavWindow):

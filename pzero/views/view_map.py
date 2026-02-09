@@ -33,8 +33,8 @@ from ..entities_factory import (
     Attitude,
 )
 from ..orientation_analysis import get_dip_dir_vectors
-from ..collections.xsection_collection import section_from_azimuth
-from ..collections.boundary_collection import boundary_from_points
+from ..collections.xsection_collection import section_from_strike
+from ..collections.boundary_collection import boundary_from_points, boundary_from_three_points, boundary_from_obb
 
 
 class ViewMap(View2D):
@@ -57,20 +57,30 @@ class ViewMap(View2D):
         super().initialize_menu_tools()
 
         # then add new code specific to this class
-        self.sectionFromAzimuthButton = QAction("Section from azimuth", self)
-        self.sectionFromAzimuthButton.triggered.connect(
-            lambda: self.vector_by_mouse(section_from_azimuth)
+        self.sectionFromStrikeButton = QAction("Section from strike", self)
+        self.sectionFromStrikeButton.triggered.connect(
+            lambda: self.vector_by_mouse(section_from_strike)
         )
-        self.menuCreate.addAction(self.sectionFromAzimuthButton)
+        self.menuCreate.addAction(self.sectionFromStrikeButton)
 
         self.boundaryFromPointsButton = QAction("Boundary from 2 points", self)
         self.boundaryFromPointsButton.triggered.connect(
             lambda: self.vector_by_mouse(boundary_from_points)
         )
         self.menuCreate.addAction(self.boundaryFromPointsButton)
+        self.boundaryFromThreePointsButton = QAction("Boundary from 3 points", self)
+        self.boundaryFromThreePointsButton.triggered.connect(
+            lambda: self.vector_by_mouse(boundary_from_three_points)
+        )
+        self.menuCreate.addAction(self.boundaryFromThreePointsButton)
+
+        self.boundaryFromOBBButton = QAction("Boundary from OBB", self)
+        self.boundaryFromOBBButton.triggered.connect(
+            lambda: boundary_from_obb(self)
+        )
+        self.menuCreate.addAction(self.boundaryFromOBBButton)
 
     # ================================  Methods required by BaseView(), (re-)implemented here =========================
-
     def show_actor_with_property(
         self, uid=None, coll_name=None, show_property=None, visible=None
     ):
@@ -344,15 +354,20 @@ class ViewMap(View2D):
             if isinstance(plot_entity.points, np_ndarray):
                 # This check is needed to avoid errors when trying to plot an empty
                 # PolyData, just created at the beginning of a digitizing session.
+                show_property_value = None
                 if show_property == "none" or show_property is None:
-                    show_property_value = None
+                    pass
+                elif show_property == self.RGB_TOTAL_PROPERTY:
+                    show_property_value = self._get_point_cloud_rgb_total(plot_entity)
+                    if show_property_value is not None:
+                        plot_rgb_option = True
                 elif show_property == "X":
                     show_property_value = plot_entity.points_X
                 elif show_property == "Y":
                     show_property_value = plot_entity.points_Y
                 elif show_property == "Z":
                     show_property_value = plot_entity.points_Z
-                elif show_property[-1] == "]":
+                elif isinstance(show_property, str) and show_property.endswith("]"):
                     #  we can identify multicomponent properties such as RGB[0] or Normals[0] by
                     # taking the last character of the property name ("]").
                     #  Get the start and end index of the [n_component]
@@ -362,21 +377,26 @@ class ViewMap(View2D):
                     original_prop = show_property[:pos1]
                     #  Get the column index (the n_component value)
                     index = int(show_property[pos1 + 1 : pos2])
-                    show_property_value = plot_entity.get_point_data(original_prop)[
-                        :, index
-                    ]
+                    try:
+                        show_property_value = plot_entity.get_point_data(original_prop)[
+                            :, index
+                        ]
+                    except Exception:
+                        show_property_value = None
                 else:
-                    n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[
-                        self.parent.dom_coll.get_uid_properties_names(uid).index(
-                            show_property
-                        )
-                    ]
-                    # Get the n of components for the given property. If it's > 1 then do stuff depending on the type of property (e.g. show_rgb_option -> True if the property is RGB)
-                    if n_comp > 1:
+                    try:
+                        prop_names = self.parent.dom_coll.get_uid_properties_names(uid)
+                        prop_index = prop_names.index(show_property)
+                        n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[
+                            prop_index
+                        ]
                         show_property_value = plot_entity.get_point_data(show_property)
-                        plot_rgb_option = True
+                    except Exception:
+                        show_property_value = None
                     else:
-                        show_property_value = plot_entity.get_point_data(show_property)
+                        # Get the n of components for the given property. If it's > 1 then treat it as RGB(A).
+                        if n_comp > 1:
+                            plot_rgb_option = True
             this_actor = self.plot_PC_3D(
                 uid=uid,
                 plot_entity=new_plot,
@@ -488,6 +508,13 @@ class ViewMap(View2D):
                 show_property = plot_entity.points_Z
             elif show_property == "MD":
                 show_property = plot_entity.get_point_data(data_key="MD")
+            elif isinstance(
+                show_property, str
+            ) and show_property.strip().upper().startswith("LITHOLOGY"):
+                # LITHOLOGY RGB property stored as point_data (handles [0], [1], [2] suffixes for RGB components)
+                # Use original property name for lookup
+                show_property = plot_entity.get_point_data(data_key="LITHOLOGY")
+                plot_rgb_option = True
             else:
                 prop = plot_entity.plot_along_trace(
                     show_property, method=self.trace_method, camera=self.plotter.camera

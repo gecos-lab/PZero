@@ -68,14 +68,13 @@ def well2vtk(self, path=None):
     well_uid = str(uuid4())
     for key in prop_df:
         prop = prop_df[key]
-
         if "START" in prop.columns:
-            if key == "LITHOLOGY" or key == "GEOLOGY":
+            if key in ("LITHOLOGY", "GEOLOGY"):
                 tr_data = np_full(shape=(points, 3), fill_value=np_nan)
 
                 try:
                     color_dict = {k: np_random.rand(3) for k in pd_unique(prop[key])}
-                except:
+                except Exception:
                     print("No key found")
                 else:
                     for row, (start, end, value) in prop.iterrows():
@@ -98,7 +97,7 @@ def well2vtk(self, path=None):
                             marker_obj_dict["name"] = f"marker_{value}"
                             marker_obj_dict["role"] = "top"
                             marker_obj_dict["feature"] = value
-                            marker_obj_dict["x_section"] = well_uid
+                            marker_obj_dict["parent_uid"] = well_uid
                             marker_obj_dict["vtk_obj"] = marker_obj
                             self.geol_coll.add_entity_from_dict(marker_obj_dict)
                             color_R = (
@@ -125,6 +124,10 @@ def well2vtk(self, path=None):
 
                         tr_data[start_idx:end_idx] = color_val
 
+                # Save as point_data for direct coloring
+                well_obj.trace.set_point_data(
+                    data_key=f"{key}", attribute_matrix=tr_data
+                )
             else:
                 tr_data = np_zeros(shape=points)
                 for row, (start, end, value) in prop.iterrows():
@@ -132,9 +135,10 @@ def well2vtk(self, path=None):
                     end_idx = np_argmin(np_abs(arr - end))
                     tr_data[start_idx:end_idx] = value
                     # tr_data.insert(0,0)
-            well_obj.add_trace_data(
-                name=f"{key}", tr_data=tr_data, xyz=well_obj.trace.points
-            )
+                # Other interval data use add_trace_data
+                well_obj.add_trace_data(
+                    name=f"{key}", tr_data=tr_data, xyz=well_obj.trace.points
+                )
         elif "MD_point" in prop.columns:
             prop = prop.set_index("MD_point")
             for col in prop.columns:
@@ -150,6 +154,11 @@ def well2vtk(self, path=None):
                 annotation_obj.auto_cells()
                 annotation_obj.set_field_data(name=col, data=mrk_data)
                 ann_list.append(annotation_obj)
+
+                # also add as marker to the well object
+                well_obj.add_marker_data(
+                    name=col, mrk_pos=mrk_pos.reshape(-1, 3), mrk_data=mrk_data
+                )
         else:
             prop = prop.set_index("MD")
             for col in prop.columns:
@@ -163,7 +172,13 @@ def well2vtk(self, path=None):
                     idx = np_argmin(np_abs(arr - row))
                     # value = prop_clean.loc[row]
                     xyz[i, :] = points_arr[idx, :]
+
                 well_obj.add_trace_data(name=f"{col}", tr_data=tr_data, xyz=xyz)
+                
+                #only add as marker to the well object, for labeling
+                #well_obj.add_marker_data(
+                #    name=col, mrk_pos=xyz, mrk_data=tr_data
+                #)
 
     trace_keys = well_obj.get_trace_names()
     components = []
@@ -172,9 +187,18 @@ def well2vtk(self, path=None):
         components.append(well_obj.trace.get_field_data_shape(key)[1])
         types.append(well_obj.trace.get_field_data_type(key))
 
+    # Add LITHOLOGY to properties if present (GEOLOGY is only for coloring, not in properties)
+    point_data_keys = well_obj.trace.point_data_keys
+    if "LITHOLOGY" in point_data_keys:
+        trace_keys.append("LITHOLOGY")
+        components.append(3)  # RGB has 3 components
+        types.append("float64")
+
     bore_obj_attributes = deepcopy(WellCollection().entity_dict)
     bore_obj_attributes["uid"] = well_uid
-    bore_obj_attributes["Loc ID"] = well_obj.ID
+    # Ensure proper identification in WellCollection
+    bore_obj_attributes["name"] = well_obj.ID
+    bore_obj_attributes["topology"] = "PolyLine"
     bore_obj_attributes["properties_names"] = trace_keys
     bore_obj_attributes["properties_components"] = components
     bore_obj_attributes["properties_types"] = types
@@ -199,8 +223,8 @@ def well2vtk(self, path=None):
 
         annotation_obj_attributes["properties_names"] = ann_keys
         annotation_obj_attributes["properties_components"] = components
-        annotation_obj_attributes["properties_types"] = types
-        annotation_obj_attributes["borehole"] = bore_obj_attributes["uid"]
+        # annotation_obj_attributes["properties_types"] = types
+        annotation_obj_attributes["parent_uid"] = bore_obj_attributes["uid"]
 
         annotation_obj_attributes["vtk_obj"] = annotation
         self.backgrnd_coll.add_entity_from_dict(entity_dict=annotation_obj_attributes)
@@ -320,7 +344,7 @@ def well2vtk(self, path=None):
     #     # marker_obj_attributes['properties_names'] = []
     #     # marker_obj_attributes['properties_components'] = []
     #     # marker_obj_attributes['properties_types'] = []
-    #     # marker_obj_attributes['x_section'] = curr_obj_attributes['uid']
+    #     # marker_obj_attributes['parent_uid'] = curr_obj_attributes['uid']
     #     # marker_obj_attributes['vtk_obj'] = well_marker
 
     #     # self.geol_coll.add_entity_from_dict(entity_dict=marker_obj_attributes)

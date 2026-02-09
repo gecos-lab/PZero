@@ -87,8 +87,8 @@ class Ui_ProjectWindow(object):
         self.actionImportSHP.setObjectName("actionImportSHP")
         self.actionImportDEM = QAction(ProjectWindow)
         self.actionImportDEM.setObjectName("actionImportDEM")
-        self.actionImportOrthoImage = QAction(ProjectWindow)
-        self.actionImportOrthoImage.setObjectName("actionImportOrthoImage")
+        self.actionImportMapImage = QAction(ProjectWindow)
+        self.actionImportMapImage.setObjectName("actionImportMapImage")
         self.actionImportXSectionImage = QAction(ProjectWindow)
         self.actionImportXSectionImage.setObjectName("actionImportXSectionImage")
         self.actionImportWellData = QAction(ProjectWindow)
@@ -173,6 +173,8 @@ class Ui_ProjectWindow(object):
         self.actionHistogramView.setObjectName("actionHistogramView")
         self.actionHelp = QAction(ProjectWindow)
         self.actionHelp.setObjectName("actionHelp")
+        self.actionCheckForUpdates = QAction(ProjectWindow)
+        self.actionCheckForUpdates.setObjectName("actionCheckForUpdates")
         self.actionAbout = QAction(ProjectWindow)
         self.actionAbout.setObjectName("actionAbout")
         self.actionShowInfoOnEntities = QAction(ProjectWindow)
@@ -407,7 +409,7 @@ class Ui_ProjectWindow(object):
         self.menuFile.addAction(self.actionImportPyVista)
         self.menuFile.addAction(self.actionImportSHP)
         self.menuFile.addAction(self.actionImportDEM)
-        self.menuFile.addAction(self.actionImportOrthoImage)
+        self.menuFile.addAction(self.actionImportMapImage)
         self.menuFile.addAction(self.actionImportXSectionImage)
         self.menuFile.addAction(self.actionImportWellData)
         self.menuFile.addAction(self.actionImportSEGY)
@@ -444,6 +446,7 @@ class Ui_ProjectWindow(object):
         self.menuWindows.addAction(self.actionXYPlotView)
         self.menuWindows.addAction(self.actionHistogramView)
         self.menuHelp.addAction(self.actionHelp)
+        self.menuHelp.addAction(self.actionCheckForUpdates)
         self.menuHelp.addAction(self.actionAbout)
         self.menuPointClouds.addAction(self.actionBuildOctree)
         self.menuPointClouds.addAction(self.actionDecimatePointCloud)
@@ -512,8 +515,8 @@ class Ui_ProjectWindow(object):
         self.actionImportDEM.setText(
             QCoreApplication.translate("ProjectWindow", "Import DEM", None)
         )
-        self.actionImportOrthoImage.setText(
-            QCoreApplication.translate("ProjectWindow", "Import OrthoImage", None)
+        self.actionImportMapImage.setText(
+            QCoreApplication.translate("ProjectWindow", "Import Map Image", None)
         )
         self.actionImportXSectionImage.setText(
             QCoreApplication.translate("ProjectWindow", "Import X-section Image", None)
@@ -642,6 +645,9 @@ class Ui_ProjectWindow(object):
         )
         self.actionHelp.setText(
             QCoreApplication.translate("ProjectWindow", "PZero Help", None)
+        )
+        self.actionCheckForUpdates.setText(
+            QCoreApplication.translate("ProjectWindow", "Check for Updates", None)
         )
         self.actionAbout.setText(
             QCoreApplication.translate("ProjectWindow", "About PZero", None)

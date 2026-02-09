@@ -14,19 +14,19 @@ class DomCollection(DIMCollection):
             "uid": "",
             "name": "undef",
             "scenario": "undef",
-            "x_section": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
-            "textures": [],
+            "parent_uid": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "topology": "undef",
             "vtk_obj": None,
             "properties_names": [],
             "properties_components": [],
+            "textures": [],
         }
 
         self.entity_dict_types = {
             "uid": str,
             "name": str,
             "scenario": str,
-            "x_section": str,
+            "parent_uid": str,
             "textures": str,
             "topology": str,
             "vtk_obj": object,

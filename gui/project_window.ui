@@ -226,7 +226,7 @@
     <addaction name="actionImportPyVista"/>
     <addaction name="actionImportSHP"/>
     <addaction name="actionImportDEM"/>
-    <addaction name="actionImportOrthoImage"/>
+    <addaction name="actionImportMapImage"/>
     <addaction name="actionImportXSectionImage"/>
     <addaction name="actionImportWellData"/>
     <addaction name="actionImportSEGY"/>
@@ -294,6 +294,7 @@
      <string>Help</string>
     </property>
     <addaction name="actionHelp"/>
+    <addaction name="actionCheckForUpdates"/>
     <addaction name="actionAbout"/>
    </widget>
    <widget class="QMenu" name="menuPointClouds">
@@ -427,9 +428,9 @@
     <string>Import DEM</string>
    </property>
   </action>
-  <action name="actionImportOrthoImage">
+  <action name="actionImportMapImage">
    <property name="text">
-    <string>Import OrthoImage</string>
+    <string>Import MapImage</string>
    </property>
   </action>
   <action name="actionImportXSectionImage">
@@ -636,6 +637,11 @@
    <property name="text">
     <string>PZero Help</string>
    </property>
+  </action>
+  <action name="actionCheckForUpdates">
+    <property name="text">
+    <string>Check for Updates</string>
+    </property>
   </action>
   <action name="actionAbout">
    <property name="text">

@@ -6,6 +6,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QAbstractItemView
 
 # numpy import____
+from numpy import column_stack as np_column_stack
 from numpy import ndarray as np_ndarray
 
 # VTK imports incl. VTK-Numpy interface____
@@ -24,6 +25,8 @@ from pyvista import PointSet as pvPointSet
 from .abstract_base_view import BaseView
 from ..orientation_analysis import get_dip_dir_vectors
 from ..helpers.helper_dialogs import input_one_value_dialog, save_file_dialog
+from ..helpers.screenshot_dialog import ScreenshotExportDialog
+from ..helpers.gif_export_dialog import GifExportDialog
 from ..entities_factory import (
     VertexSet,
     PolyLine,
@@ -46,10 +49,57 @@ from ..entities_factory import (
 class ViewVTK(BaseView):
     """Abstract class used as a base for all classes using the VTK/PyVista plotting canvas."""
 
+    RGB_TOTAL_PROPERTY = "RGB total"
+
     def __init__(self, *args, **kwargs):
         super(ViewVTK, self).__init__(*args, **kwargs)
 
     # ================================  General methods shared by all views - built incrementally =====================
+
+    def _get_point_cloud_rgb_total(self, plot_entity):
+        """Return a Nx3 RGB array for point-cloud rendering, if available.
+
+        Supports either a vector 'RGB' array or separate scalar arrays named
+        'RGB[0]', 'RGB[1]', 'RGB[2]'.
+        """
+        if plot_entity is None:
+            return None
+
+        try:
+            if "RGB" in plot_entity.point_data_keys:
+                rgb = plot_entity.get_point_data("RGB")
+                if (
+                    isinstance(rgb, np_ndarray)
+                    and (
+                        (
+                            rgb.ndim == 2
+                            and rgb.shape[1] >= 3
+                            and rgb.shape[0] == plot_entity.points_number
+                        )
+                        or (
+                            rgb.ndim == 1
+                            and plot_entity.points_number == 1
+                            and rgb.shape[0] >= 3
+                        )
+                    )
+                ):
+                    if rgb.ndim == 1:
+                        return rgb[:3].reshape((1, 3))
+                    return rgb[:, :3]
+        except Exception:
+            pass
+
+        try:
+            keys = ("RGB[0]", "RGB[1]", "RGB[2]")
+            if all(key in plot_entity.point_data_keys for key in keys):
+                r = plot_entity.get_point_data(keys[0])
+                g = plot_entity.get_point_data(keys[1])
+                b = plot_entity.get_point_data(keys[2])
+                return np_column_stack((r, g, b))
+        except Exception:
+            pass
+
+        return None
 
     def initialize_menu_tools(self):
         """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
@@ -57,6 +107,8 @@ class ViewVTK(BaseView):
         super().initialize_menu_tools()
 
         # then add new code specific to this class
+        
+
         self.zoomActive = QAction("Zoom to active", self)
         self.zoomActive.triggered.connect(self.zoom_active)
         self.menuView.addAction(self.zoomActive)
@@ -80,6 +132,10 @@ class ViewVTK(BaseView):
         self.actionExportScreen = QAction("Take screenshot", self)
         self.actionExportScreen.triggered.connect(self.export_screen)
         self.menuView.addAction(self.actionExportScreen)
+
+        self.actionCreateGif = QAction("Create animated GIF", self)
+        self.actionCreateGif.triggered.connect(self.create_gif)
+        self.menuView.addAction(self.actionCreateGif)
 
     # ================================  Methods required by BaseView(), (re-)implemented here =========================
 
@@ -186,45 +242,40 @@ class ViewVTK(BaseView):
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
         """Set actor uid visible or invisible (visible = True or False)"""
+        # if uid not in self.actors_df["uid"].to_list():
+        #     return
         collection = self.actors_df.loc[
             self.actors_df["uid"] == uid, "collection"
         ].values[0]
-        actors = self.plotter.renderer.actors
-        # Check if actor exists before accessing it (handles race condition during entity addition)
-        if uid not in actors:
-            self.print_terminal(f"Warning: Actor for uid {uid} not found in plotter. It may not be created yet.")
+        actors = getattr(self.plotter.renderer, "actors", {})
+
+        def _set_visibility_for(key):
+            try:
+                actors[key].SetVisibility(visible)
+            except Exception:
+                pass
+
+        try:
+            this_actor = actors[uid]
+        except Exception:
             return
-        this_actor = actors[uid]
+
         if collection == "well_coll":
-            # case for WELLS
-            if name == "Trace":
-                # case for WELL TRACE
-                if f"{uid}_prop" in actors.keys():
-                    prop_actor = actors[f"{uid}_prop"]
-                    prop_actor.SetVisibility(visible)
-                if f"{uid}_geo" in actors:
-                    geo_actor = actors[f"{uid}_geo"]
-                    geo_actor.SetVisibility(visible)
-                # self.plotter.remove_actor(f'{uid}_prop')
-                # self.plotter.remove_actor(f'{uid}_geo')
-                this_actor.SetVisibility(visible)
-            elif name == "Markers":
-                # case for WELL markers
-                if f"{uid}_marker-labels" in actors.keys():
-                    marker_actor_labels = actors[f"{uid}_marker-labels"]
-                    marker_actor_points = actors[f"{uid}_marker-points"]
-                    marker_actor_labels.SetVisibility(visible)
-                    marker_actor_points.SetVisibility(visible)
+            if name == "Markers":
+                _set_visibility_for(f"{uid}_marker-labels")
+                _set_visibility_for(f"{uid}_marker-points")
+                return
+            # Default behaviour toggles trace and any auxiliary actors (property, geo, litho)
+            this_actor.SetVisibility(visible)
+            _set_visibility_for(f"{uid}_prop")
+            _set_visibility_for(f"{uid}_geo")
+            _set_visibility_for(f"{uid}_litho")
+            return
         elif collection == "backgrnd_coll":
             # case for BACKGROUNDS
-            if f"{uid}_name-labels" in actors.keys():
-                marker_actor_labels = actors[f"{uid}_name-labels"]
-                marker_actor_labels.SetVisibility(visible)
-            this_actor.SetVisibility(visible)
-        else:
-            # case for ALL OTHER COLLECTIONS
-            # self.print_terminal("case for ALL OTHER COLLECTIONS")
-            this_actor.SetVisibility(visible)
+            _set_visibility_for(f"{uid}_name-labels")
+
+        this_actor.SetVisibility(visible)
 
     def remove_actor_in_view(self, uid=None, redraw=False):
         """ "Remove actor from plotter"""
@@ -570,15 +621,20 @@ class ViewVTK(BaseView):
             if isinstance(plot_entity.points, np_ndarray):
                 # This check is needed to avoid errors when trying to plot an empty
                 # PolyData, just created at the beginning of a digitizing session.
+                show_property_value = None
                 if show_property == "none" or show_property is None:
-                    show_property_value = None
+                    pass
+                elif show_property == self.RGB_TOTAL_PROPERTY:
+                    show_property_value = self._get_point_cloud_rgb_total(plot_entity)
+                    if show_property_value is not None:
+                        plot_rgb_option = True
                 elif show_property == "X":
                     show_property_value = plot_entity.points_X
                 elif show_property == "Y":
                     show_property_value = plot_entity.points_Y
                 elif show_property == "Z":
                     show_property_value = plot_entity.points_Z
-                elif show_property[-1] == "]":
+                elif isinstance(show_property, str) and show_property.endswith("]"):
                     # We can identify multicomponents properties such as RGB[0] or Normals[0] by
                     # taking the last character of the property name ("]").
                     # Get the start and end index of the [n_component]
@@ -588,22 +644,26 @@ class ViewVTK(BaseView):
                     original_prop = show_property[:pos1]
                     # Get the column index (the n_component value)
                     index = int(show_property[pos1 + 1 : pos2])
-                    show_property_value = plot_entity.get_point_data(original_prop)[
-                        :, index
-                    ]
+                    try:
+                        show_property_value = plot_entity.get_point_data(original_prop)[
+                            :, index
+                        ]
+                    except Exception:
+                        show_property_value = None
                 else:
-                    n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[
-                        self.parent.dom_coll.get_uid_properties_names(uid).index(
-                            show_property
-                        )
-                    ]
-                    # Get the n of components for the given property. If it's > 1 then do stuff depending
-                    # on the type of property (e.g. show_rgb_option -> True if the property is RGB).
-                    if n_comp > 1:
+                    try:
+                        prop_names = self.parent.dom_coll.get_uid_properties_names(uid)
+                        prop_index = prop_names.index(show_property)
+                        n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[
+                            prop_index
+                        ]
                         show_property_value = plot_entity.get_point_data(show_property)
-                        plot_rgb_option = True
+                    except Exception:
+                        show_property_value = None
                     else:
-                        show_property_value = plot_entity.get_point_data(show_property)
+                        # Get the n of components for the given property. If it's > 1 then treat it as RGB(A).
+                        if n_comp > 1:
+                            plot_rgb_option = True
             this_actor = self.plot_PC_3D(
                 uid=uid,
                 plot_entity=new_plot,
@@ -747,14 +807,27 @@ class ViewVTK(BaseView):
                 show_property = None
                 self.plotter.remove_actor(f"{uid}_prop")
             elif show_property == "X":
+                self.plotter.remove_actor(f"{uid}_prop")
                 show_property = plot_entity.points_X
             elif show_property == "Y":
+                self.plotter.remove_actor(f"{uid}_prop")
                 show_property = plot_entity.points_Y
             elif show_property == "Z":
+                self.plotter.remove_actor(f"{uid}_prop")
                 show_property = plot_entity.points_Z
             elif show_property == "MD":
+                self.plotter.remove_actor(f"{uid}_prop")
                 show_property = plot_entity.get_point_data(data_key="MD")
+            elif isinstance(
+                show_property, str
+            ) and show_property.strip().upper().startswith("LITHOLOGY"):
+                # LITHOLOGY RGB property stored as point_data (handles [0], [1], [2] suffixes for RGB components)
+                self.plotter.remove_actor(f"{uid}_prop")
+                # Use original property name for lookup
+                show_property = plot_entity.get_point_data(data_key="LITHOLOGY")
+                plot_rgb_option = True
             else:
+                self.plotter.remove_actor(f"{uid}_prop")
                 prop = plot_entity.plot_along_trace(
                     show_property, method=self.trace_method, camera=self.plotter.camera
                 )
@@ -870,16 +943,105 @@ class ViewVTK(BaseView):
         self.plotter.reset_camera()
 
     def export_screen(self):
-        out_file_name = save_file_dialog(
+        """Open the screenshot export dialog for high-quality figure export.
+        
+        This dialog provides comprehensive options including resolution presets,
+        format selection, colormap options, and quality settings.
+        """
+        # Determine view name based on class type
+        view_name = self._get_view_name()
+        
+        # Open the screenshot export dialog
+        dialog = ScreenshotExportDialog(
             parent=self,
-            caption="Export 3D view as HTML.",
-            filter="png (*.png);; jpeg (*.jpg)",
+            plotter=self.plotter,
+            view_name=view_name,
         )
-        self.plotter.screenshot(
-            out_file_name, transparent_background=True, window_size=(1920, 1080)
+        dialog.exec()
+
+    def _get_view_name(self):
+        """Get a descriptive name for the current view type.
+        
+        Returns:
+            str: Name of the view (e.g., '3D View', 'Map View', 'XSection View')
+        """
+        class_name = self.__class__.__name__
+        if "3D" in class_name or class_name == "View3D":
+            return "3D View"
+        elif "Map" in class_name:
+            return "Map View"
+        elif "Xsection" in class_name or "XSection" in class_name:
+            return "XSection View"
+        else:
+            return "View"
+
+    def create_gif(self):
+        """Open the GIF export dialog for creating animated GIFs.
+        
+        This dialog provides comprehensive options for creating animated GIFs
+        including camera orbit controls, animation presets, and quality settings.
+        Perfect for showcasing 3D geomodelling structures in presentations.
+        """
+        # Determine view name based on class type
+        view_name = self._get_view_name()
+        
+        # Open the GIF export dialog
+        dialog = GifExportDialog(
+            parent=self,
+            plotter=self.plotter,
+            view_name=view_name,
         )
+        dialog.exec()
 
     # ================================  Methods specific to VTK views =================================================
+
+    def plot_PC_3D(
+        self,
+        uid=None,
+        plot_entity=None,
+        visible=None,
+        color_RGB=None,
+        show_property=None,
+        color_bar_range=None,
+        show_property_title=None,
+        plot_rgb_option=None,
+        point_size=1.0,
+        points_as_spheres=True,
+        opacity=1.0,
+    ):
+        """Plot point clouds in PyVista interactive plotter."""
+        if not self.actors_df.empty:
+            camera_position = self.plotter.camera_position
+        if show_property is not None and plot_rgb_option is None:
+            show_property_cmap = self.parent.prop_legend_df.loc[
+                self.parent.prop_legend_df["property_name"] == show_property_title,
+                "colormap",
+            ].values[0]
+        else:
+            show_property_cmap = None
+        this_actor = self.plotter.add_points(
+            plot_entity,
+            name=uid,
+            style="points",
+            point_size=point_size,
+            render_points_as_spheres=points_as_spheres,
+            color=color_RGB,
+            scalars=show_property,
+            n_colors=256,
+            clim=color_bar_range,
+            flip_scalars=False,
+            interpolate_before_map=True,
+            cmap=show_property_cmap,
+            scalar_bar_args=None,
+            rgb=plot_rgb_option,
+            show_scalar_bar=False,
+            opacity=opacity,
+        )
+        if not visible:
+            this_actor.SetVisibility(False)
+        if not self.actors_df.empty:
+            self.plotter.camera_position = camera_position
+        return this_actor
 
     def plot_mesh(
         self,
@@ -907,10 +1069,16 @@ class ViewVTK(BaseView):
             # the scene to a very distant place or to the origin that is the default position before any mesh is plotted.
             camera_position = self.plotter.camera_position
         if show_property_title is not None and show_property_title != "none":
-            show_property_cmap = self.parent.prop_legend_df.loc[
+            # Check if the property exists in prop_legend_df
+            matching_props = self.parent.prop_legend_df.loc[
                 self.parent.prop_legend_df["property_name"] == show_property_title,
                 "colormap",
-            ].values[0]
+            ]
+            if len(matching_props) > 0:
+                show_property_cmap = matching_props.values[0]
+            else:
+                # Property not in legend (e.g., RGB properties like LITHOLOGY)
+                show_property_cmap = None
         else:
             show_property_cmap = None
 
