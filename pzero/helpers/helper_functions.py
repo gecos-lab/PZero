@@ -1,9 +1,9 @@
 """helper_functions.py
 PZero© Andrea Bistacchi"""
 
-import datetime
+from datetime import datetime
 
-import os
+from os import path as os_path
 
 from csv import Sniffer
 
@@ -25,6 +25,8 @@ from numpy import sqrt as np_sqrt
 from numpy import square as np_square
 from numpy import std as np_std
 from numpy import sum as np_sum
+from numpy import float32 as np_float32
+from numpy import float64 as np_float64
 
 
 def auto_sep(filename):
@@ -52,27 +54,27 @@ def profiler(path, iter):
     def func(foo):
     do some stuff"""
 
-    root, base = os.path.split(path)
+    root, base = os_path.split(path)
     diff_list = []
 
     def secondary(func):
         def inner(*args, **kwargs):
             title = func.__name__
-            date = datetime.datetime.now()
+            date = datetime.now()
             print(
                 f"\n-------------------{title} PROFILING STARTED-------------------\n"
             )
             for i in range(iter):
                 print(f"{i + 1} cycle of {iter}")
-                start = datetime.datetime.now()
+                start = datetime.now()
                 res = func(*args, **kwargs)
-                end = datetime.datetime.now()
+                end = datetime.now()
                 diff = (end - start).total_seconds()
                 diff_list.append(diff)
                 print(f"cycle {i + 1} completed. It took {diff} seconds")
             raw_time_diff = pd_DataFrame(diff_list, columns=["time diff [s]"])
             raw_time_diff.to_csv(
-                os.path.join(
+                os_path.join(
                     root, f'{title}_raw{date.strftime("%d_%m_%Y-%H%M%S")}.csv'
                 ),
                 sep=";",
@@ -81,7 +83,7 @@ def profiler(path, iter):
             mean = np_mean(diff_list)
             std = np_std(diff_list)
 
-            if os.path.exists(path):
+            if os_path.exists(path):
                 with open(path, "a") as f:
                     f.write(
                         f'{date.strftime("%d_%m_%Y-%H%M%S")};{title};{mean};{std};{iter};\n'
@@ -203,13 +205,16 @@ def best_fitting_plane(points, equation=False):
 
     """
 
-    w, v = PCA(points)
+    points64 = np_float64(points)
+    del points
+
+    w, v = PCA(points64)
 
     #: the normal to the plane is the last eigenvector (lower correlation)
     normal = v[:, 2]
 
     #: get center point of the plane (mean)
-    point = np_mean(points, axis=0)
+    point = np_mean(points64, axis=0)
 
     if equation:
         a, b, c = normal

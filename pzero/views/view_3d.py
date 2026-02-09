@@ -64,6 +64,7 @@ from ..helpers.helper_dialogs import (
 from ..helpers.helper_functions import best_fitting_plane, gen_frame
 from ..collections.geological_collection import GeologicalCollection
 from ..entities_factory import PolyData, Attitude
+from ..two_d_lines import draw_line_3d
 
 
 class View3D(ViewVTK):
@@ -111,6 +112,17 @@ class View3D(ViewVTK):
         # append code from superclass
         super().initialize_menu_tools()
 
+        # Remove 2D line drawing from 3D view (use "Draw line (3D mode)" instead)
+        if hasattr(self, "drawLineButton"):
+            self.drawLineButton.setEnabled(False)
+            self.drawLineButton.setVisible(False)
+            if hasattr(self, "menuCreate"):
+                self.menuCreate.removeAction(self.drawLineButton)
+
+        # Ensure any inherited 3D line action is removed before re-adding it here
+        if hasattr(self, "drawLine3DButton") and hasattr(self, "menuCreate"):
+            self.menuCreate.removeAction(self.drawLine3DButton)
+
         # then add new code specific to this class
         self.saveHomeView = QAction("Save home view", self)
         self.saveHomeView.triggered.connect(self.save_home_view)
@@ -119,6 +131,13 @@ class View3D(ViewVTK):
         self.zoomHomeView = QAction("Zoom to home", self)
         self.zoomHomeView.triggered.connect(self.zoom_home_view)
         self.menuView.insertAction(self.zoomActive, self.zoomHomeView)
+
+        # Add 3D-specific line drawing tool that uses point picking
+        # proper connection to the action
+        self.drawLine3DButton = QAction("Draw line (3D mode)", self)
+        self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
+        self.menuCreate.addAction(self.drawLine3DButton)
+        
 
         self.menuBoreTraceVis = QMenu("Borehole visualization methods", self)
 
@@ -778,6 +797,31 @@ class View3D(ViewVTK):
             self.plotter.camera_position = camera_position
         return this_actor
 
+    def _refresh_well_trace_properties(self):
+        """
+        Re-render all well property actors so they reflect the current trace visualization method.
+        """
+        if not hasattr(self, "actors_df") or self.actors_df.empty:
+            return
+        try:
+            well_rows = self.actors_df[(self.actors_df["collection"] == "well_coll")]
+        except Exception:
+            return
+
+        if well_rows.empty:
+            return
+
+        for _, row in well_rows.iterrows():
+            prop = row.get("show_property")
+            if prop in (None, "none", "Marker", "Annotations"):
+                continue
+            try:
+                self.toggle_property(
+                    collection_name="well_coll", uid=row["uid"], prop_text=prop
+                )
+            except Exception:
+                continue
+
     def change_bore_vis(self, method):
         actors = set(self.plotter.renderer.actors.copy())
         wells = set(self.parent.well_coll.get_uids)
@@ -785,8 +829,10 @@ class View3D(ViewVTK):
         well_actors = actors.intersection(wells)
         if method == "trace":
             self.trace_method = method
+            self._refresh_well_trace_properties()
         elif method == "cylinder":
             self.trace_method = method
+            self._refresh_well_trace_properties()
         elif method == "geo":
             for uid in well_actors:
                 if "_geo" in uid:
@@ -971,6 +1017,7 @@ class View3D(ViewVTK):
         entity_label = QLabel("Select Entity:")
         entity_combo = QComboBox()
         entity_combo.addItems(self.getSliceableEntities())
+        entity_combo.setObjectName("mesh_slicer_entity_combo")
 
         entity_layout.addWidget(entity_label)
         entity_layout.addWidget(entity_combo)
@@ -986,6 +1033,7 @@ class View3D(ViewVTK):
         multi_entity_label = QLabel("Select Entity:")
         multi_entity_combo = QComboBox()
         multi_entity_combo.addItems(self.getSliceableEntities())
+        multi_entity_combo.setObjectName("mesh_slicer_multi_entity_combo")
 
         multi_entity_layout.addWidget(multi_entity_label)
         multi_entity_layout.addWidget(multi_entity_combo)
@@ -2789,6 +2837,11 @@ class View3D(ViewVTK):
         control_panel.setLayout(layout)
         control_panel.show()
 
+        # Expose key widgets and helpers for external callers (e.g., tree context menus)
+        control_panel.single_entity_combo = entity_combo
+        control_panel.multi_entity_combo = multi_entity_combo
+        control_panel.initialize_entity_controls = initialize_entity_controls
+
         # Add this after creating the control_panel
         control_panel.finished.connect(cleanup_on_close)
         # Maintain singleton reference and clean it up on close/destroy
@@ -2992,6 +3045,22 @@ class View3D(ViewVTK):
         """Add mesh slicer to the menu tools."""
         # Call parent's initialize_menu_tools first to ensure menus and toolbars are created
         super().initialize_menu_tools()
+
+        # Remove 2D line drawing from 3D view (use "Draw line (3D mode)" instead)
+        if hasattr(self, "drawLineButton"):
+            self.drawLineButton.setEnabled(False)
+            self.drawLineButton.setVisible(False)
+            if hasattr(self, "menuCreate"):
+                self.menuCreate.removeAction(self.drawLineButton)
+
+        # Re-add 3D line drawing with point-picking (ensure proper connection)
+        if hasattr(self, "drawLine3DButton") and hasattr(self, "menuCreate"):
+            self.menuCreate.removeAction(self.drawLine3DButton)
+        from ..two_d_lines import draw_line_3d
+
+        self.drawLine3DButton = QAction("Draw line (3D mode)", self)
+        self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
+        self.menuCreate.addAction(self.drawLine3DButton)
 
         # Create Mesh Tools menu if it doesn't exist
         if not hasattr(self, "menuMeshTools"):
@@ -3723,3 +3792,5 @@ class View3D(ViewVTK):
                 child.setChecked(True)
                 break
         return dialog
+
+

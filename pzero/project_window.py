@@ -1,16 +1,22 @@
 """project_window.py
 PZero© Andrea Bistacchi"""
 
-import os
-import json
+from os import path as os_path
+from os import mkdir as os_mkdir
+
 from copy import deepcopy
 
 from datetime import datetime
 
+from numpy import cos as np_cos
+from numpy import pi as np_pi
+from numpy import sin as np_sin
+
 from PySide6.QtCore import Signal as pyqtSignal
-from PySide6.QtCore import QObject
-from PySide6.QtWidgets import QMainWindow, QMessageBox
-from PySide6.QtGui import QAction
+from PySide6.QtCore import QObject, QUrl
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QDialog, QLabel, QVBoxLayout
+from PySide6.QtGui import QAction, QDesktopServices, QPixmap
+from PySide6.QtCore import Qt
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv
@@ -212,7 +218,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportPC.triggered.connect(self.import_PC)
         self.actionImportSHP.triggered.connect(self.import_SHP)
         self.actionImportDEM.triggered.connect(self.import_DEM)
-        self.actionImportOrthoImage.triggered.connect(self.import_mapimage)
+        self.actionImportMapImage.triggered.connect(self.import_mapimage)
         self.actionImportXSectionImage.triggered.connect(self.import_xsimage)
         self.actionImportWellData.triggered.connect(self.import_welldata)
         self.actionImportSEGY.triggered.connect(self.import_SEGY)
@@ -282,6 +288,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         self.actionListCRS.triggered.connect(lambda: CRS_list(self))
 
+        """Help actions -> slots"""
+        self.actionHelp.triggered.connect(self.open_help_url)
+        self.actionCheckForUpdates.triggered.connect(self.open_release_url)
+        self.actionAbout.triggered.connect(self.show_about_dialog)
+
     def closeEvent(self, event):
         """Re-implement the standard closeEvent method of QWidget and ask (1) to save project, and (2) for confirmation to quit."""
         reply = QMessageBox.question(
@@ -333,6 +344,45 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         except:
             self.TextTerminal.appendPlainText("error printing in terminal")
 
+    def show_about_dialog(self):
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("About PZero")
+        dialog.setFixedWidth(420)
+
+        layout = QVBoxLayout(dialog)
+
+        # Logo
+        image_path = QPixmap("images/Gecos_logo.jpg")
+        logo_label = QLabel()
+        pixmap = QPixmap(image_path)
+
+        if not pixmap.isNull():
+            logo_label.setPixmap(pixmap.scaledToWidth(220, Qt.SmoothTransformation))
+            logo_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(logo_label)
+
+        # Text
+        text_label = QLabel(
+            "<b>PZero</b> © 2020 Andrea Bistacchi<br><br>"
+            "Released under the <b>GNU AGPLv3</b> license.<br><br>"
+            "PZero is a Python open-source 3D geological modelling application "
+            "supporting explicit surface interpolation, advanced implicit modelling, "
+            "and standard geomodelling data management and analysis workflows."
+        )
+        text_label.setWordWrap(True)
+        text_label.setAlignment(Qt.AlignCenter)
+
+        layout.addWidget(text_label)
+
+        dialog.setLayout(layout)
+        dialog.exec()
+
+    def open_help_url(self):
+        QDesktopServices.openUrl(QUrl("https://github.com/gecos-lab/PZero/wiki"))
+
+    def open_release_url(self):
+        QDesktopServices.openUrl(QUrl("https://github.com/gecos-lab/PZero/releases"))
     """Methods used to manage the entities shown in tables."""
 
     @property
@@ -1168,9 +1218,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             f"Saving project as VTK files and csv tables with metada and legend.\nIn file/folder: {self.out_file_name}/{out_dir_name}\n"
         )
         # Create the folder if it does not exist already.
-        if not os.path.isdir(self.out_file_name[:-3] + "_p0"):
-            os.mkdir(self.out_file_name[:-3] + "_p0")
-        os.mkdir(out_dir_name)
+        if not os_path.isdir(self.out_file_name[:-3] + "_p0"):
+            os_mkdir(self.out_file_name[:-3] + "_p0")
+        os_mkdir(out_dir_name)
         # Save the root file pointing to the folder.
         fout = open(self.out_file_name, "w")
         fout.write(
@@ -1354,7 +1404,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 im_writer.Write()
             prgs_bar.add_one()
 
-        # Save boundaries collection table to JSON file and entities as VTK.
+        # Save boundaries collection table to CSV and JSON files.
         out_cols = list(self.boundary_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.boundary_coll.df[out_cols].to_json(
@@ -1375,7 +1425,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.Write()
             prgs_bar.add_one()
 
-        # Save wells collection table to JSON file and entities as VTK.
+        # Save wells collection table to CSV and JSON files.
 
         out_cols = list(self.well_coll.df.columns)
         out_cols.remove("vtk_obj")
@@ -1397,7 +1447,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.Write()
             prgs_bar.add_one()
 
-        # Save fluids collection table to JSON file and entities as VTK.
+        # Save fluids collection table to CSV and JSON files.
         out_cols = list(self.fluid_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.fluid_coll.df[out_cols].to_json(
@@ -1418,7 +1468,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.Write()
             prgs_bar.add_one()
 
-        # Save Backgrounds collection table to JSON file and entities as VTK.
+        # Save Backgrounds collection table to CSV and JSON files.
         out_cols = list(self.backgrnd_coll.df.columns)
         out_cols.remove("vtk_obj")
         self.backgrnd_coll.df[out_cols].to_json(
@@ -1506,7 +1556,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.print_terminal(
                 f"Opening project/revision : {in_file_name}/{rev_name}\n"
             )
-            if not os.path.isdir(in_dir_name):
+            if not os_path.isdir(in_dir_name):
                 self.print_terminal(in_dir_name)
                 self.print_terminal("-- ERROR: missing folder --")
                 return
@@ -1521,10 +1571,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             # --------------------- READ LEGENDS ---------------------
 
             # Read geological legend tables.
-            if os.path.isfile(
+            if os_path.isfile(
                 (in_dir_name + "/geol_legend_table.csv")
-            ) or os.path.isfile((in_dir_name + "/geol_legend_table.json")):
-                if os.path.isfile((in_dir_name + "/geol_legend_table.json")):
+            ) or os_path.isfile((in_dir_name + "/geol_legend_table.json")):
+                if os_path.isfile((in_dir_name + "/geol_legend_table.json")):
                     new_geol_coll_legend_df = pd_read_json(
                         in_dir_name + "/geol_legend_table.json",
                         orient="index",
@@ -1560,10 +1610,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 )
 
             # Read well legend tables.
-            if os.path.isfile(
+            if os_path.isfile(
                 (in_dir_name + "/well_legend_table.csv")
-            ) or os.path.isfile((in_dir_name + "/well_legend_table.json")):
-                if os.path.isfile((in_dir_name + "/well_legend_table.json")):
+            ) or os_path.isfile((in_dir_name + "/well_legend_table.json")):
+                if os_path.isfile((in_dir_name + "/well_legend_table.json")):
                     new_well_legend_df = pd_read_json(
                         in_dir_name + "/well_legend_table.json",
                         orient="index",
@@ -1592,10 +1642,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     )
 
             # Read fluids legend tables.
-            if os.path.isfile(
+            if os_path.isfile(
                 (in_dir_name + "/fluids_legend_table.csv")
-            ) or os.path.isfile((in_dir_name + "/fluids_legend_table.json")):
-                if os.path.isfile((in_dir_name + "/fluids_legend_table.json")):
+            ) or os_path.isfile((in_dir_name + "/fluids_legend_table.json")):
+                if os_path.isfile((in_dir_name + "/fluids_legend_table.json")):
                     new_fluids_legend_df = pd_read_json(
                         in_dir_name + "/fluids_legend_table.json",
                         orient="index",
@@ -1626,10 +1676,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     )
 
             # Read Backgrounds legend tables.
-            if os.path.isfile(
+            if os_path.isfile(
                 (in_dir_name + "/backgrounds_legend_table.csv")
-            ) or os.path.isfile((in_dir_name + "/backgrounds_legend_table.json")):
-                if os.path.isfile((in_dir_name + "/backgrounds_legend_table.json")):
+            ) or os_path.isfile((in_dir_name + "/backgrounds_legend_table.json")):
+                if os_path.isfile((in_dir_name + "/backgrounds_legend_table.json")):
                     new_backgrounds_legend_df = pd_read_json(
                         in_dir_name + "/backgrounds_legend_table.json",
                         orient="index",
@@ -1657,10 +1707,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         )
 
             # Read other legend tables.
-            if os.path.isfile(
+            if os_path.isfile(
                 (in_dir_name + "/others_legend_table.csv")
-            ) or os.path.isfile((in_dir_name + "/others_legend_table.json")):
-                if os.path.isfile((in_dir_name + "/others_legend_table.json")):
+            ) or os_path.isfile((in_dir_name + "/others_legend_table.json")):
+                if os_path.isfile((in_dir_name + "/others_legend_table.json")):
                     new_others_legend_df = pd_read_json(
                         in_dir_name + "/others_legend_table.json",
                         orient="index",
@@ -1683,10 +1733,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     for diff in diffs:
                         self.others_legend_df[diff] = Legend.others_legend_dict[diff]
 
-            if os.path.isfile((in_dir_name + "/prop_legend_df.csv")) or os.path.isfile(
+            if os_path.isfile((in_dir_name + "/prop_legend_df.csv")) or os_path.isfile(
                 (in_dir_name + "/prop_legend_df.json")
             ):
-                if os.path.isfile((in_dir_name + "/prop_legend_df.json")):
+                if os_path.isfile((in_dir_name + "/prop_legend_df.json")):
                     new_prop_legend_df = pd_read_json(
                         in_dir_name + "/prop_legend_df.json",
                         orient="index",
@@ -1703,11 +1753,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             # --------------------- READ TABLES ---------------------
 
             # Read x-section table and build cross-sections. Note beginResetModel() and endResetModel().
-            if os.path.isfile((in_dir_name + "/xsection_table.csv")) or os.path.isfile(
+            if os_path.isfile((in_dir_name + "/xsection_table.csv")) or os_path.isfile(
                 (in_dir_name + "/xsection_table.json")
             ):
                 self.xsect_coll.table_model.beginResetModel()
-                if os.path.isfile((in_dir_name + "/xsection_table.json")):
+                if os_path.isfile((in_dir_name + "/xsection_table.json")):
                     # noinspection PyTypeChecker
                     new_xsect_coll_df = pd_read_json(
                         in_dir_name + "/xsection_table.json",
@@ -1725,22 +1775,107 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 # reindex new_dom_coll_df to catch any problem with non-consecutive indices
                 new_xsect_coll_df.reset_index(drop=True, inplace=True)
                 if not new_xsect_coll_df.empty:
-                    # keep this workaround until x-section table is simplified by removing redundant columns ______________
-                    if not "width" in new_xsect_coll_df:
-                        new_xsect_coll_df.insert(
-                            15,
-                            "width",
-                            new_xsect_coll_df.top - new_xsect_coll_df.bottom,
-                        )
-                        self.print_terminal("column width added to xsect table")
+                    if not "height" in new_xsect_coll_df:
+                        # case for old projects before simplification of cross-section collection columns
+                        if "azimuth" in new_xsect_coll_df.columns:
+                            new_xsect_coll_df.rename(
+                                columns={"azimuth": "strike"}, inplace=True
+                            )
+                            self.print_terminal(
+                                "column azimuth renamed as strike in x-section table"
+                            )
+                        if not "parent_uid" in new_xsect_coll_df.columns:
+                            new_xsect_coll_df["parent_uid"] = new_xsect_coll_df["uid"]
+                            self.print_terminal(
+                                "column top renamed as origin_z in x-section table"
+                            )
+
+                        if not "width" in new_xsect_coll_df:
+                            # case for very old projects, before the introduction of inclined cross-sections
+                            # these sections have the base point on top
+                            if "base_x" in new_xsect_coll_df.columns:
+                                new_xsect_coll_df.rename(
+                                    columns={"base_x": "origin_x"}, inplace=True
+                                )
+                                self.print_terminal(
+                                    "column base_x renamed as origin_x in x-section table"
+                                )
+                            if "base_y" in new_xsect_coll_df.columns:
+                                new_xsect_coll_df.rename(
+                                    columns={"base_y": "origin_y"}, inplace=True
+                                )
+                                self.print_terminal(
+                                    "column base_y renamed as origin_y in x-section table"
+                                )
+                            if "top" in new_xsect_coll_df.columns:
+                                new_xsect_coll_df.insert(
+                                    15,
+                                    "height",
+                                    abs(new_xsect_coll_df.top - new_xsect_coll_df.bottom),
+                                )
+                                self.print_terminal("column height added to xsect table")
+                            if "top" in new_xsect_coll_df.columns:
+                                if "bottom" in new_xsect_coll_df.columns:
+                                    new_xsect_coll_df.loc[new_xsect_coll_df["bottom"] > new_xsect_coll_df["top"], "top"] = new_xsect_coll_df["bottom"]
+                                new_xsect_coll_df.rename(
+                                    columns={"top": "origin_z"}, inplace=True
+                                )
+                                self.print_terminal(
+                                    "column top renamed as origin_z in x-section table"
+                                )
+                        else:
+                            # case for intermediate age projects, after the introduction of inclined cross-sections,
+                            # but before columns simplification,
+                            # these sections have the base point on bottom, that must be projected to the
+                            # top along dip, and width was ok, and must be renames to height
+                            new_xsect_coll_df.rename(
+                                columns={"width": "height"}, inplace=True
+                            )
+                            self.print_terminal(
+                                "column width renamed as height in x-section table"
+                            )
+                            new_xsect_coll_df.rename(
+                                columns={"base_x": "origin_x"}, inplace=True
+                            )
+                            self.print_terminal(
+                                "column base_x renamed as origin_x in x-section table"
+                            )
+                            new_xsect_coll_df.rename(
+                                columns={"base_y": "origin_y"}, inplace=True
+                            )
+                            self.print_terminal(
+                                "column base_y renamed as origin_y in x-section table"
+                            )
+                            new_xsect_coll_df.rename(
+                                columns={"base_z": "origin_z"}, inplace=True
+                            )
+                            self.print_terminal(
+                                "column base_z renamed as origin_z in x-section table"
+                            )
+                            new_xsect_coll_df["origin_x"] += (
+                                new_xsect_coll_df["height"]
+                                * np_cos(new_xsect_coll_df["dip"] * np_pi / 180)
+                                * np_cos((new_xsect_coll_df["strike"] + 180 % 360) * np_pi / 180)
+                            )
+                            new_xsect_coll_df["origin_y"] += (
+                                new_xsect_coll_df["height"]
+                                * np_cos(new_xsect_coll_df["dip"] * np_pi / 180)
+                                * np_sin((new_xsect_coll_df["strike"] + 180 % 360) * np_pi / 180)
+                            )
+                            new_xsect_coll_df["origin_z"] += (
+                                new_xsect_coll_df["height"]
+                                * np_sin(new_xsect_coll_df["dip"] * np_pi / 180)
+                            )
 
                     for new_column in new_xsect_coll_df.columns.values.tolist():
+                        # drop columns not included in the standard dictionary
                         if new_column not in self.xsect_coll.df.columns.values.tolist():
                             new_xsect_coll_df.drop(new_column, axis=1, inplace=True)
-                            self.print_terminal(
-                                f"column {new_column} removed from xsect table"
-                            )
+                        self.print_terminal(
+                            f"column {new_column} removed from xsect table"
+                        )
                     for column in self.xsect_coll.df.columns.values.tolist():
+                        # add missing columns with default values
                         if column not in new_xsect_coll_df.columns.values.tolist():
                             missing_column = pd_DataFrame(
                                 [{column: self.xsect_coll.entity_dict[column]}]
@@ -1761,6 +1896,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     # reorder columns
                     new_xsect_coll_df = new_xsect_coll_df[self.xsect_coll.df.columns]
 
+                    # finally, set the imported dataframe into the project dataframe
                     self.xsect_coll.df = new_xsect_coll_df
 
                 for uid in self.xsect_coll.df["uid"].tolist():
@@ -1768,11 +1904,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.xsect_coll.table_model.endResetModel()
 
             # Read DOM table and files. Note beginResetModel() and endResetModel().
-            if os.path.isfile((in_dir_name + "/dom_table.csv")) or os.path.isfile(
+            if os_path.isfile((in_dir_name + "/dom_table.csv")) or os_path.isfile(
                 (in_dir_name + "/dom_table.json")
             ):
                 self.dom_coll.table_model.beginResetModel()
-                if os.path.isfile((in_dir_name + "/dom_table.json")):
+                if os_path.isfile((in_dir_name + "/dom_table.json")):
                     # noinspection PyTypeChecker
                     new_dom_coll_df = pd_read_json(
                         in_dir_name + "/dom_table.json",
@@ -1861,7 +1997,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 )
                 for uid in self.dom_coll.df["uid"].to_list():
                     if self.dom_coll.get_uid_topology(uid) == "DEM":
-                        if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
+                        if not os_path.isfile((in_dir_name + "/" + uid + ".vts")):
                             print("error: missing VTK file")
                             return
                         vtk_object = DEM()
@@ -1904,11 +2040,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.dom_coll.table_model.endResetModel()
 
             # Read image collection and files.
-            if os.path.isfile((in_dir_name + "/image_table.csv")) or os.path.isfile(
+            if os_path.isfile((in_dir_name + "/image_table.csv")) or os_path.isfile(
                 (in_dir_name + "/image_table.json")
             ):
                 self.image_coll.table_model.beginResetModel()
-                if os.path.isfile((in_dir_name + "/image_table.json")):
+                if os_path.isfile((in_dir_name + "/image_table.json")):
                     # noinspection PyTypeChecker
                     new_image_coll_df = pd_read_json(
                         in_dir_name + "/image_table.json",
@@ -1976,7 +2112,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     if self.image_coll.df.loc[
                         self.image_coll.df["uid"] == uid, "topology"
                     ].values[0] in ["MapImage", "TSDomImage"]:
-                        if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
+                        if not os_path.isfile((in_dir_name + "/" + uid + ".vti")):
                             print("error: missing image file")
                             return
                         vtk_object = MapImage()
@@ -1988,7 +2124,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     elif self.image_coll.df.loc[
                         self.image_coll.df["uid"] == uid, "topology"
                     ].values[0] in ["XsImage"]:
-                        if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
+                        if not os_path.isfile((in_dir_name + "/" + uid + ".vti")):
                             print("error: missing image file")
                             return
                         vtk_object = XsImage(
@@ -2005,57 +2141,25 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     elif self.image_coll.df.loc[
                         self.image_coll.df["uid"] == uid, "topology"
                     ].values[0] in ["Seismics"]:
-                        # Try to load from metadata first (fast method)
-                        metadata_file = in_dir_name + "/" + uid + "_seismic_metadata.json"
-                        if os.path.isfile(metadata_file):
-                            try:
-                                with open(metadata_file, "r") as f:
-                                    seismic_metadata = json.load(f)
-                                source_file = seismic_metadata.get("source_file")
-
-                                if source_file and os.path.isfile(source_file):
-                                    # Re-import from original SEGY file
-                                    self.print_terminal(f"Loading seismic from source: {source_file}")
-                                    pv_seismic_grid = read_segy_file(in_file_name=source_file)
-                                    vtk_object = Seismics()
-                                    vtk_object.DeepCopy(pv_seismic_grid)
-                                else:
-                                    self.print_terminal(f"Warning: Source SEGY file not found: {source_file}")
-                                    self.print_terminal("Attempting to load from saved VTK file...")
-                                    # Fallback to old method
-                                    if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
-                                        print("error: missing both metadata source and VTK file")
-                                        return
-                                    vtk_object = Seismics()
-                                    sg_reader = vtkXMLStructuredGridReader()
-                                    sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
-                                    sg_reader.Update()
-                                    vtk_object.ShallowCopy(sg_reader.GetOutput())
-                                    vtk_object.Modified()
-                            except Exception as e:
-                                self.print_terminal(f"Error loading seismic metadata: {e}")
-                                return
-                        else:
-                            # Fallback to old VTK file method for legacy projects
-                            if not os.path.isfile((in_dir_name + "/" + uid + ".vts")):
-                                print("error: missing VTK file")
-                                return
-                            vtk_object = Seismics()
-                            sg_reader = vtkXMLStructuredGridReader()
-                            sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
-                            sg_reader.Update()
-                            vtk_object.ShallowCopy(sg_reader.GetOutput())
-                            vtk_object.Modified()
+                        if not os_path.isfile((in_dir_name + "/" + uid + ".vts")):
+                            print("error: missing VTK file")
+                            return
+                        vtk_object = Seismics()
+                        sg_reader = vtkXMLStructuredGridReader()
+                        sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
+                        sg_reader.Update()
+                        vtk_object.ShallowCopy(sg_reader.GetOutput())
+                        vtk_object.Modified()
                     self.image_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                     prgs_bar.add_one()
                 self.image_coll.table_model.endResetModel()
 
             # Read mesh3d collection and files.
-            if os.path.isfile((in_dir_name + "/mesh3d_table.csv")) or os.path.isfile(
+            if os_path.isfile((in_dir_name + "/mesh3d_table.csv")) or os_path.isfile(
                 (in_dir_name + "/mesh3d_table.json")
             ):
                 self.mesh3d_coll.table_model.beginResetModel()
-                if os.path.isfile((in_dir_name + "/mesh3d_table.json")):
+                if os_path.isfile((in_dir_name + "/mesh3d_table.json")):
                     # noinspection PyTypeChecker
                     new_mesh3d_coll_df = pd_read_json(
                         in_dir_name + "/mesh3d_table.json",
@@ -2128,7 +2232,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     if self.mesh3d_coll.df.loc[
                         self.mesh3d_coll.df["uid"] == uid, "topology"
                     ].values[0] in ["Voxet"]:
-                        if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
+                        if not os_path.isfile((in_dir_name + "/" + uid + ".vti")):
                             print("error: missing .mesh3d file")
                             return
                         vtk_object = Voxet()
@@ -2140,7 +2244,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     elif self.mesh3d_coll.df.loc[
                         self.mesh3d_coll.df["uid"] == uid, "topology"
                     ].values[0] in ["XsVoxet"]:
-                        if not os.path.isfile((in_dir_name + "/" + uid + ".vti")):
+                        if not os_path.isfile((in_dir_name + "/" + uid + ".vti")):
                             print("error: missing .mesh3d file")
                             return
                         vtk_object = XsVoxet(
@@ -2159,11 +2263,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.mesh3d_coll.table_model.endResetModel()
 
             # Read boundaries collection and files.
-            if os.path.isfile((in_dir_name + "/boundary_table.csv")) or os.path.isfile(
+            if os_path.isfile((in_dir_name + "/boundary_table.csv")) or os_path.isfile(
                 (in_dir_name + "/boundary_table.json")
             ):
                 self.boundary_coll.table_model.beginResetModel()
-                if os.path.isfile((in_dir_name + "/boundary_table.json")):
+                if os_path.isfile((in_dir_name + "/boundary_table.json")):
                     # noinspection PyTypeChecker
                     new_boundary_coll_df = pd_read_json(
                         in_dir_name + "/boundary_table.json",
@@ -2235,7 +2339,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     parent=self,
                 )
                 for uid in self.boundary_coll.df["uid"].to_list():
-                    if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
+                    if not os_path.isfile((in_dir_name + "/" + uid + ".vtp")):
                         print("error: missing VTK file")
                         return
                     if self.boundary_coll.get_uid_topology(uid) == "PolyLine":
@@ -2252,11 +2356,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.boundary_coll.table_model.endResetModel()
 
             # Read well table and files.
-            if os.path.isfile((in_dir_name + "/well_table.csv")) or os.path.isfile(
+            if os_path.isfile((in_dir_name + "/well_table.csv")) or os_path.isfile(
                 (in_dir_name + "/well_table.json")
             ):
                 self.well_coll.table_model.beginResetModel()
-                if os.path.isfile((in_dir_name + "/well_table.json")):
+                if os_path.isfile((in_dir_name + "/well_table.json")):
                     # noinspection PyTypeChecker
                     new_well_coll_df = pd_read_json(
                         in_dir_name + "/well_table.json",
@@ -2275,6 +2379,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 # reindex new_dom_coll_df to catch any problem with non-consecutive indices
                 new_well_coll_df.reset_index(drop=True, inplace=True)
 
+                if "Loc ID" in new_well_coll_df.columns:
+                    new_well_coll_df.rename(
+                        columns={"Loc ID": "name"}, inplace=True
+                    )
+                    self.print_terminal(
+                        "column Loc ID renamed as name in wells table"
+                    )
                 if not new_well_coll_df.empty:
                     if "x_section" in new_well_coll_df.columns:
                         new_well_coll_df.rename(
@@ -2321,7 +2432,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     parent=self,
                 )
                 for uid in self.well_coll.df["uid"].to_list():
-                    if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
+                    if not os_path.isfile((in_dir_name + "/" + uid + ".vtp")):
                         print("error: missing VTK file")
                         return
                     vtk_object = Well()
@@ -2339,11 +2450,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.prop_legend.update_widget(parent=self)
 
             # Read geological table and files.
-            if os.path.isfile(
+            if os_path.isfile(
                 (in_dir_name + "/geological_table.csv")
-            ) or os.path.isfile((in_dir_name + "/geological_table.json")):
+            ) or os_path.isfile((in_dir_name + "/geological_table.json")):
                 self.geol_coll.table_model.beginResetModel()
-                if os.path.isfile((in_dir_name + "/geological_table.json")):
+                if os_path.isfile((in_dir_name + "/geological_table.json")):
                     # noinspection PyTypeChecker
                     new_geol_coll_df = pd_read_json(
                         in_dir_name + "/geological_table.json",
@@ -2410,7 +2521,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     parent=self,
                 )
                 for uid in self.geol_coll.df["uid"].to_list():
-                    if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
+                    if not os_path.isfile((in_dir_name + "/" + uid + ".vtp")):
                         print("error: missing VTK file")
                         return
                     if self.geol_coll.get_uid_topology(uid) == "VertexSet":
@@ -2442,11 +2553,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.prop_legend.update_widget(parent=self)
 
             # Read fluids table and files.
-            if os.path.isfile((in_dir_name + "/fluids_table.csv")) or os.path.isfile(
+            if os_path.isfile((in_dir_name + "/fluids_table.csv")) or os_path.isfile(
                 (in_dir_name + "/fluids_table.json")
             ):
                 self.fluid_coll.table_model.beginResetModel()
-                if os.path.isfile((in_dir_name + "/fluids_table.json")):
+                if os_path.isfile((in_dir_name + "/fluids_table.json")):
                     # noinspection PyTypeChecker
                     new_fluids_coll_df = pd_read_json(
                         in_dir_name + "/fluids_table.json",
@@ -2513,7 +2624,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     parent=self,
                 )
                 for uid in self.fluid_coll.df["uid"].to_list():
-                    if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
+                    if not os_path.isfile((in_dir_name + "/" + uid + ".vtp")):
                         print("error: missing VTK file")
                         return
                     if self.fluid_coll.get_uid_topology(uid) == "VertexSet":
@@ -2542,11 +2653,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.prop_legend.update_widget(parent=self)
 
             # Read Backgrounds table and files."""
-            if os.path.isfile(
+            if os_path.isfile(
                 (in_dir_name + "/backgrounds_table.csv")
-            ) or os.path.isfile((in_dir_name + "/backgrounds_table.json")):
+            ) or os_path.isfile((in_dir_name + "/backgrounds_table.json")):
                 self.backgrnd_coll.table_model.beginResetModel()
-                if os.path.isfile((in_dir_name + "/backgrounds_table.json")):
+                if os_path.isfile((in_dir_name + "/backgrounds_table.json")):
                     # noinspection PyTypeChecker
                     new_backgrounds_coll_df = pd_read_json(
                         in_dir_name + "/backgrounds_table.json",
@@ -2623,7 +2734,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     parent=self,
                 )
                 for uid in self.backgrnd_coll.df["uid"].to_list():
-                    if not os.path.isfile((in_dir_name + "/" + uid + ".vtp")):
+                    if not os_path.isfile((in_dir_name + "/" + uid + ".vtp")):
                         print("error: missing VTK file")
                         return
                     if self.backgrnd_coll.get_uid_topology(uid) == "VertexSet":
@@ -2647,7 +2758,28 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             # Update legend.
             self.prop_legend.update_widget(parent=self)
 
-        except:
+
+        except BaseException as e:
+            # Get current system exception
+            import sys
+            import traceback
+
+            ex_type, ex_value, ex_traceback = sys.exc_info()
+
+            # Extract unformatter stack traces as tuples
+            trace_back = traceback.extract_tb(ex_traceback)
+
+            # Format stacktrace
+            stack_trace = list()
+
+            for trace in trace_back:
+                stack_trace.append(
+                    "File : %s , Line : %d, Func.Name : %s, Message : %s" % (trace[0], trace[1], trace[2], trace[3]))
+
+            print("Exception type : %s " % ex_type.__name__)
+            print("Exception message : %s" % ex_value)
+            print("Stack trace : %s" % stack_trace)
+
             self.print_terminal("Error - tried to open invalid project.")
 
     # ---- Methods used to import entities from other file formats. ----
@@ -2722,7 +2854,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         for in_file_name in in_file_names:
             self.print_terminal("in_file_name: " + in_file_name)
             # Get x-section name from file.
-            x_section_name = os.path.splitext(os.path.basename(in_file_name))[0]
+            x_section_name = os_path.splitext(os_path.basename(in_file_name))[0]
             if x_section_name in self.xsect_coll.df["name"].to_list():
                 if append_opt == 0:
                     return
@@ -2793,14 +2925,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         ext_filter = "All supported (*.txt *.csv *.xyz *.asc *.ply *.las *.laz);;Text files (*.txt *.csv *.xyz *.asc);;PLY files (*.ply);;LAS/LAZ files (*.las *.laz)"
 
-        add_opt = [["check255Box", "Display RGB values within the 0-255 range"]]
-
         args = import_dialog(
             self,
             default_attr_list=default_attr_list,
             ext_filter=ext_filter,
             caption="Import point cloud data",
-            add_opt=add_opt,
         ).args
         if args:
             in_file_name, col_names, row_range, index_list, delimiter, origin = args
@@ -2961,12 +3090,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
         self.print_terminal(("Saving CAD surfaces in folder: " + out_dir_name))
         # Create the folder if it does not exist already.
-        if not os.path.isdir(out_dir_name):
-            os.mkdir(out_dir_name)
+        if not os_path.isdir(out_dir_name):
+            os_mkdir(out_dir_name)
         if cad_format == "DXF":
             print("is DXF")
-            os.mkdir(f"{out_dir_name}/csv")
-            os.mkdir(f"{out_dir_name}/dxf")
+            os_mkdir(f"{out_dir_name}/csv")
+            os_mkdir(f"{out_dir_name}/dxf")
             vtk2dxf(self=self, out_dir_name=out_dir_name)
         elif cad_format == "GOCAD":
             if not self.selected_uids:

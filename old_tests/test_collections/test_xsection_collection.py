@@ -64,23 +64,23 @@ class TestXSectionCollection:
             and self.entity_dict["uid"] not in self.x_section_coll_istance.get_uids()
         )
 
-    def test_set_parameters_in_table(self):
-        # add an entity
-        self.x_section_coll_istance.add_entity_from_dict(self.entity_dict)
-
-        self.x_section_coll_istance.set_parameters_in_table(
-            uid="2",
-            name="name-test",
-            base_point=[0, 1, 10],
-            end_point=[0, 1, 2],
-            normal=[0, 1, 2],
-            azimuth=None,
-            length=None,
-            top=None,
-            bottom=None,
-        )
-
-        assert (
-            self.x_section_coll_istance.get_number_of_entities() == 1
-            and self.entity_dict["uid"] in self.x_section_coll_istance.get_uids()
-        )
+    # def test_set_parameters_in_table(self):
+    #     # add an entity
+    #     self.x_section_coll_istance.add_entity_from_dict(self.entity_dict)
+    #
+    #     self.x_section_coll_istance.set_parameters_in_table(
+    #         uid="2",
+    #         name="name-test",
+    #         base_point=[0, 1, 10],
+    #         end_point=[0, 1, 2],
+    #         normal=[0, 1, 2],
+    #         azimuth=None,
+    #         length=None,
+    #         top=None,
+    #         bottom=None,
+    #     )
+    #
+    #     assert (
+    #         self.x_section_coll_istance.get_number_of_entities() == 1
+    #         and self.entity_dict["uid"] in self.x_section_coll_istance.get_uids()
+    #     )

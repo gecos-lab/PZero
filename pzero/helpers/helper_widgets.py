@@ -4,10 +4,27 @@ PZero© Andrea Bistacchi"""
 from math import degrees, atan2, sqrt, asin
 
 from numpy import array as np_array
+from numpy import ndarray as np_ndarray
 from numpy import flip as np_flip
 
-from pyvista import lines_from_points as pv_line_from_points
+import pyvista as pv
+import numpy as np
+
+import pyvista as pv
+import numpy as np
+
+import pyvista as pv
+import numpy as np
+
+import pyvista as pv
+import numpy as np
+
+import math
+
+from pyvista import lines_from_points as pv_lines_from_points
 from pyvista import wrap as pv_wrap
+from pyvista import Sphere as pv_Sphere
+
 
 from vtkmodules.vtkCommonCore import vtkCommand
 from vtkmodules.vtkInteractionWidgets import (
@@ -85,7 +102,7 @@ class Vector(vtkContourWidget):
                 self.deltas[0] ** 2 + self.deltas[1] ** 2 + self.deltas[2] ** 2
             )
             self.azimuth = degrees(atan2(self.deltas[0], self.deltas[1])) % 360
-            self.line = pv_line_from_points(np_array([self.p1, self.p2]))
+            self.line = pv_lines_from_points(np_array([self.p1, self.p2]))
             # self.points = np_array(pld.GetPoints().GetData())[:2, :]
             self.dip = degrees(asin(abs(self.deltas[2] / self.length))) % 90
 
@@ -93,6 +110,181 @@ class Vector(vtkContourWidget):
             self.EnabledOff()
             # invoke callback with original parent
             self.run_function(self._parent, vector=self)
+
+
+class Tracer3D:
+    """A 3D line drawing tool that uses point picking for better 3D interaction.
+    Click on surfaces to add points, right-click to finish."""
+    
+    def __init__(self, parent=None):
+        self._parent = parent
+        self.points = []
+        self.line_actor = None
+        self.temp_line_actor = None
+        self.point_actors = []
+        self.is_active = False
+        
+    def enable(self):
+        """Enable the 3D line drawing mode."""
+        self.is_active = True
+        self.points = []
+        self.line_actor = None
+        self.temp_line_actor = None
+        self.point_actors = []
+        
+    def disable(self):
+        """Disable the 3D line drawing mode and clean up."""
+        self.is_active = False
+        self._cleanup_visuals()
+        
+    def _cleanup_visuals(self):
+        """Remove all visual elements."""
+        if self.line_actor and hasattr(self._parent, 'plotter'):
+            try:
+                self._parent.plotter.remove_actor(self.line_actor)
+            except:
+                pass
+        if self.temp_line_actor and hasattr(self._parent, 'plotter'):
+            try:
+                self._parent.plotter.remove_actor(self.temp_line_actor)
+            except:
+                pass
+        for actor in self.point_actors:
+            try:
+                self._parent.plotter.remove_actor(actor)
+            except:
+                pass
+        self.line_actor = None
+        self.temp_line_actor = None
+        self.point_actors = []
+
+    def _compute_point_radius(self, point):
+        """Compute a screen-consistent radius that scales down when zooming in."""
+
+        try:
+            renderer = self._parent.plotter.renderer
+            camera = renderer.GetActiveCamera()
+            bounds = renderer.ComputeVisiblePropBounds()
+            scene_size = max(
+                bounds[1] - bounds[0],
+                bounds[3] - bounds[2],
+                bounds[5] - bounds[4],
+            )
+            # Determine viewport height in pixels
+            try:
+                render_window = renderer.GetRenderWindow()
+                _, height_px = render_window.GetSize()
+            except Exception:
+                _, height_px = renderer.GetSize()
+            height_px = max(height_px, 1)
+
+            if camera.GetParallelProjection():
+                parallel_scale = camera.GetParallelScale() or (scene_size * 0.5)
+                world_per_pixel = (2.0 * parallel_scale) / height_px
+            else:
+                cam_pos = camera.GetPosition()
+                dist = math.sqrt(
+                    (cam_pos[0] - point[0]) ** 2
+                    + (cam_pos[1] - point[1]) ** 2
+                    + (cam_pos[2] - point[2]) ** 2
+                )
+                view_angle = camera.GetViewAngle()
+                world_per_pixel = (
+                    2.0 * dist * math.tan(math.radians(view_angle * 0.5))
+                ) / height_px
+
+            desired_px = 4.0
+            radius = world_per_pixel * desired_px
+
+            if scene_size > 0:
+                min_radius = scene_size * 0.001
+                max_radius = scene_size * 0.02
+                radius = min(max(radius, min_radius), max_radius)
+
+            return radius
+        except Exception:
+            return None
+        
+    def add_point(self, point):
+        """Add a point to the line being drawn."""
+        
+        # Convert to tuple if needed
+        if isinstance(point, np_ndarray):
+            point = tuple(point)
+        
+        self.points.append(point)
+        
+        # Calculate appropriate sphere radius based on scene bounds
+        sphere_radius = self._compute_point_radius(point)
+        if not sphere_radius:
+            try:
+                bounds = self._parent.plotter.renderer.ComputeVisiblePropBounds()
+                scene_size = max(
+                    bounds[1] - bounds[0],
+                    bounds[3] - bounds[2],
+                    bounds[5] - bounds[4],
+                )
+                sphere_radius = scene_size * 0.01  # 1% of scene size
+            except Exception:
+                sphere_radius = 10  # Fallback radius
+        
+        # Add a sphere at the point location for visual feedback
+        sphere = pv_Sphere(radius=sphere_radius, center=point, theta_resolution=16, phi_resolution=16)
+        actor = self._parent.plotter.add_mesh(
+            sphere, color='red', opacity=0.9, pickable=False, lighting=True
+        )
+        self.point_actors.append(actor)
+        
+        # Update the line visualization
+        if len(self.points) >= 2:
+            self._update_line()
+        
+        self._parent.plotter.render()
+        
+    def _update_line(self):
+        """Update the line visualization."""
+        
+        # Remove old line actor
+        if self.line_actor:
+            try:
+                self._parent.plotter.remove_actor(self.line_actor)
+            except:
+                pass
+        
+        # Create new line from all points
+        line = pv_lines_from_points(np_array(self.points))
+        self.line_actor = self._parent.plotter.add_mesh(
+            line, color='yellow', line_width=5, pickable=False, lighting=False
+        )
+        
+    def update_temp_line(self, current_pos):
+        """Show a temporary line from the last point to current mouse position."""
+        
+        if len(self.points) == 0:
+            return
+            
+        # Remove old temp line
+        if self.temp_line_actor:
+            try:
+                self._parent.plotter.remove_actor(self.temp_line_actor)
+            except:
+                pass
+        
+        # Create temp line from last point to current position
+        temp_line = pv_lines_from_points(np_array([self.points[-1], current_pos]))
+        self.temp_line_actor = self._parent.plotter.add_mesh(
+            temp_line, color='gray', line_width=1, opacity=0.5, pickable=False
+        )
+        self._parent.plotter.render()
+        
+    def get_polydata(self):
+        """Get the final polydata object."""
+        if len(self.points) < 2:
+            return None
+        
+        # Create polydata from points
+        line = pv_lines_from_points(np_array(self.points))
+        return line
 
 
 class Editor(vtkContourWidget):
@@ -156,7 +348,7 @@ class Editor(vtkContourWidget):
             self._event_translator.RemoveTranslation(vtkCommand.RightButtonPressEvent)
             self._event_translator.RemoveTranslation(vtkCommand.LeftButtonPressEvent)
             self.Render()
-            self.parent.plotter.track_click_position(
+            self._parent.plotter.track_click_position(
                 side="left", callback=self.select_point, viewport=True
             )
 
@@ -178,7 +370,7 @@ class Editor(vtkContourWidget):
         )
         points = line.points
         p_flip = np_flip(points, axis=0)
-        # line = pv.lines_from_points(p_flip)
+        # line = pv_lines_from_points(p_flip)
         self.GetContourRepresentation().ClearAllNodes()
         for point in p_flip:
             self.GetContourRepresentation().AddNodeAtWorldPosition(point)

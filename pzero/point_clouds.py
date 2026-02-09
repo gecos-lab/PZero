@@ -12,7 +12,7 @@ from matplotlib.style import (
     context as mplstyle_context,
 )  # used for hisotgram in calibration PC
 
-import seaborn as sns  # used for hisotgram in calibration PC - should be converted to standard mpl histogram
+import seaborn as sns  # used for histogram in calibration PC - should be converted to standard mpl histogram
 
 from numpy import arcsin as np_arcsin
 from numpy import arctan2 as np_arctan2
