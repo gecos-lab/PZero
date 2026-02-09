@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (QWidget, QGridLayout, QLabel, QLineEdit, QCheckBo
 
 from pzero.entities_factory import PolyLine, TriSurf
 from pzero.helpers.helper_dialogs import general_input_dialog, message_dialog
+from pzero.helpers.helper_functions import freeze_gui_onoff
 from .AbstractCollection import BaseCollection
 
 
@@ -151,19 +152,20 @@ def compute_obb_boundary(parent):
     
     return best_corners, z_top, z_bottom, best_angle, best_local_translation
 
+@freeze_gui_onoff
 def boundary_from_obb(self):
     """Create a new Boundary from OBB (Oriented Bounding Box) analysis of all data"""
     boundary_dict = deepcopy(self.parent.boundary_coll.entity_dict)
     
-    # Freeze QT interface
-    self.disable_actions()
+    # # Freeze QT interface
+    # self.disable_actions()
     
     # Compute initial OBB values
     obb_result = compute_obb_boundary(self.parent)
     
     if obb_result[0] is None:
         message_dialog(title="OBB Boundary Error", message="No data found to compute OBB boundary.")
-        self.enable_actions()
+        # self.enable_actions()
         return
     
     # Extract OBB results
@@ -424,7 +426,7 @@ def boundary_from_obb(self):
         QApplication.processEvents()
     
     if not dialog_result["accepted"]:
-        self.enable_actions()
+        # self.enable_actions()
         return
     
     # Get values from dialog
@@ -545,14 +547,15 @@ def boundary_from_obb(self):
         # The boundary is already updated via the preview mechanism
         pass
     
-    # Un-Freeze QT interface
-    self.enable_actions()
+    # # Un-Freeze QT interface
+    # self.enable_actions()
 
+@freeze_gui_onoff
 def boundary_from_points(self, vector):
     """Create a new Boundary from a vector with two end points"""
     boundary_dict = deepcopy(self.parent.boundary_coll.entity_dict)
-    # Freeze QT interface.
-    self.disable_actions()
+    # # Freeze QT interface.
+    # self.disable_actions()
     # Draw the diagonal of the Boundary by drawing a vector with vector_by_mouse. "while True" lets the user
     # draw the vector multiple times if modifications are necessary.
     self.plotter.untrack_click_position(side="left")
@@ -582,7 +585,7 @@ def boundary_from_points(self, vector):
         title="New Boundary from points", input_dict=boundary_dict_in
     )
     if boundary_dict_updt is None:
-        self.enable_actions()
+        # self.enable_actions()
         return
     # Check if other Boundaries with the same name exist. If so, add suffix to make the name unique.
     while True:
@@ -683,15 +686,16 @@ def boundary_from_points(self, vector):
     #             view.add_all_entities()
     # except Exception:
     #     pass
-    # Un-Freeze QT interface
-    self.enable_actions()
+    # # Un-Freeze QT interface
+    # self.enable_actions()
 
 
+@freeze_gui_onoff
 def boundary_from_three_points(self, vector):
     """Create a new Boundary from three points (orthogonal edges)"""
     boundary_dict = deepcopy(self.parent.boundary_coll.entity_dict)
-    # Freeze QT interface.
-    self.disable_actions()
+    # # Freeze QT interface.
+    # self.disable_actions()
     self.plotter.untrack_click_position(side="left")
 
     p1 = np_array(vector.p1, dtype=float)
@@ -700,7 +704,7 @@ def boundary_from_three_points(self, vector):
     length = np_linalg.norm(delta_xy)
     if length == 0:
         self.print_terminal(" -- Boundary from 3 points: first two points are coincident -- ")
-        self.enable_actions()
+        # self.enable_actions()
         return
 
     # Show the first line segment (p1 -> p2) while placing the third point
@@ -810,7 +814,7 @@ def boundary_from_three_points(self, vector):
             pass
 
         if event is None:
-            self.enable_actions()
+            # self.enable_actions()
             return
 
         p3_raw = np_array(event, dtype=float)
@@ -846,7 +850,7 @@ def boundary_from_three_points(self, vector):
             title="New Boundary from 3 points", input_dict=boundary_dict_in
         )
         if boundary_dict_updt is None:
-            self.enable_actions()
+            # self.enable_actions()
             return
 
         # Check if other Boundaries with the same name exist. If so, add suffix to make the name unique.
@@ -872,7 +876,7 @@ def boundary_from_three_points(self, vector):
         length_local = np_linalg.norm(delta_xy_local)
         if length_local == 0:
             self.print_terminal(" -- Boundary from 3 points: point 1 and point 2 are coincident -- ")
-            self.enable_actions()
+            # self.enable_actions()
             return
         perp_unit_local = np_array([-delta_xy_local[1], delta_xy_local[0]]) / length_local
         t_local = (p3_xy[0] - p2_xy[0]) * perp_unit_local[0] + (p3_xy[1] - p2_xy[1]) * perp_unit_local[1]
@@ -947,8 +951,8 @@ def boundary_from_three_points(self, vector):
                     view.add_all_entities()
         except Exception:
             pass
-        # Un-Freeze QT interface
-        self.enable_actions()
+        # # Un-Freeze QT interface
+        # self.enable_actions()
 
     self.plotter.track_click_position(side="left", callback=end_third_point)
 

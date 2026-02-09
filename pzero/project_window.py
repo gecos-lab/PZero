@@ -317,6 +317,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def disable_actions(self):
         """Freeze all actions while doing something."""
         # self.parent.findChildren(QAction) returns a list of all actions in the application.
+        print("- disabling actions in project window")
         for action in self.findChildren(QAction):
             try:
                 # try - except added to catch an inexplicable bug with an action with text=""
@@ -327,6 +328,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def enable_actions(self):
         """Un-freeze all actions after having done something."""
         # self.parent.findChildren(QAction) returns a list of all actions in the application.
+        print("o enabling actions in project window")
         for action in self.findChildren(QAction):
             try:
                 # try - except added for symmetry with disable_actions (bug with an action with text="")

@@ -461,7 +461,8 @@ class View3D(ViewVTK):
 
     def end_pick(self, pos):
         """Function used to disable actor picking. Due to some slight difference,
-        must be reimplemented in subclasses."""
+        must be reimplemented in subclasses.
+        Do not use @freeze_gui_onoff here, that is used at a higher level."""
         # Remove the selector observer
         self.plotter.iren.interactor.RemoveObservers("LeftButtonPressEvent")
         # Remove the right click observer
@@ -474,7 +475,7 @@ class View3D(ViewVTK):
         # Closing settings
         self.plotter.reset_key_events()
         self.selected_uids = self.parent.selected_uids
-        self.enable_actions()
+        # self.enable_actions()
 
     def orbit_entity(self):
         uid_list = self.actors_df["uid"].to_list()

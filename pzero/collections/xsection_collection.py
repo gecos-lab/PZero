@@ -23,6 +23,7 @@ from numpy import sign as np_sign
 from numpy import float32 as np_float32
 from numpy import float64 as np_float64
 from numpy.linalg import inv as np_linalg_inv
+from numpy import round as np_round
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv
@@ -35,7 +36,7 @@ from vtkmodules.vtkFiltersCore import vtkAppendPolyData
 
 from pzero.entities_factory import Plane, XsPolyLine
 from pzero.helpers.helper_dialogs import general_input_dialog, open_file_dialog
-from pzero.helpers.helper_functions import auto_sep, best_fitting_plane
+from pzero.helpers.helper_functions import auto_sep, best_fitting_plane, freeze_gui_onoff
 from pzero.orientation_analysis import dip_directions2normals, get_dip_dir_vectors
 
 from .AbstractCollection import BaseCollection
@@ -44,6 +45,7 @@ from .AbstractCollection import BaseCollection
 # =================================== Methods used to create cross sections ===========================================
 
 
+@freeze_gui_onoff
 def section_from_strike(self, vector):
     """Create a cross-section from one point and strike."""
     self.plotter.untrack_click_position(side="left")
@@ -55,23 +57,21 @@ def section_from_strike(self, vector):
             "QLabel",
         ],
         "name": ["Insert Xsection name", "new_section", "QLineEdit"],
-        "origin_x": ["Insert origin X coord", vector.p1[0], "QLineEdit"],
-        "origin_y": ["Insert origin Y coord", vector.p1[1], "QLineEdit"],
-        "origin_z": ["Insert origin Z coord", vector.p1[2], "QLineEdit"],
-        "strike": ["Insert strike", vector.azimuth, "QLineEdit"],
+        "origin_x": ["Insert origin X coord", np_round(vector.p1[0]), "QLineEdit"],
+        "origin_y": ["Insert origin Y coord", np_round(vector.p1[1]), "QLineEdit"],
+        "origin_z": ["Insert origin Z coord", np_round(vector.p1[2]), "QLineEdit"],
+        "strike": ["Insert strike", np_round(vector.azimuth), "QLineEdit"],
         "dip": ["Insert dip", 90.0, "QLineEdit"],
-        "length": ["Insert length", vector.length, "QLineEdit"],
-        "height": ["Insert height", 0.0, "QLineEdit"],
+        "length": ["Insert length", np_round(vector.length), "QLineEdit"],
+        "height": ["Insert height", np_round(vector.length/200)*100, "QLineEdit"],
         "num_xs": ["Number of XSections", 1, "QLineEdit"],
-        "spacing": ["Spacing of XSections (+o-)", 1000.0, "QLineEdit"],
+        "spacing": ["Spacing of XSections (+o-)", np_round(vector.length/200)*100, "QLineEdit"],
     }
     section_dict_updt = general_input_dialog(
         title="New XSection from points", input_dict=section_dict_in
     )
     if section_dict_updt is None:
         # Check for a valid input dictionary.
-        # If None un-freeze the Qt interface and return.
-        self.enable_actions()
         return
 
     section_dict = deepcopy(self.parent.xsect_coll.entity_dict)
@@ -114,8 +114,6 @@ def section_from_strike(self, vector):
         section_dict["origin_z"] = origin_z + normal_z * i
 
         self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
-    # At the end un-freeze the Qt interface before returning.
-    self.enable_actions()
 
 
 # def sections_from_file(self):

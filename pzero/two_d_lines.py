@@ -34,11 +34,12 @@ from .helpers.helper_dialogs import (
     message_dialog,
 )
 from .helpers.helper_widgets import Editor, Tracer, Tracer3D
-from .helpers.helper_functions import freeze_gui
+from .helpers.helper_functions import freeze_gui_onoff
 from .entities_factory import PolyLine, XsPolyLine
 
 from .views.view_map import ViewMap; from .views.view_xsection import ViewXsection
 
+@freeze_gui_onoff
 def draw_line(self):
     def end_digitize(event, input_dict):
         # Signal called to end the digitization of a trace. It returns a new polydata
@@ -50,9 +51,9 @@ def draw_line(self):
             input_dict["vtk_obj"].ShallowCopy(traced_pld)
             self.parent.geol_coll.add_entity_from_dict(input_dict)
         tracer.EnabledOff()
-        self.enable_actions()
+        # self.enable_actions()
 
-    self.disable_actions()
+    # self.disable_actions()
     # Create deepcopy of the geological entity dictionary.
     line_dict = deepcopy(self.parent.geol_coll.entity_dict)
     # One dictionary is set as input for a general widget of multiple-value-input"""
@@ -76,7 +77,7 @@ def draw_line(self):
     )
     # Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits
     if line_dict_updt is None:
-        self.enable_actions()
+        # self.enable_actions()
         return
     # Getting the values that have been typed by the user through the widget
     for key in line_dict_updt:
@@ -102,6 +103,7 @@ def draw_line(self):
     )
 
 
+@freeze_gui_onoff
 def draw_line_3d(self):
     """Draw a line in 3D using point clicking. Only works on surfaces.
     
@@ -175,7 +177,7 @@ def draw_line_3d(self):
         if len(tracer_3d.points) < 2:
             self.print_terminal("Need at least 2 points to create a line")
             tracer_3d.disable()
-            self.enable_actions()
+            # self.enable_actions()
             return
         
         # Get the polydata from the tracer
@@ -188,9 +190,9 @@ def draw_line_3d(self):
         
         # Clean up
         tracer_3d.disable()
-        self.enable_actions()
+        # self.enable_actions()
     
-    self.disable_actions()
+    # self.disable_actions()
     
     # Create deepcopy of the geological entity dictionary
     line_dict = deepcopy(self.parent.geol_coll.entity_dict)
@@ -218,7 +220,7 @@ def draw_line_3d(self):
     
     # Check if the output of the widget is empty or not
     if line_dict_updt is None:
-        self.enable_actions()
+        # self.enable_actions()
         return
     
     # Getting the values that have been typed by the user through the widget
@@ -239,6 +241,7 @@ def draw_line_3d(self):
     self.print_terminal("3D Line Drawing: Left-click on surfaces to add points, Right-click to finish")
 
 
+@freeze_gui_onoff
 def edit_line(self):
     def end_edit(event, uid):
         self.plotter.untrack_click_position(side="right")
@@ -257,12 +260,12 @@ def edit_line(self):
         self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
         editor.EnabledOff()
         self.clear_selection()
-        self.enable_actions()
+        # self.enable_actions()
 
     if not self.selected_uids:
         self.print_terminal(" -- No input data selected -- ")
         return
-    self.disable_actions()
+    # self.disable_actions()
     sel_uid = self.selected_uids[0]
     actor = self.plotter.renderer.actors[sel_uid]
     data = actor.mapper.dataset
@@ -277,7 +280,7 @@ def edit_line(self):
     # self.plotter.track_click_position(side='left', callback=left_click, viewport=True)
 
 
-@freeze_gui
+@freeze_gui_onoff
 def sort_line_nodes(self):
     """Sort line nodes."""
     self.print_terminal("Sort line nodes according to cell order.")
@@ -304,7 +307,7 @@ def sort_line_nodes(self):
     self.clear_selection()
 
 
-@freeze_gui
+@freeze_gui_onoff
 def move_line(self, vector):
     """Move the whole line by rigid-body translation.
     Here transformation to UV is not necessary since the translation vector is already in world space
@@ -350,7 +353,7 @@ def move_line(self, vector):
     self.clear_selection()
 
 
-@freeze_gui
+@freeze_gui_onoff
 def rotate_line(self):
     """Rotate lines by rigid-body rotation using Shapely."""
     self.print_terminal(
@@ -409,6 +412,7 @@ def rotate_line(self):
     self.clear_selection()
 
 
+@freeze_gui_onoff
 def extend_line(self):
     def end_edit(event, uid):
         self.plotter.untrack_click_position(side="right")
@@ -431,7 +435,7 @@ def extend_line(self):
         self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
         extender.EnabledOff()
         self.clear_selection()
-        self.enable_actions()
+        # self.enable_actions()
 
     # Extend selected line.
     self.print_terminal("Extend Line. Press 'k' to change end of line to extend.")
@@ -448,8 +452,8 @@ def extend_line(self):
     ):
         self.print_terminal(" -- Selected data is not a line -- ")
         return
-    # Freeze QT interface
-    self.disable_actions()
+    # # Freeze QT interface
+    # self.disable_actions()
     # If more than one line is selected, keep the first
     sel_uid = self.selected_uids[0]
     current_line = self.get_actor_by_uid(sel_uid).GetMapper().GetInput()
@@ -463,7 +467,7 @@ def extend_line(self):
     )
 
 
-@freeze_gui
+@freeze_gui_onoff
 def split_line_line(self):
     """Split line (paper) with another line (scissors). First, select the paper-line then the scissors-line"""
     # print("Split line with line. Line to be split has been selected, please select an intersecting line.")   #Reviw needed
@@ -608,6 +612,7 @@ def split_line_line(self):
     self.clear_selection()
 
 
+@freeze_gui_onoff
 def split_line_existing_point(self):
     # Here transformation to UV is not necessary since we select a point in world space
     def end_select(event, uid):
@@ -711,8 +716,8 @@ def split_line_existing_point(self):
         # Deselect input line.
         self.clear_selection()
         selector.EnabledOff()
-        # Un-Freeze QT interface
-        self.enable_actions()
+        # # Un-Freeze QT interface
+        # self.enable_actions()
 
     # Split line at selected existing point (vertex)
     self.print_terminal(
@@ -729,8 +734,8 @@ def split_line_existing_point(self):
     ):
         self.print_terminal(" -- Selected data is not a line -- ")
         return
-    # Freeze QT interface
-    self.disable_actions
+    # # Freeze QT interface
+    # self.disable_actions
     # If more than one line is selected, keep the first
     sel_uid = self.selected_uids[0]
     current_line = self.get_actor_by_uid(sel_uid)
@@ -749,7 +754,7 @@ def split_line_vector(self, vector): ...
 # check merge, snap, and see if a bridge nodes method is needed____________________
 
 
-@freeze_gui
+@freeze_gui_onoff
 def merge_lines(self):
     """Merge two (contiguous or non-contiguous) lines.
     Metadata will be taken from the first selected line."""
@@ -757,7 +762,7 @@ def merge_lines(self):
     self.print_terminal(f"self.selected_uids: {self.selected_uids}")
     if not self.selected_uids:
         self.print_terminal(" -- No input data selected -- ")
-        self.enable_actions()
+        # self.enable_actions()
         return
     # Create local copy of selected_uids
     in_uids = self.selected_uids
@@ -765,7 +770,7 @@ def merge_lines(self):
         self.print_terminal(
             " -- Not enough input data selected. Select at least 2 objects -- "
         )
-        self.enable_actions()
+        # self.enable_actions()
         return
     # Check if all input entities are PolyLine or XsPolyLine
     # print(in_uids)
@@ -776,7 +781,7 @@ def merge_lines(self):
             continue
         else:
             self.print_terminal(" -- Selection must include lines only -- ")
-            self.enable_actions()
+            # self.enable_actions()
             return
     # For XsPolyLine, check that they all belong to the same cross-section.
     this_xsection = None
@@ -789,7 +794,7 @@ def merge_lines(self):
                     self.print_terminal(
                         " -- Selection must include lines belonging to the same cross-section only -- "
                     )
-                    self.enable_actions()
+                    # self.enable_actions()
                     return
     # Create empty dictionary for the output line.
     new_line = deepcopy(self.parent.geol_coll.entity_dict)
@@ -848,7 +853,7 @@ def merge_lines(self):
     self.parent.geol_coll.add_entity_from_dict(new_line)
 
 
-@freeze_gui
+@freeze_gui_onoff
 def snap_line(self):
     """Snaps vertices of the selected line (the snapping-line) to the nearest vertex of the chosen line (goal-line),
     depending on the Tolerance parameter."""
@@ -998,7 +1003,7 @@ def snap_line(self):
     self.clear_selection()
 
 
-@freeze_gui
+@freeze_gui_onoff
 def resample_lines_distance(self):
     """Resample selected line with constant specified spacing."""
     # Check if at least a line is selected.
@@ -1093,7 +1098,7 @@ def resample_lines_distance(self):
         )
 
 
-@freeze_gui
+@freeze_gui_onoff
 def resample_lines_number_points(
     self,
 ):  # this must be done per-part___________________________________________________
@@ -1196,7 +1201,7 @@ def resample_lines_number_points(
         )
 
 
-@freeze_gui
+@freeze_gui_onoff
 def simplify_line(self):
     """Return a simplified representation of the line. Permits the user to choose a value for the Tolerance parameter."""
     self.print_terminal(
@@ -1307,7 +1312,7 @@ def simplify_line(self):
     self.clear_selection()
 
 
-@freeze_gui
+@freeze_gui_onoff
 def copy_parallel(
     self,
 ):  # this must be done per-part_______________________________________________________
@@ -1339,8 +1344,8 @@ def copy_parallel(
         default_value=100,
     )
     if distance is None:
-        # Un-Freeze QT interface
-        self.enable_actions()
+        # # Un-Freeze QT interface
+        # self.enable_actions()
         return
 
     in_line_name = self.parent.geol_coll.df.loc[
@@ -1418,7 +1423,7 @@ def copy_parallel(
         self.print_terminal("Empty object")
 
 
-@freeze_gui
+@freeze_gui_onoff
 def copy_kink(self):
     """Kink folding. Create a line copied and translated from a template line using Shapely.
     Since lines are oriented left-to-right and bottom-to-top, and here we copy a line to the left,
@@ -1535,7 +1540,7 @@ def copy_kink(self):
         self.print_terminal(f"Error: {str(e)}")
 
 
-@freeze_gui
+@freeze_gui_onoff
 def copy_similar(
     self, vector
 ):  # this must be done per-part_______________________________________________________
@@ -1612,6 +1617,7 @@ def copy_similar(
         self.print_terminal("Empty object")
 
 
+@freeze_gui_onoff
 def measure_distance(self, vector):
     """Tool to measure distance between two points. Draw a vector_by_mouse and obtain length and azimuth"""
     self.print_terminal(
@@ -1620,11 +1626,11 @@ def measure_distance(self, vector):
 
     def end_measure(event=None):
         """Cleanup function to properly end the measurement tool"""
-        self.enable_actions()
+        # self.enable_actions()
         if hasattr(self, "plotter"):
             self.plotter.untrack_click_position(side="right")
 
-    self.disable_actions()
+    # self.disable_actions()
 
     if vector.length == 0:
         self.print_terminal("Zero-length vector")
