@@ -119,14 +119,32 @@ from .three_d_surfaces import (
 
 from pzero.views.dock_window import DockWindow
 from .processing.CRS import CRS_list, CRS_transform_selected
+from PySide6.QtWidgets import QDockWidget
+from numpy import cos as np_cos
+from numpy import pi as np_pi
+from numpy import sin as np_sin
 
-
+from PySide6.QtCore import Signal as pyqtSignal
+from PySide6.QtCore import QObject, QUrl
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QDialog, QLabel, QVBoxLayout
+from PySide6.QtGui import QAction, QDesktopServices, QPixmap
+from PySide6.QtCore import Qt
 PYMESHIT_MODULE_NAME = "Pymeshit_workflow_gui"
 PYMESHIT_CLASS_NAME = "MeshItWorkflowGUI"
 PYMESHIT_ENTRY_FILE = "Pymeshit_workflow_gui.py"
 PYMESHIT_ENV_VAR = "PZERO_PYMESHIT_PATH"
 
+from pathlib import Path
+from typing import Optional
 
+from PySide6.QtCore import Signal as pyqtSignal, Qt
+from PySide6.QtCore import QObject
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QDockWidget, QAbstractItemView
+from PySide6.QtGui import QAction
+import importlib
+import importlib.util
+import os
+import sys
 class _PyMeshItDockWidget(QDockWidget):
     """
     Custom QDockWidget that hides instead of closing when the X button is clicked.
