@@ -137,6 +137,9 @@ class ViewXsection(View2D):
             ],
             exclusive=True,
         )
+        if not opt_dialog:
+            return
+        opt_dialog = opt_dialog[0]  # Extract the first element from the list
         if opt_dialog == "Fit cross-section frame only":
             fit_method = "frame"
         elif opt_dialog == "Fit vertical cross-section plane and frame":
