@@ -1443,7 +1443,15 @@ def copy_parallel(
         line_dict["topology"] = "PolyLine"
     # elif isinstance(self, (ViewXsection, ViewXsection)):
     elif isinstance(self, ViewXsection):
-        inU, inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).world2plane()
+        in_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(input_uid)
+        inU, inV = self.parent.xsect_coll.world2plane(
+            section_uid=self.this_x_section_uid,
+            X=in_vtk_obj.points_X,
+            Y=in_vtk_obj.points_Y,
+            Z=in_vtk_obj.points_Z,
+        )
+        inU = np_array(inU).reshape(-1)
+        inV = np_array(inV).reshape(-1)
         line_dict["vtk_obj"] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
         line_dict["topology"] = "XsPolyLine"
         line_dict["parent_uid"] = self.this_x_section_uid
@@ -1460,8 +1468,26 @@ def copy_parallel(
         shp_line_out = shp_line_in.parallel_offset(
             distance, "left", resolution=16, join_style=1
         )  # parallel folds are obtained with join_style=1
+        if shp_line_out.is_empty:
+            self.print_terminal("Empty geometry after parallel offset")
+            return
+        if shp_line_out.geom_type == "LineString":
+            out_line = shp_line_out
+        elif hasattr(shp_line_out, "geoms"):
+            line_parts = [
+                geom
+                for geom in shp_line_out.geoms
+                if geom.geom_type == "LineString" and len(geom.coords) >= 2
+            ]
+            if not line_parts:
+                self.print_terminal("Invalid offset geometry")
+                return
+            out_line = max(line_parts, key=lambda geom: geom.length)
+        else:
+            self.print_terminal("Unsupported offset geometry")
+            return
 
-        outUV = np_array(shp_line_out.coords)
+        outUV = np_array(out_line.coords)
         # Un-stack output coordinates and write them to the empty dictionary.
         outU = outUV[:, 0]
         outV = outUV[:, 1]
@@ -1558,7 +1584,14 @@ def copy_kink(self):
             )
             line_dict["topology"] = "XsPolyLine"
             line_dict["parent_uid"] = self.this_x_section_uid
-            inU, inV = vtk_obj.world2plane()
+            inU, inV = self.parent.xsect_coll.world2plane(
+                section_uid=self.this_x_section_uid,
+                X=vtk_obj.points_X,
+                Y=vtk_obj.points_Y,
+                Z=vtk_obj.points_Z,
+            )
+            inU = np_array(inU).reshape(-1)
+            inV = np_array(inV).reshape(-1)
 
         # Stack coordinates in two-columns matrix
         inUV = np_column_stack((inU, inV))
@@ -1581,7 +1614,23 @@ def copy_kink(self):
             self.print_terminal("Empty geometry after parallel offset")
             return
 
-        outUV = np_array(shp_line_out.coords)
+        if shp_line_out.geom_type == "LineString":
+            out_line = shp_line_out
+        elif hasattr(shp_line_out, "geoms"):
+            line_parts = [
+                geom
+                for geom in shp_line_out.geoms
+                if geom.geom_type == "LineString" and len(geom.coords) >= 2
+            ]
+            if not line_parts:
+                self.print_terminal("Invalid offset geometry")
+                return
+            out_line = max(line_parts, key=lambda geom: geom.length)
+        else:
+            self.print_terminal("Unsupported offset geometry")
+            return
+
+        outUV = np_array(out_line.coords)
         outU = outUV[:, 0]
         outV = outUV[:, 1]
 
