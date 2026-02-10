@@ -246,7 +246,7 @@ def draw_line_3d(self):
     self.print_terminal("3D Line Drawing: Left-click on surfaces to add points, Right-click to finish")
 
 
-@freeze_gui_onoff
+@freeze_gui_on
 def edit_line(self):
     def end_edit(event, uid):
         self.plotter.untrack_click_position(side="right")
@@ -265,10 +265,11 @@ def edit_line(self):
         self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
         editor.EnabledOff()
         self.clear_selection()
-        # self.enable_actions()
+        freeze_gui_off(self)
 
     if not self.selected_uids:
         self.print_terminal(" -- No input data selected -- ")
+        freeze_gui_off(self)
         return
     # self.disable_actions()
     sel_uid = self.selected_uids[0]
@@ -281,8 +282,6 @@ def edit_line(self):
     self.plotter.track_click_position(
         side="right", callback=lambda event: end_edit(event, sel_uid)
     )
-    # self.plotter.track_mouse_position()
-    # self.plotter.track_click_position(side='left', callback=left_click, viewport=True)
 
 
 @freeze_gui_onoff
@@ -419,7 +418,7 @@ def rotate_line(self):
     self.clear_selection()
 
 
-@freeze_gui_onoff
+@freeze_gui_on
 def extend_line(self):
     def end_edit(event, uid):
         self.plotter.untrack_click_position(side="right")
@@ -442,7 +441,7 @@ def extend_line(self):
         self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
         extender.EnabledOff()
         self.clear_selection()
-        # self.enable_actions()
+        freeze_gui_off(self)
 
     # Extend selected line.
     self.print_terminal("Extend Line. Press 'k' to change end of line to extend.")
@@ -451,6 +450,7 @@ def extend_line(self):
     # Check if a line is selected
     if not self.selected_uids:
         self.print_terminal(" -- No input data selected -- ")
+        freeze_gui_off(self)
         return
     if (
         self.parent.geol_coll.get_uid_topology(self.selected_uids[0]) != "PolyLine"
@@ -458,6 +458,7 @@ def extend_line(self):
         self.parent.geol_coll.get_uid_topology(self.selected_uids[0]) != "XsPolyLine"
     ):
         self.print_terminal(" -- Selected data is not a line -- ")
+        freeze_gui_off(self)
         return
     # If more than one line is selected, keep the first
     sel_uid = self.selected_uids[0]
@@ -1690,11 +1691,11 @@ def left_right(self, uid=None):
     else:
         return
     if U_line[0] > U_line[-1]:  # reverse if right-to-left
-        flip_line(uid=uid)
+        self.flip_line(uid=uid)
     elif (
         U_line[0] == U_line[-1] and V_line[0] > V_line[-1]
     ):  # reverse if vertical up-to-down
-        flip_line(uid=uid)
+        self.flip_line(uid=uid)
 
 
 def int_node(line1, line2):
