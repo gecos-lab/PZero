@@ -2675,6 +2675,13 @@ class ViewInterpretation(ViewMap):
             # Store display point
             self._autotrack_points.append(tuple(point))
 
+            # Draw a preview segment between consecutive waypoints for visual guidance
+            if len(self._autotrack_points) >= 2:
+                self._show_path_preview(
+                    self._autotrack_points[-2],
+                    self._autotrack_points[-1],
+                )
+
             marker_name = f'autotrack_marker_{len(self._autotrack_points)}'
             marker_point = list(point)
             small_offset = self._autotrack_marker_size * 0.5
@@ -3049,19 +3056,29 @@ class ViewInterpretation(ViewMap):
         self._start_semi_auto_tracking(mode="fault")
     
     def _show_path_preview(self, point_a, point_b):
-        """Show a preview line between two points (just a straight line for visual feedback)."""
+        """Show a preview line between two display-space points."""
         try:
+            # Click picks are stored in display space (Z already scaled by VE).
+            # Mesh actors are rendered with plotter scale, so convert back to real Z
+            # to avoid applying vertical exaggeration twice.
+            v_exag = float(getattr(self, "_autotrack_v_exag", 1.0) or 1.0)
+            p0 = np.array(point_a, dtype=float).copy()
+            p1 = np.array(point_b, dtype=float).copy()
+            if v_exag != 0.0 and v_exag != 1.0:
+                p0[2] = p0[2] / v_exag
+                p1[2] = p1[2] / v_exag
+
             # Create a simple line between the two points for visual feedback
-            line = pv.Line(point_a, point_b)
+            line = pv.Line(p0, p1)
             preview_name = f'autotrack_preview_{len(self._autotrack_preview_actors)}'
             self.plotter.add_mesh(
                 line,
-                color='cyan',
-                line_width=4,
+                color='red',
+                line_width=6,
                 name=preview_name,
                 pickable=False,
                 reset_camera=False,
-                lighting=False
+                lighting=False,
             )
             self._autotrack_preview_actors.append(preview_name)
             self.plotter.update()
