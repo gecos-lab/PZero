@@ -36,7 +36,7 @@ from vtkmodules.vtkFiltersCore import vtkAppendPolyData
 
 from pzero.entities_factory import Plane, XsPolyLine
 from pzero.helpers.helper_dialogs import general_input_dialog, open_file_dialog
-from pzero.helpers.helper_functions import auto_sep, best_fitting_plane, freeze_gui_onoff
+from pzero.helpers.helper_functions import auto_sep, best_fitting_plane, freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 from pzero.orientation_analysis import dip_directions2normals, get_dip_dir_vectors
 
 from .AbstractCollection import BaseCollection
@@ -45,7 +45,7 @@ from .AbstractCollection import BaseCollection
 # =================================== Methods used to create cross sections ===========================================
 
 
-@freeze_gui_onoff
+# @freeze_gui_onoff
 def section_from_strike(self, vector):
     """Create a cross-section from one point and strike."""
     self.plotter.untrack_click_position(side="left")
@@ -72,6 +72,7 @@ def section_from_strike(self, vector):
     )
     if section_dict_updt is None:
         # Check for a valid input dictionary.
+        freeze_gui_off(self)
         return
 
     section_dict = deepcopy(self.parent.xsect_coll.entity_dict)
@@ -114,6 +115,8 @@ def section_from_strike(self, vector):
         section_dict["origin_z"] = origin_z + normal_z * i
 
         self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
+
+    freeze_gui_off(self)
 
 
 # def sections_from_file(self):

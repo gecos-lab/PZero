@@ -15,7 +15,7 @@ from numpy import squeeze as np_squeeze
 
 from pzero.helpers.helper_dialogs import multiple_input_dialog
 
-from .helpers.helper_functions import freeze_gui_onoff
+from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 
 # -----IN THE FUTURE add functions for orientation analysis.-----
 

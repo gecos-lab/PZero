@@ -22,7 +22,7 @@ from segyio import BinField as segyio_BinField
 from segyio import TraceField as segyio_TraceField
 
 from pzero.entities_factory import Seismics
-from pzero.helpers.helper_functions import freeze_gui_onoff
+from pzero.helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 from pzero.processing.segy_standardizer import convert_to_standard_segy
 
 

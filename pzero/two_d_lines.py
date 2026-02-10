@@ -34,12 +34,12 @@ from .helpers.helper_dialogs import (
     message_dialog,
 )
 from .helpers.helper_widgets import Editor, Tracer, Tracer3D
-from .helpers.helper_functions import freeze_gui_onoff
+from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 from .entities_factory import PolyLine, XsPolyLine
 
 from .views.view_map import ViewMap; from .views.view_xsection import ViewXsection
 
-@freeze_gui_onoff
+@freeze_gui_on
 def draw_line(self):
     def end_digitize(event, input_dict):
         # Signal called to end the digitization of a trace. It returns a new polydata
@@ -52,6 +52,7 @@ def draw_line(self):
             self.parent.geol_coll.add_entity_from_dict(input_dict)
         tracer.EnabledOff()
         # self.enable_actions()
+        freeze_gui_off(self)
 
     # self.disable_actions()
     # Create deepcopy of the geological entity dictionary.
@@ -103,7 +104,7 @@ def draw_line(self):
     )
 
 
-@freeze_gui_onoff
+@freeze_gui_on
 def draw_line_3d(self):
     """Draw a line in 3D using point clicking. Only works on surfaces.
     
@@ -165,6 +166,7 @@ def draw_line_3d(self):
     def on_right_click(obj, event):
         """Handle right-click to finish drawing."""
         if not tracer_3d.is_active:
+            freeze_gui_off(self)
             return
         
         # Remove event observers using stored tags
@@ -178,6 +180,7 @@ def draw_line_3d(self):
             self.print_terminal("Need at least 2 points to create a line")
             tracer_3d.disable()
             # self.enable_actions()
+            freeze_gui_off(self)
             return
         
         # Get the polydata from the tracer
@@ -191,6 +194,7 @@ def draw_line_3d(self):
         # Clean up
         tracer_3d.disable()
         # self.enable_actions()
+        freeze_gui_off(self)
     
     # self.disable_actions()
     
@@ -221,6 +225,7 @@ def draw_line_3d(self):
     # Check if the output of the widget is empty or not
     if line_dict_updt is None:
         # self.enable_actions()
+        freeze_gui_off(self)
         return
     
     # Getting the values that have been typed by the user through the widget
@@ -307,27 +312,29 @@ def sort_line_nodes(self):
     self.clear_selection()
 
 
-@freeze_gui_onoff
+# @freeze_gui_onoff
 def move_line(self, vector):
     """Move the whole line by rigid-body translation.
     Here transformation to UV is not necessary since the translation vector is already in world space
     """
     # It should block the function before to activate the vector
-    if not self.selected_uids:
+    if self.selected_uids == []:
         self.print_terminal(" -- No input data selected -- ")
+        freeze_gui_off(self)
         return
 
     self.print_terminal("Move Line. Move the whole line by rigid-body translation.")
     if vector.length == 0:
         self.print_terminal("Zero-length vector")
+        freeze_gui_off(self)
         return
 
     for current_uid in self.selected_uids:
         if (self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine") and (
             self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
         ):
-            self.print_terminal(" -- Selected data is not a line -- ")
-            return
+            self.print_terminal(f" -- Selected data {current_uid} is not a line -- ")
+            break
 
         # Editing loop.
         # -----For some reason in the following the [:] is needed.-----
@@ -351,6 +358,7 @@ def move_line(self, vector):
         self.parent.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
     # Deselect input line.
     self.clear_selection()
+    freeze_gui_off(self)
 
 
 @freeze_gui_onoff
@@ -748,7 +756,9 @@ def split_line_existing_point(self):
     )
 
 
-def split_line_vector(self, vector): ...
+def split_line_vector(self, vector):
+    freeze_gui_off(self)
+    pass
 
 
 # check merge, snap, and see if a bridge nodes method is needed____________________
@@ -1099,9 +1109,8 @@ def resample_lines_distance(self):
 
 
 @freeze_gui_onoff
-def resample_lines_number_points(
-    self,
-):  # this must be done per-part___________________________________________________
+def resample_lines_number_points(self):
+    # this must be done per-part___________________________________________________
     """Resample selected line with constant spacing defined by a specified number of nodes."""
     # Check if at least a line is selected.
     if not self.selected_uids:
@@ -1313,9 +1322,8 @@ def simplify_line(self):
 
 
 @freeze_gui_onoff
-def copy_parallel(
-    self,
-):  # this must be done per-part_______________________________________________________
+def copy_parallel(self):
+    # this must be done per-part_______________________________________________________
     """Parallel folding. Create a line copied and translated from a template line using Shapely.
     Since lines are oriented left-to-right and bottom-to-top, and here we copy a line to the left,
     a positive distance creates a line shifted upwards and to the left."""
@@ -1540,10 +1548,9 @@ def copy_kink(self):
         self.print_terminal(f"Error: {str(e)}")
 
 
-@freeze_gui_onoff
-def copy_similar(
-    self, vector
-):  # this must be done per-part_______________________________________________________
+# @freeze_gui_onoff
+def copy_similar(self, vector):
+    # this must be done per-part_______________________________________________________
     """Similar folding. Create a line copied and translated from a template line.
     Does not need U,V coordinates since the translation vector is already in world coords
     """
@@ -1553,6 +1560,7 @@ def copy_similar(
     # Check if a line is selected
     if not self.selected_uids:
         self.print_terminal(" -- No input data selected -- ")
+        freeze_gui_off(self)
         return
     if (
         self.parent.geol_coll.get_uid_topology(self.selected_uids[0]) != "PolyLine"
@@ -1560,8 +1568,10 @@ def copy_similar(
         self.parent.geol_coll.get_uid_topology(self.selected_uids[0]) != "XsPolyLine"
     ):
         self.print_terminal(" -- Selected data is not a line -- ")
+        freeze_gui_off(self)
         return
     # If more than one line is selected, keep the first.
+    # We can switch to multiple entities in the future ------------------------------------------------
     input_uid = self.selected_uids[0]
     # ----IN THE FUTURE add a test to check that the selected feature is a geological feature
     # Create empty dictionary for the output line and set name and role.
@@ -1588,6 +1598,7 @@ def copy_similar(
     # Get similar folding vector.
     if vector.length == 0:
         self.print_terminal("Zero-length vector")
+        freeze_gui_off(self)
         return
 
     # Create output line.
@@ -1615,9 +1626,10 @@ def copy_similar(
         # self.parent.geol_coll.signals.geom_modified.emit([input_uid])  # emit uid as list to force redraw()
     else:
         self.print_terminal("Empty object")
+    freeze_gui_off(self)
 
 
-@freeze_gui_onoff
+# @freeze_gui_on
 def measure_distance(self, vector):
     """Tool to measure distance between two points. Draw a vector_by_mouse and obtain length and azimuth"""
     self.print_terminal(
@@ -1660,6 +1672,8 @@ def measure_distance(self, vector):
         dialog.finished.connect(end_measure)
     else:
         end_measure()
+    # Finally, unfreeze the GUI.
+    freeze_gui_off(self)
 
 
 def flip_line(self, uid=None):

@@ -9,7 +9,7 @@ from vtkmodules.util.numpy_support import numpy_to_vtk
 from vtkmodules.vtkFiltersGeneral import vtkTransformFilter
 
 from pzero.helpers.helper_dialogs import general_input_dialog
-from pzero.helpers.helper_functions import freeze_gui_onoff
+from pzero.helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 
 EPSG_dict = {
     "EPSG:6707": "RDN2008 / UTM zone 32N (N-E) / Nord, Est",

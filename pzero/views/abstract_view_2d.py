@@ -6,7 +6,7 @@ from PySide6.QtGui import QAction
 
 # PZero imports____
 from .abstract_view_vtk import ViewVTK
-from ..helpers.helper_functions import freeze_gui_onoff
+from ..helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 from ..helpers.helper_widgets import Vector
 
 
@@ -162,12 +162,14 @@ class View2D(ViewVTK):
         self.plotter.reset_key_events()
         self.selected_uids = self.parent.selected_uids
         # self.enable_actions()
+        freeze_gui_off(self)
 
-    @freeze_gui_onoff
+    @freeze_gui_on
     def vector_by_mouse(self, func):
         """Vector by mouse points to the pzero Vector() class, derived from VTK vtkContourWidget(),
         which includes several sub-methods that are specified in the pass_func argument.
-        All these are placed here under the hood of @freeze_gui_onoff"""
+        All these are placed here under the hood of @freeze_gui_onoff. Linked functions, i.e. functions
+        passed as "func", should not be placed under @freeze_gui, but must end with @freeze_gui_off."""
         # self.disable_actions()
         vector = Vector(parent=self, pass_func=func)
         vector.EnabledOn()

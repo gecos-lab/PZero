@@ -82,7 +82,7 @@ from .entities_factory import (
     XsVertexSet,
     Attitude,
 )
-from .helpers.helper_functions import freeze_gui_onoff
+from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 
 
 def get_boundary_obb_transform(boundary_coll, boundary_uid):

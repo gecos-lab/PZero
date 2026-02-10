@@ -61,7 +61,7 @@ from ..helpers.helper_dialogs import (
     multiple_input_dialog,
     progress_dialog,
 )
-from ..helpers.helper_functions import best_fitting_plane, gen_frame
+from ..helpers.helper_functions import best_fitting_plane, gen_frame, freeze_gui_off
 from ..collections.geological_collection import GeologicalCollection
 from ..entities_factory import PolyData, Attitude
 from ..two_d_lines import draw_line_3d
@@ -476,6 +476,7 @@ class View3D(ViewVTK):
         self.plotter.reset_key_events()
         self.selected_uids = self.parent.selected_uids
         # self.enable_actions()
+        freeze_gui_off(self)
 
     def orbit_entity(self):
         uid_list = self.actors_df["uid"].to_list()

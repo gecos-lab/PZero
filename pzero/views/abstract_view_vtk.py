@@ -23,7 +23,7 @@ from pyvista import PointSet as pvPointSet
 
 # PZero imports____
 from .abstract_base_view import BaseView
-from ..helpers.helper_functions import freeze_gui_onoff
+from ..helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 from ..orientation_analysis import get_dip_dir_vectors
 from ..helpers.helper_dialogs import input_one_value_dialog, save_file_dialog
 from ..helpers.screenshot_dialog import ScreenshotExportDialog
@@ -1158,10 +1158,10 @@ class ViewVTK(BaseView):
             self.parent.DOMsTableView.clearSelection()
             self.selected_uids = []
 
-    @freeze_gui_onoff
+    @freeze_gui_on
     def select_actor_with_mouse(self):
         """Function used for actor selection. As long as selection goes on, other actions are
-        not allowed by @freeze_gui_onoff."""
+        not allowed by @freeze_gui_on, which is relased later on with freeze_gui_off(self)."""
         # self.disable_actions()
         self.plotter.iren.interactor.AddObserver(
             "LeftButtonPressEvent", self.select_actor

@@ -300,24 +300,12 @@ def freeze_gui_on(func):
             print(f"Function {func} ended successfully.")
         except:
             self.print_terminal(f"Function {func} cannot be started.")
-
     return wrapper
 
 
-def freeze_gui_off(func):
-    """Decorator function used to unfreeze the GUI."""
-    def wrapper(self, *args, **kwargs):
-        # the wrapped function goes here, with try-except to avoid crashes
-        try:
-            print(f"Function {func} started.")
-            func(self, *args, **kwargs)
-            print(f"Function {func} ended successfully.")
-        except:
-            self.print_terminal(f"Function {func} cannot be started.")
-        # Enable GUI after function is called.
-        self.enable_actions()
-
-    return wrapper
+def freeze_gui_off(self):
+    """Function used to unfreeze the GUI, in combination with freeze_gui_on."""
+    self.enable_actions()
 
 
 def freeze_gui_onoff(func):
@@ -334,5 +322,4 @@ def freeze_gui_onoff(func):
             self.print_terminal(f"Function {func} cannot be started.")
         # Enable GUI after function is called.
         self.enable_actions()
-
     return wrapper
