@@ -1092,7 +1092,11 @@ class ShapefileAssignmentDialog(QMainWindow):
 
     USER_DEFINED_OPTION = "user defined"
     USER_DEFINED_FEATURE_TOKEN = "__user_defined_feature__"
-    DEFAULT_USER_FEATURE = "undefined"
+    DEFAULT_USER_FEATURE = "undef"
+    FIXED_ROLE_OPTION = "Fixed value..."
+    FIXED_ROLE_TOKEN = "__fixed_role__"
+    USER_DEFINED_NAME_TOKEN = "__user_defined_name__"
+    USER_DEFINED_SCENARIO_TOKEN = "__user_defined_scenario__"
 
     def __init__(
         self,
@@ -1100,6 +1104,7 @@ class ShapefileAssignmentDialog(QMainWindow):
         shapefile_df=None,
         topology_type=None,
         include_label=False,
+        valid_roles=None,
         *args,
         **kwargs,
     ):
@@ -1109,9 +1114,13 @@ class ShapefileAssignmentDialog(QMainWindow):
         self.shapefile_df = shapefile_df
         self.topology_type = topology_type
         self.include_label = include_label
+        self.valid_roles = valid_roles if valid_roles is not None else []
         self.attribute_mapping = {}
         self.result = None
         self.feature_user_line = None
+        self.role_fixed_combo = None
+        self.name_user_line = None
+        self.scenario_user_line = None
 
         # Define required and optional fields based on topology
         self.required_fields, self.optional_fields = self._get_field_definitions()
@@ -1192,8 +1201,7 @@ class ShapefileAssignmentDialog(QMainWindow):
             if field == "feature":
                 self.feature_user_line = QLineEdit()
                 self.feature_user_line.setObjectName("feature_user_defined_line")
-                self.feature_user_line.setPlaceholderText(self.DEFAULT_USER_FEATURE)
-                self.feature_user_line.setText(self.DEFAULT_USER_FEATURE)
+                self.feature_user_line.setPlaceholderText("Enter feature")
                 self.feature_user_line.setEnabled(False)
                 self.feature_user_line.textChanged.connect(
                     self._on_user_feature_text_changed
@@ -1213,7 +1221,12 @@ class ShapefileAssignmentDialog(QMainWindow):
             #arrow_label = QLabel("←")
             #arrow_label.setAlignment(Qt.AlignCenter)
             combo = QComboBox()
-            combo.addItems(shapefile_columns)
+            if field == "role" and self.valid_roles:
+                combo.addItems(shapefile_columns + [self.FIXED_ROLE_OPTION])
+            elif field in ["name", "scenario"]:
+                combo.addItems(shapefile_columns + [self.USER_DEFINED_OPTION])
+            else:
+                combo.addItems(shapefile_columns)
             combo.setObjectName(f"combo_{field}")
             combo.currentTextChanged.connect(
                 lambda text, f=field, lbl=label: self._on_combo_changed(f, text, lbl)
@@ -1222,9 +1235,40 @@ class ShapefileAssignmentDialog(QMainWindow):
             main_layout.addWidget(label, row, 0)
             #.addWidget(arrow_label, row, 1)
             main_layout.addWidget(combo, row, 1)
-            placeholder = QLabel("-")
-            placeholder.setAlignment(Qt.AlignCenter)
-            main_layout.addWidget(placeholder, row, 2)
+
+            # Create appropriate widget for third column
+            if field == "role" and self.valid_roles:
+                self.role_fixed_combo = QComboBox()
+                self.role_fixed_combo.setObjectName("role_fixed_combo")
+                self.role_fixed_combo.addItems(self.valid_roles)
+                self.role_fixed_combo.setEnabled(False)
+                self.role_fixed_combo.currentTextChanged.connect(
+                    self._on_fixed_role_changed
+                )
+                main_layout.addWidget(self.role_fixed_combo, row, 2)
+            elif field == "name":
+                self.name_user_line = QLineEdit()
+                self.name_user_line.setObjectName("name_user_line")
+                self.name_user_line.setPlaceholderText("Enter name")
+                self.name_user_line.setEnabled(False)
+                self.name_user_line.textChanged.connect(
+                    lambda text, f=field: self._on_user_defined_text_changed(f, text)
+                )
+                main_layout.addWidget(self.name_user_line, row, 2)
+            elif field == "scenario":
+                self.scenario_user_line = QLineEdit()
+                self.scenario_user_line.setObjectName("scenario_user_line")
+                self.scenario_user_line.setPlaceholderText("Enter scenario")
+                self.scenario_user_line.setEnabled(False)
+                self.scenario_user_line.textChanged.connect(
+                    lambda text, f=field: self._on_user_defined_text_changed(f, text)
+                )
+                main_layout.addWidget(self.scenario_user_line, row, 2)
+            else:
+                placeholder = QLabel("-")
+                placeholder.setAlignment(Qt.AlignCenter)
+                main_layout.addWidget(placeholder, row, 2)
+
             self.combo_boxes[field] = combo
             self.field_labels[field] = label
             row += 1
@@ -1283,6 +1327,66 @@ class ShapefileAssignmentDialog(QMainWindow):
                 self.attribute_mapping.pop("feature_user_value", None)
             return
 
+        if field == "role":
+            if text == self.FIXED_ROLE_OPTION:
+                if self.role_fixed_combo is not None:
+                    self.role_fixed_combo.setEnabled(True)
+                self.attribute_mapping["role"] = self.FIXED_ROLE_TOKEN
+                self.attribute_mapping["role_fixed_value"] = (
+                    self._get_fixed_role_value()
+                )
+            elif text == "<none>":
+                if self.role_fixed_combo is not None:
+                    self.role_fixed_combo.setEnabled(False)
+                self.attribute_mapping.pop("role", None)
+                self.attribute_mapping.pop("role_fixed_value", None)
+            else:
+                if self.role_fixed_combo is not None:
+                    self.role_fixed_combo.setEnabled(False)
+                self.attribute_mapping["role"] = text
+                self.attribute_mapping.pop("role_fixed_value", None)
+            return
+
+        if field == "name":
+            if text == self.USER_DEFINED_OPTION:
+                if self.name_user_line is not None:
+                    self.name_user_line.setEnabled(True)
+                self.attribute_mapping["name"] = self.USER_DEFINED_NAME_TOKEN
+                self.attribute_mapping["name_user_value"] = (
+                    self.name_user_line.text().strip() if self.name_user_line else ""
+                )
+            elif text == "<none>":
+                if self.name_user_line is not None:
+                    self.name_user_line.setEnabled(False)
+                self.attribute_mapping.pop("name", None)
+                self.attribute_mapping.pop("name_user_value", None)
+            else:
+                if self.name_user_line is not None:
+                    self.name_user_line.setEnabled(False)
+                self.attribute_mapping["name"] = text
+                self.attribute_mapping.pop("name_user_value", None)
+            return
+
+        if field == "scenario":
+            if text == self.USER_DEFINED_OPTION:
+                if self.scenario_user_line is not None:
+                    self.scenario_user_line.setEnabled(True)
+                self.attribute_mapping["scenario"] = self.USER_DEFINED_SCENARIO_TOKEN
+                self.attribute_mapping["scenario_user_value"] = (
+                    self.scenario_user_line.text().strip() if self.scenario_user_line else ""
+                )
+            elif text == "<none>":
+                if self.scenario_user_line is not None:
+                    self.scenario_user_line.setEnabled(False)
+                self.attribute_mapping.pop("scenario", None)
+                self.attribute_mapping.pop("scenario_user_value", None)
+            else:
+                if self.scenario_user_line is not None:
+                    self.scenario_user_line.setEnabled(False)
+                self.attribute_mapping["scenario"] = text
+                self.attribute_mapping.pop("scenario_user_value", None)
+            return
+
         if text == "<none>":
             if field in self.attribute_mapping:
                 del self.attribute_mapping[field]
@@ -1307,6 +1411,36 @@ class ShapefileAssignmentDialog(QMainWindow):
             self.attribute_mapping["feature_user_value"] = (
                 self._get_user_defined_feature_value()
             )
+
+    def _get_fixed_role_value(self):
+        """Return current fixed role value."""
+        if self.role_fixed_combo is None:
+            return self.valid_roles[0] if self.valid_roles else "undef"
+        return self.role_fixed_combo.currentText()
+
+    def _on_fixed_role_changed(self, _text):
+        """Update mapping when user selects a different fixed role."""
+        role_combo = self.combo_boxes.get("role")
+        if role_combo and role_combo.currentText() == self.FIXED_ROLE_OPTION:
+            self.attribute_mapping["role"] = self.FIXED_ROLE_TOKEN
+            self.attribute_mapping["role_fixed_value"] = self._get_fixed_role_value()
+
+    def _on_user_defined_text_changed(self, field, _text):
+        """Update mapping when user edits custom name or scenario value."""
+        if field == "name":
+            name_combo = self.combo_boxes.get("name")
+            if name_combo and name_combo.currentText() == self.USER_DEFINED_OPTION:
+                self.attribute_mapping["name"] = self.USER_DEFINED_NAME_TOKEN
+                self.attribute_mapping["name_user_value"] = (
+                    self.name_user_line.text().strip() if self.name_user_line else ""
+                )
+        elif field == "scenario":
+            scenario_combo = self.combo_boxes.get("scenario")
+            if scenario_combo and scenario_combo.currentText() == self.USER_DEFINED_OPTION:
+                self.attribute_mapping["scenario"] = self.USER_DEFINED_SCENARIO_TOKEN
+                self.attribute_mapping["scenario_user_value"] = (
+                    self.scenario_user_line.text().strip() if self.scenario_user_line else ""
+                )
 
     def _validate_and_accept(self):
         """Validate that all required fields are assigned before accepting."""
@@ -1351,6 +1485,26 @@ class ShapefileAssignmentDialog(QMainWindow):
             self.attribute_mapping["feature_user_value"] = (
                 self._get_user_defined_feature_value()
             )
+
+        role_combo = self.combo_boxes.get("role")
+        if role_combo and role_combo.currentText() == self.FIXED_ROLE_OPTION:
+            self.attribute_mapping["role"] = self.FIXED_ROLE_TOKEN
+            self.attribute_mapping["role_fixed_value"] = self._get_fixed_role_value()
+
+        name_combo = self.combo_boxes.get("name")
+        if name_combo and name_combo.currentText() == self.USER_DEFINED_OPTION:
+            self.attribute_mapping["name"] = self.USER_DEFINED_NAME_TOKEN
+            self.attribute_mapping["name_user_value"] = (
+                self.name_user_line.text().strip() if self.name_user_line else ""
+            )
+
+        scenario_combo = self.combo_boxes.get("scenario")
+        if scenario_combo and scenario_combo.currentText() == self.USER_DEFINED_OPTION:
+            self.attribute_mapping["scenario"] = self.USER_DEFINED_SCENARIO_TOKEN
+            self.attribute_mapping["scenario_user_value"] = (
+                self.scenario_user_line.text().strip() if self.scenario_user_line else ""
+            )
+
         self.result = self.attribute_mapping.copy()
 
         self.close()

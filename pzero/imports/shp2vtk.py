@@ -27,6 +27,12 @@ from pzero.orientation_analysis import dip_directions2normals
 
 USER_DEFINED_FEATURE_TOKEN = "__user_defined_feature__"
 USER_DEFINED_FEATURE_COLUMN = "__pzero_user_defined_feature__"
+FIXED_ROLE_TOKEN = "__fixed_role__"
+FIXED_ROLE_COLUMN = "__pzero_fixed_role__"
+USER_DEFINED_NAME_TOKEN = "__user_defined_name__"
+USER_DEFINED_NAME_COLUMN = "__pzero_user_defined_name__"
+USER_DEFINED_SCENARIO_TOKEN = "__user_defined_scenario__"
+USER_DEFINED_SCENARIO_COLUMN = "__pzero_user_defined_scenario__"
 
 # Importer for SHP files and other GIS formats, to be improved IN THE FUTURE.
 # Known bugs for multi-part polylines.
@@ -67,12 +73,22 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
     # include_label only for Background data (original code handled label only there)
     include_label = collection == "Background data"
 
+    # Get valid_roles for all collections
+    valid_roles = None
+    if collection == "Geology":
+        valid_roles = GeologicalCollection().valid_roles
+    elif collection == "Fluid contacts":
+        valid_roles = FluidCollection().valid_roles
+    elif collection == "Background data":
+        valid_roles = BackgroundCollection().valid_roles
+
     # Open dialog to assign shapefile attributes to PZero properties
     dialog = ShapefileAssignmentDialog(
         parent=self,
         shapefile_df=attrs_df,
         topology_type=topology_type,
         include_label=include_label,
+        valid_roles=valid_roles,
     )
     attribute_mapping = dialog.exec()
 
@@ -84,15 +100,48 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
     # Support an explicit user-defined feature value for all imported objects.
     if attribute_mapping.get("feature") == USER_DEFINED_FEATURE_TOKEN:
         user_feature_value = str(
-            attribute_mapping.get("feature_user_value", "undefined")
+            attribute_mapping.get("feature_user_value", "undef")
         ).strip()
         if not user_feature_value:
-            user_feature_value = "undefined"
+            user_feature_value = "undef"
         feature_col_name = USER_DEFINED_FEATURE_COLUMN
         while feature_col_name in gdf.columns:
             feature_col_name = f"_{feature_col_name}"
         gdf[feature_col_name] = user_feature_value
         attribute_mapping["feature"] = feature_col_name
+
+    # Support a fixed role value for all imported objects.
+    if attribute_mapping.get("role") == FIXED_ROLE_TOKEN:
+        fixed_role_value = str(attribute_mapping.get("role_fixed_value", "undef")).strip()
+        if not fixed_role_value:
+            fixed_role_value = "undef"
+        role_col_name = FIXED_ROLE_COLUMN
+        while role_col_name in gdf.columns:
+            role_col_name = f"_{role_col_name}"
+        gdf[role_col_name] = fixed_role_value
+        attribute_mapping["role"] = role_col_name
+
+    # Support a user-defined name value for all imported objects.
+    if attribute_mapping.get("name") == USER_DEFINED_NAME_TOKEN:
+        user_name_value = str(attribute_mapping.get("name_user_value", "")).strip()
+        if not user_name_value:
+            user_name_value = "undef"
+        name_col_name = USER_DEFINED_NAME_COLUMN
+        while name_col_name in gdf.columns:
+            name_col_name = f"_{name_col_name}"
+        gdf[name_col_name] = user_name_value
+        attribute_mapping["name"] = name_col_name
+
+    # Support a user-defined scenario value for all imported objects.
+    if attribute_mapping.get("scenario") == USER_DEFINED_SCENARIO_TOKEN:
+        user_scenario_value = str(attribute_mapping.get("scenario_user_value", "")).strip()
+        if not user_scenario_value:
+            user_scenario_value = "undef"
+        scenario_col_name = USER_DEFINED_SCENARIO_COLUMN
+        while scenario_col_name in gdf.columns:
+            scenario_col_name = f"_{scenario_col_name}"
+        gdf[scenario_col_name] = user_scenario_value
+        attribute_mapping["scenario"] = scenario_col_name
 
     # Split mapping into properties vs orientation-related fields
     # Build maps without mutating original
