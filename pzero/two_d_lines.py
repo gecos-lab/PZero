@@ -21,7 +21,6 @@ from numpy.linalg import norm as np_norm
 # from shapely import affinity
 from shapely.affinity import scale as shp_scale
 from shapely.affinity import rotate as shp_rotate
-from shapely.geometry import Point as shp_point
 from shapely.geometry import LineString as shp_linestring
 
 # from shapely.geometry import MultiLineString as shp_multilinestring
@@ -380,7 +379,15 @@ def rotate_line(self):
             inU = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X
             inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y
         elif isinstance(self, ViewXsection):
-            inU, inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid).world2plane()
+            in_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid)
+            inU, inV = self.parent.xsect_coll.world2plane(
+                section_uid=self.this_x_section_uid,
+                X=in_vtk_obj.points_X,
+                Y=in_vtk_obj.points_Y,
+                Z=in_vtk_obj.points_Z,
+            )
+            inU = np_array(inU).reshape(-1)
+            inV = np_array(inV).reshape(-1)
         # Stack coordinates in two-columns matrix and convert into Shapely object.
         inUV = np_column_stack((inU, inV))
         shp_line_in = shp_linestring(inUV)
@@ -491,9 +498,15 @@ def split_line_line(self):
         inU = self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors).points_X
         inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors).points_Y
     elif isinstance(self, ViewXsection):
-        inU, inV = self.parent.geol_coll.get_uid_vtk_obj(
-            current_uid_scissors
-        ).world2plane()
+        in_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors)
+        inU, inV = self.parent.xsect_coll.world2plane(
+            section_uid=self.this_x_section_uid,
+            X=in_vtk_obj.points_X,
+            Y=in_vtk_obj.points_Y,
+            Z=in_vtk_obj.points_Z,
+        )
+        inU = np_array(inU).reshape(-1)
+        inV = np_array(inV).reshape(-1)
 
     inUV_scissors = np_column_stack((inU, inV))
     shp_line_in_scissors = shp_linestring(inUV_scissors)
@@ -511,9 +524,15 @@ def split_line_line(self):
             inU = self.parent.geol_coll.get_uid_vtk_obj(current_uid_paper).points_X
             inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid_paper).points_Y
         elif isinstance(self, ViewXsection):
-            inU, inV = self.parent.geol_coll.get_uid_vtk_obj(
-                current_uid_paper
-            ).world2plane()
+            in_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid_paper)
+            inU, inV = self.parent.xsect_coll.world2plane(
+                section_uid=self.this_x_section_uid,
+                X=in_vtk_obj.points_X,
+                Y=in_vtk_obj.points_Y,
+                Z=in_vtk_obj.points_Z,
+            )
+            inU = np_array(inU).reshape(-1)
+            inV = np_array(inV).reshape(-1)
         inUV_paper = np_column_stack((inU, inV))
 
         # Create deepcopies of the selected entities. Split U- and V-coordinates.
@@ -528,14 +547,16 @@ def split_line_line(self):
         # inUV_paper = np_column_stack((inU_paper, inV_paper,inZ_paper))
         # Run the Shapely function.
         shp_line_in_paper = shp_linestring(inUV_paper)
-        # Check if the two lineal geometries have shared path with dimension 1 (= they share a line-type object)
-        if shp_line_in_paper.crosses(shp_line_in_scissors):
-            # Run the split shapely function.
-            split_lines = shp_split(
-                shp_line_in_paper, shp_line_in_scissors
-            )  # lines must include all line parts not affected by splitting and two parts for the split line__________
-        else:  # handles the case when the shp_linestring share a linear path and, for the moment, exists the tool
-            # Deselect input line.
+        # Run split. If lines do not strictly cross, extend splitter to catch touch/T intersections.
+        paper_to_split = shp_line_in_paper
+        splitter = shp_line_in_scissors
+        if not shp_line_in_paper.crosses(shp_line_in_scissors):
+            paper_to_split, splitter = int_node(shp_line_in_paper, shp_line_in_scissors)
+        if not paper_to_split.intersects(splitter):
+            self.clear_selection()
+            return
+        split_lines = shp_split(paper_to_split, splitter)
+        if len(split_lines.geoms) < 2:
             self.clear_selection()
             return
         replace = 1  # replace = 1 for the first line to operate replace_vtk
@@ -609,11 +630,16 @@ def split_line_line(self):
 
 
 def split_line_existing_point(self):
-    # Here transformation to UV is not necessary since we select a point in world space
+    # Split line at picked point in 2D work coordinates (map XY or xsection UV).
     def end_select(event, uid):
         point_pos = selector.active_pos
         self.plotter.untrack_click_position(side="right")
-        # Create empty dictionary for the output line
+        if point_pos is None:
+            selector.EnabledOff()
+            self.enable_actions()
+            return
+
+        # Create empty dictionary for the output lines
         new_line_1 = deepcopy(self.parent.geol_coll.entity_dict)
         new_line_2 = deepcopy(self.parent.geol_coll.entity_dict)
         new_line_2["name"] = (
@@ -634,30 +660,51 @@ def split_line_existing_point(self):
         new_line_2["scenario"] = self.parent.geol_coll.df.loc[
             self.parent.geol_coll.df["uid"] == uid, "scenario"
         ].values[0]
+
+        vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+
         if isinstance(self, ViewMap):
-            inU_line = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(uid).points[:, 0])
-            inV_line = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(uid).points[:, 1])
+            inU_line = deepcopy(vtk_obj.points_X)
+            inV_line = deepcopy(vtk_obj.points_Y)
+            point_u = point_pos[0]
+            point_v = point_pos[1]
         elif isinstance(self, ViewXsection):
-            inU_line = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(uid).points_W)
-            inV_line = deepcopy(self.parent.geol_coll.get_uid_vtk_obj(uid).points_Z)
+            inU_line, inV_line = self.parent.xsect_coll.world2plane(
+                section_uid=self.this_x_section_uid,
+                X=vtk_obj.points_X,
+                Y=vtk_obj.points_Y,
+                Z=vtk_obj.points_Z,
+            )
+            inU_line = np_array(inU_line).reshape(-1)
+            inV_line = np_array(inV_line).reshape(-1)
+            point_u, point_v = self.parent.xsect_coll.world2plane(
+                section_uid=self.this_x_section_uid,
+                X=[point_pos[0]],
+                Y=[point_pos[1]],
+                Z=[point_pos[2]],
+            )
+            point_u = float(np_array(point_u).reshape(-1)[0])
+            point_v = float(np_array(point_v).reshape(-1)[0])
             new_line_2["parent_uid"] = self.this_x_section_uid
-        # Stack coordinates in two-columns matrix"""
+
         inUV_line = np_column_stack((inU_line, inV_line))
-        # Run the Shapely function.
-        shp_line_in = shp_linestring(
-            deepcopy(self.parent.geol_coll.get_uid_vtk_obj(uid).points)
-        )
-        # x_vertex_unit = deepcopy(current_line_U_true[vertex_ind])
-        # y_vertex_unit = deepcopy(current_line_V_true[vertex_ind])
-        shp_point_in = shp_point(point_pos[0], point_pos[1], point_pos[2])
-        # Splitting shapely function.
-        split_lines = shp_split(shp_line_in, shp_point_in)
-        line1_out = shp_linestring(split_lines.geoms[0])
-        line2_out = shp_linestring(split_lines.geoms[1])
-        # Convert shapely lines to UV objects
-        outUV_1 = deepcopy(np_array(line1_out.coords))
-        outUV_2 = deepcopy(np_array(line2_out.coords))
-        # Un-stack output coordinates and write them to the empty dictionary.
+        if inUV_line.shape[0] < 3:
+            self.print_terminal(" -- Line has too few points to split -- ")
+            selector.EnabledOff()
+            self.enable_actions()
+            return
+
+        # Split at nearest existing vertex (excluding first/last point).
+        distances = np_norm(inUV_line - np_array([point_u, point_v]), axis=1)
+        vertex_ind = int(distances.argmin())
+        if vertex_ind <= 0 or vertex_ind >= inUV_line.shape[0] - 1:
+            self.print_terminal(" -- Split point does not divide the line -- ")
+            selector.EnabledOff()
+            self.enable_actions()
+            return
+
+        outUV_1 = deepcopy(inUV_line[: vertex_ind + 1, :])
+        outUV_2 = deepcopy(inUV_line[vertex_ind:, :])
         outU_1 = outUV_1[:, 0]
         outV_1 = outUV_1[:, 1]
         outU_2 = outUV_2[:, 0]
@@ -670,14 +717,12 @@ def split_line_existing_point(self):
             outY_2 = outV_2
             outZ_2 = np_zeros(np_shape(outX_2))
         elif isinstance(self, ViewXsection):
-            outX_1, outY_1 = self.parent.xsect_coll.get_XY_from_W(
-                section_uid=self.this_x_section_uid, W=outU_1
+            outX_1, outY_1, outZ_1 = self.parent.xsect_coll.plane2world(
+                self.this_x_section_uid, outU_1, outV_1
             )
-            outZ_1 = outV_1
-            outX_2, outY_2 = self.parent.xsect_coll.get_XY_from_W(
-                section_uid=self.this_x_section_uid, W=outU_2
+            outX_2, outY_2, outZ_2 = self.parent.xsect_coll.plane2world(
+                self.this_x_section_uid, outU_2, outV_2
             )
-            outZ_2 = outV_2
         new_points_1 = np_column_stack((outX_1, outY_1, outZ_1))
         new_points_2 = np_column_stack((outX_2, outY_2, outZ_2))
         if isinstance(self, ViewMap):
@@ -690,12 +735,10 @@ def split_line_existing_point(self):
             new_line_2["vtk_obj"] = XsPolyLine(
                 self.this_x_section_uid, parent=self.parent
             )
-        new_line_1["vtk_obj"].points = deepcopy(np_array(line1_out.coords))
+        new_line_1["vtk_obj"].points = new_points_1
         new_line_1["vtk_obj"].auto_cells()
-        new_line_2["vtk_obj"].points = deepcopy(np_array(line2_out.coords))
-        new_line_2[
-            "vtk_obj"
-        ].auto_cells()  # lines must include all line parts not affected by splitting and two parts for the split line__________
+        new_line_2["vtk_obj"].points = new_points_2
+        new_line_2["vtk_obj"].auto_cells()
         # Replace VTK object
         if new_line_1["vtk_obj"].points_number > 0:
             self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=new_line_1["vtk_obj"])
@@ -730,7 +773,7 @@ def split_line_existing_point(self):
         self.print_terminal(" -- Selected data is not a line -- ")
         return
     # Freeze QT interface
-    self.disable_actions
+    self.disable_actions()
     # If more than one line is selected, keep the first
     sel_uid = self.selected_uids[0]
     current_line = self.get_actor_by_uid(sel_uid)
@@ -917,12 +960,24 @@ def snap_line(self):
                 self.this_x_section_uid, parent=self.parent
             )
             new_line_goal["parent_uid"] = self.this_x_section_uid
-            inU_snap, inV_snap = self.parent.geol_coll.get_uid_vtk_obj(
-                current_uid_snap
-            ).world2plane()
-            inU_goal, inV_goal = self.parent.geol_coll.get_uid_vtk_obj(
-                current_uid_goal
-            ).world2plane()
+            snap_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid_snap)
+            goal_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid_goal)
+            inU_snap, inV_snap = self.parent.xsect_coll.world2plane(
+                section_uid=self.this_x_section_uid,
+                X=snap_vtk_obj.points_X,
+                Y=snap_vtk_obj.points_Y,
+                Z=snap_vtk_obj.points_Z,
+            )
+            inU_goal, inV_goal = self.parent.xsect_coll.world2plane(
+                section_uid=self.this_x_section_uid,
+                X=goal_vtk_obj.points_X,
+                Y=goal_vtk_obj.points_Y,
+                Z=goal_vtk_obj.points_Z,
+            )
+            inU_snap = np_array(inU_snap).reshape(-1)
+            inV_snap = np_array(inV_snap).reshape(-1)
+            inU_goal = np_array(inU_goal).reshape(-1)
+            inV_goal = np_array(inV_goal).reshape(-1)
         # Stack coordinates in two-columns matrix
         inUV_snap = np_column_stack((inU_snap, inV_snap))
         inUV_goal = np_column_stack((inU_goal, inV_goal))
@@ -943,10 +998,8 @@ def snap_line(self):
         else:
             self.print_terminal("Polyline is not simple, it self-intersects")
             return
-        shp_line_out_diff = shp_line_out_snap.difference(
-            shp_line_in_goal
-        )  # eliminate the shared path that Snap may create
-        outUV_snap = deepcopy(np_array(shp_line_out_diff.coords))
+        # Use snapped line directly. Using difference may return empty/multigeometries.
+        outUV_snap = deepcopy(np_array(shp_line_out_snap.coords))
         outUV_goal = deepcopy(np_array(shp_line_in_goal.coords))
         # Un-stack output coordinates and write them to the empty dictionary.
         if outUV_snap.ndim < 2:
@@ -1261,7 +1314,14 @@ def simplify_line(self):
             elif isinstance(self, ViewXsection):
                 new_line["topology"] = "XsPolyLine"
                 new_line["parent_uid"] = self.this_x_section_uid
-                inU, inV = vtk_obj.world2plane()
+                inU, inV = self.parent.xsect_coll.world2plane(
+                    section_uid=self.this_x_section_uid,
+                    X=vtk_obj.points_X,
+                    Y=vtk_obj.points_Y,
+                    Z=vtk_obj.points_Z,
+                )
+                inU = np_array(inU).reshape(-1)
+                inV = np_array(inV).reshape(-1)
                 new_line["vtk_obj"] = XsPolyLine(
                     self.this_x_section_uid, parent=self.parent
                 )
@@ -1304,8 +1364,9 @@ def simplify_line(self):
 
             # Replace VTK object
             if new_line["vtk_obj"].points_number > 0:
-                self.parent.geol_coll.remove_entity(current_uid)
-                self.parent.geol_coll.add_entity_from_dict(new_line)
+                self.parent.geol_coll.replace_vtk(
+                    uid=current_uid, vtk_object=new_line["vtk_obj"]
+                )
                 self.parent.signals.geom_modified.emit(
                     [current_uid], self.parent.geol_coll
                 )
@@ -1686,18 +1747,28 @@ def left_right(self, uid=None):
         V_line = self.parent.geol_coll.get_uid_vtk_obj(uid).points_Y
     # elif isinstance(self, ViewXsection):
     elif isinstance(self, ViewXsection):
-        U_line, V_line = self.parent.geol_coll.get_uid_vtk_obj(uid).world2plane()
+        vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        U_line, V_line = self.parent.xsect_coll.world2plane(
+            section_uid=self.this_x_section_uid,
+            X=vtk_obj.points_X,
+            Y=vtk_obj.points_Y,
+            Z=vtk_obj.points_Z,
+        )
+        U_line = np_array(U_line).reshape(-1)
+        V_line = np_array(V_line).reshape(-1)
     # elif isinstance(self, View3D):
     #     # For 3D view, left-right orientation is not meaningful, so return early
     #     return
     else:
         return
+    if len(U_line) < 2:
+        return
     if U_line[0] > U_line[-1]:  # reverse if right-to-left
-        flip_line(uid=uid)
+        flip_line(self, uid=uid)
     elif (
         U_line[0] == U_line[-1] and V_line[0] > V_line[-1]
     ):  # reverse if vertical up-to-down
-        flip_line(uid=uid)
+        flip_line(self, uid=uid)
 
 
 def int_node(line1, line2):
@@ -1731,23 +1802,23 @@ def int_node(line1, line2):
     else:
         if len(line2.coords) == 2:
             scaled_segment1 = shp_scale(
-                line2, xfact=fac, yfact=fac, origin=line2.boundary[0]
+                line2, xfact=fac, yfact=fac, origin=line2.coords[0]
             )
             scaled_segment2 = shp_scale(
                 scaled_segment1,
                 xfact=fac,
                 yfact=fac,
-                origin=scaled_segment1.boundary[1],
+                origin=scaled_segment1.coords[-1],
             )
             extended_line = shp_linestring(scaled_segment2)
         elif len(line2.coords) == 3:
             first_seg = shp_linestring(line2.coords[:2])
             last_seg = shp_linestring(line2.coords[-2:])
             scaled_first_segment = shp_scale(
-                first_seg, xfact=fac, yfact=fac, origin=first_seg.boundary[1]
+                first_seg, xfact=fac, yfact=fac, origin=first_seg.coords[-1]
             )
             scaled_last_segment = shp_scale(
-                last_seg, xfact=fac, yfact=fac, origin=last_seg.boundary[0]
+                last_seg, xfact=fac, yfact=fac, origin=last_seg.coords[0]
             )
             extended_line = shp_linestring(
                 [*scaled_first_segment.coords, *scaled_last_segment.coords]
@@ -1757,10 +1828,10 @@ def int_node(line1, line2):
             last_seg = shp_linestring(line2.coords[-2:])
 
             scaled_first_segment = shp_scale(
-                first_seg, xfact=fac, yfact=fac, origin=first_seg.boundary[1]
+                first_seg, xfact=fac, yfact=fac, origin=first_seg.coords[-1]
             )
             scaled_last_segment = shp_scale(
-                last_seg, xfact=fac, yfact=fac, origin=last_seg.boundary[0]
+                last_seg, xfact=fac, yfact=fac, origin=last_seg.coords[0]
             )
             extended_line = shp_linestring(
                 [

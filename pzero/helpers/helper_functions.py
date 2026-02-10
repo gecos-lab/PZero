@@ -297,8 +297,8 @@ def freeze_gui(func):
         # the wrapped function goes here, with try-except to avoid crashes
         try:
             func(self, *args, **kwargs)
-        except:
-            self.print_terminal(f"Function {func} ended without output.")
+        except Exception as exc:
+            self.print_terminal(f"Function {func.__name__} failed: {exc}")
         # Enable GUI after function is called.
         self.enable_actions()
 
