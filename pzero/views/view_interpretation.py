@@ -278,9 +278,12 @@ class ViewInterpretation(ViewMap):
                         )
                         self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=matches_current_slice)
                         self.print_terminal(f"Added interpretation line {uid}, visible={matches_current_slice}")
+                        continue
                     else:
                         # NEW: Try to classify it immediately if we have a volume loaded
                         # This handles undo/redo or external adds
+                        classified_as_multipart_horizon = False
+                        classified_as_multipart_fault = False
                         if self.current_seismic_uid:
                             self.scan_and_index_single_horizon(uid)
                             if uid in self.interpretation_lines:
@@ -292,7 +295,27 @@ class ViewInterpretation(ViewMap):
                                     slice_info['slice_index'] == self.current_slice_index
                                 )
                                 self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=matches_current_slice)
-                                return
+                                continue
+
+                            classified_as_multipart_horizon = (
+                                hasattr(self, 'multipart_horizons') and
+                                uid in self.multipart_horizons
+                            )
+                            classified_as_multipart_fault = (
+                                hasattr(self, 'multipart_faults') and
+                                uid in self.multipart_faults
+                            )
+
+                        # For multipart interpretation entities, always force filtered-by-slice rendering.
+                        if classified_as_multipart_horizon:
+                            self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=False)
+                            self.update_multipart_horizon_visibility(uid)
+                            continue
+
+                        if classified_as_multipart_fault:
+                            self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=False)
+                            self.update_multipart_fault_visibility(uid)
+                            continue
 
                         # Not a tracked interpretation line, show normally
                         self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=True)
@@ -1862,17 +1885,34 @@ class ViewInterpretation(ViewMap):
 
             seismic_bounds = self._cached_bounds
             seismic_dims = self._cached_dims
-            
-            # Simple tolerance for "flatness"
-            TOLERANCE = 0.01 
+
+            # Try to recover multipart slice metadata from geometry when slice_index arrays
+            # are missing (e.g. after generic merge/split operations).
+            if self._try_register_multipart_from_geometry(
+                uid=uid,
+                vtk_obj=vtk_obj,
+                seismic_bounds=seismic_bounds,
+                seismic_dims=seismic_dims,
+            ):
+                return
             
             # Calculate spacing on the fly (assuming regular grid)
             dx = (seismic_bounds[1] - seismic_bounds[0]) / max(seismic_dims[0] - 1, 1)
             dy = (seismic_bounds[3] - seismic_bounds[2]) / max(seismic_dims[1] - 1, 1)
             dz = (seismic_bounds[5] - seismic_bounds[4]) / max(seismic_dims[2] - 1, 1)
 
+            # Spacing-aware tolerance for "flatness" to handle operations introducing
+            # small numerical offsets along the nominal slice axis.
+            tol_x = max(abs(dx) * 0.35, 1e-3)
+            tol_y = max(abs(dy) * 0.35, 1e-3)
+            tol_z = max(abs(dz) * 0.35, 1e-3)
+            x_range = abs(bounds[1] - bounds[0])
+            y_range = abs(bounds[3] - bounds[2])
+            z_range = abs(bounds[5] - bounds[4])
+            min_span_guard = 1e-9
+
             # Check for Inline (YZ plane, X is constant)
-            if abs(bounds[1] - bounds[0]) < TOLERANCE:
+            if x_range < tol_x and x_range < 0.1 * max(y_range, z_range, min_span_guard):
                 # Calculate which slice index this corresponds to
                 # x = bounds[0] (or center)
                 x_pos = (bounds[0] + bounds[1]) / 2.0
@@ -1896,7 +1936,7 @@ class ViewInterpretation(ViewMap):
                             return
 
             # Check for Crossline (XZ plane, Y is constant)
-            if abs(bounds[3] - bounds[2]) < TOLERANCE:
+            if y_range < tol_y and y_range < 0.1 * max(x_range, z_range, min_span_guard):
                 y_pos = (bounds[2] + bounds[3]) / 2.0
                 if dy > 0:
                     idx_float = (y_pos - seismic_bounds[2]) / dy
@@ -1912,7 +1952,7 @@ class ViewInterpretation(ViewMap):
                             return
 
             # Check for Z-slice (XY plane, Z is constant)
-            if abs(bounds[5] - bounds[4]) < TOLERANCE:
+            if z_range < tol_z and z_range < 0.1 * max(x_range, y_range, min_span_guard):
                 z_pos = (bounds[4] + bounds[5]) / 2.0
                 if dz > 0:
                     idx_float = (z_pos - seismic_bounds[4]) / dz
@@ -1930,6 +1970,146 @@ class ViewInterpretation(ViewMap):
         except Exception as e:
             # self.print_terminal(f"Debug: failed to scan {uid}: {e}")
             pass
+
+    def _try_register_multipart_from_geometry(self, uid, vtk_obj, seismic_bounds, seismic_dims):
+        """
+        Infer per-cell slice indices from geometry for polylines missing slice_index arrays.
+        This is used to preserve slice-aware visibility after generic merge/split operations.
+        """
+        try:
+            n_cells = vtk_obj.GetNumberOfCells()
+            if n_cells < 2:
+                return False
+
+            dx = (seismic_bounds[1] - seismic_bounds[0]) / max(seismic_dims[0] - 1, 1)
+            dy = (seismic_bounds[3] - seismic_bounds[2]) / max(seismic_dims[1] - 1, 1)
+            dz = (seismic_bounds[5] - seismic_bounds[4]) / max(seismic_dims[2] - 1, 1)
+            axis_specs = [
+                ("Inline", 0, seismic_bounds[0], dx, seismic_dims[0]),
+                ("Crossline", 1, seismic_bounds[2], dy, seismic_dims[1]),
+                ("Z-slice", 2, seismic_bounds[4], dz, seismic_dims[2]),
+            ]
+
+            best = None
+            for axis_name, coord_idx, origin, spacing, dim_n in axis_specs:
+                if abs(spacing) <= 0:
+                    continue
+
+                per_cell = {}
+                spreads = []
+                frac_err = []
+                for cell_id in range(n_cells):
+                    cell = vtk_obj.GetCell(cell_id)
+                    pts = cell.GetPoints() if cell is not None else None
+                    if pts is None:
+                        continue
+                    n_pts = pts.GetNumberOfPoints()
+                    if n_pts < 2:
+                        continue
+
+                    coords = [pts.GetPoint(i)[coord_idx] for i in range(n_pts)]
+                    c_min = min(coords)
+                    c_max = max(coords)
+                    c_avg = (c_min + c_max) * 0.5
+                    idx_float = (c_avg - origin) / spacing
+                    idx_round = int(round(idx_float))
+                    if idx_round < 0 or idx_round >= dim_n:
+                        continue
+
+                    per_cell[cell_id] = idx_round
+                    spreads.append(abs(c_max - c_min) / max(abs(spacing), 1e-12))
+                    frac_err.append(abs(idx_float - idx_round))
+
+                if not per_cell:
+                    continue
+
+                unique_slices = sorted(set(per_cell.values()))
+                if len(unique_slices) < 2:
+                    continue
+
+                med_spread = float(np.median(spreads)) if spreads else 1e9
+                med_err = float(np.median(frac_err)) if frac_err else 1e9
+
+                # Keep only strong slice-grid fits.
+                if med_spread > 0.45 or med_err > 0.45:
+                    continue
+
+                score = med_spread + med_err
+                candidate = (axis_name, per_cell, unique_slices, score)
+                if best is None:
+                    best = candidate
+                else:
+                    _, _, best_slices, best_score = best
+                    if (len(unique_slices), -score) > (len(best_slices), -best_score):
+                        best = candidate
+
+            if best is None:
+                return False
+
+            axis_name, per_cell, unique_slices, _ = best
+
+            from vtk import vtkIntArray, vtkStringArray
+
+            # Build cell-level slice_index array.
+            cell_slice_arr = vtkIntArray()
+            cell_slice_arr.SetName("slice_index")
+            cell_slice_arr.SetNumberOfComponents(1)
+            for cell_id in range(n_cells):
+                cell_slice_arr.InsertNextValue(int(per_cell.get(cell_id, -1)))
+            cell_data = vtk_obj.GetCellData()
+            if cell_data and cell_data.HasArray("slice_index"):
+                cell_data.RemoveArray("slice_index")
+            vtk_obj.GetCellData().AddArray(cell_slice_arr)
+
+            # Build point-level slice_index array (best effort from first owning cell).
+            n_points = vtk_obj.GetNumberOfPoints()
+            point_slice = [-1] * n_points
+            for cell_id, sidx in per_cell.items():
+                cell = vtk_obj.GetCell(cell_id)
+                if cell is None:
+                    continue
+                for j in range(cell.GetNumberOfPoints()):
+                    pid = cell.GetPointId(j)
+                    if 0 <= pid < n_points and point_slice[pid] < 0:
+                        point_slice[pid] = int(sidx)
+            point_slice_arr = vtkIntArray()
+            point_slice_arr.SetName("slice_index")
+            point_slice_arr.SetNumberOfComponents(1)
+            for sidx in point_slice:
+                point_slice_arr.InsertNextValue(int(sidx))
+            point_data = vtk_obj.GetPointData()
+            if point_data and point_data.HasArray("slice_index"):
+                point_data.RemoveArray("slice_index")
+            vtk_obj.GetPointData().AddArray(point_slice_arr)
+
+            # Store axis in field data.
+            axis_arr = vtkStringArray()
+            axis_arr.SetName("slice_axis")
+            axis_arr.SetNumberOfValues(1)
+            axis_arr.SetValue(0, axis_name)
+            field_data = vtk_obj.GetFieldData()
+            if field_data and field_data.HasArray("slice_axis"):
+                field_data.RemoveArray("slice_axis")
+            vtk_obj.GetFieldData().AddArray(axis_arr)
+            vtk_obj.Modified()
+
+            if not hasattr(self, 'multipart_horizons'):
+                self.multipart_horizons = {}
+            self.multipart_horizons[uid] = {
+                'seismic_uid': self.current_seismic_uid,
+                'axis': axis_name,
+                'slice_indices': unique_slices,
+                'slice_to_cell_index': {sidx: cid for cid, sidx in per_cell.items()},
+                'seed_slice': unique_slices[0],
+            }
+
+            self.print_terminal(
+                f"Recovered multipart slice metadata for {uid[:8]}... ({axis_name}, {len(unique_slices)} slices)"
+            )
+            self.set_actor_visibility(uid, False)
+            return True
+        except Exception:
+            return False
     
     def _invalidate_actor_cache(self, uid=None):
         """Invalidate actor cache when entities are added/removed."""
