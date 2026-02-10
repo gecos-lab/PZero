@@ -923,6 +923,61 @@ class ViewInterpretation(ViewMap):
         except:
             pass
         return 'gray'  # Default
+
+    def _get_geol_legend_color(self, uid, default=(1.0, 1.0, 1.0)):
+        """Return normalized RGB color for a geological entity from the legend table."""
+        try:
+            legend = self.parent.geol_coll.get_uid_legend(uid=uid)
+            return (
+                legend["color_R"] / 255.0,
+                legend["color_G"] / 255.0,
+                legend["color_B"] / 255.0,
+            )
+        except Exception:
+            return default
+
+    def _sanitize_legend_value(self, value, fallback="undef"):
+        """Normalize legend metadata values so they are always usable strings."""
+        if value is None:
+            return fallback
+        try:
+            text = str(value).strip()
+        except Exception:
+            return fallback
+        if text == "" or text.lower() in {"nan", "none", "null"}:
+            return fallback
+        return text
+
+    def _sanitize_legend_choices(self, values, fallback="undef"):
+        """Return unique, clean combo choices for legend-related dialogs."""
+        out = []
+        for value in values:
+            clean = self._sanitize_legend_value(value, fallback="")
+            if clean and clean not in out:
+                out.append(clean)
+        if not out:
+            out = [fallback]
+        return out
+
+    def _get_geol_legend_style(self, uid):
+        """Return standard style values (color, line width, opacity) from geology legend."""
+        try:
+            legend = self.parent.geol_coll.get_uid_legend(uid=uid)
+            return {
+                "color": (
+                    legend["color_R"] / 255.0,
+                    legend["color_G"] / 255.0,
+                    legend["color_B"] / 255.0,
+                ),
+                "line_width": float(legend["line_thick"]),
+                "opacity": float(legend["opacity"]) / 100.0,
+            }
+        except Exception:
+            return {
+                "color": (1.0, 1.0, 1.0),
+                "line_width": 5.0,
+                "opacity": 1.0,
+            }
     
     def update_slice_colormap(self):
         """Update the slice colormap when legend changes - called by prop_legend_cmap_modified signal."""
@@ -997,6 +1052,12 @@ class ViewInterpretation(ViewMap):
         
         # Create deepcopy of the geological entity dictionary.
         line_dict = deepcopy(self.parent.geol_coll.entity_dict)
+        feature_choices = self._sanitize_legend_choices(
+            self.parent.geol_coll.legend_df["feature"].tolist(), fallback="undef"
+        )
+        scenario_choices = self._sanitize_legend_choices(
+            self.parent.geol_coll.legend_df["scenario"].tolist(), fallback="undef"
+        )
         # One dictionary is set as input for a general widget of multiple-value-input
         line_dict_in = {
             "name": ["PolyLine name: ", "interp_line"],
@@ -1006,11 +1067,11 @@ class ViewInterpretation(ViewMap):
             ],
             "feature": [
                 "Feature: ",
-                self.parent.geol_coll.legend_df["feature"].tolist(),
+                feature_choices,
             ],
             "scenario": [
                 "Scenario: ",
-                list(set(self.parent.geol_coll.legend_df["scenario"].tolist())),
+                scenario_choices,
             ],
         }
         line_dict_updt = multiple_input_dialog(
@@ -1023,6 +1084,9 @@ class ViewInterpretation(ViewMap):
         # Getting the values that have been typed by the user through the widget
         for key in line_dict_updt:
             line_dict[key] = line_dict_updt[key]
+        line_dict["role"] = self._sanitize_legend_value(line_dict.get("role"), "undef")
+        line_dict["feature"] = self._sanitize_legend_value(line_dict.get("feature"), "undef")
+        line_dict["scenario"] = self._sanitize_legend_value(line_dict.get("scenario"), "undef")
         
         line_dict["topology"] = "PolyLine"
         line_dict["x_section"] = ""
@@ -1463,23 +1527,16 @@ class ViewInterpretation(ViewMap):
                 n_filtered_points = filtered_polydata.GetNumberOfPoints()
                 
                 if n_filtered_cells > 0 and n_filtered_points > 0:
-                    # Get color from collection
-                    try:
-                        mask = self.parent.geol_coll.df['uid'] == horizon_uid
-                        if mask.any():
-                            row = self.parent.geol_coll.df.loc[mask].iloc[0]
-                            color = (row['color_R']/255, row['color_G']/255, row['color_B']/255)
-                        else:
-                            color = (1.0, 1.0, 0.0)  # Default yellow
-                    except:
-                        color = (1.0, 1.0, 0.0)
+                    # Use standard geological legend style (same behavior as other views).
+                    style = self._get_geol_legend_style(horizon_uid)
                     
                     # Add new filtered actor
                     self.plotter.add_mesh(
                         pv.wrap(filtered_polydata),
                         name=actor_name,
-                        color=color,
-                        line_width=5,
+                        color=style["color"],
+                        line_width=style["line_width"],
+                        opacity=style["opacity"],
                         render_lines_as_tubes=True,
                         pickable=False,
                         reset_camera=False
@@ -1624,25 +1681,16 @@ class ViewInterpretation(ViewMap):
             n_filtered_points = filtered_polydata.GetNumberOfPoints()
             
             if n_filtered_cells > 0 and n_filtered_points > 0:
-                # Get color from dataframe
-                try:
-                    mask = self.parent.geol_coll.df['uid'] == fault_uid
-                    if mask.any():
-                        r = self.parent.geol_coll.df.loc[mask, 'color_R'].values[0]
-                        g = self.parent.geol_coll.df.loc[mask, 'color_G'].values[0]
-                        b = self.parent.geol_coll.df.loc[mask, 'color_B'].values[0]
-                        color = (r/255.0, g/255.0, b/255.0)
-                    else:
-                        color = (0.8, 0.2, 0.8)  # Purple default for faults
-                except:
-                    color = (0.8, 0.2, 0.8)
+                # Use standard geological legend style (same behavior as other views).
+                style = self._get_geol_legend_style(fault_uid)
                 
                 # Add filtered actor
                 self.plotter.add_mesh(
                     pv.wrap(filtered_polydata),
                     name=actor_name,
-                    color=color,
-                    line_width=6,
+                    color=style["color"],
+                    line_width=style["line_width"],
+                    opacity=style["opacity"],
                     render_lines_as_tubes=True,
                     reset_camera=False
                 )
@@ -2314,6 +2362,12 @@ class ViewInterpretation(ViewMap):
         self._autotrack_preview_actors = []
 
         line_dict = deepcopy(self.parent.geol_coll.entity_dict)
+        feature_choices = self._sanitize_legend_choices(
+            self.parent.geol_coll.legend_df["feature"].tolist(), fallback="undef"
+        )
+        scenario_choices = self._sanitize_legend_choices(
+            self.parent.geol_coll.legend_df["scenario"].tolist(), fallback="undef"
+        )
         line_dict_in = {
             "name": ["PolyLine name: ", default_name],
             "role": [
@@ -2322,11 +2376,11 @@ class ViewInterpretation(ViewMap):
             ],
             "feature": [
                 "Feature: ",
-                self.parent.geol_coll.legend_df["feature"].tolist(),
+                feature_choices,
             ],
             "scenario": [
                 "Scenario: ",
-                list(set(self.parent.geol_coll.legend_df["scenario"].tolist())),
+                scenario_choices,
             ],
         }
         line_dict_updt = multiple_input_dialog(title=title, input_dict=line_dict_in)
@@ -2337,6 +2391,11 @@ class ViewInterpretation(ViewMap):
 
         for key in line_dict_updt:
             line_dict[key] = line_dict_updt[key]
+        role_fallback = "fault" if mode == "fault" else "top"
+        feature_fallback = "auto_fault" if mode == "fault" else "auto_horizon"
+        line_dict["role"] = self._sanitize_legend_value(line_dict.get("role"), role_fallback)
+        line_dict["feature"] = self._sanitize_legend_value(line_dict.get("feature"), feature_fallback)
+        line_dict["scenario"] = self._sanitize_legend_value(line_dict.get("scenario"), "undef")
 
         line_dict["topology"] = "PolyLine"
         line_dict["x_section"] = ""
@@ -2975,48 +3034,9 @@ class ViewInterpretation(ViewMap):
                 'slice_index': self.current_slice_index
             }
             
-            # Generate a distinct random color
-            import random
-            if mode == "fault":
-                # Bias toward purples for faults
-                line_color = [random.randint(120, 240), random.randint(40, 140), random.randint(140, 255)]
-            else:
-                line_color = [random.randint(50, 255), random.randint(50, 255), random.randint(50, 255)]
-                while sum(line_color) < 300 or sum(line_color) > 650:
-                    line_color = [random.randint(50, 255), random.randint(50, 255), random.randint(50, 255)]
-
-            self.print_terminal(f"Generated random color: RGB{tuple(line_color)}")
-            
             # Add to geological collection
             new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
             self.print_terminal(f"Created auto-tracked horizon with {n_points} points, uid: {new_uid}")
-            
-            # Set the color for the line using proper UID lookup (uid is a column, not the index)
-            try:
-                mask = self.parent.geol_coll.df['uid'] == new_uid
-                if mask.any():
-                    self.parent.geol_coll.df.loc[mask, 'color_R'] = line_color[0]
-                    self.parent.geol_coll.df.loc[mask, 'color_G'] = line_color[1]
-                    self.parent.geol_coll.df.loc[mask, 'color_B'] = line_color[2]
-                    self.print_terminal(f"Set color in df for {new_uid}")
-            except Exception as color_err:
-                self.print_terminal(f"Could not set color in df: {color_err}")
-            
-            # Also try to update the actor color directly if it exists
-            try:
-                actor_name = f"geol_coll_{new_uid}"
-                if actor_name in self.plotter.renderer.actors:
-                    actor = self.plotter.renderer.actors[actor_name]
-                    actor.GetProperty().SetColor(line_color[0]/255.0, line_color[1]/255.0, line_color[2]/255.0)
-                    self.print_terminal(f"Set actor color for {actor_name}")
-                else:
-                    # Try without prefix
-                    if new_uid in self.plotter.renderer.actors:
-                        actor = self.plotter.renderer.actors[new_uid]
-                        actor.GetProperty().SetColor(line_color[0]/255.0, line_color[1]/255.0, line_color[2]/255.0)
-                        self.print_terminal(f"Set actor color for {new_uid}")
-            except Exception as actor_err:
-                self.print_terminal(f"Could not set actor color: {actor_err}")
             
             # Track this interpretation line
             # Track this interpretation line
@@ -3435,7 +3455,6 @@ class ViewInterpretation(ViewMap):
             attributes = ['amplitude', 'edge']
         from vtk import vtkPoints, vtkCellArray, vtkIntArray
         from ..helpers.autotracker import propagate_horizon
-        import random
         
         # Get the seismic data
         if not hasattr(self, '_cached_seismic') or self._cached_seismic is None:
@@ -3544,11 +3563,6 @@ class ViewInterpretation(ViewMap):
         # Progress callback
         def progress_callback(msg, pct=None):
             self.print_terminal(f"Tracking: {msg}")
-        
-        # Generate a random color for this propagated horizon
-        horizon_color = [random.randint(50, 255), random.randint(50, 255), random.randint(50, 255)]
-        while sum(horizon_color) < 300 or sum(horizon_color) > 650:
-            horizon_color = [random.randint(50, 255), random.randint(50, 255), random.randint(50, 255)]
         
         # Run attribute-guided tracking
         self._is_propagating = True
@@ -3767,6 +3781,16 @@ class ViewInterpretation(ViewMap):
                 line_dict["topology"] = "PolyLine"
                 line_dict["x_section"] = ""
                 line_dict["vtk_obj"] = multipart_line
+                # Keep propagated horizon metadata aligned with the seed interpretation.
+                line_dict["role"] = self._sanitize_legend_value(
+                    self.parent.geol_coll.get_uid_role(seed_uid), "top"
+                )
+                line_dict["feature"] = self._sanitize_legend_value(
+                    self.parent.geol_coll.get_uid_feature(seed_uid), "auto_horizon"
+                )
+                line_dict["scenario"] = self._sanitize_legend_value(
+                    self.parent.geol_coll.get_uid_scenario(seed_uid), "undef"
+                )
                 
                 # Add to collection
                 new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
@@ -3783,21 +3807,10 @@ class ViewInterpretation(ViewMap):
                     'seed_slice': current_idx
                 }
                 
-                # Set color
-                try:
-                    mask = self.parent.geol_coll.df['uid'] == new_uid
-                    if mask.any():
-                        self.parent.geol_coll.df.loc[mask, 'color_R'] = horizon_color[0]
-                        self.parent.geol_coll.df.loc[mask, 'color_G'] = horizon_color[1]
-                        self.parent.geol_coll.df.loc[mask, 'color_B'] = horizon_color[2]
-                except:
-                    pass
-                
                 self.print_terminal(f"=== Propagation Complete ===")
                 self.print_terminal(f"Created multipart horizon: {line_dict['name']}")
                 self.print_terminal(f"Contains {len(cell_slice_indices)} line segments across slices")
                 self.print_terminal(f"Slice range: {min(cell_slice_indices)} to {max(cell_slice_indices)}")
-                self.print_terminal(f"Color: RGB{tuple(horizon_color)}")
                 
                 # Add actor to scene and update visibility
                 self.show_actor_with_property(uid=new_uid, coll_name='geol_coll', visible=True)
@@ -4123,7 +4136,6 @@ class ViewInterpretation(ViewMap):
         from vtk import vtkPoints, vtkCellArray, vtkIdList, vtkIntArray
         from ..entities_factory import PolyLine
         from copy import deepcopy
-        import random
         import numpy as np
         
         # Get seed line geometry using correct method
@@ -4216,9 +4228,6 @@ class ViewInterpretation(ViewMap):
         
         def progress_callback(msg, pct):
             self.print_terminal(f"  {msg}" + (f" ({pct}%)" if pct is not None else ""))
-        
-        # Random color for the fault
-        fault_color = [random.randint(150, 255), random.randint(50, 150), random.randint(50, 150)]
         
         self._is_propagating = True
         try:
@@ -4352,6 +4361,16 @@ class ViewInterpretation(ViewMap):
                     fault_dict["topology"] = "PolyLine"
                     fault_dict["x_section"] = ""
                     fault_dict["vtk_obj"] = multipart_fault
+                    # Keep propagated fault metadata aligned with the seed interpretation.
+                    fault_dict["role"] = self._sanitize_legend_value(
+                        self.parent.geol_coll.get_uid_role(seed_uid), "fault"
+                    )
+                    fault_dict["feature"] = self._sanitize_legend_value(
+                        self.parent.geol_coll.get_uid_feature(seed_uid), "auto_fault"
+                    )
+                    fault_dict["scenario"] = self._sanitize_legend_value(
+                        self.parent.geol_coll.get_uid_scenario(seed_uid), "undef"
+                    )
                     
                     new_uid = self.parent.geol_coll.add_entity_from_dict(fault_dict)
                     
@@ -4366,16 +4385,6 @@ class ViewInterpretation(ViewMap):
                         'slice_to_cell_index': {slice_idx: i for i, slice_idx in enumerate(cell_slice_indices)},
                         'seed_slice': current_idx
                     }
-                    
-                    # Set color
-                    try:
-                        mask = self.parent.geol_coll.df['uid'] == new_uid
-                        if mask.any():
-                            self.parent.geol_coll.df.loc[mask, 'color_R'] = fault_color[0]
-                            self.parent.geol_coll.df.loc[mask, 'color_G'] = fault_color[1]
-                            self.parent.geol_coll.df.loc[mask, 'color_B'] = fault_color[2]
-                    except:
-                        pass
                     
                     self.print_terminal(f"=== Fault Propagation Complete ===")
                     self.print_terminal(f"Created multipart fault: {fault_dict['name']}")
@@ -4453,6 +4462,20 @@ class ViewInterpretation(ViewMap):
             self.parent.signals.prop_legend_cmap_modified.connect(self.on_colormap_changed)
         except Exception as e:
             self.print_terminal(f"Warning: Could not connect prop_legend_cmap_modified signal: {e}")
+
+        # Keep custom multipart filtered actors synced with standard geology legend edits.
+        try:
+            self.parent.signals.legend_color_modified.connect(
+                self.on_geology_legend_style_changed
+            )
+            self.parent.signals.legend_thick_modified.connect(
+                self.on_geology_legend_style_changed
+            )
+            self.parent.signals.legend_opacity_modified.connect(
+                self.on_geology_legend_style_changed
+            )
+        except Exception as e:
+            self.print_terminal(f"Warning: Could not connect geology legend style signals: {e}")
     
     def on_entities_removed(self, uids):
         """
@@ -4544,6 +4567,30 @@ class ViewInterpretation(ViewMap):
         """Called when colormap is changed in the legend manager."""
         if property_name == 'intensity':
             self.update_slice_colormap()
+
+    def on_geology_legend_style_changed(self, updated_uids, collection):
+        """Refresh multipart filtered actors when geology legend style changes."""
+        try:
+            if collection is not self.parent.geol_coll:
+                return
+        except Exception:
+            return
+
+        try:
+            changed = set(updated_uids or [])
+        except Exception:
+            changed = set()
+
+        horizon_uids = set(getattr(self, "multipart_horizons", {}).keys())
+        fault_uids = set(getattr(self, "multipart_faults", {}).keys())
+        needs_refresh = bool(changed & (horizon_uids | fault_uids))
+
+        if not needs_refresh:
+            return
+
+        self.update_all_multipart_horizons_visibility()
+        self.update_all_multipart_faults_visibility()
+        self.plotter.render()
 
     def show_qt_canvas(self):
         """Show the Qt Window and refresh the volume list."""
