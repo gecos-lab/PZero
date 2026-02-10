@@ -96,6 +96,7 @@ from .entities_factory import (
     Attitude,
     XsImage,
 )
+from .helpers.helper_functions import freeze_gui_onoff
 from .legend_manager import Legend
 from .orientation_analysis import set_normals
 from .point_clouds import decimate_pc
@@ -764,6 +765,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     dom_uid=dom_uid, map_image_uid=map_image_uid
                 )
 
+    @ freeze_gui_onoff
     def property_add(self):
         # ____________________________________________________ ADD IMAGES
         """Add empty property on geological entity"""
