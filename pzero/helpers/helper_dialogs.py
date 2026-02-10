@@ -1305,8 +1305,33 @@ class ShapefileAssignmentDialog(QMainWindow):
         if feature_combo and feature_combo.currentText() == "<none>":
             feature_combo.setCurrentText(self.USER_DEFINED_OPTION)
 
+    def _enforce_unique_columns(self, changed_field, selected_text):
+        """Ensure no two fields share the same shapefile column,
+        and dir/dip_dir are mutually exclusive."""
+        special_options = {"<none>", self.USER_DEFINED_OPTION, self.FIXED_ROLE_OPTION}
+
+        if selected_text not in special_options:
+            # Reset any OTHER combo that already has this shapefile column
+            for field, combo in self.combo_boxes.items():
+                if field == changed_field:
+                    continue
+                if combo.currentText() == selected_text:
+                    combo.setCurrentText("<none>")
+
+        # dir and dip_dir are mutually exclusive regardless of column
+        if changed_field == "dir" and selected_text != "<none>":
+            dip_dir_combo = self.combo_boxes.get("dip_dir")
+            if dip_dir_combo and dip_dir_combo.currentText() != "<none>":
+                dip_dir_combo.setCurrentText("<none>")
+        elif changed_field == "dip_dir" and selected_text != "<none>":
+            dir_combo = self.combo_boxes.get("dir")
+            if dir_combo and dir_combo.currentText() != "<none>":
+                dir_combo.setCurrentText("<none>")
+
     def _on_combo_changed(self, field, text, label):
         """Handle combo box changes."""
+        self._enforce_unique_columns(field, text)
+
         if field == "feature":
             if text == self.USER_DEFINED_OPTION:
                 if self.feature_user_line is not None:
