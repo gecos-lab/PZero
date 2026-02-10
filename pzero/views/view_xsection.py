@@ -3,9 +3,7 @@ PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
 from PySide6.QtGui import QAction
-
-# Standard library imports____
-from math import sqrt
+from PySide6.QtCore import QEvent, Qt
 
 # numpy import____
 from numpy import array as np_array
@@ -16,6 +14,7 @@ from pyvista import Arrow as pv_Arrow
 # PZero imports____
 from .abstract_view_2d import View2D
 from vtkmodules.vtkFiltersCore import vtkAppendPolyData
+from vtkmodules.vtkInteractionStyle import vtkInteractorStyleImage
 from pyvista import Line as pv_Line
 from .view_map import ViewMap
 from ..orientation_analysis import get_dip_dir_vectors
@@ -25,6 +24,41 @@ from ..helpers.helper_dialogs import (
     options_dialog,
     input_checkbox_dialog,
 )
+
+
+class _NoCtrlRotateImageStyle(vtkInteractorStyleImage):
+    """Image interactor style variant that neutralizes Ctrl during mouse interaction."""
+
+    def _clear_ctrl_modifier(self):
+        interactor = self.GetInteractor()
+        if interactor and interactor.GetControlKey():
+            interactor.SetControlKey(0)
+
+    def OnLeftButtonDown(self):
+        self._clear_ctrl_modifier()
+        super().OnLeftButtonDown()
+
+    def OnMiddleButtonDown(self):
+        self._clear_ctrl_modifier()
+        super().OnMiddleButtonDown()
+
+    def OnRightButtonDown(self):
+        self._clear_ctrl_modifier()
+        super().OnRightButtonDown()
+
+    def OnMouseMove(self):
+        self._clear_ctrl_modifier()
+        super().OnMouseMove()
+
+    # Hard-disable rotate path for xsection interaction.
+    def OnStartRotate(self):
+        return
+
+    def OnRotate(self):
+        return
+
+    def Rotate(self):
+        return
 
 
 class ViewXsection(View2D):
@@ -62,6 +96,12 @@ class ViewXsection(View2D):
         # Rename Base View, Menu and Tool
         self.setWindowTitle(f"Xsection View: {self.this_x_section_name}")
 
+        # Block Ctrl+mouse gestures on the VTK widget (prevents Ctrl-rotate).
+        self.plotter.interactor.installEventFilter(self)
+
+        # Keep image interaction in strict 2D mode and disable CTRL-driven rotation.
+        self._install_no_ctrl_image_style()
+
         # Store center and direction in internal variables of this view
         self.set_section_projection()
 
@@ -77,14 +117,6 @@ class ViewXsection(View2D):
         super().initialize_menu_tools()
 
         # then add new code specific to this class
-        self.restoreGeographicOrientationButton = QAction(
-            "Restore Geographic Orientation", self
-        )
-        self.restoreGeographicOrientationButton.triggered.connect(
-            self.restore_geographic_orientation
-        )
-        self.menuView.addAction(self.restoreGeographicOrientationButton)
-
         self.horizMirrorButton = QAction("Mirror horizontal axes", self)
         self.horizMirrorButton.triggered.connect(self.horizontal_mirror)
         self.menuView.addAction(self.horizMirrorButton)
@@ -92,6 +124,19 @@ class ViewXsection(View2D):
         self.fitFrameButton = QAction("Fit frame to all entities", self)
         self.fitFrameButton.triggered.connect(self.fit_frame)
         self.menuModify.addAction(self.fitFrameButton)
+
+    def eventFilter(self, obj, event):
+        """Block Ctrl+mouse interaction events on xsection VTK widget."""
+        if obj is getattr(self.plotter, "interactor", None):
+            if event.type() in (
+                QEvent.MouseButtonPress,
+                QEvent.MouseButtonRelease,
+                QEvent.MouseMove,
+                QEvent.Wheel,
+            ):
+                if event.modifiers() & Qt.ControlModifier:
+                    return True
+        return super().eventFilter(obj, event)
 
     # # --- AGGIUNTA: funzione di slot per sincronizzazione selezione ---
     # def on_selection_changed(self, collection):
@@ -107,6 +152,11 @@ class ViewXsection(View2D):
             interactive=None,
             color="gold",
         )
+
+    def end_pick(self, pos):
+        """Restore default 2D interaction and keep CTRL-rotate disabled."""
+        super().end_pick(pos)
+        self._install_no_ctrl_image_style()
 
     # ================================  Methods specific to Xsection views ============================================
 
@@ -133,58 +183,17 @@ class ViewXsection(View2D):
         self.plotter.camera.position = self.center + self.direction
         self.plotter.reset_camera()
 
-    def restore_geographic_orientation(self):
-        """Restore section camera to geographic reference orientation."""
-        section_plane = self.parent.xsect_coll.get_uid_vtk_plane(self.this_x_section_uid)
-        self.center = np_array(section_plane.GetOrigin())
-        self.direction = np_array(section_plane.GetNormal())
-
-        camera = self.plotter.camera
-        current_parallel_scale = getattr(camera, "parallel_scale", None)
-
-        dx = camera.position[0] - self.center[0]
-        dy = camera.position[1] - self.center[1]
-        dz = camera.position[2] - self.center[2]
-        distance = sqrt(dx * dx + dy * dy + dz * dz)
-        if distance == 0:
-            distance = 1.0
-
-        normal_norm = sqrt(
-            self.direction[0] * self.direction[0]
-            + self.direction[1] * self.direction[1]
-            + self.direction[2] * self.direction[2]
-        )
-        if normal_norm == 0:
-            return
-        normal = self.direction / normal_norm
-
-        # Keep vertical elevation up by projecting global Z onto the section plane.
-        up_vector = np_array([0.0, 0.0, 1.0])
-        z_dot_n = (
-            up_vector[0] * normal[0]
-            + up_vector[1] * normal[1]
-            + up_vector[2] * normal[2]
-        )
-        up_vector = up_vector - z_dot_n * normal
-        up_norm = sqrt(
-            up_vector[0] * up_vector[0]
-            + up_vector[1] * up_vector[1]
-            + up_vector[2] * up_vector[2]
-        )
-        if up_norm == 0:
-            up_vector = np_array([0.0, 1.0, 0.0])
-            up_norm = 1.0
-        up_vector = up_vector / up_norm
-
-        self.plotter.camera_position = [
-            tuple((self.center + normal * distance).tolist()),
-            tuple(self.center.tolist()),
-            tuple(up_vector.tolist()),
-        ]
-        if current_parallel_scale is not None:
-            camera.parallel_scale = current_parallel_scale
-
-        self.plotter.render()
+    def _install_no_ctrl_image_style(self):
+        """Install image interactor style with Ctrl-rotate suppression."""
+        try:
+            style = _NoCtrlRotateImageStyle()
+            style.SetInteractionModeToImage2D()
+            style.SetDefaultRenderer(self.plotter.renderer)
+            self.plotter.iren.interactor.SetInteractorStyle(style)
+            # Keep a reference to avoid style garbage collection.
+            self._image_style_no_ctrl = style
+        except Exception:
+            pass
 
     def fit_frame(self):
         """
