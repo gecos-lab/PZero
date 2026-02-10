@@ -888,18 +888,25 @@ class XSectionCollection(BaseCollection):
             Y=append_points[:, 1],
             Z=append_points[:, 2],
         )
-        max_U = max(append_points_U)
-        min_U = min(append_points_U)
-        max_V = max(append_points_V)
-        min_V = min(append_points_V)
-        new_length = max_U - min_U
-        new_height = max_V - min_V
-        shift_origin = self.plane2world(section_uid=xuid, U=min_U, V=min_V, as_arr=True)
+        # world2plane returns column vectors (N, 1); flatten to scalar-compatible 1D arrays.
+        append_points_U = np_array(append_points_U, dtype=np_float64).reshape(-1)
+        append_points_V = np_array(append_points_V, dtype=np_float64).reshape(-1)
+        max_U = float(append_points_U.max())
+        min_U = float(append_points_U.min())
+        max_V = float(append_points_V.max())
+        min_V = float(append_points_V.min())
+        new_length = float(max_U - min_U)
+        new_height = float(max_V - min_V)
+
+        shift_origin = np_array(
+            self.plane2world(section_uid=xuid, U=min_U, V=min_V, as_arr=True),
+            dtype=np_float64,
+        ).reshape(-1)
         self.set_uid_length(xuid, new_length)
         self.set_uid_width(xuid, new_height)
-        self.set_uid_origin_x(xuid, shift_origin[0])
-        self.set_uid_origin_y(xuid, shift_origin[1])
-        self.set_uid_origin_z(xuid, shift_origin[2])
+        self.set_uid_origin_x(xuid, float(shift_origin[0]))
+        self.set_uid_origin_y(xuid, float(shift_origin[1]))
+        self.set_uid_origin_z(xuid, float(shift_origin[2]))
         self.set_geometry(uid=xuid)
         # Reset data model
         self.modelReset.emit()
