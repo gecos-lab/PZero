@@ -13,8 +13,15 @@ from numpy import pi as np_pi
 from numpy import sin as np_sin
 
 from PySide6.QtCore import Signal as pyqtSignal
-from PySide6.QtCore import QObject, QUrl
-from PySide6.QtWidgets import QMainWindow, QMessageBox, QDialog, QLabel, QVBoxLayout
+from PySide6.QtCore import QObject, QUrl, QTimer
+from PySide6.QtWidgets import (
+    QMainWindow,
+    QMessageBox,
+    QDialog,
+    QComboBox,
+    QLabel,
+    QVBoxLayout,
+)
 from PySide6.QtGui import QAction, QDesktopServices, QPixmap
 from PySide6.QtCore import Qt
 
@@ -1171,6 +1178,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # Ui_ProjectWindow). Setting the model also updates the view.
         self.backgrnd_coll = BackgroundCollection(parent=self)
         self.BackgroundsTableView.setModel(self.backgrnd_coll.proxy_table_model)
+        for table_view, collection in [
+            (self.GeologyTableView, self.geol_coll),
+            (self.FluidsTableView, self.fluid_coll),
+            (self.BackgroundsTableView, self.backgrnd_coll),
+        ]:
+            self.bind_role_click_editor(table_view=table_view, collection=collection)
 
         # Create the geol_coll.legend_df legend table (a Pandas dataframe), create the corresponding QT
         # Legend self.legend (a Qt QTreeWidget that is internally connected to its data source),
@@ -1197,6 +1210,87 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.prop_legend_df = pd_DataFrame(PropertiesCMaps.prop_cmap_dict)
         self.prop_legend = PropertiesCMaps()
         self.prop_legend.update_widget(parent=self)
+
+    def bind_role_click_editor(self, table_view=None, collection=None):
+        """Bind click-to-dropdown behavior for role cells using collection.valid_roles."""
+        if table_view is None or collection is None:
+            return
+        if "role" not in collection.df.columns or not collection.valid_roles:
+            return
+        role_col = collection.df.columns.get_loc("role")
+
+        old_handler = getattr(table_view, "_role_click_handler", None)
+        if old_handler:
+            try:
+                table_view.clicked.disconnect(old_handler)
+            except:
+                pass
+
+        handler = lambda idx, tv=table_view, coll=collection, rc=role_col: self.on_role_cell_clicked(
+            table_view=tv, collection=coll, role_col=rc, index=idx
+        )
+        table_view._role_click_handler = handler
+        table_view.clicked.connect(handler)
+
+    def on_role_cell_clicked(self, table_view=None, collection=None, role_col=None, index=None):
+        """Open an in-table combo editor for role values when clicking the role column."""
+        if table_view is None or collection is None or index is None:
+            return
+        if not index.isValid():
+            return
+        if index.column() != role_col:
+            self.clear_role_cell_editor(table_view=table_view)
+            return
+
+        valid_roles = [str(role) for role in collection.valid_roles]
+        if not valid_roles:
+            return
+
+        self.clear_role_cell_editor(table_view=table_view)
+        current_role = index.data(Qt.DisplayRole)
+        current_role = "" if current_role is None else str(current_role)
+        current_idx = (
+            valid_roles.index(current_role) if current_role in valid_roles else 0
+        )
+
+        combo = QComboBox(table_view)
+        combo.setEditable(False)
+        combo.addItems(valid_roles)
+        combo.setCurrentIndex(current_idx)
+
+        table_view.setIndexWidget(index, combo)
+        table_view._active_role_editor = (index, combo)
+
+        combo.activated.connect(
+            lambda _=None, tv=table_view, idx=index, cb=combo: self.commit_role_cell_editor(
+                table_view=tv, index=idx, combo=cb
+            )
+        )
+        QTimer.singleShot(0, combo.showPopup)
+
+    def commit_role_cell_editor(self, table_view=None, index=None, combo=None):
+        if table_view is None or index is None or combo is None:
+            return
+        if index.isValid():
+            selected_role = str(combo.currentText())
+            if selected_role:
+                table_view.model().setData(index, selected_role, Qt.EditRole)
+        self.clear_role_cell_editor(table_view=table_view)
+
+    def clear_role_cell_editor(self, table_view=None):
+        if table_view is None:
+            return
+        active_editor = getattr(table_view, "_active_role_editor", None)
+        if not active_editor:
+            return
+        editor_index, editor_combo = active_editor
+        try:
+            table_view.setIndexWidget(editor_index, None)
+        except:
+            pass
+        if editor_combo:
+            editor_combo.deleteLater()
+        table_view._active_role_editor = None
 
     def save_project(self):
         # ________________________________________WRITERS TO BE MOVED TO COLLECTIONS
