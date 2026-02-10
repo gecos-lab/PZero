@@ -162,7 +162,6 @@ def boundary_from_obb(self):
     
     if obb_result[0] is None:
         message_dialog(title="OBB Boundary Error", message="No data found to compute OBB boundary.")
-        # self.enable_actions()
         return
     
     # Extract OBB results
@@ -423,7 +422,6 @@ def boundary_from_obb(self):
         QApplication.processEvents()
     
     if not dialog_result["accepted"]:
-        # self.enable_actions()
         return
     
     # Get values from dialog
@@ -576,7 +574,6 @@ def boundary_from_points(self, vector):
         title="New Boundary from points", input_dict=boundary_dict_in
     )
     if boundary_dict_updt is None:
-        # self.enable_actions()
         freeze_gui_off(self)
         return
     # Check if other Boundaries with the same name exist. If so, add suffix to make the name unique.
@@ -694,7 +691,6 @@ def boundary_from_three_points(self, vector):
     length = np_linalg.norm(delta_xy)
     if length == 0:
         self.print_terminal(" -- Boundary from 3 points: first two points are coincident -- ")
-        # self.enable_actions()
         freeze_gui_off(self)
         return
 
@@ -805,7 +801,6 @@ def boundary_from_three_points(self, vector):
             pass
 
         if event is None:
-            # self.enable_actions()
             freeze_gui_off(self)
             return
 
@@ -842,7 +837,6 @@ def boundary_from_three_points(self, vector):
             title="New Boundary from 3 points", input_dict=boundary_dict_in
         )
         if boundary_dict_updt is None:
-            # self.enable_actions()
             freeze_gui_off(self)
             return
 
@@ -869,7 +863,6 @@ def boundary_from_three_points(self, vector):
         length_local = np_linalg.norm(delta_xy_local)
         if length_local == 0:
             self.print_terminal(" -- Boundary from 3 points: point 1 and point 2 are coincident -- ")
-            # self.enable_actions()
             freeze_gui_off(self)
             return
         perp_unit_local = np_array([-delta_xy_local[1], delta_xy_local[0]]) / length_local
