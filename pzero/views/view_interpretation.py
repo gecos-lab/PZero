@@ -1538,7 +1538,7 @@ class ViewInterpretation(ViewMap):
                         line_width=style["line_width"],
                         opacity=style["opacity"],
                         render_lines_as_tubes=True,
-                        pickable=False,
+                        pickable=True,
                         reset_camera=False
                     )
                     
@@ -1692,6 +1692,7 @@ class ViewInterpretation(ViewMap):
                     line_width=style["line_width"],
                     opacity=style["opacity"],
                     render_lines_as_tubes=True,
+                    pickable=True,
                     reset_camera=False
                 )
 
@@ -3842,75 +3843,6 @@ class ViewInterpretation(ViewMap):
 
     # ==================== Fault Tracking Methods ====================
     
-    def toggle_fault_enhancement(self, checked):
-        """Toggle fault enhancement display overlay."""
-        if not hasattr(self, '_fault_enhancement_active'):
-            self._fault_enhancement_active = False
-        
-        self._fault_enhancement_active = checked
-        
-        if checked:
-            self.print_terminal("Fault enhancement view enabled")
-            self._apply_fault_enhancement()
-        else:
-            self.print_terminal("Fault enhancement view disabled")
-            self._remove_fault_enhancement()
-    
-    def _apply_fault_enhancement(self):
-        """Apply fault enhancement to current slice display."""
-        if not hasattr(self, '_cached_seismic') or self._cached_seismic is None:
-            self.print_terminal("No seismic data cached - select a volume first")
-            return
-        
-        try:
-            from ..helpers.seismic_attributes import SeismicAttributes
-            import numpy as np
-            
-            # Get 3D data from cache
-            seismic = self._cached_seismic
-            dims = self._cached_dims
-            
-            if 'intensity' in seismic.array_names:
-                data = seismic['intensity']
-            elif seismic.array_names:
-                data = seismic[seismic.array_names[0]]
-            else:
-                self.print_terminal("No data arrays in seismic!")
-                return
-            
-            data_3d = data.reshape(dims, order='F').astype(np.float32)
-            
-            # Get current slice
-            if self.current_axis == 'Inline':
-                slice_data = data_3d[self.current_slice_index, :, :]
-            elif self.current_axis == 'Crossline':
-                slice_data = data_3d[:, self.current_slice_index, :]
-            else:
-                slice_data = data_3d[:, :, self.current_slice_index]
-            
-            # Compute fault enhancement
-            attrs = SeismicAttributes()
-            enhanced = attrs.compute_fault_enhancement(slice_data, 'likelihood')
-            
-            # Store for later use
-            self._fault_enhancement_data = enhanced
-            
-            self.print_terminal(f"Fault likelihood computed for {self.current_axis} slice {self.current_slice_index}")
-            self.print_terminal("High values (bright) = likely fault locations")
-            self.print_terminal("Use 'Draw Interpretation Line' to draw a VERTICAL line marking the fault")
-            
-        except Exception as e:
-            import traceback
-            self.print_terminal(f"Fault enhancement error: {e}")
-            self.print_terminal(traceback.format_exc())
-    
-    def _remove_fault_enhancement(self):
-        """Remove fault enhancement overlay."""
-        if hasattr(self, '_fault_enhancement_data'):
-            del self._fault_enhancement_data
-        # Refresh normal display
-        self.plotter.render()
-
     def propagate_fault(self):
         """Open dialog to propagate a fault line across multiple slices."""
         self.disable_actions()
@@ -3922,8 +3854,7 @@ class ViewInterpretation(ViewMap):
                 "Please draw a VERTICAL fault line first:\n\n"
                 "1. Use 'Draw Interpretation Line' from the menu\n"
                 "2. Draw a line following the fault (should be roughly vertical)\n"
-                "3. Then use 'Propagate Fault' to extend it across slices\n\n"
-                "TIP: Enable 'Fault Enhancement View' to see faults more clearly.")
+                "3. Then use 'Propagate Fault' to extend it across slices.")
             self.enable_actions()
             return
         
@@ -4415,35 +4346,63 @@ class ViewInterpretation(ViewMap):
 
     def initialize_menu_tools(self):
         super().initialize_menu_tools()
+
+        # Interpretation view does not use the generic 2D "Modify" workflow.
+        # Hide the menu and remove inherited actions to avoid inconsistent behavior.
+        try:
+            if hasattr(self, "menuModify") and self.menuModify is not None:
+                self.menuModify.clear()
+                self.menuModify.setEnabled(False)
+                self.menuModify.menuAction().setVisible(False)
+                try:
+                    self.menuBar().removeAction(self.menuModify.menuAction())
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Remove inherited Create actions that are not relevant to interpretation workflow.
+        try:
+            remove_create_texts = {
+                "Draw line",
+                "Copy parallel",
+                "Copy kink",
+                "Copy similar",
+                "Section from strike",
+                "Boundary from 2 points",
+                "Boundary from 3 points",
+                "Boundary from OBB",
+            }
+            for action in list(self.menuCreate.actions()):
+                if action.text() in remove_create_texts:
+                    self.menuCreate.removeAction(action)
+        except Exception:
+            pass
+
         # Add interpretation-specific draw line action
         self.drawInterpLineButton = QAction("Draw Interpretation Line", self)
         self.drawInterpLineButton.triggered.connect(self.draw_interpretation_line)
-        self.menuCreate.insertAction(self.menuCreate.actions()[0], self.drawInterpLineButton)
+        self.menuCreate.addAction(self.drawInterpLineButton)
         
         # Add semi-auto tracking action
         self.semiAutoTrackButton = QAction("Semi-Auto Track Horizon", self)
         self.semiAutoTrackButton.triggered.connect(self.draw_semi_auto_line)
-        self.menuCreate.insertAction(self.menuCreate.actions()[1], self.semiAutoTrackButton)
+        self.menuCreate.addAction(self.semiAutoTrackButton)
 
         # Add semi-auto fault tracking action
         self.semiAutoTrackFaultButton = QAction("Semi-Auto Track Fault", self)
         self.semiAutoTrackFaultButton.triggered.connect(self.draw_semi_auto_fault_line)
-        self.menuCreate.insertAction(self.menuCreate.actions()[2], self.semiAutoTrackFaultButton)
+        self.menuCreate.addAction(self.semiAutoTrackFaultButton)
         
         # Add propagate horizon action
         self.propagateHorizonButton = QAction("Propagate Horizon (Auto-Track 3D)", self)
         self.propagateHorizonButton.triggered.connect(self.propagate_horizon)
-        self.menuCreate.insertAction(self.menuCreate.actions()[3], self.propagateHorizonButton)
+        self.menuCreate.addAction(self.propagateHorizonButton)
         
         # Add propagate fault action
         self.propagateFaultButton = QAction("Propagate Fault (Auto-Track 3D)", self)
         self.propagateFaultButton.triggered.connect(self.propagate_fault)
-        self.menuCreate.insertAction(self.menuCreate.actions()[4], self.propagateFaultButton)
-        
-        # Add fault enhancement toggle
-        self.faultEnhancementAction = QAction("Fault Enhancement View", self, checkable=True)
-        self.faultEnhancementAction.triggered.connect(self.toggle_fault_enhancement)
-        self.menuCreate.insertAction(self.menuCreate.actions()[5], self.faultEnhancementAction)
+        self.menuCreate.addAction(self.propagateFaultButton)
 
         # Connect our custom handler for additional processing (volume list refresh)
         try:
