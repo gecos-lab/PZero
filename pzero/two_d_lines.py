@@ -312,7 +312,6 @@ def sort_line_nodes(self):
     self.clear_selection()
 
 
-# @freeze_gui_onoff
 def move_line(self, vector):
     """Move the whole line by rigid-body translation.
     Here transformation to UV is not necessary since the translation vector is already in world space
@@ -460,8 +459,6 @@ def extend_line(self):
     ):
         self.print_terminal(" -- Selected data is not a line -- ")
         return
-    # # Freeze QT interface
-    # self.disable_actions()
     # If more than one line is selected, keep the first
     sel_uid = self.selected_uids[0]
     current_line = self.get_actor_by_uid(sel_uid).GetMapper().GetInput()
@@ -724,8 +721,6 @@ def split_line_existing_point(self):
         # Deselect input line.
         self.clear_selection()
         selector.EnabledOff()
-        # # Un-Freeze QT interface
-        # self.enable_actions()
 
     # Split line at selected existing point (vertex)
     self.print_terminal(
@@ -742,8 +737,6 @@ def split_line_existing_point(self):
     ):
         self.print_terminal(" -- Selected data is not a line -- ")
         return
-    # # Freeze QT interface
-    # self.disable_actions
     # If more than one line is selected, keep the first
     sel_uid = self.selected_uids[0]
     current_line = self.get_actor_by_uid(sel_uid)
@@ -1548,7 +1541,6 @@ def copy_kink(self):
         self.print_terminal(f"Error: {str(e)}")
 
 
-# @freeze_gui_onoff
 def copy_similar(self, vector):
     # this must be done per-part_______________________________________________________
     """Similar folding. Create a line copied and translated from a template line.
@@ -1629,7 +1621,6 @@ def copy_similar(self, vector):
     freeze_gui_off(self)
 
 
-# @freeze_gui_on
 def measure_distance(self, vector):
     """Tool to measure distance between two points. Draw a vector_by_mouse and obtain length and azimuth"""
     self.print_terminal(

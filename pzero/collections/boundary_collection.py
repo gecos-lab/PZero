@@ -157,9 +157,6 @@ def boundary_from_obb(self):
     """Create a new Boundary from OBB (Oriented Bounding Box) analysis of all data"""
     boundary_dict = deepcopy(self.parent.boundary_coll.entity_dict)
     
-    # # Freeze QT interface
-    # self.disable_actions()
-    
     # Compute initial OBB values
     obb_result = compute_obb_boundary(self.parent)
     
@@ -546,16 +543,10 @@ def boundary_from_obb(self):
         # Updating existing boundary - it was already updated in the preview
         # The boundary is already updated via the preview mechanism
         pass
-    
-    # # Un-Freeze QT interface
-    # self.enable_actions()
 
-# @freeze_gui_onoff
 def boundary_from_points(self, vector):
     """Create a new Boundary from a vector with two end points"""
     boundary_dict = deepcopy(self.parent.boundary_coll.entity_dict)
-    # # Freeze QT interface.
-    # self.disable_actions()
     # Draw the diagonal of the Boundary by drawing a vector with vector_by_mouse. "while True" lets the user
     # draw the vector multiple times if modifications are necessary.
     self.plotter.untrack_click_position(side="left")
@@ -690,16 +681,11 @@ def boundary_from_points(self, vector):
     #             view.add_all_entities()
     # except Exception:
     #     pass
-    # # Un-Freeze QT interface
-    # self.enable_actions()
 
 
-# @freeze_gui_onoff
 def boundary_from_three_points(self, vector):
     """Create a new Boundary from three points (orthogonal edges)"""
     boundary_dict = deepcopy(self.parent.boundary_coll.entity_dict)
-    # # Freeze QT interface.
-    # self.disable_actions()
     self.plotter.untrack_click_position(side="left")
 
     p1 = np_array(vector.p1, dtype=float)
@@ -959,8 +945,6 @@ def boundary_from_three_points(self, vector):
                     view.add_all_entities()
         except Exception:
             pass
-        # # Un-Freeze QT interface
-        # self.enable_actions()
         freeze_gui_off(self)
 
     self.plotter.track_click_position(side="left", callback=end_third_point)

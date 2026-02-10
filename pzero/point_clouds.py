@@ -190,8 +190,6 @@ def cut_pc(self, method="both"):
     if not self.selected_uids:
         print(" -- No input data selected -- ")
         return
-    # # Freeze QT interface
-    # self.disable_actions()
 
     # Getting the values that have been typed by the user through the widget
 

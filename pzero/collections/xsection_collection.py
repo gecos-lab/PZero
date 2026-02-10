@@ -45,7 +45,6 @@ from .AbstractCollection import BaseCollection
 # =================================== Methods used to create cross sections ===========================================
 
 
-# @freeze_gui_onoff
 def section_from_strike(self, vector):
     """Create a cross-section from one point and strike."""
     self.plotter.untrack_click_position(side="left")
