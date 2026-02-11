@@ -59,9 +59,6 @@ class ViewXsection(View2D):
         # Rename Base View, Menu and Tool
         self.setWindowTitle(f"Xsection View: {self.this_x_section_name}")
 
-        # Clear Ctrl before default VTK mouse handlers to avoid Ctrl-driven rotate.
-        self._install_ctrl_suppression_observers()
-
         # Store center and direction in internal variables of this view
         self.set_section_projection()
 
@@ -124,19 +121,6 @@ class ViewXsection(View2D):
         self.plotter.camera.focal_point = self.center
         self.plotter.camera.position = self.center + self.direction
         self.plotter.reset_camera()
-
-    def _clear_ctrl_modifier(self, interactor, _event):
-        """VTK observer callback: clear Ctrl modifier before default handlers."""
-        if interactor and interactor.GetControlKey():
-            interactor.SetControlKey(0)
-
-    def _install_ctrl_suppression_observers(self):
-        """Install a high-priority VTK observer for Ctrl+left-click suppression."""
-        interactor = self.plotter.iren.interactor
-
-        self._ctrl_suppression_observer_tag = interactor.AddObserver(
-            "LeftButtonPressEvent", self._clear_ctrl_modifier, 10.0
-        )
 
     def fit_frame(self):
         """
