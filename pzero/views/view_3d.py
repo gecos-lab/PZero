@@ -1495,6 +1495,73 @@ class View3D(ViewVTK):
             mapping = {"U Direction": "X", "V Direction": "Y", "W Direction": "Z"}
             return mapping.get(direction, "X")
 
+        def extract_slice_data_for_position(pv_entity, slice_type, normalized_pos, bounds):
+            """Create one slice at a normalized position, preferring extract_subset for structured grids."""
+            is_structured = (
+                hasattr(pv_entity, "dimensions")
+                and pv_entity.dimensions is not None
+            )
+            dims = pv_entity.dimensions if is_structured else None
+
+            if is_structured and dims is not None and all(d > 1 for d in dims):
+                if slice_type == "X":
+                    idx = int(normalized_pos * (dims[0] - 1))
+                    idx = max(0, min(dims[0] - 1, idx))
+                    subset = pv_entity.extract_subset(
+                        [idx, idx, 0, dims[1] - 1, 0, dims[2] - 1]
+                    )
+                elif slice_type == "Y":
+                    idx = int(normalized_pos * (dims[1] - 1))
+                    idx = max(0, min(dims[1] - 1, idx))
+                    subset = pv_entity.extract_subset(
+                        [0, dims[0] - 1, idx, idx, 0, dims[2] - 1]
+                    )
+                else:
+                    idx = int(normalized_pos * (dims[2] - 1))
+                    idx = max(0, min(dims[2] - 1, idx))
+                    subset = pv_entity.extract_subset(
+                        [0, dims[0] - 1, 0, dims[1] - 1, idx, idx]
+                    )
+
+                slice_data = subset.extract_surface() if subset.n_points > 0 else subset
+                if slice_data.n_points > 0:
+                    return slice_data
+
+                # If we are exactly at an edge and got an empty subset, nudge one index inward.
+                if slice_type == "X":
+                    idx = max(1, min(dims[0] - 2, int(normalized_pos * (dims[0] - 1))))
+                    subset = pv_entity.extract_subset(
+                        [idx, idx, 0, dims[1] - 1, 0, dims[2] - 1]
+                    )
+                elif slice_type == "Y":
+                    idx = max(1, min(dims[1] - 2, int(normalized_pos * (dims[1] - 1))))
+                    subset = pv_entity.extract_subset(
+                        [0, dims[0] - 1, idx, idx, 0, dims[2] - 1]
+                    )
+                else:
+                    idx = max(1, min(dims[2] - 2, int(normalized_pos * (dims[2] - 1))))
+                    subset = pv_entity.extract_subset(
+                        [0, dims[0] - 1, 0, dims[1] - 1, idx, idx]
+                    )
+                return subset.extract_surface() if subset.n_points > 0 else subset
+
+            eps = getattr(self, "_slice_edge_epsilon", 1e-6)
+            clamped_pos = normalized_pos
+            if clamped_pos <= 0.0:
+                clamped_pos = eps
+            elif clamped_pos >= 1.0:
+                clamped_pos = 1.0 - eps
+
+            if slice_type == "X":
+                position = bounds[0] + clamped_pos * (bounds[1] - bounds[0])
+                return pv_entity.slice(normal=[1, 0, 0], origin=[position, 0, 0])
+            if slice_type == "Y":
+                position = bounds[2] + clamped_pos * (bounds[3] - bounds[2])
+                return pv_entity.slice(normal=[0, 1, 0], origin=[0, position, 0])
+
+            position = bounds[4] + clamped_pos * (bounds[5] - bounds[4])
+            return pv_entity.slice(normal=[0, 0, 1], origin=[0, 0, position])
+
         # Multi-slice implementation functions
         def create_grid_slices():
             """Create multiple slices along the selected direction"""
@@ -1519,14 +1586,6 @@ class View3D(ViewVTK):
             # Get bounds and slice type
             bounds = entity.bounds
             slice_type = direction_to_slice_type(direction)
-
-            # Calculate positions along the axis
-            if slice_type == "X":  # U direction
-                min_val, max_val = bounds[0], bounds[1]
-            elif slice_type == "Y":  # V direction
-                min_val, max_val = bounds[2], bounds[3]
-            else:  # Z (W direction)
-                min_val, max_val = bounds[4], bounds[5]
 
             # Get the start and end positions from sliders
             start_norm = start_slider.value() / 100.0
@@ -1553,16 +1612,9 @@ class View3D(ViewVTK):
                     continue
 
                 try:
-                    # Calculate actual position
-                    if slice_type == "X":  # U direction
-                        pos = min_val + normalized_pos * (max_val - min_val)
-                        slice_data = entity.slice(normal="x", origin=[pos, 0, 0])
-                    elif slice_type == "Y":  # V direction
-                        pos = min_val + normalized_pos * (max_val - min_val)
-                        slice_data = entity.slice(normal="y", origin=[0, pos, 0])
-                    else:  # Z (W direction)
-                        pos = min_val + normalized_pos * (max_val - min_val)
-                        slice_data = entity.slice(normal="z", origin=[0, 0, pos])
+                    slice_data = extract_slice_data_for_position(
+                        entity, slice_type, normalized_pos, bounds
+                    )
 
                     # Skip empty slices
                     if slice_data.n_points <= 0:
@@ -1698,12 +1750,6 @@ class View3D(ViewVTK):
                 entity = pv.wrap(entity)
             bounds = entity.bounds
             slice_type = direction_to_slice_type(direction)
-            if slice_type == "X":
-                min_val, max_val = bounds[0], bounds[1]
-            elif slice_type == "Y":
-                min_val, max_val = bounds[2], bounds[3]
-            else:
-                min_val, max_val = bounds[4], bounds[5]
             start_norm = start_slider.value() / 100.0
             end_norm = end_slider.value() / 100.0
             import numpy as np
@@ -1727,15 +1773,9 @@ class View3D(ViewVTK):
                     print(f"Slice {slice_id} already exists, skipping")
                     continue
                 try:
-                    if slice_type == "X":
-                        pos = min_val + normalized_pos * (max_val - min_val)
-                        slice_data = entity.slice(normal="x", origin=[pos, 0, 0])
-                    elif slice_type == "Y":
-                        pos = min_val + normalized_pos * (max_val - min_val)
-                        slice_data = entity.slice(normal="y", origin=[0, pos, 0])
-                    else:
-                        pos = min_val + normalized_pos * (max_val - min_val)
-                        slice_data = entity.slice(normal="z", origin=[0, 0, pos])
+                    slice_data = extract_slice_data_for_position(
+                        entity, slice_type, normalized_pos, bounds
+                    )
                     if slice_data.n_points <= 0:
                         print(f"Skipping empty slice at position {normalized_pos}")
                         continue
