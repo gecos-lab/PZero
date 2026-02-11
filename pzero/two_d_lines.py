@@ -16,16 +16,15 @@ from numpy import round as np_round
 from numpy import shape as np_shape
 from numpy import zeros as np_zeros
 from numpy import concatenate as np_concatenate
-from numpy import allclose as np_allclose
 from numpy.linalg import norm as np_norm
 
 # from shapely import affinity
 from shapely.affinity import scale as shp_scale
 from shapely.affinity import rotate as shp_rotate
 from shapely.geometry import LineString as shp_linestring
+from shapely.geometry import Point as shp_point
 
 # from shapely.geometry import MultiLineString as shp_multilinestring
-from shapely.ops import snap as shp_snap
 from shapely.ops import split as shp_split
 
 from .helpers.helper_dialogs import (
@@ -892,190 +891,216 @@ def merge_lines(self):
     self.parent.geol_coll.add_entity_from_dict(new_line)
 
 
+def _ordered_unique_uids(uids):
+    ordered = []
+    for uid in uids:
+        if uid not in ordered:
+            ordered.append(uid)
+    return ordered
+
+
+def _extract_intersection_points(geometry):
+    if geometry.is_empty:
+        return []
+    gtype = geometry.geom_type
+    if gtype == "Point":
+        return [np_array(geometry.coords[0], dtype=float)]
+    if gtype == "MultiPoint":
+        return [np_array(point.coords[0], dtype=float) for point in geometry.geoms]
+    if gtype in ("LineString", "LinearRing"):
+        coords = list(geometry.coords)
+        return [np_array(coords[0], dtype=float), np_array(coords[-1], dtype=float)]
+    if gtype == "MultiLineString":
+        points = []
+        for line in geometry.geoms:
+            coords = list(line.coords)
+            points.append(np_array(coords[0], dtype=float))
+            points.append(np_array(coords[-1], dtype=float))
+        return points
+    if hasattr(geometry, "geoms"):
+        points = []
+        for geom in geometry.geoms:
+            points.extend(_extract_intersection_points(geom))
+        return points
+    return []
+
+
+def _insert_point_on_line_coords(line_coords, point, eps=1e-8):
+    for vertex in line_coords:
+        if np_norm(vertex - point) <= eps:
+            return line_coords
+    point_geom = shp_point(float(point[0]), float(point[1]))
+    for i in range(len(line_coords) - 1):
+        segment = shp_linestring([line_coords[i], line_coords[i + 1]])
+        if segment.distance(point_geom) <= eps:
+            return np_concatenate(
+                (line_coords[: i + 1], point.reshape(1, 2), line_coords[i + 1 :]),
+                axis=0,
+            )
+    return line_coords
+
+
+def _endpoint_extension_candidates(line_coords, eps=1e-12):
+    candidates = []
+    end_anchor = line_coords[-1]
+    for i in range(len(line_coords) - 2, -1, -1):
+        vec = end_anchor - line_coords[i]
+        vec_len = np_norm(vec)
+        if vec_len > eps:
+            candidates.append(("append", end_anchor, vec / vec_len))
+            break
+    start_anchor = line_coords[0]
+    for i in range(1, len(line_coords)):
+        vec = start_anchor - line_coords[i]
+        vec_len = np_norm(vec)
+        if vec_len > eps:
+            candidates.append(("prepend", start_anchor, vec / vec_len))
+            break
+    return candidates
+
+
 @freeze_gui
 def snap_line(self):
-    """Snaps vertices of the selected line (the snapping-line) to the nearest vertex of the chosen line (goal-line),
-    depending on the Tolerance parameter."""
+    """Extend first selected line to intersect second selected line and add node on both."""
     if not self.selected_uids:
         self.print_terminal(" -- No input data selected -- ")
         return
-    ordered_selected_uids = []
-    for uid in self.selected_uids:
-        if uid not in ordered_selected_uids:
-            ordered_selected_uids.append(uid)
-    if len(ordered_selected_uids) <= 1:
-        self.print_terminal(
-            " -- Not enough input data selected. Select at least 2 objects -- "
-        )
+
+    ordered_selected_uids = _ordered_unique_uids(self.selected_uids)
+    if len(ordered_selected_uids) != 2:
+        self.print_terminal(" -- Select exactly 2 lines: first active, second target -- ")
         return
-    current_uid_goal = ordered_selected_uids[-1]
-    if (self.parent.geol_coll.get_uid_topology(current_uid_goal) != "PolyLine") and (
-        self.parent.geol_coll.get_uid_topology(current_uid_goal) != "XsPolyLine"
-    ):
-        self.print_terminal(" -- Selected goal is not a line -- ")
-        return
+
+    active_uid = ordered_selected_uids[0]
+    other_uid = ordered_selected_uids[1]
+
+    for uid in (active_uid, other_uid):
+        if (self.parent.geol_coll.get_uid_topology(uid) != "PolyLine") and (
+            self.parent.geol_coll.get_uid_topology(uid) != "XsPolyLine"
+        ):
+            self.print_terminal(" -- Selected data is not a line -- ")
+            return
+
     tolerance = input_one_value_dialog(
         parent=self,
-        title="Snap tolerance",
-        label="Insert snap tolerance",
+        title="Snap max extension distance",
+        label="Insert max extension distance",
         default_value=10,
     )
     if tolerance is None:
         self.print_terminal(" -- Snap cancelled by user -- ")
         return
+    if isinstance(tolerance, str) or tolerance <= 0:
+        self.print_terminal(" -- Max extension distance must be > 0 -- ")
+        return
 
-    changed_lines = 0
-    unchanged_lines = 0
-    processed_lines = 0
-    for current_uid_snap in ordered_selected_uids[:-1]:
-        if (
-            self.parent.geol_coll.get_uid_topology(current_uid_snap) != "PolyLine"
-        ) and (
-            self.parent.geol_coll.get_uid_topology(current_uid_snap) != "XsPolyLine"
-        ):
-            self.print_terminal(" -- Selected snap is not a line -- ")
-            return
-
-        # Create empty dictionary for the output line.
-        new_line_snap = deepcopy(self.parent.geol_coll.entity_dict)
-        new_line_goal = deepcopy(self.parent.geol_coll.entity_dict)
-
-        # Editing loop. Get coordinates of the line to be modified (snap-line).
-        if isinstance(self, ViewMap):
-            new_line_snap["vtk_obj"] = PolyLine()
-            new_line_snap["parent_uid"] = None
-            new_line_goal["vtk_obj"] = PolyLine()
-            new_line_goal["parent_uid"] = None
-            inU_snap = deepcopy(
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid_snap).points_X
-            )
-            inV_snap = deepcopy(
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid_snap).points_Y
-            )
-            inU_goal = deepcopy(
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid_goal).points_X
-            )
-            inV_goal = deepcopy(
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid_goal).points_Y
-            )
-        elif isinstance(self, ViewXsection):
-            new_line_snap["vtk_obj"] = XsPolyLine(
-                self.this_x_section_uid, parent=self.parent
-            )
-            new_line_snap["parent_uid"] = self.this_x_section_uid
-            new_line_goal["vtk_obj"] = XsPolyLine(
-                self.this_x_section_uid, parent=self.parent
-            )
-            new_line_goal["parent_uid"] = self.this_x_section_uid
-            snap_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid_snap)
-            goal_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid_goal)
-            inU_snap, inV_snap = self.parent.xsect_coll.world2plane(
-                section_uid=self.this_x_section_uid,
-                X=snap_vtk_obj.points_X,
-                Y=snap_vtk_obj.points_Y,
-                Z=snap_vtk_obj.points_Z,
-            )
-            inU_goal, inV_goal = self.parent.xsect_coll.world2plane(
-                section_uid=self.this_x_section_uid,
-                X=goal_vtk_obj.points_X,
-                Y=goal_vtk_obj.points_Y,
-                Z=goal_vtk_obj.points_Z,
-            )
-            inU_snap = np_array(inU_snap).reshape(-1)
-            inV_snap = np_array(inV_snap).reshape(-1)
-            inU_goal = np_array(inU_goal).reshape(-1)
-            inV_goal = np_array(inV_goal).reshape(-1)
-        # Stack coordinates in two-columns matrix
-        inUV_snap = np_column_stack((inU_snap, inV_snap))
-        inUV_goal = np_column_stack((inU_goal, inV_goal))
-        # Run the Shapely function.
-        shp_line_in_snap = shp_linestring(inUV_snap)
-        shp_line_in_goal = shp_linestring(inUV_goal)
-
-        try:
-            shp_line_in_goal, _ = int_node(shp_line_in_goal, shp_line_in_snap)
-        except ValueError as exc:
-            self.print_terminal(
-                f" -- Warning: could not insert intersection node ({exc}). Using original goal line. -- "
-            )
-
-        # -----In the snapping tool, the last input value is called Tolerance. Can be modified, do some checks.
-        # Little tolerance risks of not snapping distant lines, while too big tolerance snaps to the wrong vertex and
-        # not to the nearest one----
-        if shp_line_in_snap.is_simple and shp_line_in_goal.is_simple:
-            shp_line_out_snap = shp_snap(shp_line_in_snap, shp_line_in_goal, tolerance)
-        else:
-            self.print_terminal("Polyline is not simple, it self-intersects")
-            return
-        inUV_snap_orig = np_array(shp_line_in_snap.coords)
-        # Use snapped line directly. Using difference may return empty/multigeometries.
-        outUV_snap = deepcopy(np_array(shp_line_out_snap.coords))
-        outUV_goal = deepcopy(np_array(shp_line_in_goal.coords))
-        snapped_changed = (
-            inUV_snap_orig.shape != outUV_snap.shape
-            or not np_allclose(inUV_snap_orig, outUV_snap)
+    if isinstance(self, ViewMap):
+        active_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(active_uid)
+        other_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(other_uid)
+        active_u = np_array(active_vtk_obj.points_X).reshape(-1)
+        active_v = np_array(active_vtk_obj.points_Y).reshape(-1)
+        other_u = np_array(other_vtk_obj.points_X).reshape(-1)
+        other_v = np_array(other_vtk_obj.points_Y).reshape(-1)
+    elif isinstance(self, ViewXsection):
+        active_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(active_uid)
+        other_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(other_uid)
+        active_u, active_v = self.parent.xsect_coll.world2plane(
+            section_uid=self.this_x_section_uid,
+            X=active_vtk_obj.points_X,
+            Y=active_vtk_obj.points_Y,
+            Z=active_vtk_obj.points_Z,
         )
-        # Un-stack output coordinates and write them to the empty dictionary.
-        if outUV_snap.ndim < 2:
-            self.print_terminal("Invalid shape")
-            continue
-        outU_snap = outUV_snap[:, 0]
-        outV_snap = outUV_snap[:, 1]
-        outU_goal = outUV_goal[:, 0]
-        outV_goal = outUV_goal[:, 1]
-        # Convert local coordinates to XYZ ones.
-        if isinstance(self, ViewMap):
-            outX_snap = outU_snap
-            outY_snap = outV_snap
-            outZ_snap = np_zeros(np_shape(outX_snap))
+        other_u, other_v = self.parent.xsect_coll.world2plane(
+            section_uid=self.this_x_section_uid,
+            X=other_vtk_obj.points_X,
+            Y=other_vtk_obj.points_Y,
+            Z=other_vtk_obj.points_Z,
+        )
+        active_u = np_array(active_u).reshape(-1)
+        active_v = np_array(active_v).reshape(-1)
+        other_u = np_array(other_u).reshape(-1)
+        other_v = np_array(other_v).reshape(-1)
+    else:
+        self.print_terminal(" -- Snap line is available only in 2D views -- ")
+        return
 
-            outX_goal = outU_goal
-            outY_goal = outV_goal
-            outZ_goal = np_zeros(np_shape(outX_goal))
-        elif isinstance(self, ViewXsection):
-            outX_snap, outY_snap, outZ_snap = self.parent.xsect_coll.plane2world(
-                self.this_x_section_uid, outU_snap, outV_snap
+    active_uv = np_column_stack((active_u, active_v))
+    other_uv = np_column_stack((other_u, other_v))
+    if len(active_uv) < 2 or len(other_uv) < 2:
+        self.print_terminal(" -- Lines must have at least 2 vertices -- ")
+        return
+
+    candidates = _endpoint_extension_candidates(active_uv)
+    if not candidates:
+        self.print_terminal(" -- Active line end segments are too short -- ")
+        return
+    other_line = shp_linestring(other_uv)
+
+    eps = 1e-8
+    best_mode = None
+    hit_point = None
+    hit_dist = None
+    max_dist = float(tolerance)
+    for mode, anchor, direction in candidates:
+        ray_end = anchor + direction * max_dist
+        ray = shp_linestring([anchor, ray_end])
+        intersections = _extract_intersection_points(ray.intersection(other_line))
+        for candidate in intersections:
+            vec = candidate - anchor
+            proj = float(vec[0] * direction[0] + vec[1] * direction[1])
+            if proj < -eps or proj > max_dist + eps:
+                continue
+            if (hit_dist is None) or (proj < hit_dist):
+                hit_dist = proj
+                hit_point = candidate
+                best_mode = mode
+
+    if hit_point is None or best_mode is None:
+        self.print_terminal(" -- No intersection within max extension distance -- ")
+        return
+
+    out_active_uv = deepcopy(active_uv)
+    if best_mode == "append":
+        if hit_dist > eps and np_norm(hit_point - active_uv[-1]) > eps:
+            out_active_uv = np_concatenate(
+                (out_active_uv, hit_point.reshape(1, 2)), axis=0
             )
-            outX_goal, outY_goal, outZ_goal = self.parent.xsect_coll.plane2world(
-                self.this_x_section_uid, outU_goal, outV_goal
+    else:
+        if hit_dist > eps and np_norm(hit_point - active_uv[0]) > eps:
+            out_active_uv = np_concatenate(
+                (hit_point.reshape(1, 2), out_active_uv), axis=0
             )
 
-            # outZ = outV
-        # Create new vtk objects
-        new_points_snap = np_column_stack((outX_snap, outY_snap, outZ_snap))
-        new_points_goal = np_column_stack((outX_goal, outY_goal, outZ_goal))
+    out_other_uv = _insert_point_on_line_coords(deepcopy(other_uv), hit_point, eps=eps)
 
-        new_line_snap["vtk_obj"].points = new_points_snap
-        new_line_snap["vtk_obj"].auto_cells()
-        new_line_goal["vtk_obj"].points = new_points_goal
-        new_line_goal["vtk_obj"].auto_cells()
-        # Replace VTK object
-        if new_line_snap["vtk_obj"].points_number > 0:
-            self.parent.geol_coll.replace_vtk(
-                uid=current_uid_snap, vtk_object=new_line_snap["vtk_obj"]
-            )
-            self.parent.geol_coll.replace_vtk(
-                uid=current_uid_goal, vtk_object=new_line_goal["vtk_obj"]
-            )
-            del new_line_snap
-            del new_line_goal
-        else:
-            print("Empty object")
-        processed_lines += 1
-        if snapped_changed:
-            changed_lines += 1
-        else:
-            unchanged_lines += 1
-            self.print_terminal(
-                f" -- No vertices within tolerance for snap line {current_uid_snap} -- "
-            )
+    if isinstance(self, ViewMap):
+        out_active_x = out_active_uv[:, 0]
+        out_active_y = out_active_uv[:, 1]
+        out_active_z = np_zeros(np_shape(out_active_x))
+        out_other_x = out_other_uv[:, 0]
+        out_other_y = out_other_uv[:, 1]
+        out_other_z = np_zeros(np_shape(out_other_x))
+        new_active = PolyLine()
+        new_other = PolyLine()
+    else:
+        out_active_x, out_active_y, out_active_z = self.parent.xsect_coll.plane2world(
+            self.this_x_section_uid, out_active_uv[:, 0], out_active_uv[:, 1]
+        )
+        out_other_x, out_other_y, out_other_z = self.parent.xsect_coll.plane2world(
+            self.this_x_section_uid, out_other_uv[:, 0], out_other_uv[:, 1]
+        )
+        new_active = XsPolyLine(self.this_x_section_uid, parent=self.parent)
+        new_other = XsPolyLine(self.this_x_section_uid, parent=self.parent)
 
-    self.print_terminal(
-        f"Snap line completed: {changed_lines}/{processed_lines} source line(s) changed."
-    )
-    if processed_lines > 0 and unchanged_lines == processed_lines:
-        self.print_terminal(" -- No vertices within tolerance for any selected snap line -- ")
+    new_active.points = np_column_stack((out_active_x, out_active_y, out_active_z))
+    new_active.auto_cells()
+    new_other.points = np_column_stack((out_other_x, out_other_y, out_other_z))
+    new_other.auto_cells()
 
+    self.parent.geol_coll.replace_vtk(uid=active_uid, vtk_object=new_active)
+    self.parent.geol_coll.replace_vtk(uid=other_uid, vtk_object=new_other)
+
+    self.print_terminal("Snap line completed: active line extended and node added on target.")
     self.clear_selection()
 
 
