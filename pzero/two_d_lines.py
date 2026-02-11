@@ -16,6 +16,7 @@ from numpy import round as np_round
 from numpy import shape as np_shape
 from numpy import zeros as np_zeros
 from numpy import concatenate as np_concatenate
+from numpy import allclose as np_allclose
 from numpy.linalg import norm as np_norm
 
 # from shapely import affinity
@@ -895,18 +896,19 @@ def merge_lines(self):
 def snap_line(self):
     """Snaps vertices of the selected line (the snapping-line) to the nearest vertex of the chosen line (goal-line),
     depending on the Tolerance parameter."""
-    # print("Snap line to line. Line to be snapped has been selected, please select second line.")
-    # Terminate running event loops
-    # Check if a line is selected
     if not self.selected_uids:
         self.print_terminal(" -- No input data selected -- ")
         return
-    elif len(self.selected_uids) <= 1:
+    ordered_selected_uids = []
+    for uid in self.selected_uids:
+        if uid not in ordered_selected_uids:
+            ordered_selected_uids.append(uid)
+    if len(ordered_selected_uids) <= 1:
         self.print_terminal(
             " -- Not enough input data selected. Select at least 2 objects -- "
         )
         return
-    current_uid_goal = self.selected_uids[-1]
+    current_uid_goal = ordered_selected_uids[-1]
     if (self.parent.geol_coll.get_uid_topology(current_uid_goal) != "PolyLine") and (
         self.parent.geol_coll.get_uid_topology(current_uid_goal) != "XsPolyLine"
     ):
@@ -918,9 +920,14 @@ def snap_line(self):
         label="Insert snap tolerance",
         default_value=10,
     )
+    if tolerance is None:
+        self.print_terminal(" -- Snap cancelled by user -- ")
+        return
 
-    for current_uid_snap in self.selected_uids[:-1]:
-        # print(current_uid_snap)
+    changed_lines = 0
+    unchanged_lines = 0
+    processed_lines = 0
+    for current_uid_snap in ordered_selected_uids[:-1]:
         if (
             self.parent.geol_coll.get_uid_topology(current_uid_snap) != "PolyLine"
         ) and (
@@ -985,10 +992,12 @@ def snap_line(self):
         shp_line_in_snap = shp_linestring(inUV_snap)
         shp_line_in_goal = shp_linestring(inUV_goal)
 
-        shp_line_in_goal, extended = int_node(shp_line_in_goal, shp_line_in_snap)
-        # plt.plot(np_array(shp_line_in_goal.coords)[:, 0], np_array(shp_line_in_goal.coords)[:, 1], 'r-o')
-        # plt.plot(np_array(extended.coords)[:, 0], np_array(extended.coords)[:, 1], 'b-o')
-        # plt.show()
+        try:
+            shp_line_in_goal, _ = int_node(shp_line_in_goal, shp_line_in_snap)
+        except ValueError as exc:
+            self.print_terminal(
+                f" -- Warning: could not insert intersection node ({exc}). Using original goal line. -- "
+            )
 
         # -----In the snapping tool, the last input value is called Tolerance. Can be modified, do some checks.
         # Little tolerance risks of not snapping distant lines, while too big tolerance snaps to the wrong vertex and
@@ -998,9 +1007,14 @@ def snap_line(self):
         else:
             self.print_terminal("Polyline is not simple, it self-intersects")
             return
+        inUV_snap_orig = np_array(shp_line_in_snap.coords)
         # Use snapped line directly. Using difference may return empty/multigeometries.
         outUV_snap = deepcopy(np_array(shp_line_out_snap.coords))
         outUV_goal = deepcopy(np_array(shp_line_in_goal.coords))
+        snapped_changed = (
+            inUV_snap_orig.shape != outUV_snap.shape
+            or not np_allclose(inUV_snap_orig, outUV_snap)
+        )
         # Un-stack output coordinates and write them to the empty dictionary.
         if outUV_snap.ndim < 2:
             self.print_terminal("Invalid shape")
@@ -1047,7 +1061,21 @@ def snap_line(self):
             del new_line_goal
         else:
             print("Empty object")
-        # Deselect input lines
+        processed_lines += 1
+        if snapped_changed:
+            changed_lines += 1
+        else:
+            unchanged_lines += 1
+            self.print_terminal(
+                f" -- No vertices within tolerance for snap line {current_uid_snap} -- "
+            )
+
+    self.print_terminal(
+        f"Snap line completed: {changed_lines}/{processed_lines} source line(s) changed."
+    )
+    if processed_lines > 0 and unchanged_lines == processed_lines:
+        self.print_terminal(" -- No vertices within tolerance for any selected snap line -- ")
+
     self.clear_selection()
 
 
