@@ -209,7 +209,17 @@ class View3D(ViewVTK):
         # self.menuBaseView.addAction(self.showOct)
         # self.toolBarBase.addAction(self.showOct)
 
-    # Called by BaseView.toggle_property after main actor's property changes via tree combo
+    def toggle_property(self, collection_name=None, uid=None, prop_text=None):
+        """Extend base property toggle to keep Mesh Slicer slices in sync."""
+        super().toggle_property(
+            collection_name=collection_name, uid=uid, prop_text=prop_text
+        )
+        # Rebuild any active slice actors for this entity with the newly selected property.
+        self.on_property_toggled(
+            collection_name=collection_name, uid=uid, prop_text=prop_text
+        )
+
+    # Called by View3D.toggle_property after main actor's property changes via tree combo
     def on_property_toggled(self, collection_name=None, uid=None, prop_text=None):
         try:
             # Find the entity label used in the slicer combo for this uid
@@ -268,28 +278,44 @@ class View3D(ViewVTK):
             if entity is None:
                 return
             pv_entity = pv.wrap(entity)
-            b = pv_entity.bounds
-            origin = actor.GetCenter()
-            if axis == "X" and b[1] > b[0]:
-                norm = (origin[0] - b[0]) / (b[1] - b[0])
-            elif axis == "Y" and b[3] > b[2]:
-                norm = (origin[1] - b[2]) / (b[3] - b[2])
-            elif axis == "Z" and b[5] > b[4]:
-                norm = (origin[2] - b[4]) / (b[5] - b[4])
-            else:
-                norm = 0.5
-            position = {
-                "X": b[0] + norm * (b[1] - b[0]),
-                "Y": b[2] + norm * (b[3] - b[2]),
-                "Z": b[4] + norm * (b[5] - b[4]),
-            }[axis]
-            normal = {"X": [1, 0, 0], "Y": [0, 1, 0], "Z": [0, 0, 1]}[axis]
-            origin_vec = {
-                "X": [position, 0, 0],
-                "Y": [0, position, 0],
-                "Z": [0, 0, position],
-            }[axis]
-            slice_data = pv_entity.slice(normal=normal, origin=origin_vec)
+            slice_data = None
+
+            # Reuse current slice geometry if available. This avoids axis-specific
+            # positioning issues (especially W/Z when vertical exaggeration is active).
+            try:
+                mapper = actor.GetMapper()
+                if mapper is not None and mapper.GetInput() is not None:
+                    slice_data = pv.wrap(mapper.GetInput())
+            except Exception:
+                slice_data = None
+
+            # Fallback: reconstruct slice geometry from actor center.
+            if slice_data is None or slice_data.n_points <= 0:
+                b = pv_entity.bounds
+                origin = actor.GetCenter()
+                if axis == "X" and b[1] > b[0]:
+                    norm = (origin[0] - b[0]) / (b[1] - b[0])
+                elif axis == "Y" and b[3] > b[2]:
+                    norm = (origin[1] - b[2]) / (b[3] - b[2])
+                elif axis == "Z" and b[5] > b[4]:
+                    v_exag = getattr(self, "v_exaggeration", 1.0)
+                    origin_z = origin[2] / v_exag if v_exag not in [0, 1.0] else origin[2]
+                    norm = (origin_z - b[4]) / (b[5] - b[4])
+                else:
+                    norm = 0.5
+                position = {
+                    "X": b[0] + norm * (b[1] - b[0]),
+                    "Y": b[2] + norm * (b[3] - b[2]),
+                    "Z": b[4] + norm * (b[5] - b[4]),
+                }[axis]
+                normal = {"X": [1, 0, 0], "Y": [0, 1, 0], "Z": [0, 0, 1]}[axis]
+                origin_vec = {
+                    "X": [position, 0, 0],
+                    "Y": [0, position, 0],
+                    "Z": [0, 0, position],
+                }[axis]
+                slice_data = pv_entity.slice(normal=normal, origin=origin_vec)
+
             if slice_data.n_points <= 0:
                 return
             # Resolve property
@@ -366,22 +392,34 @@ class View3D(ViewVTK):
             if entity is None:
                 return
             pv_entity = pv.wrap(entity)
-            # Compute origin position from actor
-            origin = actor.GetCenter()
-            b = pv_entity.bounds
-            if axis == "X":
-                position = origin[0]
-                normal = [1, 0, 0]
-                origin_vec = [position, 0, 0]
-            elif axis == "Y":
-                position = origin[1]
-                normal = [0, 1, 0]
-                origin_vec = [0, position, 0]
-            else:
-                position = origin[2]
-                normal = [0, 0, 1]
-                origin_vec = [0, 0, position]
-            slice_data = pv_entity.slice(normal=normal, origin=origin_vec)
+            slice_data = None
+
+            # Reuse existing grid-slice geometry when possible.
+            try:
+                mapper = actor.GetMapper()
+                if mapper is not None and mapper.GetInput() is not None:
+                    slice_data = pv.wrap(mapper.GetInput())
+            except Exception:
+                slice_data = None
+
+            # Fallback: reconstruct from actor center.
+            if slice_data is None or slice_data.n_points <= 0:
+                origin = actor.GetCenter()
+                if axis == "X":
+                    position = origin[0]
+                    normal = [1, 0, 0]
+                    origin_vec = [position, 0, 0]
+                elif axis == "Y":
+                    position = origin[1]
+                    normal = [0, 1, 0]
+                    origin_vec = [0, position, 0]
+                else:
+                    v_exag = getattr(self, "v_exaggeration", 1.0)
+                    position = origin[2] / v_exag if v_exag not in [0, 1.0] else origin[2]
+                    normal = [0, 0, 1]
+                    origin_vec = [0, 0, position]
+                slice_data = pv_entity.slice(normal=normal, origin=origin_vec)
+
             if slice_data.n_points <= 0:
                 return
             # Determine prop
