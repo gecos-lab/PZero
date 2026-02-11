@@ -1248,12 +1248,14 @@ class View3D(ViewVTK):
         # Create buttons
         create_btn = QPushButton("Create Slices")
         remove_btn = QPushButton("Remove Slices")
+        create_xsection_btn = QPushButton("Create Section")
 
         # Add buttons to layout
         buttons_layout = QHBoxLayout()
         buttons_layout.addWidget(create_btn)
         buttons_layout.addWidget(remove_btn)
         multi_slice_layout.addLayout(buttons_layout)
+        multi_slice_layout.addWidget(create_xsection_btn)
 
         # Add direct manipulation option for multi-slice grid
         multi_manipulation_group = QGroupBox("Grid Visualization")
@@ -1877,8 +1879,93 @@ class View3D(ViewVTK):
                     continue
             self.plotter.render()
 
+        def create_section_from_slice():
+            """Create one XSection from an indexed multi-slice position and open its view."""
+            entity_name = multi_entity_combo.currentText()
+            if not entity_name:
+                self.print_terminal("No entity selected.")
+                return
+
+            default_direction = direction_combo.currentText()
+            default_n_slices = int(slices_spin.value())
+            default_slice_no = max(1, int((default_n_slices + 1) / 2))
+            direction_letter = {"U Direction": "U", "V Direction": "V", "W Direction": "W"}.get(
+                default_direction, "U"
+            )
+            plain_name = entity_name.split(": ", 1)[1] if ": " in entity_name else entity_name
+            safe_name = plain_name.replace(" ", "_")
+            default_section_name = f"XS_{safe_name}_{direction_letter}_{default_slice_no}"
+
+            out_dict = multiple_input_dialog(
+                title="Create Section from Slice",
+                input_dict={
+                    "direction": [
+                        "Direction",
+                        ["U Direction", "V Direction", "W Direction"],
+                        default_direction,
+                    ],
+                    "slice_no": ["Slice number (1..N)", default_slice_no],
+                    "n_slices": ["Total slices (N)", default_n_slices],
+                    "section_name": ["X-Section name", default_section_name],
+                },
+            )
+            if out_dict is None:
+                return
+
+            direction = out_dict["direction"]
+            slice_type = direction_to_slice_type(direction)
+
+            try:
+                n_slices = int(out_dict["n_slices"])
+            except Exception:
+                n_slices = default_n_slices
+            n_slices = max(1, n_slices)
+
+            try:
+                slice_no = int(out_dict["slice_no"])
+            except Exception:
+                slice_no = default_slice_no
+            slice_no = max(1, min(n_slices, slice_no))
+
+            section_name = str(out_dict["section_name"]).strip()
+            if not section_name:
+                section_name = default_section_name
+
+            start_norm = start_slider.value() / 100.0
+            end_norm = end_slider.value() / 100.0
+            if n_slices == 1:
+                normalized_pos = start_norm
+            else:
+                normalized_pos = start_norm + (slice_no - 1) * (
+                    (end_norm - start_norm) / (n_slices - 1)
+                )
+            normalized_pos = max(0.0, min(1.0, normalized_pos))
+
+            xuid = self._create_xsection_from_slicer_slice(
+                entity_name=entity_name,
+                slice_type=slice_type,
+                normalized_position=normalized_pos,
+                section_name=section_name,
+            )
+            if not xuid:
+                self.print_terminal("Failed to create X-Section from selected slice.")
+                return
+
+            xs_data_uid = self._add_xsection_data_from_entity(entity_name=entity_name, xuid=xuid)
+            if not xs_data_uid:
+                self.print_terminal(
+                    "Warning: Section created, but slice data could not be attached."
+                )
+
+            created_name = self.parent.xsect_coll.get_uid_name(xuid)
+            self.print_terminal(
+                f"Created section '{created_name}' from {direction} slice #{slice_no}/{n_slices}."
+            )
+            self._open_xsection_view_for_uid(xuid)
+
         create_btn.clicked.connect(create_grid_slices_sync)
         remove_btn.clicked.connect(remove_grid_slices)
+        create_xsection_btn.clicked.connect(create_section_from_slice)
 
         # Helper functions (shared between both modes)
         # ------------------------------------
@@ -3078,6 +3165,452 @@ class View3D(ViewVTK):
         except Exception:
             return None
         return None
+
+    def _unique_xsection_name(self, base_name):
+        """Return a unique cross-section name within the project."""
+        try:
+            existing = set(self.parent.xsect_coll.get_names)
+        except Exception:
+            existing = set()
+
+        name = base_name if base_name else "new_section"
+        if name not in existing:
+            return name
+
+        idx = 1
+        while f"{name}_{idx}" in existing:
+            idx += 1
+        return f"{name}_{idx}"
+
+    def _create_xsection_from_slicer_slice(
+        self, entity_name, slice_type, normalized_position, section_name=None
+    ):
+        """
+        Create one XSection aligned to the selected slicer plane and fit its frame
+        to the source entity extents projected onto that plane.
+        """
+        import numpy as np
+
+        entity = self.get_entity_by_name(entity_name)
+        if entity is None:
+            return None
+
+        pv_entity = pv.wrap(entity)
+        bounds = pv_entity.bounds
+        t = max(0.0, min(1.0, float(normalized_position)))
+
+        # Define a plane from slicer direction (X/Y/Z).
+        if slice_type == "X":
+            plane_pos = bounds[0] + t * (bounds[1] - bounds[0])
+            origin = np.array(
+                [
+                    plane_pos,
+                    (bounds[2] + bounds[3]) / 2.0,
+                    (bounds[4] + bounds[5]) / 2.0,
+                ],
+                dtype=float,
+            )
+            normal = np.array([1.0, 0.0, 0.0], dtype=float)
+        elif slice_type == "Y":
+            plane_pos = bounds[2] + t * (bounds[3] - bounds[2])
+            origin = np.array(
+                [
+                    (bounds[0] + bounds[1]) / 2.0,
+                    plane_pos,
+                    (bounds[4] + bounds[5]) / 2.0,
+                ],
+                dtype=float,
+            )
+            normal = np.array([0.0, 1.0, 0.0], dtype=float)
+        elif slice_type == "Z":
+            plane_pos = bounds[4] + t * (bounds[5] - bounds[4])
+            origin = np.array(
+                [
+                    (bounds[0] + bounds[1]) / 2.0,
+                    (bounds[2] + bounds[3]) / 2.0,
+                    plane_pos,
+                ],
+                dtype=float,
+            )
+            # Keep geological convention (normal points downwards when possible).
+            normal = np.array([0.0, 0.0, -1.0], dtype=float)
+        else:
+            return None
+
+        if normal[2] > 0:
+            normal = -normal
+
+        strike = (float(np.degrees(np.arctan2(normal[0], normal[1]))) + 90.0) % 360.0
+        dip = 90.0 - float(np.degrees(np.arcsin(float(-normal[2]))))
+
+        # Create base cross-section.
+        xs_dict = deepcopy(self.parent.xsect_coll.entity_dict)
+        xs_dict["name"] = self._unique_xsection_name(
+            section_name if section_name else f"XS_{slice_type}"
+        )
+        xs_dict["origin_x"] = float(origin[0])
+        xs_dict["origin_y"] = float(origin[1])
+        xs_dict["origin_z"] = float(origin[2])
+        xs_dict["strike"] = float(strike)
+        xs_dict["dip"] = float(dip)
+        xs_dict["length"] = 1.0
+        xs_dict["height"] = 1.0
+        xuid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=xs_dict)
+
+        # Fit frame to source entity bounds projected to the section plane.
+        b = bounds
+        corners = np.array(
+            [
+                [b[0], b[2], b[4]],
+                [b[0], b[2], b[5]],
+                [b[0], b[3], b[4]],
+                [b[0], b[3], b[5]],
+                [b[1], b[2], b[4]],
+                [b[1], b[2], b[5]],
+                [b[1], b[3], b[4]],
+                [b[1], b[3], b[5]],
+            ],
+            dtype=float,
+        )
+        U, V = self.parent.xsect_coll.world2plane(
+            section_uid=xuid, X=corners[:, 0], Y=corners[:, 1], Z=corners[:, 2]
+        )
+        U = np.asarray(U).reshape(-1)
+        V = np.asarray(V).reshape(-1)
+
+        min_u = float(np.min(U))
+        max_u = float(np.max(U))
+        min_v = float(np.min(V))
+        max_v = float(np.max(V))
+
+        # Small padding avoids a frame touching data bounds exactly.
+        pad = 0.02 * max(max_u - min_u, max_v - min_v)
+        if pad <= 0.0:
+            pad = 1.0
+        min_u -= pad
+        max_u += pad
+        min_v -= pad
+        max_v += pad
+
+        fitted_origin = self.parent.xsect_coll.plane2world(
+            section_uid=xuid, U=min_u, V=min_v, as_arr=True
+        )
+        self.parent.xsect_coll.set_uid_length(xuid, float(max_u - min_u))
+        self.parent.xsect_coll.set_uid_width(xuid, float(max_v - min_v))
+        self.parent.xsect_coll.set_uid_origin_x(xuid, float(fitted_origin[0]))
+        self.parent.xsect_coll.set_uid_origin_y(xuid, float(fitted_origin[1]))
+        self.parent.xsect_coll.set_uid_origin_z(xuid, float(fitted_origin[2]))
+        self.parent.xsect_coll.set_geometry(uid=xuid)
+        self.parent.xsect_coll.modelReset.emit()
+        self.parent.signals.geom_modified.emit([xuid], self.parent.xsect_coll)
+        return xuid
+
+    def _open_xsection_view_for_uid(self, xuid):
+        """Open an XSection view focused on the provided cross-section uid."""
+        if not xuid:
+            return
+        try:
+            self.parent._next_xsection_uid = xuid
+            if hasattr(self.parent, "actionXSectionView"):
+                self.parent.actionXSectionView.trigger()
+                return
+        except Exception:
+            pass
+        try:
+            from .dock_window import DockWindow
+
+            self.parent._next_xsection_uid = xuid
+            DockWindow(parent=self.parent, window_type="ViewXsection")
+        except Exception:
+            pass
+
+    def _add_xsection_data_from_entity(self, entity_name, xuid):
+        """
+        Build and attach XSection data from a slicable entity.
+        Structured volumes are converted to XsVoxet; non-structured meshes fall back
+        to a cutter-based geologic section entity.
+        """
+        try:
+            import numpy as np
+            from scipy.interpolate import griddata as sp_griddata
+            from vtk import vtkImageData
+            from vtkmodules.vtkFiltersCore import vtkCleanPolyData, vtkCutter, vtkStripper
+            from ..entities_factory import TriSurf, XsPolyLine, XsVertexSet, XsVoxet
+
+            if ":" not in entity_name:
+                return None
+
+            prefix, plain_name = entity_name.split(": ", 1)
+            collection_map = {
+                "Mesh": "mesh3d_coll",
+                "Geological": "geol_coll",
+                "Cross-section": "xsect_coll",
+                "Boundary": "boundary_coll",
+                "DOM": "dom_coll",
+                "Image": "image_coll",
+                "Well": "well_coll",
+                "Fluid": "fluid_coll",
+                "Background": "backgrnd_coll",
+            }
+            coll_name = collection_map.get(prefix)
+            if not coll_name or not hasattr(self.parent, coll_name):
+                return None
+
+            source_coll = getattr(self.parent, coll_name)
+            src_uids = source_coll.get_name_uid(plain_name)
+            if not src_uids:
+                return None
+            src_uid = src_uids[0]
+
+            src_obj = source_coll.get_uid_vtk_obj(src_uid)
+            if src_obj is None:
+                return None
+
+            try:
+                src_topology = source_coll.get_uid_topology(src_uid)
+            except Exception:
+                src_topology = ""
+
+            try:
+                source_scenario = source_coll.get_uid_scenario(src_uid)
+            except Exception:
+                source_scenario = "undef"
+
+            try:
+                source_props = list(source_coll.get_uid_properties_names(src_uid))
+            except Exception:
+                source_props = []
+            try:
+                source_comps = list(source_coll.get_uid_properties_components(src_uid))
+            except Exception:
+                source_comps = []
+
+            def _unique_name(collection, base_name):
+                existing_names = set(collection.df["name"].tolist())
+                out_name = base_name
+                idx = 1
+                while out_name in existing_names:
+                    idx += 1
+                    out_name = f"{base_name}_{idx}"
+                return out_name
+
+            structured_topologies = {"Seismics", "Image3D", "Voxet", "XsVoxet"}
+            if src_topology in structured_topologies:
+                scalar_name = None
+                try:
+                    if (
+                        hasattr(self, "slice_prop_by_entity")
+                        and entity_name in self.slice_prop_by_entity
+                    ):
+                        cand = self.slice_prop_by_entity[entity_name]
+                        if cand and cand not in ["none", "X", "Y", "Z"] and not cand.endswith("]"):
+                            scalar_name = cand
+                except Exception:
+                    pass
+                if scalar_name is None and source_props:
+                    scalar_name = source_props[0]
+
+                plane = self.parent.xsect_coll.get_uid_vtk_plane(xuid)
+                cutter = vtkCutter()
+                cutter.SetCutFunction(plane)
+                cutter.SetInputData(src_obj)
+                cutter.Update()
+                cut_out = cutter.GetOutput()
+                if cut_out is None or cut_out.GetNumberOfPoints() <= 0:
+                    return None
+
+                point_data = cut_out.GetPointData()
+                arr = point_data.GetArray(scalar_name) if scalar_name else None
+                if arr is None:
+                    arr = point_data.GetArray(0)
+                    if arr is None:
+                        return None
+                    scalar_name = arr.GetName() if arr.GetName() else scalar_name
+                else:
+                    point_data.SetActiveScalars(scalar_name)
+
+                values = numpy_support.vtk_to_numpy(arr)
+                if values.ndim > 1:
+                    values = values[:, 0]
+                values = values.reshape((-1,))
+
+                cutter_bounds = np.array(cut_out.GetBounds(), dtype=float)
+                if np.any(~np.isfinite(cutter_bounds)):
+                    return None
+
+                try:
+                    src_dims = src_obj.GetDimensions()
+                    strike = float(self.parent.xsect_coll.get_uid_strike(xuid))
+                    normal = np.asarray(
+                        self.parent.xsect_coll.get_uid_normal_vect(section_uid=xuid),
+                        dtype=float,
+                    )
+                    normal_abs = np.abs(normal)
+                    axis_idx = int(np.argmax(normal_abs))
+                    if axis_idx == 0:  # X-normal slice
+                        dim_w = int(max(2, src_dims[1]))
+                        dim_z = int(max(2, src_dims[2]))
+                        spacing_z = abs(
+                            (src_obj.GetBounds()[5] - src_obj.GetBounds()[4])
+                            / max(src_dims[2] - 1, 1)
+                        )
+                    elif axis_idx == 1:  # Y-normal slice
+                        dim_w = int(max(2, src_dims[0]))
+                        dim_z = int(max(2, src_dims[2]))
+                        spacing_z = abs(
+                            (src_obj.GetBounds()[5] - src_obj.GetBounds()[4])
+                            / max(src_dims[2] - 1, 1)
+                        )
+                    else:  # Z-normal slice
+                        dim_w = int(max(2, src_dims[0]))
+                        dim_z = int(max(2, src_dims[1]))
+                        spacing_z = abs(
+                            (src_obj.GetBounds()[3] - src_obj.GetBounds()[2])
+                            / max(src_dims[1] - 1, 1)
+                        )
+                except Exception:
+                    strike = float(self.parent.xsect_coll.get_uid_strike(xuid))
+                    npts = int(cut_out.GetNumberOfPoints())
+                    dim_z = int(max(2, round(np.sqrt(max(npts, 4)))))
+                    dim_w = int(max(2, round(max(npts, 4) / dim_z)))
+                    spacing_z = abs(cutter_bounds[5] - cutter_bounds[4]) / max(dim_z - 1, 1)
+
+                spacing_w = np.sqrt(
+                    (cutter_bounds[1] - cutter_bounds[0]) ** 2
+                    + (cutter_bounds[3] - cutter_bounds[2]) ** 2
+                ) / max(dim_w - 1, 1)
+                if spacing_w <= 0:
+                    spacing_w = 1.0
+                if spacing_z <= 0:
+                    spacing_z = 1.0
+
+                if strike <= 90:
+                    origin = [cutter_bounds[0], cutter_bounds[2], cutter_bounds[4]]
+                    direction_matrix = [
+                        np.sin(strike * np.pi / 180), 0, -(np.cos(strike * np.pi / 180)),
+                        np.cos(strike * np.pi / 180), 0, np.sin(strike * np.pi / 180),
+                        0, 1, 0,
+                    ]
+                elif strike <= 180:
+                    origin = [cutter_bounds[1], cutter_bounds[2], cutter_bounds[4]]
+                    direction_matrix = [
+                        -(np.sin(strike * np.pi / 180)), 0, -(np.cos(strike * np.pi / 180)),
+                        -(np.cos(strike * np.pi / 180)), 0, np.sin(strike * np.pi / 180),
+                        0, 1, 0,
+                    ]
+                elif strike <= 270:
+                    origin = [cutter_bounds[0], cutter_bounds[2], cutter_bounds[4]]
+                    direction_matrix = [
+                        -(np.sin(strike * np.pi / 180)), 0, -(np.cos(strike * np.pi / 180)),
+                        -(np.cos(strike * np.pi / 180)), 0, np.sin(strike * np.pi / 180),
+                        0, 1, 0,
+                    ]
+                else:
+                    origin = [cutter_bounds[1], cutter_bounds[2], cutter_bounds[4]]
+                    direction_matrix = [
+                        np.sin(strike * np.pi / 180), 0, -(np.cos(strike * np.pi / 180)),
+                        np.cos(strike * np.pi / 180), 0, np.sin(strike * np.pi / 180),
+                        0, 1, 0,
+                    ]
+
+                probe_image = vtkImageData()
+                probe_image.SetOrigin(origin)
+                probe_image.SetSpacing([float(spacing_w), float(spacing_z), 0.0])
+                probe_image.SetDimensions([int(dim_w), int(dim_z), 1])
+                probe_image.SetDirectionMatrix(direction_matrix)
+
+                xyz_cutter = numpy_support.vtk_to_numpy(cut_out.GetPoints().GetData())
+                n_probe_pts = probe_image.GetNumberOfPoints()
+                xyz_probe = np.zeros((n_probe_pts, 3), dtype=float)
+                for i in range(n_probe_pts):
+                    xyz_probe[i, :] = probe_image.GetPoint(i)
+
+                regular_values = sp_griddata(
+                    points=xyz_cutter, values=values, xi=xyz_probe, method="nearest"
+                )
+                if regular_values is None:
+                    return None
+
+                vtk_vals = numpy_support.numpy_to_vtk(np.asarray(regular_values))
+                vtk_vals.SetName(scalar_name)
+                probe_image.GetPointData().AddArray(vtk_vals)
+                probe_image.GetPointData().SetActiveScalars(scalar_name)
+
+                obj_dict = deepcopy(self.parent.mesh3d_coll.entity_dict)
+                base_name = f"{plain_name}_xs_{self.parent.xsect_coll.get_uid_name(xuid)}"
+                obj_dict["name"] = _unique_name(self.parent.mesh3d_coll, base_name)
+                obj_dict["scenario"] = source_scenario
+                obj_dict["topology"] = "XsVoxet"
+                obj_dict["parent_uid"] = xuid
+                obj_dict["properties_names"] = [scalar_name]
+                obj_dict["properties_components"] = [1]
+                obj_dict["properties_types"] = ["float"]
+                obj_dict["vtk_obj"] = XsVoxet(x_section_uid=xuid, parent=self.parent)
+                obj_dict["vtk_obj"].ShallowCopy(probe_image)
+                if obj_dict["vtk_obj"].points_number <= 0:
+                    return None
+                return self.parent.mesh3d_coll.add_entity_from_dict(obj_dict)
+
+            # Generic mesh fallback: create section polyline/surface from cutter output.
+            plane = self.parent.xsect_coll.get_uid_vtk_plane(xuid)
+            cutter = vtkCutter()
+            cutter.SetCutFunction(plane)
+            cutter.SetInputData(src_obj)
+            cutter.Update()
+            cut_out = cutter.GetOutput()
+            if cut_out is None or cut_out.GetNumberOfPoints() <= 0:
+                return None
+
+            base_name = f"{plain_name}_xs_{self.parent.xsect_coll.get_uid_name(xuid)}"
+            obj_dict = deepcopy(self.parent.geol_coll.entity_dict)
+            obj_dict["name"] = _unique_name(self.parent.geol_coll, base_name)
+            obj_dict["scenario"] = source_scenario
+            obj_dict["role"] = "undef"
+            obj_dict["feature"] = "undef"
+            obj_dict["parent_uid"] = xuid
+            obj_dict["properties_names"] = source_props
+            obj_dict["properties_components"] = source_comps
+
+            line_data = None
+            if cut_out.GetNumberOfLines() > 0:
+                clean = vtkCleanPolyData()
+                clean.SetInputData(cut_out)
+                clean.SetTolerance(0.0)
+                clean.Update()
+                stripper = vtkStripper()
+                stripper.JoinContiguousSegmentsOn()
+                stripper.SetInputConnection(clean.GetOutputPort())
+                stripper.Update()
+                stripped = stripper.GetOutput()
+                if stripped and stripped.GetNumberOfPoints() > 0 and stripped.GetNumberOfLines() > 0:
+                    line_data = stripped
+
+            if line_data is not None:
+                obj_dict["topology"] = "XsPolyLine"
+                obj_dict["vtk_obj"] = XsPolyLine(x_section_uid=xuid, parent=self.parent)
+                obj_dict["vtk_obj"].DeepCopy(line_data)
+            elif cut_out.GetNumberOfPolys() > 0:
+                obj_dict["topology"] = "TriSurf"
+                obj_dict["vtk_obj"] = TriSurf()
+                obj_dict["vtk_obj"].DeepCopy(cut_out)
+            else:
+                obj_dict["topology"] = "XsVertexSet"
+                obj_dict["vtk_obj"] = XsVertexSet(x_section_uid=xuid, parent=self.parent)
+                obj_dict["vtk_obj"].DeepCopy(cut_out)
+
+            try:
+                for data_key in obj_dict["vtk_obj"].point_data_keys:
+                    if data_key not in obj_dict["properties_names"]:
+                        obj_dict["vtk_obj"].remove_point_data(data_key)
+            except Exception:
+                pass
+
+            if obj_dict["vtk_obj"].GetNumberOfPoints() <= 0:
+                return None
+            return self.parent.geol_coll.add_entity_from_dict(obj_dict)
+        except Exception:
+            self.print_terminal("Warning: could not attach section data for new X-Section.")
+            return None
 
     def _set_tree_checked_for_uid(self, coll_name, uid, checked: bool):
         """Programmatically set the checkbox state in the collection tree for a given uid."""

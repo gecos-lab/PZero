@@ -26,24 +26,32 @@ from ..helpers.helper_dialogs import (
 
 class ViewXsection(View2D):
     def __init__(self, parent=None, *args, **kwargs):
-        # Choose section name with dialog.
-        if parent.xsect_coll.get_names:
-            self.this_x_section_name = input_combo_dialog(
-                parent=None,
-                title="Xsection",
-                label="Choose Xsection",
-                choice_list=parent.xsect_coll.get_names,
-            )
+        # If requested by caller, open directly on a specific section uid.
+        preferred_uid = getattr(parent, "_next_xsection_uid", None)
+        if preferred_uid and preferred_uid in parent.xsect_coll.get_uids:
+            self.this_x_section_uid = preferred_uid
+            self.this_x_section_name = parent.xsect_coll.get_uid_name(preferred_uid)
+            parent._next_xsection_uid = None
         else:
-            message_dialog(title="Xsection", message="No Xsection in project")
-            return
-        # Select section uid from name.
-        if self.this_x_section_name:
-            self.this_x_section_uid = parent.xsect_coll.df.loc[
-                parent.xsect_coll.df["name"] == self.this_x_section_name, "uid"
-            ].values[0]
-        else:
-            return
+            parent._next_xsection_uid = None
+            # Choose section name with dialog.
+            if parent.xsect_coll.get_names:
+                self.this_x_section_name = input_combo_dialog(
+                    parent=None,
+                    title="Xsection",
+                    label="Choose Xsection",
+                    choice_list=parent.xsect_coll.get_names,
+                )
+            else:
+                message_dialog(title="Xsection", message="No Xsection in project")
+                return
+            # Select section uid from name.
+            if self.this_x_section_name:
+                self.this_x_section_uid = parent.xsect_coll.df.loc[
+                    parent.xsect_coll.df["name"] == self.this_x_section_name, "uid"
+                ].values[0]
+            else:
+                return
         # Set filter for entities belonging to this cross section.
         # Note that this filter does not return the cross section itself. If we want its frame to be shown we must
         # find a different solution to add it to the plotter.
