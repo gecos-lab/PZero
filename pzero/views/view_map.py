@@ -58,15 +58,7 @@ class ViewMap(View2D):
         """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
         # append code from superclass
         super().initialize_menu_tools()
-
-        # then add new code specific to this class
-        self.restoreGeographicOrientationButton = QAction(
-            "Restore Geographic Orientation", self
-        )
-        self.restoreGeographicOrientationButton.triggered.connect(
-            self.restore_geographic_orientation
-        )
-        self.menuView.addAction(self.restoreGeographicOrientationButton)
+   
 
         self.sectionFromStrikeButton = QAction("Section from strike", self)
         self.sectionFromStrikeButton.triggered.connect(
@@ -556,29 +548,3 @@ class ViewMap(View2D):
 
     def set_orientation_widget(self):
         self.plotter.add_north_arrow_widget(interactive=None, color="gold")
-
-    # ================================  Methods specific to map view ==================================================
-
-    def restore_geographic_orientation(self):
-        """Restore map camera to top-down geographic orientation (north-up)."""
-        camera = self.plotter.camera
-        focal_x, focal_y, focal_z = camera.focal_point
-        pos_x, pos_y, pos_z = camera.position
-
-        dx = pos_x - focal_x
-        dy = pos_y - focal_y
-        dz = pos_z - focal_z
-        distance = sqrt(dx * dx + dy * dy + dz * dz)
-        if distance == 0:
-            distance = 1.0
-
-        current_parallel_scale = getattr(camera, "parallel_scale", None)
-        self.plotter.camera_position = [
-            (focal_x, focal_y, focal_z + distance),
-            (focal_x, focal_y, focal_z),
-            (0.0, 1.0, 0.0),
-        ]
-        if current_parallel_scale is not None:
-            camera.parallel_scale = current_parallel_scale
-
-        self.plotter.render()

@@ -3,7 +3,6 @@ PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
 from PySide6.QtGui import QAction
-from PySide6.QtCore import QEvent, Qt
 
 # numpy import____
 from numpy import array as np_array
@@ -14,7 +13,6 @@ from pyvista import Arrow as pv_Arrow
 # PZero imports____
 from .abstract_view_2d import View2D
 from vtkmodules.vtkFiltersCore import vtkAppendPolyData
-from vtkmodules.vtkInteractionStyle import vtkInteractorStyleImage
 from pyvista import Line as pv_Line
 from .view_map import ViewMap
 from ..orientation_analysis import get_dip_dir_vectors
@@ -24,41 +22,6 @@ from ..helpers.helper_dialogs import (
     options_dialog,
     input_checkbox_dialog,
 )
-
-
-class _NoCtrlRotateImageStyle(vtkInteractorStyleImage):
-    """Image interactor style variant that neutralizes Ctrl during mouse interaction."""
-
-    def _clear_ctrl_modifier(self):
-        interactor = self.GetInteractor()
-        if interactor and interactor.GetControlKey():
-            interactor.SetControlKey(0)
-
-    def OnLeftButtonDown(self):
-        self._clear_ctrl_modifier()
-        super().OnLeftButtonDown()
-
-    def OnMiddleButtonDown(self):
-        self._clear_ctrl_modifier()
-        super().OnMiddleButtonDown()
-
-    def OnRightButtonDown(self):
-        self._clear_ctrl_modifier()
-        super().OnRightButtonDown()
-
-    def OnMouseMove(self):
-        self._clear_ctrl_modifier()
-        super().OnMouseMove()
-
-    # Hard-disable rotate path for xsection interaction.
-    def OnStartRotate(self):
-        return
-
-    def OnRotate(self):
-        return
-
-    def Rotate(self):
-        return
 
 
 class ViewXsection(View2D):
@@ -96,12 +59,6 @@ class ViewXsection(View2D):
         # Rename Base View, Menu and Tool
         self.setWindowTitle(f"Xsection View: {self.this_x_section_name}")
 
-        # Block Ctrl+mouse gestures on the VTK widget (prevents Ctrl-rotate).
-        self.plotter.interactor.installEventFilter(self)
-
-        # Keep image interaction in strict 2D mode and disable CTRL-driven rotation.
-        self._install_no_ctrl_image_style()
-
         # Store center and direction in internal variables of this view
         self.set_section_projection()
 
@@ -125,19 +82,6 @@ class ViewXsection(View2D):
         self.fitFrameButton.triggered.connect(self.fit_frame)
         self.menuModify.addAction(self.fitFrameButton)
 
-    def eventFilter(self, obj, event):
-        """Block Ctrl+mouse interaction events on xsection VTK widget."""
-        if obj is getattr(self.plotter, "interactor", None):
-            if event.type() in (
-                QEvent.MouseButtonPress,
-                QEvent.MouseButtonRelease,
-                QEvent.MouseMove,
-                QEvent.Wheel,
-            ):
-                if event.modifiers() & Qt.ControlModifier:
-                    return True
-        return super().eventFilter(obj, event)
-
     # # --- AGGIUNTA: funzione di slot per sincronizzazione selezione ---
     # def on_selection_changed(self, collection):
     #     print("DEBUG SLOT: selection_changed ricevuto per collection:", collection)
@@ -152,11 +96,6 @@ class ViewXsection(View2D):
             interactive=None,
             color="gold",
         )
-
-    def end_pick(self, pos):
-        """Restore default 2D interaction and keep CTRL-rotate disabled."""
-        super().end_pick(pos)
-        self._install_no_ctrl_image_style()
 
     # ================================  Methods specific to Xsection views ============================================
 
@@ -182,18 +121,6 @@ class ViewXsection(View2D):
         self.plotter.camera.focal_point = self.center
         self.plotter.camera.position = self.center + self.direction
         self.plotter.reset_camera()
-
-    def _install_no_ctrl_image_style(self):
-        """Install image interactor style with Ctrl-rotate suppression."""
-        try:
-            style = _NoCtrlRotateImageStyle()
-            style.SetInteractionModeToImage2D()
-            style.SetDefaultRenderer(self.plotter.renderer)
-            self.plotter.iren.interactor.SetInteractorStyle(style)
-            # Keep a reference to avoid style garbage collection.
-            self._image_style_no_ctrl = style
-        except Exception:
-            pass
 
     def fit_frame(self):
         """
