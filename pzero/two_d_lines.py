@@ -112,6 +112,23 @@ def draw_line_3d(self):
     """
     import numpy as np
     from vtkmodules.vtkRenderingCore import vtkCellPicker
+
+    def _get_vertical_exaggeration():
+        """Return current Z scale used in the 3D view (fallback to 1.0)."""
+        v_exag = 1.0
+        try:
+            if hasattr(self, "v_exaggeration") and self.v_exaggeration not in [None, 0]:
+                v_exag = float(self.v_exaggeration)
+            elif (
+                hasattr(self, "plotter")
+                and getattr(self.plotter, "scale", None) is not None
+                and len(self.plotter.scale) >= 3
+                and self.plotter.scale[2] not in [None, 0]
+            ):
+                v_exag = float(self.plotter.scale[2])
+        except Exception:
+            v_exag = 1.0
+        return v_exag if np.isfinite(v_exag) and v_exag != 0 else 1.0
     
     def on_left_click(obj, event):
         """Handle left-click to add point only if clicking on a surface.
@@ -145,6 +162,11 @@ def draw_line_3d(self):
                 if isinstance(picked_position, (tuple, list, np.ndarray)):
                     point = list(picked_position) if not isinstance(picked_position, list) else picked_position
                     if len(point) == 3:
+                        # Picker returns coordinates in rendered/scaled space.
+                        # Convert Z back to model space so the saved line respects vertical exaggeration.
+                        v_exag = _get_vertical_exaggeration()
+                        if v_exag != 1.0:
+                            point[2] = point[2] / v_exag
                         tracer_3d.add_point(point)
                         self.print_terminal(f"✓ Point {len(tracer_3d.points)} added at ({point[0]:.2f}, {point[1]:.2f}, {point[2]:.2f})")
                     else:
