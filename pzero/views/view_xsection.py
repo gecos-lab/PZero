@@ -15,6 +15,7 @@ from .abstract_view_2d import View2D
 from vtkmodules.vtkFiltersCore import vtkAppendPolyData
 from pyvista import Line as pv_Line
 from .view_map import ViewMap
+from ..helpers.helper_functions import freeze_gui_onoff
 from ..orientation_analysis import get_dip_dir_vectors
 from ..helpers.helper_dialogs import (
     input_combo_dialog,
@@ -122,6 +123,7 @@ class ViewXsection(View2D):
         self.plotter.camera.position = self.center + self.direction
         self.plotter.reset_camera()
 
+    @freeze_gui_onoff
     def fit_frame(self):
         """
         Fit frame to all entities in view.
