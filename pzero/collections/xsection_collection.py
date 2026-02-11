@@ -674,26 +674,30 @@ class XSectionCollection(BaseCollection):
         """Get XYZ world coordinates from UV cross-section plane coordinates."""
         # the following are strike, dip, normal unit vectors and the
         # position vector origin of the cross-section plane in world XYZ coordinates
-        strike_vct = np_float64(self.get_uid_strike_vect(section_uid=section_uid)).reshape(
+        # they are all converted to float64 row vectors (1 row, 3 columns)
+        strike_vct = np_float64(
+            self.get_uid_strike_vect(section_uid=section_uid)
+        ).reshape(1, 3)
+        dip_vct = np_float64(self.get_uid_dip_vect(section_uid=section_uid)).reshape(
             1, 3
         )
-        dip_vct = np_float64(self.get_uid_dip_vect(section_uid=section_uid)).reshape(1, 3)
         origin = np_float64(self.get_uid_origin(uid=section_uid)).reshape(1, 3)
-
+        # U and V are converted to float64 column vectors (columns depending on size, 1 column)
         U_arr = np_array(U, dtype=np_float64)
         V_arr = np_array(V, dtype=np_float64)
         if U_arr.shape != V_arr.shape:
             raise ValueError("U and V must have the same shape in plane2world.")
-
         U_flat = U_arr.reshape(-1, 1)
         V_flat = V_arr.reshape(-1, 1)
         # the following is the vector from the origin of the cross-section plane
         # to the point UV, already in world XYZ coordinates
+        # origin_2_point will have the same n. of rows as U_flat, V_flat and three columns as strike_vct etc.
         origin_2_point = U_flat * strike_vct + V_flat * dip_vct
         # then we add the vector from the origin of the cross-section plane to
         # world coordinates origin (0,0,0), and we get the position in world XYZ coordinates
+        # XYZ is converted back to floa32 and has the same shape as origin_2_point
         XYZ = np_float32(origin_2_point + origin)
-
+        # the following tests are redundant since we know by linear algebra the shape of XYZ --------------------------
         if U_arr.ndim == 0:
             if as_arr:
                 return XYZ[0]
@@ -889,22 +893,28 @@ class XSectionCollection(BaseCollection):
             Z=append_points[:, 2],
         )
         # world2plane returns column vectors (N, 1); flatten to scalar-compatible 1D arrays.
+        # why not going back to the old world2plane that was simply returning flat arrays? ----------------------------
         append_points_U = np_array(append_points_U, dtype=np_float64).reshape(-1)
         append_points_V = np_array(append_points_V, dtype=np_float64).reshape(-1)
-        max_U = float(append_points_U.max())
+        max_U = float(
+            append_points_U.max()
+        )  # why these float? they are float aready --------------------------------
         min_U = float(append_points_U.min())
         max_V = float(append_points_V.max())
         min_V = float(append_points_V.min())
         new_length = float(max_U - min_U)
         new_height = float(max_V - min_V)
-
         shift_origin = np_array(
             self.plane2world(section_uid=xuid, U=min_U, V=min_V, as_arr=True),
             dtype=np_float64,
-        ).reshape(-1)
+        ).reshape(
+            -1
+        )  # no need for float64 here, jst internally in the rotation --------------------------------------
         self.set_uid_length(xuid, new_length)
         self.set_uid_width(xuid, new_height)
-        self.set_uid_origin_x(xuid, float(shift_origin[0]))
+        self.set_uid_origin_x(
+            xuid, float(shift_origin[0])
+        )  # why these float? they are float aready ----------------
         self.set_uid_origin_y(xuid, float(shift_origin[1]))
         self.set_uid_origin_z(xuid, float(shift_origin[2]))
         self.set_geometry(uid=xuid)
