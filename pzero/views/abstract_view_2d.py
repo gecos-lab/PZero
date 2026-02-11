@@ -18,6 +18,8 @@ class View2D(ViewVTK):
         self.line_dict = None
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
+        self._ctrl_suppression_observer_tag = None
+        self._install_ctrl_suppression_observers()
 
     # ================================  General methods shared by all views - built incrementally =====================
 
@@ -131,7 +133,6 @@ class View2D(ViewVTK):
             lambda: self.vector_by_mouse(measure_distance)
         )
         self.menuView.addAction(self.measureDistanceButton)
-
         self.cleanSectionButton = QAction("Clean intersections", self)
         self.cleanSectionButton.triggered.connect(lambda: clean_intersection(self))
         self.menuModify.addAction(self.cleanSectionButton)
@@ -143,7 +144,18 @@ class View2D(ViewVTK):
         self.show()
 
     # ================================  Methods specific to 2D views ==================================================
+    def _clear_ctrl_modifier(self, interactor, _event):
+        """VTK observer callback: clear Ctrl modifier before default handlers."""
+        if interactor and interactor.GetControlKey():
+            interactor.SetControlKey(0)
 
+    def _install_ctrl_suppression_observers(self):
+        """Install a high-priority VTK observer for Ctrl+left-click suppression."""
+        interactor = self.plotter.iren.interactor
+
+        self._ctrl_suppression_observer_tag = interactor.AddObserver(
+            "LeftButtonPressEvent", self._clear_ctrl_modifier, 10.0
+        )
     def end_pick(self, pos):
         """Function used to disable actor picking. Due to some slight difference,
         must be reimplemented in subclasses."""
