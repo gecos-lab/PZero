@@ -803,7 +803,7 @@ def merge_lines(self):
         self.enable_actions()
         return
     # Create local copy of selected_uids
-    in_uids = self.selected_uids
+    in_uids = list(self.selected_uids)
     if len(in_uids) <= 1:
         self.print_terminal(
             " -- Not enough input data selected. Select at least 2 objects -- "
@@ -837,17 +837,21 @@ def merge_lines(self):
     # Create empty dictionary for the output line.
     new_line = deepcopy(self.parent.geol_coll.entity_dict)
     # Populate metadata from first selected line.
-    new_line["name"] = self.parent.geol_coll.get_uid_name(in_uids[0])
-    new_line["topology"] = self.parent.geol_coll.get_uid_topology(in_uids[0])
-    new_line["role"] = self.parent.geol_coll.get_uid_role(in_uids[0])
-    new_line["feature"] = self.parent.geol_coll.get_uid_feature(in_uids[0])
-    new_line["scenario"] = self.parent.geol_coll.get_uid_scenario(in_uids[0])
-    new_line["parent_uid"] = self.parent.geol_coll.get_uid_x_section(in_uids[0])
-    # Mering properties not yet implemented.
-    new_line["properties_names"] = []
-    new_line["properties_components"] = []
+    source_uid = in_uids[0]
+    new_line["name"] = self.parent.geol_coll.get_uid_name(source_uid)
+    new_line["topology"] = self.parent.geol_coll.get_uid_topology(source_uid)
+    new_line["role"] = self.parent.geol_coll.get_uid_role(source_uid)
+    new_line["feature"] = self.parent.geol_coll.get_uid_feature(source_uid)
+    new_line["scenario"] = self.parent.geol_coll.get_uid_scenario(source_uid)
+    new_line["parent_uid"] = self.parent.geol_coll.get_uid_x_section(source_uid)
+    new_line["properties_names"] = deepcopy(
+        self.parent.geol_coll.get_uid_properties_names(source_uid)
+    )
+    new_line["properties_components"] = deepcopy(
+        self.parent.geol_coll.get_uid_properties_components(source_uid)
+    )
     # Create empty PolyLine() or XsPolyLine().
-    if self.parent.geol_coll.get_uid_topology(in_uids[0]) == "XsPolyLine":
+    if self.parent.geol_coll.get_uid_topology(source_uid) == "XsPolyLine":
         new_line["vtk_obj"] = XsPolyLine()
     else:
         new_line["vtk_obj"] = PolyLine()
@@ -883,12 +887,18 @@ def merge_lines(self):
     new_line["vtk_obj"].points = points_0
     # Automatically create all line cells.
     new_line["vtk_obj"].auto_cells()
-    # Deselect input lines.
+    # Add merged line first. Remove source lines only if add succeeds.
+    out_uid = self.parent.geol_coll.add_entity_from_dict(new_line)
+    if not out_uid:
+        self.print_terminal(" -- Failed to add merged line. Input lines not removed -- ")
+        self.enable_actions()
+        return
+    # Deselect input lines, then remove old entities.
     self.clear_selection()
-    # Remove input lines.
     for uid in in_uids:
+        if uid == out_uid:
+            continue
         self.parent.geol_coll.remove_entity(uid)
-    self.parent.geol_coll.add_entity_from_dict(new_line)
 
 
 def _ordered_unique_uids(uids):
