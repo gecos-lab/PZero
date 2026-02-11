@@ -132,10 +132,10 @@ def _validate_and_fix_roles(gdf, geom_type, props_map, column_names, valid_roles
 
 def _print_import_summary(caller, imported_count, total_entities, invalid_role_count):
     """Print a terminal summary message after shapefile import."""
-    msg = f"Shapefile import complete: {imported_count}/{total_entities} entities imported"
+    msg = f"Shapefile import complete: {imported_count}/{total_entities} entities imported."
     if invalid_role_count > 0:
-        msg += f" ({invalid_role_count} had invalid roles set to 'undef')"
-    caller.print_terminal(msg + ".")
+        msg += f" ({invalid_role_count} had invalid roles set to 'undef.')"
+    caller.print_terminal(msg)
 
 
 def shp2vtk(self=None, in_file_name=None, collection=None):
