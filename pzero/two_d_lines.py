@@ -1017,8 +1017,10 @@ def resample_lines_distance(self):
     # Input distance for evenly spacing resampling.
     # Add a message to not use it with Draw Line 3D method
     self.print_terminal(
-        "Resample Line with Distance. Warning: do not use with Draw Line 3D method"
-        "Only XsPolylines maintain the Z value. For Polylines on the DEM it is necessary to reproject them."
+        "Resample Line with Distance. \nWARNING: do not use with Draw Line 3D method. \n"
+        "Only XsPolylines maintain the Z value. For Polylines on the DEM it is necessary to reproject them. \n"
+        "Please, notice that if snapping actions have been applied to the selected line(s), \n"
+        "watertight connections with other lines may be lost after resampling."
     )
     distance_delta = input_one_value_dialog(
         parent=self,
@@ -1112,8 +1114,10 @@ def resample_lines_number_points(self):
         return
     # Input the number of points for evenly spacing resampling.
     self.print_terminal(
-        "Resample Line with Distance. Warning: do not use with Draw Line 3D method"
-        "Only XsPolylines maintain the Z value. For Polylines on the DEM it is necessary to reproject them."
+        "Resample Line with Distance. \nWARNING: do not use with Draw Line 3D method. \n"
+        "Only XsPolylines maintain the Z value. For Polylines on the DEM it is necessary to reproject them. \n"
+        "Please, notice that if snapping actions have been applied to the selected line(s), \n"
+        "watertight connections with other lines may be lost after resampling."
     )
     number_of_points = input_one_value_dialog(
         parent=self,
