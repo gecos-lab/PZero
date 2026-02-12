@@ -7057,6 +7057,42 @@ class MeshItWorkflowGUI(QWidget):
         """Convenience wrapper to add wells to the Intersection tab plotter."""
         if hasattr(self, 'intersection_plotter') and self.intersection_plotter:
             self._add_wells_polyline_to_plotter(self.intersection_plotter)
+    def _has_custom_refine_constraint_selection(self) -> bool:
+        """
+        Return True when refine constraints were customized from defaults:
+        - any segment unchecked in column 0
+        - any segment marked as hole in column 4
+        """
+        from PySide6.QtCore import Qt
+
+        tree = getattr(self, "refine_constraint_tree", None)
+        if tree:
+            def walk(item):
+                data = item.data(0, Qt.UserRole)
+                if data and data.get("type") in ("constraint", "well_constraint"):
+                    if item.checkState(0) != Qt.Checked:
+                        return True
+                    if item.checkState(4) == Qt.Checked:
+                        return True
+                for i in range(item.childCount()):
+                    if walk(item.child(i)):
+                        return True
+                return False
+
+            for i in range(tree.topLevelItemCount()):
+                if walk(tree.topLevelItem(i)):
+                    return True
+
+        # Fallback for cases where the tree is not available but internal state exists.
+        seg_map = getattr(self, "_refine_segment_map", None)
+        if isinstance(seg_map, dict):
+            for seg_data in seg_map.values():
+                if not seg_data.get("selected", True):
+                    return True
+                if seg_data.get("is_hole", False):
+                    return True
+        return False
+
     def _refine_intersection_lines_action(self):
         """
         Action to refine intersection lines by:
@@ -7067,6 +7103,11 @@ class MeshItWorkflowGUI(QWidget):
         """
         logger.info("Starting refinement of intersection lines...")
         self.statusBar().showMessage("Refining intersection lines...")
+
+        # When using Multi-Patch, preserve the angular-gap hull geometry (skip draping)
+        mesh_tri_method = "standard"
+        if hasattr(self, 'mesh_tri_method_combo'):
+            mesh_tri_method = self.mesh_tri_method_combo.currentData() or "standard"
 
         if not hasattr(self, 'datasets_intersections') or not self.datasets_intersections:
             QMessageBox.information(self, "No Intersections", "No intersections found to refine.")
@@ -7284,34 +7325,73 @@ class MeshItWorkflowGUI(QWidget):
                 'interp': self.mesh_interp_combo.currentText(),
                 'smoothing': float(self.mesh_smoothing_input.value())
             }
+            config_3d = {
+                'k_neighbors': 20,
+                'interp': self.mesh_interp_combo.currentText(),
+                'smoothing': float(self.mesh_smoothing_input.value())
+            }
             reverse_surface_map = {v: k for k, v in temp_model.surface_original_to_temp_idx_map.items()}
             for temp_surface_idx, temp_surface in enumerate(temp_model.surfaces):
-                if hasattr(temp_surface, 'convex_hull') and len(temp_surface.convex_hull) >= 3:
-                    raw_hull_points = [Vector3D(p.x, p.y, p.z, point_type=getattr(p, "point_type", "DEFAULT")) for p in temp_surface.convex_hull]
-                    original_idx = reverse_surface_map.get(temp_surface_idx)
-                    refined_hull_3d = raw_hull_points
-                    if original_idx is not None and 'points' in self.datasets[original_idx]:
-                        scattered_points = [Vector3D(p[0], p[1], p[2]) for p in self.datasets[original_idx]['points']]
-                        refined_hull_3d = refine_hull_with_interpolation(
-                            raw_hull_points, scattered_points, config
+                if not hasattr(temp_surface, 'convex_hull') or len(temp_surface.convex_hull) < 3:
+                    continue
+
+                original_idx = reverse_surface_map.get(temp_surface_idx)
+                if original_idx is None or 'points' not in self.datasets[original_idx]:
+                    continue
+
+                raw_hull_points = [Vector3D(p.x, p.y, p.z, point_type=getattr(p, "point_type", "DEFAULT")) for p in temp_surface.convex_hull]
+                scattered_points = [Vector3D(p[0], p[1], p[2]) for p in self.datasets[original_idx]['points']]
+
+                # Check per-surface hull method - skip 2D refinement for angular_gap surfaces
+                surface_hull_method = self.hull_method_by_surface.get(original_idx, "auto") if hasattr(self, 'hull_method_by_surface') else "auto"
+                # Handle both "angular" and "angular_gap" values (from different tables)
+                use_angular_gap = (surface_hull_method in ("angular_gap", "angular"))
+
+                # Also check if global setting was angular_gap and surface is using global
+                if surface_hull_method in ("auto", "global"):
+                    hull_method_combo = getattr(self, 'hull_method_combo', None)
+                    if hull_method_combo and hull_method_combo.currentData() == "angular_gap":
+                        use_angular_gap = True
+
+                # Respect per-surface triangulation mode if configured.
+                surface_tri_method = self.tri_method_by_surface.get(original_idx, "auto") if hasattr(self, 'tri_method_by_surface') else "auto"
+                if surface_tri_method in ("auto", "global"):
+                    surface_tri_method = mesh_tri_method
+                preserve_angular_gap_hull_for_surface = (surface_tri_method == "multipatch")
+
+                if use_angular_gap or preserve_angular_gap_hull_for_surface:
+                    # Use 3D hull refinement to preserve angular-gap hull shape
+                    logger.info(f"Using 3D hull refinement for surface {original_idx} to preserve angular-gap hull shape.")
+                    try:
+                        from Pymeshit.intersection_utils import refine_hull_3d_along_surface
+                        refined_hull_3d = refine_hull_3d_along_surface(
+                            raw_hull_points, scattered_points, config_3d
                         )
-                        
+                        logger.info(f"3D hull refinement complete for surface {temp_surface_idx}")
+                    except Exception as e:
+                        logger.warning(f"3D hull refinement failed for surface {temp_surface_idx}: {e}")
+                        # Keep original hull rather than distorting it
+                        refined_hull_3d = raw_hull_points
+                else:
+                    # Standard 2D projection refinement for flat surfaces
+                    refined_hull_3d = refine_hull_with_interpolation(
+                        raw_hull_points, scattered_points, config
+                    )
 
-                    # Step 4: Create refined Vector3D objects preserving point types
-                    refined_hull_points = []
-                    for i, (orig_pt, refined_3d) in enumerate(zip(raw_hull_points, refined_hull_3d)):
-                        # If refined_3d is already a Vector3D, just copy it
-                        if isinstance(refined_3d, Vector3D):
-                            refined_pt = Vector3D(refined_3d.x, refined_3d.y, refined_3d.z)
-                        else:
-                            refined_pt = Vector3D(refined_3d[0], refined_3d[1], refined_3d[2])
-                        # Preserve original point type information
-                        refined_pt.point_type = getattr(orig_pt, 'point_type', 'DEFAULT')
-                        if hasattr(orig_pt, 'type'):
-                            refined_pt.type = orig_pt.type
-                        refined_hull_points.append(refined_pt)
+                # Convert refined hull back to Vector3D while preserving point annotations.
+                refined_hull_points = []
+                for i, refined_3d in enumerate(refined_hull_3d):
+                    source_pt = raw_hull_points[min(i, len(raw_hull_points) - 1)]
+                    if isinstance(refined_3d, Vector3D):
+                        refined_pt = Vector3D(refined_3d.x, refined_3d.y, refined_3d.z)
+                    else:
+                        refined_pt = Vector3D(refined_3d[0], refined_3d[1], refined_3d[2])
+                    refined_pt.point_type = getattr(source_pt, 'point_type', 'DEFAULT')
+                    if hasattr(source_pt, 'type'):
+                        refined_pt.type = source_pt.type
+                    refined_hull_points.append(refined_pt)
 
-                    temp_surface.convex_hull = refined_hull_points
+                temp_surface.convex_hull = refined_hull_points
         except Exception as e:
             logger.error(f"Error during hull refinement: {e}", exc_info=True)
             return
