@@ -2024,71 +2024,127 @@ def refine_hull_with_interpolation(raw_hull_points: List[Vector3D],
 
 def align_intersections_to_convex_hull(surface_idx: int, model):
     """
-    Geometry-preserving alignment only (no resampling here).
-    - Snap intersection endpoints to any hull vertex (not just special)
-    - If not snapped, project to closest hull edge and INSERT a new special vertex on that edge
+    Align intersection endpoints to a surface hull.
+    This keeps endpoint attachment topologically consistent by using the same
+    point object when snapping/inserting on the hull.
     """
     surface = model.surfaces[surface_idx]
     if not hasattr(surface, "convex_hull") or not surface.convex_hull or len(surface.convex_hull) < 3:
         logger.warning(f"Surface {surface_idx} has no valid convex hull for alignment.")
         return
 
-    snap_tol = 1e-4  # <<--- increased
-    proj_tol = 1e-1   # <<--- increased
+    hull = surface.convex_hull
+
+    # Adaptive tolerances from hull scale to support large-coordinate projects.
+    hull_np = np.array([[p.x, p.y, p.z] for p in hull], dtype=float)
+    diag = float(np.linalg.norm(np.max(hull_np, axis=0) - np.min(hull_np, axis=0)))
+    snap_tol = max(1e-8, diag * 1e-9)
+    proj_tol = max(5.0 * snap_tol, diag * 1e-7)
+
+    # Convert surface list index -> combined temp id if mapping is available.
+    surface_combined_idx = surface_idx
+    if hasattr(model, "surface_list_to_combined_idx_map"):
+        surface_combined_idx = model.surface_list_to_combined_idx_map.get(surface_idx, surface_idx)
+
+    def _is_surface_endpoint(intersection_obj):
+        is_surface1 = not model.is_polyline.get(intersection_obj.id1, True)
+        is_surface2 = not model.is_polyline.get(intersection_obj.id2, True)
+        return ((is_surface1 and intersection_obj.id1 == surface_combined_idx) or
+                (is_surface2 and intersection_obj.id2 == surface_combined_idx))
+
+    def _ptype(p):
+        return getattr(p, "point_type", getattr(p, "type", "DEFAULT")) or "DEFAULT"
+
+    def _set_common_type(p):
+        p.point_type = "COMMON_INTERSECTION_CONVEXHULL_POINT"
+        if hasattr(p, "type"):
+            p.type = "COMMON_INTERSECTION_CONVEXHULL_POINT"
+
+    def _project_to_segment_interior(v, a, b):
+        ab = b - a
+        den = ab.length_squared()
+        if den < 1e-30:
+            return None, None
+        t = (v - a).dot(ab) / den
+        if t < 0.0 or t >= 1.0:
+            return None, None
+        return a + ab * t, t
+
+    def _dist(a, b):
+        return (a - b).length()
+
+    def _edge_count(points):
+        if len(points) < 2:
+            return 0
+        is_closed = _dist(points[0], points[-1]) <= snap_tol
+        return len(points) - 1 if is_closed else len(points)
 
     for inter in model.intersections:
-        is_surface1 = not model.is_polyline.get(inter.id1, True)
-        is_surface2 = not model.is_polyline.get(inter.id2, True)
-        if not ((is_surface1 and inter.id1 == surface_idx) or (is_surface2 and inter.id2 == surface_idx)):
+        if not _is_surface_endpoint(inter):
             continue
         if not inter.points:
             continue
 
         endpoints = [(0, inter.points[0])] if len(inter.points) == 1 else [(0, inter.points[0]), (-1, inter.points[-1])]
         for ep_idx, ep in endpoints:
-            # Try snap to any hull vertex (not just special)
-            snapped = False
-            for v in surface.convex_hull:
-                if (ep - v).length() < snap_tol:
-                    inter.points[0 if ep_idx == 0 else -1] = v
-                    snapped = True
-                    logger.info(f"Snapped endpoint to hull vertex at ({v.x:.3f}, {v.y:.3f}, {v.z:.3f})")
+            endpoint_slot = 0 if ep_idx == 0 else -1
+
+            # Prefer snapping to existing special points first.
+            snapped_vertex = None
+            for v in hull:
+                if _ptype(v) != "DEFAULT" and _dist(ep, v) <= snap_tol:
+                    snapped_vertex = v
                     break
-            if snapped:
+            if snapped_vertex is None:
+                for v in hull:
+                    if _dist(ep, v) <= snap_tol:
+                        snapped_vertex = v
+                        break
+
+            if snapped_vertex is not None:
+                inter.points[endpoint_slot] = snapped_vertex
                 continue
 
-            # Otherwise project to closest edge; insert a special vertex there
-            best_d, best_i, best_p = float("inf"), None, None
-            n = len(surface.convex_hull)
-            for i in range(n):
-                a = surface.convex_hull[i]
-                b = surface.convex_hull[(i + 1) % n]
-                p = closest_point_on_segment(ep, a, b)
-                d = (p - ep).length()
+            # Otherwise project to nearest edge interior and insert/snap there.
+            best_d, best_i, best_p = float("inf"), -1, None
+            n_edges = _edge_count(hull)
+            for i in range(n_edges):
+                a = hull[i]
+                b = hull[(i + 1) % len(hull)]
+                p, t = _project_to_segment_interior(ep, a, b)
+                if p is None:
+                    continue
+                d = _dist(p, ep)
                 if d < best_d:
                     best_d, best_i, best_p = d, i, p
 
-            if best_p is not None and best_d < proj_tol:
-                # If point already exists at the projection location, snap
-                for v in surface.convex_hull:
-                    if (best_p - v).length() < snap_tol:
-                        inter.points[0 if ep_idx == 0 else -1] = v
-                        logger.info(f"Snapped endpoint to existing hull vertex at ({v.x:.3f}, {v.y:.3f}, {v.z:.3f})")
+            if best_p is not None and best_i >= 0 and best_d <= proj_tol:
+                existing = None
+                for v in hull:
+                    if _dist(best_p, v) <= snap_tol:
+                        existing = v
                         break
+                if existing is not None:
+                    inter.points[endpoint_slot] = existing
                 else:
-                    # Insert a new special vertex on the hull edge
                     nv = Vector3D(best_p.x, best_p.y, best_p.z, point_type="COMMON_INTERSECTION_CONVEXHULL_POINT")
-                    surface.convex_hull.insert(int(best_i) + 1, nv)
-                    inter.points[0 if ep_idx == 0 else -1] = nv
-                    logger.info(f"Inserted new special vertex at ({nv.x:.3f}, {nv.y:.3f}, {nv.z:.3f}) on hull edge {best_i}")
+                    _set_common_type(nv)
+                    hull.insert(best_i + 1, nv)
+                    inter.points[endpoint_slot] = nv
+            else:
+                logger.debug(
+                    f"Surface {surface_idx}: endpoint not snapped "
+                    f"(d_min={best_d:.6g}, snap_tol={snap_tol:.6g}, proj_tol={proj_tol:.6g})"
+                )
 
     # Remove true duplicates only (no geometry changes)
-    surface.convex_hull = clean_identical_points(surface.convex_hull, tolerance=1e-12)
+    surface.convex_hull = clean_identical_points(hull, tolerance=max(1e-12, snap_tol * 0.1))
 
     # Bookkeeping
     surface.hull_points = surface.convex_hull[:]
     special_count = sum(1 for p in surface.convex_hull if getattr(p, "point_type", getattr(p, "type", "DEFAULT")) != "DEFAULT")
     logger.info(f"Convex hull alignment complete for surface {surface_idx}: {special_count} special / {len(surface.convex_hull)} total")
+
 def calculate_size_of_intersections(model):
     """
     Calculate sizes for intersections based on the associated objects.
@@ -2343,7 +2399,8 @@ import math # Ensure math is imported
 def refine_intersection_line_by_length(intersection,
                                        target_length,
                                        min_angle_deg: float = 20.0,
-                                       uniform_meshing: bool = True):
+                                       uniform_meshing: bool = True,
+                                       tag_endpoints: bool = True):
     """
     Python re-implementation of C++ MeshIt::C_Line::RefineByLength()
     enhanced for curved / circular intersection lines.
@@ -2418,12 +2475,6 @@ def refine_intersection_line_by_length(intersection,
 
     anchors.append(original_pts[-1])        # last
 
-    # extra safeguard for near-circular curves where all pts were DEFAULT
-    if len(anchors) < 3 and len(original_pts) > 6:
-        span = max(1, len(original_pts)//8)
-        anchors = [original_pts[i] for i in range(0, len(original_pts), span)]
-        anchors.append(original_pts[-1])
-
     # ------------------------------------------------------------------
     # map each anchor → its cumulative arc-length pos
     # ------------------------------------------------------------------
@@ -2463,11 +2514,12 @@ def refine_intersection_line_by_length(intersection,
     refined = clean_identical_points(refined)
 
     # ------------------------------------------------------------------
-        # ------------------------------------------------------------------
-    # STEP-3  tag start / end  (and guarantee closed-loop duplication)
+    # STEP-3  optional endpoint tags (avoid clobbering special hull endpoints)
     # ------------------------------------------------------------------
-    if refined:
-        refined[0].point_type = refined[0].type = "START_POINT"
+    if refined and tag_endpoints:
+        first_type = getattr(refined[0], "point_type", getattr(refined[0], "type", "DEFAULT")) or "DEFAULT"
+        if first_type == "DEFAULT":
+            refined[0].point_type = refined[0].type = "START_POINT"
 
         closed = (refined[-1] - refined[0]).length() < 1e-8
         if closed:
@@ -2475,13 +2527,16 @@ def refine_intersection_line_by_length(intersection,
             if refined[-1] is refined[0]:
                 # they are actually the same object – append a clone
                 p0 = refined[0]
-                refined.append(
-                    Vector3D(p0.x, p0.y, p0.z, point_type="LOOP_END")
-                )
+                end_type = "LOOP_END" if first_type == "DEFAULT" else first_type
+                refined.append(Vector3D(p0.x, p0.y, p0.z, point_type=end_type))
             else:
-                refined[-1].point_type = refined[-1].type = "LOOP_END"
+                last_type = getattr(refined[-1], "point_type", getattr(refined[-1], "type", "DEFAULT")) or "DEFAULT"
+                if last_type == "DEFAULT":
+                    refined[-1].point_type = refined[-1].type = "LOOP_END"
         else:
-            refined[-1].point_type = refined[-1].type = "END_POINT"
+            last_type = getattr(refined[-1], "point_type", getattr(refined[-1], "type", "DEFAULT")) or "DEFAULT"
+            if last_type == "DEFAULT":
+                refined[-1].point_type = refined[-1].type = "END_POINT"
 
     # write back & return
     intersection.points = refined

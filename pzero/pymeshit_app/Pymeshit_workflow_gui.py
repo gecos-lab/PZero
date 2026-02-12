@@ -6767,6 +6767,20 @@ class MeshItWorkflowGUI(QWidget):
             self.statusBar().showMessage("Refinement skipped: No intersections found.", 5000)
             return
 
+        if self._has_custom_refine_constraint_selection():
+            reply = QMessageBox.question(
+                self,
+                "Reset Intersection Selections?",
+                "You have customized intersection selections in Step 6.\n\n"
+                "Re-running refinement may reset some intersections and their selection state.\n"
+                "Do you really want to reset the intersections and their selection state?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if reply != QMessageBox.Yes:
+                self.statusBar().showMessage("Refinement canceled: kept current intersection selections.", 5000)
+                return
+
         import copy
         self.original_intersections_backup = copy.deepcopy(self.datasets_intersections)
 
@@ -6809,6 +6823,10 @@ class MeshItWorkflowGUI(QWidget):
                 self.is_polyline = {}
                 self.surface_original_to_temp_idx_map = {}
                 self.polyline_original_to_temp_idx_map = {}
+                # Maps list indices (surfaces/polylines arrays) to combined temp ids
+                # used by Intersection.id1/id2.
+                self.surface_list_to_combined_idx_map = {}
+                self.polyline_list_to_combined_idx_map = {}
 
         temp_model = TempModelWrapper()
 
@@ -6832,6 +6850,7 @@ class MeshItWorkflowGUI(QWidget):
 
             data_wrapper = TempDataWrapper()
             data_wrapper.name = dataset_content.get('name', f"Dataset_{original_idx}")
+            data_wrapper.size = _get_target_for_surface(original_idx)
 
             hull_points_obj_array = dataset_content.get('hull_points')
             if hull_points_obj_array is not None and len(hull_points_obj_array) > 0:
@@ -6853,10 +6872,14 @@ class MeshItWorkflowGUI(QWidget):
             temp_model.is_polyline[temp_data_idx_counter] = is_p
 
             if is_p:
-                temp_model.polyline_original_to_temp_idx_map[original_idx] = len(temp_model.polylines)
+                poly_list_idx = len(temp_model.polylines)
+                temp_model.polyline_original_to_temp_idx_map[original_idx] = poly_list_idx
+                temp_model.polyline_list_to_combined_idx_map[poly_list_idx] = temp_data_idx_counter
                 temp_model.polylines.append(data_wrapper)
             else:
-                temp_model.surface_original_to_temp_idx_map[original_idx] = len(temp_model.surfaces)
+                surface_list_idx = len(temp_model.surfaces)
+                temp_model.surface_original_to_temp_idx_map[original_idx] = surface_list_idx
+                temp_model.surface_list_to_combined_idx_map[surface_list_idx] = temp_data_idx_counter
                 temp_model.surfaces.append(data_wrapper)
 
             temp_data_idx_counter += 1
@@ -6919,7 +6942,11 @@ class MeshItWorkflowGUI(QWidget):
                     class _HullLine:
                         def __init__(self, pts): self.points = [Vector3D(p.x, p.y, p.z, point_type=getattr(p, "point_type", "DEFAULT")) for p in pts]
                     refined = refine_intersection_line_by_length(
-                        _HullLine(temp_surface.convex_hull), float(eff_target_length), min_angle_deg, uniform_meshing
+                        _HullLine(temp_surface.convex_hull),
+                        float(eff_target_length),
+                        min_angle_deg,
+                        uniform_meshing,
+                        tag_endpoints=False
                     )
                     if len(refined) >= 2 and (refined[0] - refined[-1]).length_squared() < 1e-24:
                         refined = refined[:-1]
@@ -6951,12 +6978,12 @@ class MeshItWorkflowGUI(QWidget):
                 'interp': self.mesh_interp_combo.currentText(),
                 'smoothing': float(self.mesh_smoothing_input.value())
             }
+            reverse_surface_map = {v: k for k, v in temp_model.surface_original_to_temp_idx_map.items()}
             for temp_surface_idx, temp_surface in enumerate(temp_model.surfaces):
                 if hasattr(temp_surface, 'convex_hull') and len(temp_surface.convex_hull) >= 3:
                     raw_hull_points = [Vector3D(p.x, p.y, p.z, point_type=getattr(p, "point_type", "DEFAULT")) for p in temp_surface.convex_hull]
-                    original_idx = temp_model.original_indices_map.get(
-                        next((k for k, v in temp_model.surface_original_to_temp_idx_map.items() if v == temp_surface_idx), None)
-                    )
+                    original_idx = reverse_surface_map.get(temp_surface_idx)
+                    refined_hull_3d = raw_hull_points
                     if original_idx is not None and 'points' in self.datasets[original_idx]:
                         scattered_points = [Vector3D(p[0], p[1], p[2]) for p in self.datasets[original_idx]['points']]
                         refined_hull_3d = refine_hull_with_interpolation(
@@ -7065,7 +7092,7 @@ class MeshItWorkflowGUI(QWidget):
                 self.datasets_intersections[primary_key_ds] = []
 
             def _same_intersection(inter1: dict, inter2: dict, tol: float = 1e-6) -> bool:
-                import numpy as np
+    
 
                 def to_xyz_array(pts) -> np.ndarray:
                     xyz = []
@@ -7162,6 +7189,7 @@ class MeshItWorkflowGUI(QWidget):
 
         self.statusBar().showMessage("Intersection lines refined successfully.", 5000)
         logger.info("Intersection lines refined successfully.")
+
         # Refine all wells (1D polylines) - C++ MeshIt style
         logger.info("Refining wells (1D polylines)...")
         wells_refined = self._refine_all_wells()
@@ -7182,6 +7210,84 @@ class MeshItWorkflowGUI(QWidget):
             logger.error(f"Error populating constraint tree for Tab 6: {e}", exc_info=True)
         self._populate_surface_selector()
         self._update_refined_visualization()
+
+    def _generate_conforming_meshes_action(self):
+        """Generate conforming surface meshes from currently checked segments."""
+        import numpy as np
+        # Keep status/log but compute per-surface target size below
+        self.statusBar().showMessage("Generating conforming surface meshes…")
+
+        ok, total, fails = 0, 0, []
+        for s_idx, ds in enumerate(self.datasets):
+            # Skip wells (polylines) entirely for triangulation
+            if ds.get("type") in ("WELL", "polyline"):
+                continue
+
+            seg_lists = self._collect_selected_refine_segments(s_idx)
+            if not seg_lists:
+                continue
+
+            total += 1
+            name = ds.get("name", f"Surface_{s_idx}")
+            try:
+                # Build per-surface config
+                unified_target = float(self.mesh_target_feature_size_input.value())
+                per_surface_target = float(self._get_mesh_target_size_for_surface(s_idx))
+                # Clamp negative/silly inputs
+                if per_surface_target <= 1e-9:
+                    per_surface_target = max(1.0, unified_target)
+
+                cfg = {
+                    "target_size": per_surface_target,
+                    "min_angle":  float(self.mesh_min_angle_input.value()),
+                    "max_area":   float(per_surface_target) ** 2 * 1.5,
+                    "interp":     self.mesh_interp_combo.currentText(),
+                    "smoothing":  float(self.mesh_smoothing_input.value()),
+                }
+
+                surf_data = self._prepare_surface_data_for_triangulation(s_idx, ds, cfg)
+                if not surf_data:
+                    raise RuntimeError("surface-data prep failed")
+
+                pts3d, seg_arr, holes = self._build_plc_from_selection(s_idx)
+                if len(pts3d) < 3 or len(seg_arr) < 3:
+                    raise RuntimeError("too few PLC entities")
+
+                proj = surf_data["projection_params"]
+                centroid = np.asarray(proj["centroid"])
+                basis = np.asarray(proj["basis"])
+                pts2d = (np.array([[p.x, p.y, p.z] for p in pts3d]) - centroid) @ basis.T
+                pts2d = pts2d[:, :2]
+
+                holes_2d = []
+                if holes:
+                    holes_3d = np.array([[h.x, h.y, h.z] for h in holes])
+                    holes_2d = (holes_3d - centroid) @ basis.T
+                    holes_2d = holes_2d[:, :2]
+
+                v3d, tris, _ = run_constrained_triangulation_py(
+                    pts2d, seg_arr, holes_2d, proj,
+                    np.array([[p.x, p.y, p.z] for p in pts3d]), cfg
+                )
+
+                if v3d is None or len(v3d) == 0 or tris is None or len(tris) == 0:
+                    raise RuntimeError("triangulation returned empty result")
+
+                ds.setdefault("conforming_mesh", {})
+                ds["conforming_mesh"]["vertices"] = v3d
+                ds["conforming_mesh"]["triangles"] = tris
+                ds["conforming_mesh"]["holes"] = [[h.x, h.y, h.z] for h in holes] if holes else []
+
+                ok += 1
+                logger.info(f"Conforming mesh generated for '{name}': {len(v3d)} vertices, {len(tris)} triangles")
+            except Exception as e:
+                fails.append((name, str(e)))
+                logger.error(f"Conforming mesh generation FAILED for '{name}': {e}")
+
+        if fails:
+            logger.warning(f"Conforming mesh generation failures: {len(fails)}")
+        self._update_refined_visualization()
+        self.statusBar().showMessage(f"Conforming surface mesh generation finished: {ok}/{total} succeeded.", 6000)
 
     def _generate_conforming_meshes_action(self):
         """Generate conforming surface meshes from currently checked segments."""
