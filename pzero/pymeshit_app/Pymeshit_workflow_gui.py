@@ -7068,16 +7068,24 @@ class MeshItWorkflowGUI(QWidget):
         logger.info("Starting refinement of intersection lines...")
         self.statusBar().showMessage("Refining intersection lines...")
 
-        # When using Multi-Patch, preserve the angular-gap hull geometry (skip draping)
-        mesh_tri_method = "standard"
-        if hasattr(self, 'mesh_tri_method_combo'):
-            mesh_tri_method = self.mesh_tri_method_combo.currentData() or "standard"
-        preserve_angular_gap_hull = (mesh_tri_method == "multipatch")
-
         if not hasattr(self, 'datasets_intersections') or not self.datasets_intersections:
             QMessageBox.information(self, "No Intersections", "No intersections found to refine.")
             self.statusBar().showMessage("Refinement skipped: No intersections found.", 5000)
             return
+
+        if self._has_custom_refine_constraint_selection():
+            reply = QMessageBox.question(
+                self,
+                "Reset Intersection Selections?",
+                "You have customized intersection selections in Step 6.\n\n"
+                "Re-running refinement may reset some intersections and their selection state.\n"
+                "Do you really want to reset the intersections and their selection state?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if reply != QMessageBox.Yes:
+                self.statusBar().showMessage("Refinement canceled: kept current intersection selections.", 5000)
+                return
 
         import copy
         self.original_intersections_backup = copy.deepcopy(self.datasets_intersections)
@@ -7121,6 +7129,10 @@ class MeshItWorkflowGUI(QWidget):
                 self.is_polyline = {}
                 self.surface_original_to_temp_idx_map = {}
                 self.polyline_original_to_temp_idx_map = {}
+                # Maps list indices (surfaces/polylines arrays) to combined temp ids
+                # used by Intersection.id1/id2.
+                self.surface_list_to_combined_idx_map = {}
+                self.polyline_list_to_combined_idx_map = {}
 
         temp_model = TempModelWrapper()
 
@@ -7144,6 +7156,7 @@ class MeshItWorkflowGUI(QWidget):
 
             data_wrapper = TempDataWrapper()
             data_wrapper.name = dataset_content.get('name', f"Dataset_{original_idx}")
+            data_wrapper.size = _get_target_for_surface(original_idx)
 
             hull_points_obj_array = dataset_content.get('hull_points')
             if hull_points_obj_array is not None and len(hull_points_obj_array) > 0:
@@ -7165,10 +7178,14 @@ class MeshItWorkflowGUI(QWidget):
             temp_model.is_polyline[temp_data_idx_counter] = is_p
 
             if is_p:
-                temp_model.polyline_original_to_temp_idx_map[original_idx] = len(temp_model.polylines)
+                poly_list_idx = len(temp_model.polylines)
+                temp_model.polyline_original_to_temp_idx_map[original_idx] = poly_list_idx
+                temp_model.polyline_list_to_combined_idx_map[poly_list_idx] = temp_data_idx_counter
                 temp_model.polylines.append(data_wrapper)
             else:
-                temp_model.surface_original_to_temp_idx_map[original_idx] = len(temp_model.surfaces)
+                surface_list_idx = len(temp_model.surfaces)
+                temp_model.surface_original_to_temp_idx_map[original_idx] = surface_list_idx
+                temp_model.surface_list_to_combined_idx_map[surface_list_idx] = temp_data_idx_counter
                 temp_model.surfaces.append(data_wrapper)
 
             temp_data_idx_counter += 1
@@ -7231,7 +7248,11 @@ class MeshItWorkflowGUI(QWidget):
                     class _HullLine:
                         def __init__(self, pts): self.points = [Vector3D(p.x, p.y, p.z, point_type=getattr(p, "point_type", "DEFAULT")) for p in pts]
                     refined = refine_intersection_line_by_length(
-                        _HullLine(temp_surface.convex_hull), float(eff_target_length), min_angle_deg, uniform_meshing
+                        _HullLine(temp_surface.convex_hull),
+                        float(eff_target_length),
+                        min_angle_deg,
+                        uniform_meshing,
+                        tag_endpoints=False
                     )
                     if len(refined) >= 2 and (refined[0] - refined[-1]).length_squared() < 1e-24:
                         refined = refined[:-1]
@@ -7258,69 +7279,33 @@ class MeshItWorkflowGUI(QWidget):
             logger.error(f"Error during length-based refinement: {e}", exc_info=True)
             return
         # Step 3: Refine hull with interpolation (corrects hull geometry)
-        # For surfaces using angular-gap hull, skip 2D projection refinement to preserve 3D shape
         try:
             config = {
                 'interp': self.mesh_interp_combo.currentText(),
                 'smoothing': float(self.mesh_smoothing_input.value())
             }
-            config_3d = {
-                'k_neighbors': 20,
-                'interp': self.mesh_interp_combo.currentText(),
-                'smoothing': float(self.mesh_smoothing_input.value())
-            }
-
+            reverse_surface_map = {v: k for k, v in temp_model.surface_original_to_temp_idx_map.items()}
             for temp_surface_idx, temp_surface in enumerate(temp_model.surfaces):
-                if not hasattr(temp_surface, 'convex_hull') or len(temp_surface.convex_hull) < 3:
-                    continue
-
-                raw_hull_points = [Vector3D(p.x, p.y, p.z, point_type=getattr(p, "point_type", "DEFAULT")) for p in temp_surface.convex_hull]
-                original_idx = temp_model.original_indices_map.get(
-                    next((k for k, v in temp_model.surface_original_to_temp_idx_map.items() if v == temp_surface_idx), None)
-                )
-
-                if original_idx is None or 'points' not in self.datasets[original_idx]:
-                    continue
-
-                scattered_points = [Vector3D(p[0], p[1], p[2]) for p in self.datasets[original_idx]['points']]
-
-                # Check per-surface hull method - skip 2D refinement for angular_gap surfaces
-                surface_hull_method = self.hull_method_by_surface.get(original_idx, "auto")
-                # Handle both "angular" and "angular_gap" values (from different tables)
-                use_angular_gap = (surface_hull_method in ("angular_gap", "angular"))
-
-                # Also check if global setting was angular_gap and surface is using global
-                if surface_hull_method in ("auto", "global"):
-                    hull_method_combo = getattr(self, 'hull_method_combo', None)
-                    if hull_method_combo and hull_method_combo.currentData() == "angular_gap":
-                        use_angular_gap = True
-
-                if use_angular_gap or preserve_angular_gap_hull:
-                    # Use 3D hull refinement to preserve angular-gap hull shape
-                    logger.info(f"Using 3D hull refinement for surface {original_idx} to preserve angular-gap hull shape.")
-                    try:
-                        from Pymeshit.intersection_utils import refine_hull_3d_along_surface
-                        refined_hull_3d = refine_hull_3d_along_surface(
-                            raw_hull_points, scattered_points, config_3d
+                if hasattr(temp_surface, 'convex_hull') and len(temp_surface.convex_hull) >= 3:
+                    raw_hull_points = [Vector3D(p.x, p.y, p.z, point_type=getattr(p, "point_type", "DEFAULT")) for p in temp_surface.convex_hull]
+                    original_idx = reverse_surface_map.get(temp_surface_idx)
+                    refined_hull_3d = raw_hull_points
+                    if original_idx is not None and 'points' in self.datasets[original_idx]:
+                        scattered_points = [Vector3D(p[0], p[1], p[2]) for p in self.datasets[original_idx]['points']]
+                        refined_hull_3d = refine_hull_with_interpolation(
+                            raw_hull_points, scattered_points, config
                         )
-                        temp_surface.convex_hull = refined_hull_3d
-                        logger.info(f"3D hull refinement complete for surface {temp_surface_idx}")
-                    except Exception as e:
-                        logger.warning(f"3D hull refinement failed for surface {temp_surface_idx}: {e}")
-                        # Keep original hull rather than distorting it
-                else:
-                    # Standard 2D projection refinement for flat surfaces
-                    refined_hull_3d = refine_hull_with_interpolation(
-                        raw_hull_points, scattered_points, config
-                    )
+                        
 
-                    # Create refined Vector3D objects preserving point types
+                    # Step 4: Create refined Vector3D objects preserving point types
                     refined_hull_points = []
                     for i, (orig_pt, refined_3d) in enumerate(zip(raw_hull_points, refined_hull_3d)):
+                        # If refined_3d is already a Vector3D, just copy it
                         if isinstance(refined_3d, Vector3D):
                             refined_pt = Vector3D(refined_3d.x, refined_3d.y, refined_3d.z)
                         else:
                             refined_pt = Vector3D(refined_3d[0], refined_3d[1], refined_3d[2])
+                        # Preserve original point type information
                         refined_pt.point_type = getattr(orig_pt, 'point_type', 'DEFAULT')
                         if hasattr(orig_pt, 'type'):
                             refined_pt.type = orig_pt.type
@@ -7413,7 +7398,7 @@ class MeshItWorkflowGUI(QWidget):
                 self.datasets_intersections[primary_key_ds] = []
 
             def _same_intersection(inter1: dict, inter2: dict, tol: float = 1e-6) -> bool:
-                import numpy as np
+    
 
                 def to_xyz_array(pts) -> np.ndarray:
                     xyz = []
@@ -7510,6 +7495,7 @@ class MeshItWorkflowGUI(QWidget):
 
         self.statusBar().showMessage("Intersection lines refined successfully.", 5000)
         logger.info("Intersection lines refined successfully.")
+
         # Refine all wells (1D polylines) - C++ MeshIt style
         logger.info("Refining wells (1D polylines)...")
         wells_refined = self._refine_all_wells()
