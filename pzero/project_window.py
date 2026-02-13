@@ -8,6 +8,7 @@ from copy import deepcopy
 
 from datetime import datetime
 
+<<<<<<< Updated upstream
 from numpy import cos as np_cos
 from numpy import pi as np_pi
 from numpy import sin as np_sin
@@ -17,6 +18,17 @@ from PySide6.QtCore import QObject, QUrl
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QDialog, QLabel, QVBoxLayout
 from PySide6.QtGui import QAction, QDesktopServices, QPixmap
 from PySide6.QtCore import Qt
+=======
+from PySide6.QtCore import Signal as pyqtSignal, Qt
+from PySide6.QtCore import QObject
+from PySide6.QtWidgets import (
+    QMainWindow,
+    QMessageBox,
+    QDockWidget,
+    QAbstractItemView,
+)
+from PySide6.QtGui import QAction
+>>>>>>> Stashed changes
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv
@@ -999,7 +1011,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         return None
 
     def open_pymeshit_gui(self):
-        """Launch the MeshIt workflow GUI as a docked tool."""
+        """Launch the MeshIt workflow GUI as a docked panel."""
         pymeshit_dir = self._locate_pymeshit_sources()
         if pymeshit_dir is None:
             message = (
@@ -1016,16 +1028,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         bridge = PZeroPymeshitBridge(self)
 
-        # CHECK IF DOCK ALREADY EXISTS and is still valid
+        # Check if a PyMeshIt dock already exists and is still valid.
         existing_dock = getattr(self, "_pymeshit_dock", None)
         if existing_dock is not None:
             try:
-                # Check if the dock widget is still valid (not deleted)
-                existing_dock.objectName()  # This will throw if deleted
-                # Dock exists and is valid - just show, raise and update bridge
+                existing_dock.objectName()  # Raises if C++ object was deleted
                 existing_dock.show()
                 existing_dock.raise_()
-                existing_dock.setFloating(False)  # Ensure it's docked, not floating
+                existing_dock.setFloating(False)
                 widget = existing_dock.widget()
                 if widget:
                     attach = getattr(widget, "attach_pzero_bridge", None)
@@ -1034,7 +1044,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.print_terminal("Pymeshit dock reopened")
                 return
             except RuntimeError:
-                # Dock was deleted, clear references
                 self._pymeshit_dock = None
                 self._pymeshit_widget = None
 
@@ -1060,46 +1069,67 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
 
         try:
-            # 1. Create a Dock Widget attached to the main ProjectWindow (self)
+            # Hide legacy dialog from previous integration path, if present.
+            legacy_dialog = getattr(self, "_pymeshit_dialog", None)
+            if legacy_dialog is not None:
+                try:
+                    legacy_dialog.hide()
+                except RuntimeError:
+                    pass
+                self._pymeshit_dialog = None
+
+            # 1. Create dock host attached to the main ProjectWindow.
             dock = _PyMeshItDockWidget("PyMeshIt Workflow", self)
-            dock.setObjectName("PyMeshItDock")  # ID for finding it later
+            dock.setObjectName("PyMeshItDock")
             dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
             dock.setFeatures(
-                QDockWidget.DockWidgetMovable |
-                QDockWidget.DockWidgetFloatable |
-                QDockWidget.DockWidgetClosable
+                QDockWidget.DockWidgetMovable
+                | QDockWidget.DockWidgetFloatable
+                | QDockWidget.DockWidgetClosable
             )
-            
-            # 2. Instantiate the MeshIt GUI as a child of the dock
-            try:
-                self._pymeshit_widget = meshit_gui_cls(pzero_bridge=bridge, parent=dock)
-            except TypeError as exc:
-                if "pzero_bridge" in str(exc):
-                    self._pymeshit_widget = meshit_gui_cls(parent=dock)
-                else:
-                    raise
-            
-            # Attach bridge if not done via constructor
+            dock.setMinimumWidth(max(420, int(self.width() * 0.28)))
+
+            # 2. Instantiate MeshIt GUI as a child widget inside the dock.
+            creation_attempts = [
+                {"pzero_bridge": bridge, "parent": dock, "auto_show": False},
+                {"pzero_bridge": bridge, "parent": dock},
+                {"parent": dock, "auto_show": False},
+                {"parent": dock},
+            ]
+            last_exc = None
+            self._pymeshit_widget = None
+            for kwargs in creation_attempts:
+                try:
+                    self._pymeshit_widget = meshit_gui_cls(**kwargs)
+                    break
+                except TypeError as exc:
+                    last_exc = exc
+
+            if self._pymeshit_widget is None:
+                raise last_exc if last_exc is not None else RuntimeError(
+                    "Unable to instantiate PyMeshIt GUI"
+                )
+
+            if self._pymeshit_widget.parent() is None:
+                self._pymeshit_widget.setParent(dock)
+
+            # Attach bridge if not done via constructor.
             attach = getattr(self._pymeshit_widget, "attach_pzero_bridge", None)
             if callable(attach):
                 attach(bridge)
-            
-            # 3. Set the widget into the dock
+
+            # 3. Place widget in dock and show in the right dock area.
             dock.setWidget(self._pymeshit_widget)
-            
-            # 4. Add the dock to the Main Window on the Right side
             self.addDockWidget(Qt.RightDockWidgetArea, dock)
-            
-            # 5. Ensure dock is NOT floating (appears as docked panel, not separate window)
             dock.setFloating(False)
-            
-            # 6. Set a reasonable initial width for the dock (about 1/3 of main window)
-            dock.setMinimumWidth(400)
-            
-            # Store reference to dock for cleanup
+            dock.show()
+            dock.raise_()
+
+            # Keep references for reopen/reuse.
             self._pymeshit_dock = dock
-            
-            self.print_terminal("Pymeshit GUI opened as Dock")
+            self._pymeshit_dialog = None
+
+            self.print_terminal("Pymeshit GUI opened as docked panel")
 
         except Exception as exc:
             error_msg = f"Error opening Pymeshit GUI: {exc}"

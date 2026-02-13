@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPush
                             QListWidget, QColorDialog, QListWidgetItem, QProgressDialog,
                             QSpacerItem, QTableWidget, QTableWidgetItem,
                             QTreeWidget, QTreeWidgetItem, QScrollArea, QDialogButtonBox,
-                            QHeaderView, QMenuBar)
+                            QHeaderView, QMenuBar, QSizePolicy)
 from PySide6.QtGui import QFont, QIcon, QColor, QPalette, QPixmap, QAction, QActionGroup
 from PySide6.QtCore import Qt, QSize, Signal, QObject, QThread, QTimer, QSettings
 # Add these imports at the top of meshit_workflow_gui.py
@@ -676,16 +676,31 @@ class MeshItWorkflowGUI(QWidget):
         '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
     ]
 
-    def __init__(self, pzero_bridge=None, parent=None):
-        """Initialize the GUI"""
+    def __init__(self, pzero_bridge=None, parent=None, auto_show=None):
+        """Initialize the GUI.
+
+        Args:
+            pzero_bridge: Optional bridge used when hosted inside PZero.
+            parent: Parent widget when embedded in another window.
+            auto_show: If True, calls ``show()`` at the end of init.
+                Defaults to standalone-only behavior.
+        """
         super().__init__(parent)
         
         # Flag to track if window is closing (prevents operations during cleanup)
         self._closing = False
         
+        # Track whether this widget is embedded in a parent host (PZero dock) or standalone.
+        self._embedded_mode = parent is not None
+
         # Set window properties (for standalone mode, these won't apply when docked)
         self.setWindowTitle("PyMeshIt")
-        self.setMinimumSize(800, 600)  # Minimum size for usability
+        if self._embedded_mode:
+            # Compact baseline for docked usage inside PZero.
+            self.setMinimumSize(420, 360)
+        else:
+            self.setMinimumSize(800, 600)  # Minimum size for standalone usability
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         # Add color cycle for surface visualization
         self.color_cycle = [
@@ -816,16 +831,28 @@ class MeshItWorkflowGUI(QWidget):
         self._ensure_vtk_cleanup_on_exit()
         
         self._create_main_layout()
-        self.show()
+        if auto_show is None:
+            auto_show = parent is None
+        if auto_show:
+            self.show()
         self._update_statistics() # Initial update
+
+    def _new_hsplitter(self, sizes: List[int]) -> QSplitter:
+        """Create a horizontal splitter tuned for docked/resizable workflows."""
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setChildrenCollapsible(False)
+        splitter.setHandleWidth(8)
+        splitter.setSizes(sizes)
+        return splitter
+
     def _init_material_selection_ui(self) -> QGroupBox:
         """
         Builds the 'Materials' group-box and returns it so the caller
         can insert it wherever it likes (e.g. into the Tetra-mesh tab).
         """
         material_group = QGroupBox("Materials")
-        material_group.setMaximumWidth(280)
         material_group.setMinimumWidth(220)
+        material_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         v_main = QVBoxLayout(material_group)
         v_main.setContentsMargins(6, 8, 6, 6)
         v_main.setSpacing(4)
@@ -2591,10 +2618,10 @@ class MeshItWorkflowGUI(QWidget):
         When embedded in PZero as a dock widget, this hides the parent dock.
         When running standalone, this hides the widget itself.
         """
-        # Try to find and hide the parent dock widget
+        # Try to find and hide the parent host container.
         parent = self.parent()
         while parent is not None:
-            if isinstance(parent, QDockWidget):
+            if isinstance(parent, (QDockWidget, QDialog)):
                 parent.hide()
                 self.statusBar().showMessage("Panel hidden - reopen from Interpolation menu")
                 return
@@ -2751,12 +2778,15 @@ class MeshItWorkflowGUI(QWidget):
             QMessageBox.critical(self, "Error", "No valid wells loaded")
     def _setup_file_tab(self):
         """Sets up the file loading tab with controls and visualization area"""
-        # Main layout for the tab
-        tab_layout = QHBoxLayout(self.file_tab)
+        # Main layout for the tab (splitter makes controls/views draggable)
+        tab_layout = QVBoxLayout(self.file_tab)
+        splitter = self._new_hsplitter([340, 960])
+        tab_layout.addWidget(splitter)
         
         # --- Control panel (left side) ---
         control_panel = QWidget()
-        control_panel.setMaximumWidth(350) # Limit width
+        control_panel.setMinimumWidth(260)
+        control_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         control_layout = QVBoxLayout(control_panel)
         
         # -- File Loading Controls --
@@ -2870,11 +2900,10 @@ class MeshItWorkflowGUI(QWidget):
         control_layout.addWidget(stats_group)
         control_layout.addStretch()
         
-        tab_layout.addWidget(control_panel)
-        
         # --- Visualization Area (right side) ---
         viz_group = QGroupBox("Point Cloud Visualization")
         viz_layout = QVBoxLayout(viz_group)
+        viz_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         # Create container for visualization
         self.file_viz_frame = QWidget()
@@ -2888,16 +2917,22 @@ class MeshItWorkflowGUI(QWidget):
         self.file_viz_layout.addWidget(self.file_viz_placeholder)
         
         viz_layout.addWidget(self.file_viz_frame)
-        tab_layout.addWidget(viz_group, 1)  # 1 = stretch factor
+        splitter.addWidget(control_panel)
+        splitter.addWidget(viz_group)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
     
     def _setup_hull_tab(self):
         """Sets up the convex hull tab with controls and visualization area"""
-        # Main layout for the tab
-        tab_layout = QHBoxLayout(self.hull_tab)
+        # Main layout for the tab (splitter makes controls/views draggable)
+        tab_layout = QVBoxLayout(self.hull_tab)
+        splitter = self._new_hsplitter([320, 980])
+        tab_layout.addWidget(splitter)
 
         # --- Control panel (left side) ---
         control_panel = QWidget()
-        control_panel.setMaximumWidth(300)
+        control_panel.setMinimumWidth(240)
+        control_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         control_layout = QVBoxLayout(control_panel)
 
         # -- Hull Controls --
@@ -3007,11 +3042,10 @@ class MeshItWorkflowGUI(QWidget):
         control_layout.addLayout(nav_layout)
         control_layout.addStretch()
         
-        tab_layout.addWidget(control_panel)
-        
         # --- Visualization Area (right side) ---
         viz_group = QGroupBox("Convex Hull Visualization")
         viz_layout = QVBoxLayout(viz_group)
+        viz_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         # Create container for visualization
         self.hull_viz_frame = QWidget()
@@ -3028,7 +3062,10 @@ class MeshItWorkflowGUI(QWidget):
         self.hull_viz_layout.addWidget(self.hull_viz_placeholder)
         
         viz_layout.addWidget(self.hull_viz_frame)
-        tab_layout.addWidget(viz_group, 1)  # 1 = stretch factor
+        splitter.addWidget(control_panel)
+        splitter.addWidget(viz_group)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
     
     def _on_hull_method_changed(self, index):
         """Handle hull method dropdown change - enable/disable alpha parameter."""
@@ -3232,12 +3269,15 @@ class MeshItWorkflowGUI(QWidget):
 
     def _setup_segment_tab(self):
         """Sets up the segmentation tab with controls and visualization area"""
-        # Main layout for the tab
-        tab_layout = QHBoxLayout(self.segment_tab)
+        # Main layout for the tab (splitter makes controls/views draggable)
+        tab_layout = QVBoxLayout(self.segment_tab)
+        splitter = self._new_hsplitter([320, 980])
+        tab_layout.addWidget(splitter)
 
         # --- Control panel (left side) ---
         control_panel = QWidget()
-        control_panel.setMaximumWidth(300)
+        control_panel.setMinimumWidth(240)
+        control_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         control_layout = QVBoxLayout(control_panel)
 
         # -- Segmentation Controls --
@@ -3332,11 +3372,10 @@ class MeshItWorkflowGUI(QWidget):
         control_layout.addLayout(nav_layout)
         control_layout.addStretch()
 
-        tab_layout.addWidget(control_panel)
-
         # --- Visualization Area (right side) ---
         viz_group = QGroupBox("Segmentation Visualization")
         viz_layout = QVBoxLayout(viz_group)
+        viz_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         # Create container for visualization
         self.segment_viz_frame = QWidget()
@@ -3353,16 +3392,22 @@ class MeshItWorkflowGUI(QWidget):
         self.segment_viz_layout.addWidget(self.segment_viz_placeholder)
 
         viz_layout.addWidget(self.segment_viz_frame)
-        tab_layout.addWidget(viz_group, 1)  # 1 = stretch factor
+        splitter.addWidget(control_panel)
+        splitter.addWidget(viz_group)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
     
     def _setup_triangulation_tab(self):
         """Sets up the triangulation tab with controls and visualization area"""
-        # Main layout for the tab
-        tab_layout = QHBoxLayout(self.triangulation_tab)
+        # Main layout for the tab (splitter makes controls/views draggable)
+        tab_layout = QVBoxLayout(self.triangulation_tab)
+        splitter = self._new_hsplitter([320, 980])
+        tab_layout.addWidget(splitter)
 
         # --- Control panel (left side) ---
         control_panel = QWidget()
-        control_panel.setMaximumWidth(300)
+        control_panel.setMinimumWidth(240)
+        control_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         control_layout = QVBoxLayout(control_panel)
 
         # -- Triangulation Controls --
@@ -3504,12 +3549,11 @@ class MeshItWorkflowGUI(QWidget):
         control_layout.addLayout(nav_layout) # Added for completeness
         control_layout.addStretch() # Added for completeness
 
-        tab_layout.addWidget(control_panel)
-
         # --- Visualization Area (right side) --- (remain the same)
         # ... (viz_group setup remains the same) ...
         viz_group = QGroupBox("Triangulation Visualization") # Added for completeness
         viz_layout = QVBoxLayout(viz_group) # Added for completeness
+        viz_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.tri_viz_frame = QWidget() # Added for completeness
         self.tri_viz_layout = QVBoxLayout(self.tri_viz_frame) # Added for completeness
         if True: # Added for completeness
@@ -3520,7 +3564,10 @@ class MeshItWorkflowGUI(QWidget):
         self.tri_viz_placeholder.setAlignment(Qt.AlignCenter) # Added for completeness
         self.tri_viz_layout.addWidget(self.tri_viz_placeholder) # Added for completeness
         viz_layout.addWidget(self.tri_viz_frame) # Added for completeness
-        tab_layout.addWidget(viz_group, 1)  # 1 = stretch factor # Added for completeness
+        splitter.addWidget(control_panel)
+        splitter.addWidget(viz_group)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
 
     def _setup_intersection_tab(self):
         """Create the intersection tab and its components with embedded PyVista view."""
@@ -6102,12 +6149,15 @@ class MeshItWorkflowGUI(QWidget):
         self.target_size_info.setStyleSheet(f"color: {color}; font-style: italic; font-weight: bold;")
     def _setup_pre_tetramesh_tab(self):
             """Sets up the Pre-Tetrahedral Mesh tab for surface selection and validation."""
-            # Initialize the main layout for this specific tab
-            tab_layout = QHBoxLayout(self.pre_tetramesh_tab)
+            # Initialize main layout with splitter so controls/view are draggable.
+            tab_layout = QVBoxLayout(self.pre_tetramesh_tab)
+            splitter = self._new_hsplitter([360, 940])
+            tab_layout.addWidget(splitter)
 
             # --- Control panel (left side) ---
             control_panel = QWidget()
-            control_panel.setMaximumWidth(350)
+            control_panel.setMinimumWidth(260)
+            control_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
             control_layout = QVBoxLayout(control_panel) # This is the layout for the control_panel's content
             
             # -- Surface Selection Controls --
@@ -6192,12 +6242,10 @@ class MeshItWorkflowGUI(QWidget):
             control_layout.addWidget(selection_group) # Add surface selection group
             control_layout.addStretch()
             
-            # Add the control_panel to the main tab_layout
-            tab_layout.addWidget(control_panel)
-
             # --- Visualization Area (right side) ---
             viz_group = QGroupBox("Conforming Surface Mesh Visualization")
             viz_layout = QVBoxLayout(viz_group) # This is the layout for the viz_group's content
+            viz_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
             self.pre_tetramesh_viz_frame = QFrame()
             self.pre_tetramesh_viz_frame.setFrameShape(QFrame.StyledPanel)
@@ -6221,8 +6269,11 @@ class MeshItWorkflowGUI(QWidget):
 
             viz_layout.addWidget(self.pre_tetramesh_viz_frame, 1) # Add the frame to viz_group's layout
             
-            # Add the viz_group to the main tab_layout
-            tab_layout.addWidget(viz_group, 1)
+            # Add both panels to draggable splitter.
+            splitter.addWidget(control_panel)
+            splitter.addWidget(viz_group)
+            splitter.setStretchFactor(0, 0)
+            splitter.setStretchFactor(1, 1)
 
     # Add a new clear method for this tab's plotter
     def _clear_pre_tetramesh_plot(self):
@@ -14118,10 +14169,10 @@ segmentation, triangulation, and visualization.
         
 
     def _is_embedded_in_dock(self) -> bool:
-        """Check if this widget is embedded in a QDockWidget."""
+        """Check if this widget is embedded in a host container inside PZero."""
         parent = self.parent()
         while parent is not None:
-            if isinstance(parent, QDockWidget):
+            if isinstance(parent, (QDockWidget, QDialog)):
                 return True
             parent = parent.parent()
         return False
@@ -15304,14 +15355,16 @@ segmentation, triangulation, and visualization.
         self.tetra_selected_surfaces = set()  # Surfaces transferred from pre-tetra tab
         self.tetra_surface_data = {}  # Store transferred surface data
         
-        # Create main layout
-        tab_layout = QHBoxLayout(self.tetra_mesh_tab)
+        # Create main layout with splitter so all panes are draggable.
+        tab_layout = QVBoxLayout(self.tetra_mesh_tab)
         tab_layout.setSpacing(6)
+        main_splitter = self._new_hsplitter([300, 920, 320])
+        tab_layout.addWidget(main_splitter)
         
          # === Control Panel (Left) ===
         control_panel = QWidget()
-        control_panel.setMaximumWidth(280)
         control_panel.setMinimumWidth(250)
+        control_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         control_layout = QVBoxLayout(control_panel)
         control_layout.setContentsMargins(4, 4, 4, 4)
         control_layout.setSpacing(6)
@@ -15463,19 +15516,22 @@ segmentation, triangulation, and visualization.
         
         control_layout.addStretch()  # Push everything to the top
         
-        # Add control panel to layout first (left side)
-        tab_layout.addWidget(control_panel)
-        
         # === 3D Visualization Panel (Center) ===
-        self._setup_tetra_3d_viewer(tab_layout)
+        viz_panel = self._setup_tetra_3d_viewer()
         
         # === Materials Panel (Right) ===
         materials_group = self._init_material_selection_ui()
-        tab_layout.addWidget(materials_group)
+        
+        main_splitter.addWidget(control_panel)
+        main_splitter.addWidget(viz_panel)
+        main_splitter.addWidget(materials_group)
+        main_splitter.setStretchFactor(0, 0)
+        main_splitter.setStretchFactor(1, 1)
+        main_splitter.setStretchFactor(2, 0)
         
         logger.info("Enhanced tetra mesh tab with 3D viewer and surface transfer initialized")
 
-    def _setup_tetra_3d_viewer(self, parent_layout):
+    def _setup_tetra_3d_viewer(self):
         """Setup the 3D visualization panel for the tetra mesh tab"""
         # Create visualization panel
         viz_panel = QWidget()
@@ -15650,8 +15706,7 @@ segmentation, triangulation, and visualization.
             viz_layout.addWidget(placeholder)
             self.tetra_plotter = None
         
-        # Add to main layout with stretch factor
-        parent_layout.addWidget(viz_panel, 1)  # stretch=1 to take remaining space
+        return viz_panel
 
     def _load_conforming_meshes_for_tetgen(self):
         """Load conforming meshes from Tab 6 (Refine & Mesh) following C++ approach"""
