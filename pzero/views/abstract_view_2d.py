@@ -87,7 +87,7 @@ class View2D(ViewVTK):
         )
         self.menuModify.addAction(self.splitLineByPointButton)
 
-        self.mergeLineButton = QAction("Merge lines", self)
+        self.mergeLineButton = QAction("Weld Lines", self)
         self.mergeLineButton.triggered.connect(lambda: merge_lines(self))
         self.menuModify.addAction(self.mergeLineButton)
 
