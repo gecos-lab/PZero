@@ -642,28 +642,32 @@ class XSectionCollection(BaseCollection):
 
     def world2plane(self, section_uid=None, X=None, Y=None, Z=None, as_arr=False):
         """Get UV cross-section plane coordinates from XYZ world coordinates."""
-        # the following are strike, dip, normal unit vectors and the
-        # position vector origin of the cross-section plane in world XYZ coordinates
-        strike_vct = np_float64(
-            self.get_uid_strike_vect(section_uid=section_uid).reshape(1, 3)
+        # strike, dip, normal and origin are 3-element vectors in world XYZ coordinates
+        strike_vct = np_array(
+            self.get_uid_strike_vect(section_uid=section_uid), dtype=np_float64
+        ).reshape(3)
+        dip_vct = np_array(
+            self.get_uid_dip_vect(section_uid=section_uid), dtype=np_float64
+        ).reshape(3)
+        normal_vct = np_array(
+            self.get_uid_normal_vect(section_uid=section_uid), dtype=np_float64
+        ).reshape(3)
+        origin = np_array(self.get_uid_origin(uid=section_uid), dtype=np_float64).reshape(
+            3
         )
-        dip_vct = np_float64(
-            self.get_uid_dip_vect(section_uid=section_uid).reshape(1, 3)
-        )
-        normal_vct = np_float64(
-            self.get_uid_normal_vect(section_uid=section_uid).reshape(1, 3)
-        )
-        origin = self.get_uid_origin(uid=section_uid).reshape(1, 3)
-        XYZ = np_array([X, Y, Z]).T
-        # the following is the vector from the origin of the cross-section plane
-        # to the point XYZ, still in world XYZ coordinates
-        origin_2_point = np_float64(XYZ - origin)
-        # and here we convert to the UVW coordinates of the cross-section plane with dot products
-        # W is just to check and can be commented in the future
-        U = np_float32(np_dot(origin_2_point, strike_vct.T))
-        V = np_float32(np_dot(origin_2_point, dip_vct.T))
-        W = np_float32(np_dot(origin_2_point, normal_vct.T))
-        if any(W**2 > 1e-10):
+        X_arr = np_array(X, dtype=np_float64)
+        Y_arr = np_array(Y, dtype=np_float64)
+        Z_arr = np_array(Z, dtype=np_float64)
+        if X_arr.shape != Y_arr.shape or X_arr.shape != Z_arr.shape:
+            raise ValueError("X, Y and Z must have the same shape in world2plane.")
+        XYZ = np_array([X_arr, Y_arr, Z_arr], dtype=np_float64).T
+        # vector from cross-section origin to points, in world XYZ coordinates
+        origin_2_point = XYZ - origin
+        # convert to UVW coordinates with dot products; output keeps flat input shape
+        U = np_float32(np_dot(origin_2_point, strike_vct))
+        V = np_float32(np_dot(origin_2_point, dip_vct))
+        W = np_float32(np_dot(origin_2_point, normal_vct))
+        if np_array(W**2 > 1e-10).any():
             print(" ---> check W (should be zero): ", W)
         if as_arr:
             return np_array([U, V]).T
@@ -672,44 +676,31 @@ class XSectionCollection(BaseCollection):
 
     def plane2world(self, section_uid=None, U=None, V=None, as_arr=False):
         """Get XYZ world coordinates from UV cross-section plane coordinates."""
-        # the following are strike, dip, normal unit vectors and the
-        # position vector origin of the cross-section plane in world XYZ coordinates
-        # they are all converted to float64 row vectors (1 row, 3 columns)
-        strike_vct = np_float64(
-            self.get_uid_strike_vect(section_uid=section_uid)
-        ).reshape(1, 3)
-        dip_vct = np_float64(self.get_uid_dip_vect(section_uid=section_uid)).reshape(
-            1, 3
+        # strike, dip and origin are treated as 3-element vectors in world XYZ coordinates
+        strike_vct = np_array(
+            self.get_uid_strike_vect(section_uid=section_uid), dtype=np_float64
+        ).reshape(3)
+        dip_vct = np_array(
+            self.get_uid_dip_vect(section_uid=section_uid), dtype=np_float64
+        ).reshape(3)
+        origin = np_array(self.get_uid_origin(uid=section_uid), dtype=np_float64).reshape(
+            3
         )
-        origin = np_float64(self.get_uid_origin(uid=section_uid)).reshape(1, 3)
-        # U and V are converted to float64 column vectors (columns depending on size, 1 column)
+        # U and V can be scalars or arrays; keep their shape and broadcast on the XYZ axis
         U_arr = np_array(U, dtype=np_float64)
         V_arr = np_array(V, dtype=np_float64)
         if U_arr.shape != V_arr.shape:
             raise ValueError("U and V must have the same shape in plane2world.")
-        U_flat = U_arr.reshape(-1, 1)
-        V_flat = V_arr.reshape(-1, 1)
-        # the following is the vector from the origin of the cross-section plane
-        # to the point UV, already in world XYZ coordinates
-        # origin_2_point will have the same n. of rows as U_flat, V_flat and three columns as strike_vct etc.
-        origin_2_point = U_flat * strike_vct + V_flat * dip_vct
-        # then we add the vector from the origin of the cross-section plane to
-        # world coordinates origin (0,0,0), and we get the position in world XYZ coordinates
-        # XYZ is converted back to floa32 and has the same shape as origin_2_point
-        XYZ = np_float32(origin_2_point + origin)
-        # the following tests are redundant since we know by linear algebra the shape of XYZ --------------------------
+        XYZ = np_float32(
+            origin + U_arr[..., None] * strike_vct + V_arr[..., None] * dip_vct
+        )
         if U_arr.ndim == 0:
             if as_arr:
-                return XYZ[0]
-            return XYZ[0, 0], XYZ[0, 1], XYZ[0, 2]
-
-        out_shape = U_arr.shape
-        X = XYZ[:, 0].reshape(out_shape)
-        Y = XYZ[:, 1].reshape(out_shape)
-        Z = XYZ[:, 2].reshape(out_shape)
+                return XYZ
+            return XYZ[0], XYZ[1], XYZ[2]
         if as_arr:
-            return XYZ.reshape(out_shape + (3,))
-        return X, Y, Z
+            return XYZ
+        return XYZ[..., 0], XYZ[..., 1], XYZ[..., 2]
 
     def set_geometry(self, uid=None):
         """Given all parameters, sets the vtkPlane origin and normal properties, and builds the frame used for

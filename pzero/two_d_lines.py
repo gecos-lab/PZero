@@ -386,8 +386,6 @@ def rotate_line(self):
                 Y=in_vtk_obj.points_Y,
                 Z=in_vtk_obj.points_Z,
             )
-            inU = np_array(inU).reshape(-1)  # can be avoided if world2plane outputs flat arrays ----------------------
-            inV = np_array(inV).reshape(-1)
         # Stack coordinates in two-columns matrix and convert into Shapely object.
         inUV = np_column_stack((inU, inV))
         shp_line_in = shp_linestring(inUV)
@@ -505,8 +503,6 @@ def split_line_line(self):
             Y=in_vtk_obj.points_Y,
             Z=in_vtk_obj.points_Z,
         )
-        inU = np_array(inU).reshape(-1)  # can be avoided if world2plane outputs flat arrays ----------------------
-        inV = np_array(inV).reshape(-1)
 
     inUV_scissors = np_column_stack((inU, inV))
     shp_line_in_scissors = shp_linestring(inUV_scissors)
@@ -531,8 +527,6 @@ def split_line_line(self):
                 Y=in_vtk_obj.points_Y,
                 Z=in_vtk_obj.points_Z,
             )
-            inU = np_array(inU).reshape(-1)  # can be avoided if world2plane outputs flat arrays ----------------------
-            inV = np_array(inV).reshape(-1)
         inUV_paper = np_column_stack((inU, inV))
 
         # Create deepcopies of the selected entities. Split U- and V-coordinates.
@@ -675,16 +669,14 @@ def split_line_existing_point(self):
                 Y=vtk_obj.points_Y,
                 Z=vtk_obj.points_Z,
             )
-            inU_line = np_array(inU_line).reshape(-1)  # can be avoided if world2plane outputs flat arrays ----------------------
-            inV_line = np_array(inV_line).reshape(-1)
             point_u, point_v = self.parent.xsect_coll.world2plane(
                 section_uid=self.this_x_section_uid,
                 X=[point_pos[0]],
                 Y=[point_pos[1]],
                 Z=[point_pos[2]],
             )
-            point_u = float(np_array(point_u).reshape(-1)[0])
-            point_v = float(np_array(point_v).reshape(-1)[0])
+            point_u = float(point_u[0])
+            point_v = float(point_v[0])
             new_line_2["parent_uid"] = self.this_x_section_uid
 
         inUV_line = np_column_stack((inU_line, inV_line))
@@ -1026,10 +1018,6 @@ def snap_line(self):
             Y=other_vtk_obj.points_Y,
             Z=other_vtk_obj.points_Z,
         )
-        active_u = np_array(active_u).reshape(-1)
-        active_v = np_array(active_v).reshape(-1)
-        other_u = np_array(other_u).reshape(-1)
-        other_v = np_array(other_v).reshape(-1)
     else:
         self.print_terminal(" -- Snap line is available only in 2D views -- ")
         return
@@ -1167,8 +1155,6 @@ def resample_lines_distance(self):
                 Y=in_vtk_obj.points_Y,
                 Z=in_vtk_obj.points_Z,
             )
-            inU = np_array(inU).reshape(-1)  # can be avoided if world2plane outputs flat arrays ----------------------
-            inV = np_array(inV).reshape(-1)
         # Stack coordinates in two-columns matrix.
         inUV = np_column_stack((inU, inV))
         # Run the Shapely function.
@@ -1276,8 +1262,6 @@ def resample_lines_number_points(
                 Y=in_vtk_obj.points_Y,
                 Z=in_vtk_obj.points_Z,
             )
-            inU = np_array(inU).reshape(-1)  # can be avoided if world2plane outputs flat arrays ----------------------
-            inV = np_array(inV).reshape(-1)
         # Stack coordinates in two-columns matrix.
         inUV = np_column_stack((inU, inV))
         # Run the Shapely function.
@@ -1383,8 +1367,6 @@ def simplify_line(self):
                     Y=vtk_obj.points_Y,
                     Z=vtk_obj.points_Z,
                 )
-                inU = np_array(inU).reshape(-1)  # can be avoided if world2plane outputs flat arrays ----------------------
-                inV = np_array(inV).reshape(-1)
                 new_line["vtk_obj"] = XsPolyLine(
                     self.this_x_section_uid, parent=self.parent
                 )
@@ -1513,8 +1495,6 @@ def copy_parallel(
             Y=in_vtk_obj.points_Y,
             Z=in_vtk_obj.points_Z,
         )
-        inU = np_array(inU).reshape(-1)  # can be avoided if world2plane outputs flat arrays ----------------------
-        inV = np_array(inV).reshape(-1)
         line_dict["vtk_obj"] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
         line_dict["topology"] = "XsPolyLine"
         line_dict["parent_uid"] = self.this_x_section_uid
@@ -1653,8 +1633,6 @@ def copy_kink(self):
                 Y=vtk_obj.points_Y,
                 Z=vtk_obj.points_Z,
             )
-            inU = np_array(inU).reshape(-1)  # can be avoided if world2plane outputs flat arrays ----------------------
-            inV = np_array(inV).reshape(-1)
 
         # Stack coordinates in two-columns matrix
         inUV = np_column_stack((inU, inV))
@@ -1866,8 +1844,6 @@ def left_right(self, uid=None):
             Y=vtk_obj.points_Y,
             Z=vtk_obj.points_Z,
         )
-        U_line = np_array(U_line).reshape(-1)  # can be avoided if world2plane outputs flat arrays ----------------------
-        V_line = np_array(V_line).reshape(-1)
     # elif isinstance(self, View3D):
     #     # For 3D view, left-right orientation is not meaningful, so return early
     #     return
