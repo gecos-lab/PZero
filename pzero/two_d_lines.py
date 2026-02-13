@@ -5,8 +5,6 @@ from copy import deepcopy
 
 from PySide6.QtGui import QAction
 
-from geopandas import GeoDataFrame as geodataframe
-
 from numpy import stack as np_stack
 from numpy import arange as np_arange
 from numpy import array as np_array
@@ -942,6 +940,59 @@ def _insert_point_on_line_coords(line_coords, point, eps=1e-8):
     return line_coords
 
 
+def _dedupe_consecutive_coords(line_coords, eps=1e-8):
+    if len(line_coords) <= 1:
+        return line_coords
+    out_coords = [line_coords[0]]
+    for vertex in line_coords[1:]:
+        if np_norm(vertex - out_coords[-1]) > eps:
+            out_coords.append(vertex)
+    return np_array(out_coords, dtype=float)
+
+
+def _coords_changed(coords_a, coords_b, eps=1e-8):
+    if coords_a.shape != coords_b.shape:
+        return True
+    if coords_a.size == 0 and coords_b.size == 0:
+        return False
+    return np_norm(coords_a - coords_b) > eps
+
+
+def _trim_terminal_branch(line_coords, point, tolerance, eps=1e-8):
+    if len(line_coords) < 2:
+        return line_coords, False
+
+    out_coords = _insert_point_on_line_coords(line_coords, point, eps=eps)
+    out_coords = _dedupe_consecutive_coords(out_coords, eps=eps)
+    if len(out_coords) < 2:
+        return line_coords, False
+
+    start_dist = np_norm(point - out_coords[0])
+    end_dist = np_norm(point - out_coords[-1])
+    if (start_dist > tolerance + eps) and (end_dist > tolerance + eps):
+        return out_coords, _coords_changed(line_coords, out_coords, eps=eps)
+
+    distances = np_norm(out_coords - point, axis=1)
+    point_idx = int(distances.argmin())
+    if distances[point_idx] > eps:
+        return out_coords, _coords_changed(line_coords, out_coords, eps=eps)
+
+    if start_dist <= end_dist:
+        if point_idx == 0:
+            return out_coords, _coords_changed(line_coords, out_coords, eps=eps)
+        trimmed = out_coords[point_idx:, :]
+    else:
+        if point_idx >= len(out_coords) - 1:
+            return out_coords, _coords_changed(line_coords, out_coords, eps=eps)
+        trimmed = out_coords[: point_idx + 1, :]
+
+    trimmed = _dedupe_consecutive_coords(trimmed, eps=eps)
+    if len(trimmed) < 2:
+        return out_coords, _coords_changed(line_coords, out_coords, eps=eps)
+
+    return trimmed, True
+
+
 def _endpoint_extension_candidates(line_coords, eps=1e-12):
     candidates = []
     end_anchor = line_coords[-1]
@@ -963,20 +1014,17 @@ def _endpoint_extension_candidates(line_coords, eps=1e-12):
 
 @freeze_gui
 def snap_line(self):
-    """Extend first selected line to intersect second selected line and add node on both."""
+    """Snap selected lines by trimming short terminal branches and extending close endpoints."""
     if not self.selected_uids:
         self.print_terminal(" -- No input data selected -- ")
         return
 
     ordered_selected_uids = _ordered_unique_uids(self.selected_uids)
-    if len(ordered_selected_uids) != 2:
-        self.print_terminal(" -- Select exactly 2 lines: first active, second target -- ")
+    if len(ordered_selected_uids) < 2:
+        self.print_terminal(" -- Select at least 2 lines -- ")
         return
 
-    active_uid = ordered_selected_uids[0]
-    other_uid = ordered_selected_uids[1]
-
-    for uid in (active_uid, other_uid):
+    for uid in ordered_selected_uids:
         if (self.parent.geol_coll.get_uid_topology(uid) != "PolyLine") and (
             self.parent.geol_coll.get_uid_topology(uid) != "XsPolyLine"
         ):
@@ -996,109 +1044,211 @@ def snap_line(self):
         self.print_terminal(" -- Max extension distance must be > 0 -- ")
         return
 
-    if isinstance(self, ViewMap):
-        active_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(active_uid)
-        other_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(other_uid)
-        active_u = np_array(active_vtk_obj.points_X).reshape(-1)
-        active_v = np_array(active_vtk_obj.points_Y).reshape(-1)
-        other_u = np_array(other_vtk_obj.points_X).reshape(-1)
-        other_v = np_array(other_vtk_obj.points_Y).reshape(-1)
-    elif isinstance(self, ViewXsection):
-        active_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(active_uid)
-        other_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(other_uid)
-        active_u, active_v = self.parent.xsect_coll.world2plane(
-            section_uid=self.this_x_section_uid,
-            X=active_vtk_obj.points_X,
-            Y=active_vtk_obj.points_Y,
-            Z=active_vtk_obj.points_Z,
-        )
-        other_u, other_v = self.parent.xsect_coll.world2plane(
-            section_uid=self.this_x_section_uid,
-            X=other_vtk_obj.points_X,
-            Y=other_vtk_obj.points_Y,
-            Z=other_vtk_obj.points_Z,
-        )
-    else:
-        self.print_terminal(" -- Snap line is available only in 2D views -- ")
-        return
-
-    active_uv = np_column_stack((active_u, active_v))
-    other_uv = np_column_stack((other_u, other_v))
-    if len(active_uv) < 2 or len(other_uv) < 2:
-        self.print_terminal(" -- Lines must have at least 2 vertices -- ")
-        return
-
-    candidates = _endpoint_extension_candidates(active_uv)
-    if not candidates:
-        self.print_terminal(" -- Active line end segments are too short -- ")
-        return
-    other_line = shp_linestring(other_uv)
-
     eps = 1e-8
-    best_mode = None
-    hit_point = None
-    hit_dist = None
     max_dist = float(tolerance)
-    for mode, anchor, direction in candidates:
-        ray_end = anchor + direction * max_dist
-        ray = shp_linestring([anchor, ray_end])
-        intersections = _extract_intersection_points(ray.intersection(other_line))
-        for candidate in intersections:
-            vec = candidate - anchor
-            proj = float(vec[0] * direction[0] + vec[1] * direction[1])
-            if proj < -eps or proj > max_dist + eps:
-                continue
-            if (hit_dist is None) or (proj < hit_dist):
-                hit_dist = proj
-                hit_point = candidate
-                best_mode = mode
-
-    if hit_point is None or best_mode is None:
-        self.print_terminal(" -- No intersection within max extension distance -- ")
-        return
-
-    out_active_uv = deepcopy(active_uv)
-    if best_mode == "append":
-        if hit_dist > eps and np_norm(hit_point - active_uv[-1]) > eps:
-            out_active_uv = np_concatenate(
-                (out_active_uv, hit_point.reshape(1, 2)), axis=0
-            )
-    else:
-        if hit_dist > eps and np_norm(hit_point - active_uv[0]) > eps:
-            out_active_uv = np_concatenate(
-                (hit_point.reshape(1, 2), out_active_uv), axis=0
-            )
-
-    out_other_uv = _insert_point_on_line_coords(deepcopy(other_uv), hit_point, eps=eps)
+    line_uv = {}
 
     if isinstance(self, ViewMap):
-        out_active_x = out_active_uv[:, 0]
-        out_active_y = out_active_uv[:, 1]
-        out_active_z = np_zeros(np_shape(out_active_x))
-        out_other_x = out_other_uv[:, 0]
-        out_other_y = out_other_uv[:, 1]
-        out_other_z = np_zeros(np_shape(out_other_x))
-        new_active = PolyLine()
-        new_other = PolyLine()
+        for uid in ordered_selected_uids:
+            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            in_u = np_array(vtk_obj.points_X).reshape(-1)
+            in_v = np_array(vtk_obj.points_Y).reshape(-1)
+            in_uv = _dedupe_consecutive_coords(np_column_stack((in_u, in_v)), eps=eps)
+            if len(in_uv) < 2:
+                self.print_terminal(" -- Lines must have at least 2 vertices -- ")
+                return
+            line_uv[uid] = in_uv
+    elif isinstance(self, ViewXsection):
+        for uid in ordered_selected_uids:
+            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            in_u, in_v = self.parent.xsect_coll.world2plane(
+                section_uid=self.this_x_section_uid,
+                X=vtk_obj.points_X,
+                Y=vtk_obj.points_Y,
+                Z=vtk_obj.points_Z,
+            )
+            in_uv = _dedupe_consecutive_coords(np_column_stack((in_u, in_v)), eps=eps)
+            if len(in_uv) < 2:
+                self.print_terminal(" -- Lines must have at least 2 vertices -- ")
+                return
+            line_uv[uid] = in_uv
     else:
-        out_active_x, out_active_y, out_active_z = self.parent.xsect_coll.plane2world(
-            self.this_x_section_uid, out_active_uv[:, 0], out_active_uv[:, 1]
+        self.print_terminal(" -- Snap to intersection is available only in 2D views -- ")
+        return
+
+    changed_uids = set()
+    trimmed_uids = set()
+    endpoint_snap_count = 0
+
+    # Step 1: detect intersections and trim short terminal branches.
+    for idx_a, uid_a in enumerate(ordered_selected_uids):
+        for uid_b in ordered_selected_uids[idx_a + 1 :]:
+            if len(line_uv[uid_a]) < 2 or len(line_uv[uid_b]) < 2:
+                continue
+            line_a = shp_linestring(line_uv[uid_a])
+            line_b = shp_linestring(line_uv[uid_b])
+            if not line_a.intersects(line_b):
+                continue
+
+            raw_points = _extract_intersection_points(line_a.intersection(line_b))
+            intersection_points = []
+            for point in raw_points:
+                if any(np_norm(point - saved) <= eps for saved in intersection_points):
+                    continue
+                intersection_points.append(point)
+
+            for point in intersection_points:
+                before_a = line_uv[uid_a]
+                before_b = line_uv[uid_b]
+                nearest_dist_a = min(
+                    np_norm(point - before_a[0]), np_norm(point - before_a[-1])
+                )
+                nearest_dist_b = min(
+                    np_norm(point - before_b[0]), np_norm(point - before_b[-1])
+                )
+                if (nearest_dist_a > max_dist + eps) and (nearest_dist_b > max_dist + eps):
+                    continue
+
+                out_a = _insert_point_on_line_coords(before_a, point, eps=eps)
+                out_a = _dedupe_consecutive_coords(out_a, eps=eps)
+                out_b = _insert_point_on_line_coords(before_b, point, eps=eps)
+                out_b = _dedupe_consecutive_coords(out_b, eps=eps)
+                if _coords_changed(before_a, out_a, eps=eps):
+                    changed_uids.add(uid_a)
+                if _coords_changed(before_b, out_b, eps=eps):
+                    changed_uids.add(uid_b)
+                line_uv[uid_a] = out_a
+                line_uv[uid_b] = out_b
+
+                if nearest_dist_a <= max_dist + eps:
+                    trimmed_a, did_trim_a = _trim_terminal_branch(
+                        line_uv[uid_a], point, max_dist, eps=eps
+                    )
+                    line_uv[uid_a] = trimmed_a
+                    if did_trim_a:
+                        changed_uids.add(uid_a)
+                        trimmed_uids.add(uid_a)
+
+                if nearest_dist_b <= max_dist + eps:
+                    trimmed_b, did_trim_b = _trim_terminal_branch(
+                        line_uv[uid_b], point, max_dist, eps=eps
+                    )
+                    line_uv[uid_b] = trimmed_b
+                    if did_trim_b:
+                        changed_uids.add(uid_b)
+                        trimmed_uids.add(uid_b)
+
+    # Step 2: extend every endpoint to the closest reachable line and add node on target.
+    for uid in ordered_selected_uids:
+        current_uv = line_uv[uid]
+        if len(current_uv) < 2:
+            continue
+        endpoint_candidates = _endpoint_extension_candidates(current_uv)
+        for mode, anchor, direction in endpoint_candidates:
+            ray_end = anchor + direction * max_dist
+            ray = shp_linestring([anchor, ray_end])
+            best_target_uid = None
+            best_hit_point = None
+            best_hit_dist = None
+            zero_target_uid = None
+            zero_hit_point = None
+
+            for other_uid in ordered_selected_uids:
+                if other_uid == uid or len(line_uv[other_uid]) < 2:
+                    continue
+                other_line = shp_linestring(line_uv[other_uid])
+                intersections = _extract_intersection_points(
+                    ray.intersection(other_line)
+                )
+                for candidate in intersections:
+                    vec = candidate - anchor
+                    proj = float(vec[0] * direction[0] + vec[1] * direction[1])
+                    if proj < -eps or proj > max_dist + eps:
+                        continue
+                    if abs(proj) <= eps:
+                        if zero_hit_point is None:
+                            zero_hit_point = candidate
+                            zero_target_uid = other_uid
+                        continue
+                    if (best_hit_dist is None) or (proj < best_hit_dist):
+                        best_hit_dist = proj
+                        best_hit_point = candidate
+                        best_target_uid = other_uid
+
+            if zero_hit_point is not None:
+                hit_point = zero_hit_point
+                hit_dist = 0.0
+                target_uid = zero_target_uid
+            else:
+                hit_point = best_hit_point
+                hit_dist = best_hit_dist
+                target_uid = best_target_uid
+
+            if hit_point is None or target_uid is None:
+                continue
+
+            active_before = line_uv[uid]
+            if mode == "append":
+                if hit_dist > eps and np_norm(hit_point - active_before[-1]) > eps:
+                    active_after = np_concatenate(
+                        (active_before, hit_point.reshape(1, 2)), axis=0
+                    )
+                    line_uv[uid] = _dedupe_consecutive_coords(active_after, eps=eps)
+                    changed_uids.add(uid)
+                    endpoint_snap_count += 1
+            else:
+                if hit_dist > eps and np_norm(hit_point - active_before[0]) > eps:
+                    active_after = np_concatenate(
+                        (hit_point.reshape(1, 2), active_before), axis=0
+                    )
+                    line_uv[uid] = _dedupe_consecutive_coords(active_after, eps=eps)
+                    changed_uids.add(uid)
+                    endpoint_snap_count += 1
+
+            target_before = line_uv[target_uid]
+            target_after = _insert_point_on_line_coords(target_before, hit_point, eps=eps)
+            target_after = _dedupe_consecutive_coords(target_after, eps=eps)
+            if _coords_changed(target_before, target_after, eps=eps):
+                line_uv[target_uid] = target_after
+                changed_uids.add(target_uid)
+
+    if not changed_uids:
+        self.print_terminal(
+            "Snap to intersection completed: no short branches or endpoint snaps found within distance."
         )
-        out_other_x, out_other_y, out_other_z = self.parent.xsect_coll.plane2world(
-            self.this_x_section_uid, out_other_uv[:, 0], out_other_uv[:, 1]
-        )
-        new_active = XsPolyLine(self.this_x_section_uid, parent=self.parent)
-        new_other = XsPolyLine(self.this_x_section_uid, parent=self.parent)
+        self.clear_selection()
+        return
 
-    new_active.points = np_column_stack((out_active_x, out_active_y, out_active_z))
-    new_active.auto_cells()
-    new_other.points = np_column_stack((out_other_x, out_other_y, out_other_z))
-    new_other.auto_cells()
+    for uid in ordered_selected_uids:
+        if uid not in changed_uids:
+            continue
+        out_uv = _dedupe_consecutive_coords(line_uv[uid], eps=eps)
+        if len(out_uv) < 2:
+            continue
+        if isinstance(self, ViewMap):
+            out_x = out_uv[:, 0]
+            out_y = out_uv[:, 1]
+            out_z = np_zeros(np_shape(out_x))
+            out_vtk = PolyLine()
+        else:
+            out_x, out_y, out_z = self.parent.xsect_coll.plane2world(
+                self.this_x_section_uid, out_uv[:, 0], out_uv[:, 1]
+            )
+            out_vtk = XsPolyLine(self.this_x_section_uid, parent=self.parent)
+        out_vtk.points = np_column_stack((out_x, out_y, out_z))
+        out_vtk.auto_cells()
+        if out_vtk.points_number >= 2:
+            self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=out_vtk)
 
-    self.parent.geol_coll.replace_vtk(uid=active_uid, vtk_object=new_active)
-    self.parent.geol_coll.replace_vtk(uid=other_uid, vtk_object=new_other)
-
-    self.print_terminal("Snap line completed: active line extended and node added on target.")
+    self.print_terminal(
+        "Snap to intersection completed: updated "
+        + str(len(changed_uids))
+        + " line(s), trimmed "
+        + str(len(trimmed_uids))
+        + " line(s), endpoint snaps "
+        + str(endpoint_snap_count)
+        + "."
+    )
     self.clear_selection()
 
 
@@ -1935,54 +2085,3 @@ def int_node(line1, line2):
         new_line = shp_linestring([i for sublist in outcoords for i in sublist])
 
     return new_line, extended_line
-
-
-def clean_intersection(self):
-    """
-    Clean intersections for a given line. The "search radius" is a buffer applied to the selected line to snap lines
-    at a given distance from the selected line
-    """
-    data = []
-    if isinstance(self, ViewMap):
-        for i, line in self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["topology"] == "PolyLine"
-        ].iterrows():
-            vtkgeom = line["vtk_obj"]
-            uid = line["uid"]
-            geom = shp_linestring(vtkgeom.points[:, :2])
-            data.append({"uid": uid, "geometry": geom})
-    elif isinstance(self, ViewXsection):
-        for i, line in self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["topology"] == "XsPolyLine"
-        ].iterrows():
-            vtkgeom = line["vtk_obj"]
-            uid = line["uid"]
-            inU, inV = vtkgeom.world2plane()
-            inUV = np_column_stack((inU, inV))
-            geom = shp_linestring(inUV)
-            data.append({"uid": uid, "geometry": geom})
-    search = input_one_value_dialog(
-        parent=self,
-        title="Search radius",
-        label="Insert search radius",
-        default_value=0.05,
-    )
-    df = geodataframe(data=data)
-    df_buffer = df.buffer(search)
-
-    sel_uid = self.selected_uids[0]
-
-    line1 = df.loc[df["uid"] == sel_uid, "geometry"].values[0]
-    idx_line1 = df.index[df["uid"] == sel_uid]
-
-    df_buffer.drop(index=idx_line1, inplace=True)
-
-    idx_list = df_buffer.index[
-        df_buffer.intersects(line1) == True
-    ]  # Subset the intersecting lines
-    uids = df.iloc[idx_list]["uid"].to_list()
-
-    uids.append(sel_uid)
-
-    self.selected_uids = uids
-    snap_line(self)
