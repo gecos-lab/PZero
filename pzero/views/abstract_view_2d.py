@@ -50,7 +50,6 @@ class View2D(ViewVTK):
             copy_kink,
             copy_similar,
             measure_distance,
-            clean_intersection,
         )
 
         # ------------------------------------
