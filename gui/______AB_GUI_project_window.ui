@@ -900,7 +900,7 @@
   </action>
   <action name="actionMergeEntities">
    <property name="text">
-    <string>Merge to Multipart</string>
+    <string>Merge Entities</string>
    </property>
   </action>
   <action name="actionPoissonInterpolation">
@@ -1015,7 +1015,7 @@
   </action>
   <action name="actionSplitMultipart">
    <property name="text">
-    <string>Split to Single Part</string>
+    <string>Split Multi-part</string>
    </property>
   </action>
   <action name="actionImportPC">

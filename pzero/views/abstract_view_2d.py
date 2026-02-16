@@ -49,6 +49,7 @@ class View2D(ViewVTK):
             copy_kink,
             copy_similar,
             measure_distance,
+            clean_intersection,
         )
 
         # ------------------------------------
@@ -89,11 +90,11 @@ class View2D(ViewVTK):
         )
         self.menuModify.addAction(self.splitLineByPointButton)
 
-        self.mergeLineButton = QAction("Weld Lines", self)
+        self.mergeLineButton = QAction("Merge lines", self)
         self.mergeLineButton.triggered.connect(lambda: merge_lines(self))
         self.menuModify.addAction(self.mergeLineButton)
 
-        self.snapLineButton = QAction("Snap to intersection", self)
+        self.snapLineButton = QAction("Snap line", self)
         self.snapLineButton.triggered.connect(lambda: snap_line(self))
         self.menuModify.addAction(self.snapLineButton)
 
@@ -132,6 +133,9 @@ class View2D(ViewVTK):
             lambda: self.vector_by_mouse(measure_distance)
         )
         self.menuView.addAction(self.measureDistanceButton)
+        self.cleanSectionButton = QAction("Clean intersections", self)
+        self.cleanSectionButton.triggered.connect(lambda: clean_intersection(self))
+        self.menuModify.addAction(self.cleanSectionButton)
 
     # ================================  Methods required by ViewVTK(), (re-)implemented here ==========================
 
