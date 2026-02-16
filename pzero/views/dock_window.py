@@ -11,6 +11,7 @@ from .view_map import ViewMap
 from .view_xsection import ViewXsection
 from .view_stereoplot import ViewStereoplot
 from .abstract_view_vtk import ViewVTK
+from PySide6.QtCore import QTimer
 
 
 class DockWindow(QDockWidget):

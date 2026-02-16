@@ -137,6 +137,9 @@ class ViewVTK(BaseView):
         self.actionCreateGif.triggered.connect(self.create_gif)
         self.menuView.addAction(self.actionCreateGif)
 
+        self.CheckGridView = QAction("Show grid", self, checkable=True)
+        self.CheckGridView.triggered.connect(self.toggle_grid)
+        self.menuView.insertAction(self.CheckGridView, self.CheckGridView)
     # ================================  Methods required by BaseView(), (re-)implemented here =========================
 
     def closeEvent(self, event):
@@ -896,6 +899,21 @@ class ViewVTK(BaseView):
 
     def zoom_active(self):
         self.plotter.reset_camera()
+
+    def toggle_grid(self, checked):
+        if checked:
+            self.plotter.show_grid(
+                color="white",
+                font_size=8,
+                n_xlabels=3,
+                n_ylabels=3,
+                n_zlabels=2,
+                fmt="%.0f",
+                minor_ticks=False,
+            )
+        else:
+            self.plotter.remove_bounds_axes()
+
 
     def export_screen(self):
         """Open the screenshot export dialog for high-quality figure export.
