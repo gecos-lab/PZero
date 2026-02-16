@@ -307,6 +307,14 @@ def input_checkbox_dialog(
     widget = QWidget()
     widget.setWindowTitle(title)
 
+    # Place the scroll area inside a top-level layout so buttons can be placed below it
+    main_layout = QVBoxLayout(widget)
+
+    # Insert QLabel to explain the reason of the choice
+    label_line = QLabel(widget)
+    label_line.setText(label)
+    main_layout.addWidget(label_line)
+
     # Create a scroll area to host the list of checkboxes
     scroll = QScrollArea(widget)
     scroll.setWidgetResizable(True)
@@ -316,17 +324,10 @@ def input_checkbox_dialog(
     content = QWidget()
     gridLayout = QGridLayout(content)
     scroll.setWidget(content)
-
-    # Place the scroll area inside a top-level layout so buttons can be placed below it
-    main_layout = QVBoxLayout(widget)
     main_layout.addWidget(scroll)
 
     objects_qt = {}
     i = 0
-    # Insert QLabel to explain the reason of the choice
-    label_line = QLabel(widget)
-    label_line.setText(label)
-    gridLayout.addWidget(label_line, 1, 1)
 
     def handle_checkbox_click(clicked_element):
         """Handle exclusive checkbox behavior"""
@@ -346,23 +347,32 @@ def input_checkbox_dialog(
             objects_qt[element][0].clicked.connect(
                 lambda checked, el=element: handle_checkbox_click(el)
             )
-        gridLayout.addWidget(objects_qt[element][0], i + 2, 1)
+        gridLayout.addWidget(objects_qt[element][0], i, 0)
         i += 1
 
     # Set the first checkbox as checked if exclusive is True
     if exclusive and choice_list:
         objects_qt[choice_list[0]][0].setChecked(True)
 
-    # Create OK Button, add it to the grid layout an set name and state
+    # Add stretch to make scroll area expandable
+    main_layout.addStretch()
+
+    # Create a horizontal layout for buttons to keep them at the bottom
+    buttons_layout = QGridLayout()
+
+    # Create OK Button
     button_ok = QPushButton(widget)
-    gridLayout.addWidget(button_ok, i + 3, 1)
     button_ok.setAutoDefault(True)
     button_ok.setText("OK")
-    # Cancel Button, add it to the grid layout an set name and state
+    buttons_layout.addWidget(button_ok, 0, 0)
+
+    # Create Cancel Button
     button_cancel = QPushButton(widget)
-    gridLayout.addWidget(button_cancel, i + 3, 2)
     button_cancel.setAutoDefault(True)
     button_cancel.setText("Cancel")
+    buttons_layout.addWidget(button_cancel, 0, 1)
+
+    main_layout.addLayout(buttons_layout)
     # Show the widget, resized thank to the scroll function.
     widget.resize(400, 300)
     widget.show()
@@ -385,8 +395,8 @@ def input_checkbox_dialog(
     )  # Response to clicking the Cancel PushButton. End the QEventLoop
     loop.exec_()  # Execute the QEventLoop
 
-    # When the QEventLoop is closed, the output ir returned as a list if multiple checkboxes are checked,
-    # or as a string if only one checkbox is checked, and None if Cancel is pressed or nothing is checked.
+    # When the QEventLoop is closed, the output is returned as a list of checked items,
+    # or None if Cancel is pressed or nothing is checked.
     if not objects_qt:
         return
     else:
@@ -394,10 +404,7 @@ def input_checkbox_dialog(
         for element in choice_list:
             if objects_qt[element][0].isChecked():
                 output_list.append(element)
-        if len(output_list) == 1:
-            output = output_list[0]
-        else:
-            output = output_list
+        output = output_list if output_list else None
     return output
 
 
