@@ -91,11 +91,11 @@ class View2D(ViewVTK):
         )
         self.menuModify.addAction(self.splitLineByPointButton)
 
-        self.mergeLineButton = QAction("Merge lines", self)
+        self.mergeLineButton = QAction("Weld lines", self)
         self.mergeLineButton.triggered.connect(lambda: merge_lines(self))
         self.menuModify.addAction(self.mergeLineButton)
 
-        self.snapLineButton = QAction("Snap line", self)
+        self.snapLineButton = QAction("Snap to intersection", self)
         self.snapLineButton.triggered.connect(lambda: snap_line(self))
         self.menuModify.addAction(self.snapLineButton)
 
@@ -134,10 +134,6 @@ class View2D(ViewVTK):
             lambda: self.vector_by_mouse(measure_distance)
         )
         self.menuView.addAction(self.measureDistanceButton)
-        self.cleanSectionButton = QAction("Clean intersections", self)
-        self.cleanSectionButton.triggered.connect(lambda: clean_intersection(self))
-        self.menuModify.addAction(self.cleanSectionButton)
-
     # ================================  Methods required by ViewVTK(), (re-)implemented here ==========================
 
     def show_qt_canvas(self):
