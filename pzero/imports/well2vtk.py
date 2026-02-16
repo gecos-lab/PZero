@@ -327,7 +327,7 @@ def well2vtk(self, path=None):
 
     #     # curr_obj_attributes = deepcopy(WellCollection.entity_dict)
     #     # curr_obj_attributes['uid'] = str(uuid4())
-    #     # curr_obj_attributes['Loc ID'] = f'{unique_id[0]}'
+    #     # curr_obj_attributes['name'] = f'{unique_id[0]}'
     #     # curr_obj_attributes['feature'] = f'{geo_code}'
     #     # curr_obj_attributes['properties_names'] = []
     #     # curr_obj_attributes['properties_components'] = []

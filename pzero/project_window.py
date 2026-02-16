@@ -1628,7 +1628,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     for diff in diffs:
                         self.well_legend_df[diff] = Legend.well_legend_dict[diff]
                     self.well_legend_df.sort_values(
-                        by="Loc ID", ascending=True, inplace=True
+                        by="name", ascending=True, inplace=True
                     )
 
             # Read fluids legend tables.
@@ -2354,13 +2354,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 # reindex new_dom_coll_df to catch any problem with non-consecutive indices
                 new_well_coll_df.reset_index(drop=True, inplace=True)
 
-                if "Loc ID" in new_well_coll_df.columns:
-                    new_well_coll_df.rename(
-                        columns={"Loc ID": "name"}, inplace=True
-                    )
-                    self.print_terminal(
-                        "column Loc ID renamed as name in wells table"
-                    )
                 if not new_well_coll_df.empty:
                     if "x_section" in new_well_coll_df.columns:
                         new_well_coll_df.rename(

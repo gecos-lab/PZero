@@ -860,7 +860,7 @@ class ViewVTK(BaseView):
         elif coll_name == "well_coll":
             plot_entity = self.parent.well_coll.get_uid_vtk_obj(uid)
             point = plot_entity.points[0].reshape(-1, 3)
-            name_value = [self.parent.well_coll.get_uid_well_locid(uid)]
+            name_value = [self.parent.well_coll.get_uid_well_name(uid)]
         elif coll_name == "fluid_coll":
             plot_entity = self.parent.fluid_coll.get_uid_vtk_obj(uid)
             point = plot_entity.GetCenter()
