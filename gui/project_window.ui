@@ -485,12 +485,12 @@
   </action>
   <action name="actionMergeEntities">
    <property name="text">
-    <string>Merge Entities</string>
+    <string>Merge to Multipart</string>
    </property>
   </action>
   <action name="actionSplitMultipart">
    <property name="text">
-    <string>Split Multipart Entities</string>
+    <string>Split to Single Part</string>
    </property>
   </action>
   <action name="actionDecimatePointCloud">

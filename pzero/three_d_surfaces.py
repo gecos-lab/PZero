@@ -2058,10 +2058,17 @@ def project_2_xs(self):
         return
     # Define projection parameters (float64 needed for "t" afterwards)
     xs_names = self.xsect_coll.get_names
+    default_xs_uid = self.xsect_coll.df.loc[
+        self.xsect_coll.df["name"] == xs_names[0], "uid"
+    ].values[0]
+    default_strike = np_float64(self.xsect_coll.get_uid_strike(default_xs_uid))
+    default_dip = np_float64(self.xsect_coll.get_uid_dip(default_xs_uid))
+    default_proj_trend = round((default_strike + 90.0) % 360.0, 2)
+    default_proj_plunge = round(90.0 - default_dip, 2)
     input_dict = {
         "xs_name": ["XSection: ", xs_names],
-        "proj_plunge": ["Projection axis plunge: ", 0.0],
-        "proj_trend": ["Projection axis trend: ", 0.0],
+        "proj_plunge": ["Projection axis plunge: ", default_proj_plunge],
+        "proj_trend": ["Projection axis trend: ", default_proj_trend],
         "dist_sec": ["Maximum distance from section: ", 0.0],
     }
     options_dict = multiple_input_dialog(
@@ -2076,14 +2083,20 @@ def project_2_xs(self):
     ].values[0]
     proj_plunge = np_float64(options_dict["proj_plunge"])
     proj_trend = np_float64(options_dict["proj_trend"])
-    # Constrain to 0-180.
-    if proj_trend > 180.0:
-        proj_trend -= 180.0
-        proj_plunge = -proj_plunge
     # Check for projection trend parallel to cross section.
     if (
-        abs(self.xsect_coll.get_uid_strike(xs_uid) - proj_trend) < 10.0
-        or abs(self.xsect_coll.get_uid_strike(xs_uid) - 180.0 - proj_trend) < 10.0
+        abs((proj_trend - self.xsect_coll.get_uid_strike(xs_uid) + 180.0) % 360.0 - 180.0)
+        < 10.0
+        or abs(
+            (
+                proj_trend
+                - ((self.xsect_coll.get_uid_strike(xs_uid) + 180.0) % 360.0)
+                + 180.0
+            )
+            % 360.0
+            - 180.0
+        )
+        < 10.0
     ):
         self.print_terminal(
             "Plunge too close to being parallel to XSection (angle < 10°)"
