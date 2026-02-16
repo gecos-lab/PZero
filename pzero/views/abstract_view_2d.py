@@ -3,6 +3,7 @@ PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
 from PySide6.QtGui import QAction
+from PySide6.QtCore import QEvent, Qt
 
 # PZero imports____
 from .abstract_view_vtk import ViewVTK
@@ -22,8 +23,19 @@ class View2D(ViewVTK):
         self._ctrl_suppression_observer_tag = None
         self._install_ctrl_suppression_observers()
 
-    # ================================  General methods shared by all views - built incrementally =====================
+        def blank_keypress(interactor, event):
+            """Blanks/cancels/overrides a keypress event.
+            Directly accessing VTK events is necessary since the PyVista
+            interface has a lower priority. See issue #174."""
+            if interactor.GetKeyCode() not in ["w", "s"]:
+                interactor.SetKeyCode("")
+                # interactor.SetKeySym("")
+                print("blank called")
 
+        self.plotter.iren.interactor.AddObserver("KeyPressEvent", blank_keypress, 10)
+        self.plotter.clear_events_for_key("v")
+    # ================================  General methods shared by all views - built incrementally =====================
+    
     def initialize_menu_tools(self):
         """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
         # append code from superclass
@@ -152,6 +164,14 @@ class View2D(ViewVTK):
         self._ctrl_suppression_observer_tag = interactor.AddObserver(
             "LeftButtonPressEvent", self._clear_ctrl_modifier, 10.0
         )
+
+    
+    def blank_keypress(interactor, event):
+            """Blanks/cancels/overrides a keypress event.
+            Directly accessing VTK events is necessary since the PyVista
+            key event handling is not easily overridden."""
+            # Do nothing, effectively blanking the event
+            pass
     def end_pick(self, pos):
         """Function used to disable actor picking. Due to some slight difference,
         must be reimplemented in subclasses.
