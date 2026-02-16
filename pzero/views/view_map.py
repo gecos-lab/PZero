@@ -58,7 +58,7 @@ class ViewMap(View2D):
         """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
         # append code from superclass
         super().initialize_menu_tools()
-
+   
 
         self.sectionFromStrikeButton = QAction("Section from strike", self)
         self.sectionFromStrikeButton.triggered.connect(

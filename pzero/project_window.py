@@ -645,7 +645,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         else:
             return
         updt_dict = multiple_input_dialog(
-            title="Merge entities to multi-part", input_dict=input_dict
+            title="Merge to Multipart", input_dict=input_dict
         )
         """Check if the output of the widget is empty or not. If the Cancel sender was clicked, the tool quits"""
         if updt_dict is None:

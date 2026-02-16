@@ -59,8 +59,6 @@ class ViewXsection(View2D):
         # Rename Base View, Menu and Tool
         self.setWindowTitle(f"Xsection View: {self.this_x_section_name}")
 
-        # Clear Ctrl before default VTK mouse handlers to avoid Ctrl-driven rotate.
-
         # Store center and direction in internal variables of this view
         self.set_section_projection()
 
