@@ -3,7 +3,7 @@ PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
 from PySide6.QtWidgets import QDockWidget
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt
 
 # PZero imports____
 from .view_3d import View3D
@@ -66,23 +66,6 @@ class DockWindow(QDockWidget):
                 parent.print_terminal(
                     "\nWarning: as far as the orientation widget problem is not solved, please resize the window to make it smaller.\n"
                 )
-
-        if window_type == "View3D":
-            QTimer.singleShot(0, self._resize_then_init_3d_camera_widget)
-    # Temporary fix for issue 242 and 243: the 3D camera orientation widget 
-    # is not correctly displayed when the 3D view is first opened.
-    def _resize_then_init_3d_camera_widget(self):
-        """Nudge dock size, then rebuild the 3D camera orientation widget."""
-        try:
-            # Trigger the same layout refresh users do manually by resizing the dock.
-            width = max(int(self.width()), 4)
-            height = max(int(self.height()), 4)
-            self.resize(width - 1, height)
-            self.resize(width, height)
-            self.canvas.plotter.clear_camera_widgets()
-            self.canvas.plotter.add_camera_orientation_widget()
-        except Exception:
-            pass
 
     def closeEvent(self, event):
         """Override the standard closeEvent method in two cases:

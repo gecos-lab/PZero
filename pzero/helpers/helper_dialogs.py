@@ -307,14 +307,6 @@ def input_checkbox_dialog(
     widget = QWidget()
     widget.setWindowTitle(title)
 
-    # Place the scroll area inside a top-level layout so buttons can be placed below it
-    main_layout = QVBoxLayout(widget)
-
-    # Insert QLabel to explain the reason of the choice
-    label_line = QLabel(widget)
-    label_line.setText(label)
-    main_layout.addWidget(label_line)
-
     # Create a scroll area to host the list of checkboxes
     scroll = QScrollArea(widget)
     scroll.setWidgetResizable(True)
@@ -324,10 +316,17 @@ def input_checkbox_dialog(
     content = QWidget()
     gridLayout = QGridLayout(content)
     scroll.setWidget(content)
+
+    # Place the scroll area inside a top-level layout so buttons can be placed below it
+    main_layout = QVBoxLayout(widget)
     main_layout.addWidget(scroll)
 
     objects_qt = {}
     i = 0
+    # Insert QLabel to explain the reason of the choice
+    label_line = QLabel(widget)
+    label_line.setText(label)
+    gridLayout.addWidget(label_line, 1, 1)
 
     def handle_checkbox_click(clicked_element):
         """Handle exclusive checkbox behavior"""
@@ -347,32 +346,23 @@ def input_checkbox_dialog(
             objects_qt[element][0].clicked.connect(
                 lambda checked, el=element: handle_checkbox_click(el)
             )
-        gridLayout.addWidget(objects_qt[element][0], i, 0)
+        gridLayout.addWidget(objects_qt[element][0], i + 2, 1)
         i += 1
 
     # Set the first checkbox as checked if exclusive is True
     if exclusive and choice_list:
         objects_qt[choice_list[0]][0].setChecked(True)
 
-    # Add stretch to make scroll area expandable
-    main_layout.addStretch()
-
-    # Create a horizontal layout for buttons to keep them at the bottom
-    buttons_layout = QGridLayout()
-
-    # Create OK Button
+    # Create OK Button, add it to the grid layout an set name and state
     button_ok = QPushButton(widget)
+    gridLayout.addWidget(button_ok, i + 3, 1)
     button_ok.setAutoDefault(True)
     button_ok.setText("OK")
-    buttons_layout.addWidget(button_ok, 0, 0)
-
-    # Create Cancel Button
+    # Cancel Button, add it to the grid layout an set name and state
     button_cancel = QPushButton(widget)
+    gridLayout.addWidget(button_cancel, i + 3, 2)
     button_cancel.setAutoDefault(True)
     button_cancel.setText("Cancel")
-    buttons_layout.addWidget(button_cancel, 0, 1)
-
-    main_layout.addLayout(buttons_layout)
     # Show the widget, resized thank to the scroll function.
     widget.resize(400, 300)
     widget.show()
@@ -395,8 +385,8 @@ def input_checkbox_dialog(
     )  # Response to clicking the Cancel PushButton. End the QEventLoop
     loop.exec_()  # Execute the QEventLoop
 
-    # When the QEventLoop is closed, the output is returned as a list of checked items,
-    # or None if Cancel is pressed or nothing is checked.
+    # When the QEventLoop is closed, the output ir returned as a list if multiple checkboxes are checked,
+    # or as a string if only one checkbox is checked, and None if Cancel is pressed or nothing is checked.
     if not objects_qt:
         return
     else:
@@ -404,7 +394,10 @@ def input_checkbox_dialog(
         for element in choice_list:
             if objects_qt[element][0].isChecked():
                 output_list.append(element)
-        output = output_list if output_list else None
+        if len(output_list) == 1:
+            output = output_list[0]
+        else:
+            output = output_list
     return output
 
 
@@ -1097,12 +1090,21 @@ class ShapefileAssignmentDialog(QMainWindow):
     """Dialog to assign shapefile attributes to PZero properties.
     Similar to import_dialog but simplified for shapefile data without preview table."""
 
+    USER_DEFINED_OPTION = "user defined"
+    USER_DEFINED_FEATURE_TOKEN = "__user_defined_feature__"
+    DEFAULT_USER_FEATURE = "undef"
+    FIXED_ROLE_OPTION = "Fixed value..."
+    FIXED_ROLE_TOKEN = "__fixed_role__"
+    USER_DEFINED_NAME_TOKEN = "__user_defined_name__"
+    USER_DEFINED_SCENARIO_TOKEN = "__user_defined_scenario__"
+
     def __init__(
         self,
         parent=None,
         shapefile_df=None,
         topology_type=None,
         include_label=False,
+        valid_roles=None,
         *args,
         **kwargs,
     ):
@@ -1112,8 +1114,13 @@ class ShapefileAssignmentDialog(QMainWindow):
         self.shapefile_df = shapefile_df
         self.topology_type = topology_type
         self.include_label = include_label
+        self.valid_roles = valid_roles if valid_roles is not None else []
         self.attribute_mapping = {}
         self.result = None
+        self.feature_user_line = None
+        self.role_fixed_combo = None
+        self.name_user_line = None
+        self.scenario_user_line = None
 
         # Define required and optional fields based on topology
         self.required_fields, self.optional_fields = self._get_field_definitions()
@@ -1159,9 +1166,11 @@ class ShapefileAssignmentDialog(QMainWindow):
         #header_arrow = QLabel("<b>←</b>")
         #header_arrow.setAlignment(Qt.AlignCenter)
         header_shapefile = QLabel("<b>Shapefile Column</b>")
+        header_manual = QLabel("<b>User Value</b>")
         main_layout.addWidget(header_pzero, row, 0)
         #main_layout.addWidget(header_arrow, row, 1)
         main_layout.addWidget(header_shapefile, row, 1)
+        main_layout.addWidget(header_manual, row, 2)
         row += 1
 
         # Create combo boxes for each field
@@ -1177,7 +1186,10 @@ class ShapefileAssignmentDialog(QMainWindow):
             #arrow_label = QLabel("←")
             #arrow_label.setAlignment(Qt.AlignCenter)
             combo = QComboBox()
-            combo.addItems(shapefile_columns)
+            if field == "feature":
+                combo.addItems(shapefile_columns + [self.USER_DEFINED_OPTION])
+            else:
+                combo.addItems(shapefile_columns)
             combo.setObjectName(f"combo_{field}")
             combo.currentTextChanged.connect(
                 lambda text, f=field, lbl=label: self._on_combo_changed(f, text, lbl)
@@ -1186,6 +1198,15 @@ class ShapefileAssignmentDialog(QMainWindow):
             main_layout.addWidget(label, row, 0)
 #            main_layout.addWidget(arrow_label, row, 1)
             main_layout.addWidget(combo, row, 1)
+            if field == "feature":
+                self.feature_user_line = QLineEdit()
+                self.feature_user_line.setObjectName("feature_user_defined_line")
+                self.feature_user_line.setPlaceholderText("Enter feature")
+                self.feature_user_line.setEnabled(False)
+                self.feature_user_line.textChanged.connect(
+                    self._on_user_feature_text_changed
+                )
+                main_layout.addWidget(self.feature_user_line, row, 2)
             self.combo_boxes[field] = combo
             self.field_labels[field] = label
             row += 1
@@ -1200,7 +1221,12 @@ class ShapefileAssignmentDialog(QMainWindow):
             #arrow_label = QLabel("←")
             #arrow_label.setAlignment(Qt.AlignCenter)
             combo = QComboBox()
-            combo.addItems(shapefile_columns)
+            if field == "role" and self.valid_roles:
+                combo.addItems(shapefile_columns + [self.FIXED_ROLE_OPTION])
+            elif field in ["name", "scenario"]:
+                combo.addItems(shapefile_columns + [self.USER_DEFINED_OPTION])
+            else:
+                combo.addItems(shapefile_columns)
             combo.setObjectName(f"combo_{field}")
             combo.currentTextChanged.connect(
                 lambda text, f=field, lbl=label: self._on_combo_changed(f, text, lbl)
@@ -1209,6 +1235,40 @@ class ShapefileAssignmentDialog(QMainWindow):
             main_layout.addWidget(label, row, 0)
             #.addWidget(arrow_label, row, 1)
             main_layout.addWidget(combo, row, 1)
+
+            # Create appropriate widget for third column
+            if field == "role" and self.valid_roles:
+                self.role_fixed_combo = QComboBox()
+                self.role_fixed_combo.setObjectName("role_fixed_combo")
+                self.role_fixed_combo.addItems(self.valid_roles)
+                self.role_fixed_combo.setEnabled(False)
+                self.role_fixed_combo.currentTextChanged.connect(
+                    self._on_fixed_role_changed
+                )
+                main_layout.addWidget(self.role_fixed_combo, row, 2)
+            elif field == "name":
+                self.name_user_line = QLineEdit()
+                self.name_user_line.setObjectName("name_user_line")
+                self.name_user_line.setPlaceholderText("Enter name")
+                self.name_user_line.setEnabled(False)
+                self.name_user_line.textChanged.connect(
+                    lambda text, f=field: self._on_user_defined_text_changed(f, text)
+                )
+                main_layout.addWidget(self.name_user_line, row, 2)
+            elif field == "scenario":
+                self.scenario_user_line = QLineEdit()
+                self.scenario_user_line.setObjectName("scenario_user_line")
+                self.scenario_user_line.setPlaceholderText("Enter scenario")
+                self.scenario_user_line.setEnabled(False)
+                self.scenario_user_line.textChanged.connect(
+                    lambda text, f=field: self._on_user_defined_text_changed(f, text)
+                )
+                main_layout.addWidget(self.scenario_user_line, row, 2)
+            else:
+                placeholder = QLabel("-")
+                placeholder.setAlignment(Qt.AlignCenter)
+                main_layout.addWidget(placeholder, row, 2)
+
             self.combo_boxes[field] = combo
             self.field_labels[field] = label
             row += 1
@@ -1240,14 +1300,172 @@ class ShapefileAssignmentDialog(QMainWindow):
                         self.combo_boxes[field].setCurrentText(shp_col)
                         self.attribute_mapping[field] = shp_col
                     break
+        # If no "feature" column exists, default to user-defined feature value.
+        feature_combo = self.combo_boxes.get("feature")
+        if feature_combo and feature_combo.currentText() == "<none>":
+            feature_combo.setCurrentText(self.USER_DEFINED_OPTION)
+
+    def _enforce_unique_columns(self, changed_field, selected_text):
+        """Ensure no two fields share the same shapefile column,
+        and dir/dip_dir are mutually exclusive."""
+        special_options = {"<none>", self.USER_DEFINED_OPTION, self.FIXED_ROLE_OPTION}
+
+        if selected_text not in special_options:
+            # Reset any OTHER combo that already has this shapefile column
+            for field, combo in self.combo_boxes.items():
+                if field == changed_field:
+                    continue
+                if combo.currentText() == selected_text:
+                    combo.setCurrentText("<none>")
+
+        # dir and dip_dir are mutually exclusive regardless of column
+        if changed_field == "dir" and selected_text != "<none>":
+            dip_dir_combo = self.combo_boxes.get("dip_dir")
+            if dip_dir_combo and dip_dir_combo.currentText() != "<none>":
+                dip_dir_combo.setCurrentText("<none>")
+        elif changed_field == "dip_dir" and selected_text != "<none>":
+            dir_combo = self.combo_boxes.get("dir")
+            if dir_combo and dir_combo.currentText() != "<none>":
+                dir_combo.setCurrentText("<none>")
 
     def _on_combo_changed(self, field, text, label):
         """Handle combo box changes."""
+        self._enforce_unique_columns(field, text)
+
+        if field == "feature":
+            if text == self.USER_DEFINED_OPTION:
+                if self.feature_user_line is not None:
+                    self.feature_user_line.setEnabled(True)
+                self.attribute_mapping["feature"] = self.USER_DEFINED_FEATURE_TOKEN
+                self.attribute_mapping["feature_user_value"] = (
+                    self._get_user_defined_feature_value()
+                )
+            elif text == "<none>":
+                if self.feature_user_line is not None:
+                    self.feature_user_line.setEnabled(False)
+                self.attribute_mapping.pop("feature", None)
+                self.attribute_mapping.pop("feature_user_value", None)
+            else:
+                if self.feature_user_line is not None:
+                    self.feature_user_line.setEnabled(False)
+                self.attribute_mapping["feature"] = text
+                self.attribute_mapping.pop("feature_user_value", None)
+            return
+
+        if field == "role":
+            if text == self.FIXED_ROLE_OPTION:
+                if self.role_fixed_combo is not None:
+                    self.role_fixed_combo.setEnabled(True)
+                self.attribute_mapping["role"] = self.FIXED_ROLE_TOKEN
+                self.attribute_mapping["role_fixed_value"] = (
+                    self._get_fixed_role_value()
+                )
+            elif text == "<none>":
+                if self.role_fixed_combo is not None:
+                    self.role_fixed_combo.setEnabled(False)
+                self.attribute_mapping.pop("role", None)
+                self.attribute_mapping.pop("role_fixed_value", None)
+            else:
+                if self.role_fixed_combo is not None:
+                    self.role_fixed_combo.setEnabled(False)
+                self.attribute_mapping["role"] = text
+                self.attribute_mapping.pop("role_fixed_value", None)
+            return
+
+        if field == "name":
+            if text == self.USER_DEFINED_OPTION:
+                if self.name_user_line is not None:
+                    self.name_user_line.setEnabled(True)
+                self.attribute_mapping["name"] = self.USER_DEFINED_NAME_TOKEN
+                self.attribute_mapping["name_user_value"] = (
+                    self.name_user_line.text().strip() if self.name_user_line else ""
+                )
+            elif text == "<none>":
+                if self.name_user_line is not None:
+                    self.name_user_line.setEnabled(False)
+                self.attribute_mapping.pop("name", None)
+                self.attribute_mapping.pop("name_user_value", None)
+            else:
+                if self.name_user_line is not None:
+                    self.name_user_line.setEnabled(False)
+                self.attribute_mapping["name"] = text
+                self.attribute_mapping.pop("name_user_value", None)
+            return
+
+        if field == "scenario":
+            if text == self.USER_DEFINED_OPTION:
+                if self.scenario_user_line is not None:
+                    self.scenario_user_line.setEnabled(True)
+                self.attribute_mapping["scenario"] = self.USER_DEFINED_SCENARIO_TOKEN
+                self.attribute_mapping["scenario_user_value"] = (
+                    self.scenario_user_line.text().strip() if self.scenario_user_line else ""
+                )
+            elif text == "<none>":
+                if self.scenario_user_line is not None:
+                    self.scenario_user_line.setEnabled(False)
+                self.attribute_mapping.pop("scenario", None)
+                self.attribute_mapping.pop("scenario_user_value", None)
+            else:
+                if self.scenario_user_line is not None:
+                    self.scenario_user_line.setEnabled(False)
+                self.attribute_mapping["scenario"] = text
+                self.attribute_mapping.pop("scenario_user_value", None)
+            return
+
         if text == "<none>":
             if field in self.attribute_mapping:
                 del self.attribute_mapping[field]
         else:
             self.attribute_mapping[field] = text
+
+    def _get_user_defined_feature_value(self):
+        """Return normalized user-defined feature value with default fallback."""
+        if self.feature_user_line is None:
+            return self.DEFAULT_USER_FEATURE
+        feature_value = self.feature_user_line.text().strip()
+        return feature_value if feature_value else self.DEFAULT_USER_FEATURE
+
+    def _on_user_feature_text_changed(self, _text):
+        """Update mapping when user edits custom feature value."""
+        feature_combo = self.combo_boxes.get("feature")
+        if (
+            feature_combo
+            and feature_combo.currentText() == self.USER_DEFINED_OPTION
+        ):
+            self.attribute_mapping["feature"] = self.USER_DEFINED_FEATURE_TOKEN
+            self.attribute_mapping["feature_user_value"] = (
+                self._get_user_defined_feature_value()
+            )
+
+    def _get_fixed_role_value(self):
+        """Return current fixed role value."""
+        if self.role_fixed_combo is None:
+            return self.valid_roles[0] if self.valid_roles else "undef"
+        return self.role_fixed_combo.currentText()
+
+    def _on_fixed_role_changed(self, _text):
+        """Update mapping when user selects a different fixed role."""
+        role_combo = self.combo_boxes.get("role")
+        if role_combo and role_combo.currentText() == self.FIXED_ROLE_OPTION:
+            self.attribute_mapping["role"] = self.FIXED_ROLE_TOKEN
+            self.attribute_mapping["role_fixed_value"] = self._get_fixed_role_value()
+
+    def _on_user_defined_text_changed(self, field, _text):
+        """Update mapping when user edits custom name or scenario value."""
+        if field == "name":
+            name_combo = self.combo_boxes.get("name")
+            if name_combo and name_combo.currentText() == self.USER_DEFINED_OPTION:
+                self.attribute_mapping["name"] = self.USER_DEFINED_NAME_TOKEN
+                self.attribute_mapping["name_user_value"] = (
+                    self.name_user_line.text().strip() if self.name_user_line else ""
+                )
+        elif field == "scenario":
+            scenario_combo = self.combo_boxes.get("scenario")
+            if scenario_combo and scenario_combo.currentText() == self.USER_DEFINED_OPTION:
+                self.attribute_mapping["scenario"] = self.USER_DEFINED_SCENARIO_TOKEN
+                self.attribute_mapping["scenario_user_value"] = (
+                    self.scenario_user_line.text().strip() if self.scenario_user_line else ""
+                )
 
     def _validate_and_accept(self):
         """Validate that all required fields are assigned before accepting."""
@@ -1286,6 +1504,32 @@ class ShapefileAssignmentDialog(QMainWindow):
 
     def accept(self):
         """Accept the dialog and return the mapping."""
+        feature_combo = self.combo_boxes.get("feature")
+        if feature_combo and feature_combo.currentText() == self.USER_DEFINED_OPTION:
+            self.attribute_mapping["feature"] = self.USER_DEFINED_FEATURE_TOKEN
+            self.attribute_mapping["feature_user_value"] = (
+                self._get_user_defined_feature_value()
+            )
+
+        role_combo = self.combo_boxes.get("role")
+        if role_combo and role_combo.currentText() == self.FIXED_ROLE_OPTION:
+            self.attribute_mapping["role"] = self.FIXED_ROLE_TOKEN
+            self.attribute_mapping["role_fixed_value"] = self._get_fixed_role_value()
+
+        name_combo = self.combo_boxes.get("name")
+        if name_combo and name_combo.currentText() == self.USER_DEFINED_OPTION:
+            self.attribute_mapping["name"] = self.USER_DEFINED_NAME_TOKEN
+            self.attribute_mapping["name_user_value"] = (
+                self.name_user_line.text().strip() if self.name_user_line else ""
+            )
+
+        scenario_combo = self.combo_boxes.get("scenario")
+        if scenario_combo and scenario_combo.currentText() == self.USER_DEFINED_OPTION:
+            self.attribute_mapping["scenario"] = self.USER_DEFINED_SCENARIO_TOKEN
+            self.attribute_mapping["scenario_user_value"] = (
+                self.scenario_user_line.text().strip() if self.scenario_user_line else ""
+            )
+
         self.result = self.attribute_mapping.copy()
 
         self.close()

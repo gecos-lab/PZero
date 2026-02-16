@@ -15,6 +15,7 @@ from .abstract_view_2d import View2D
 from vtkmodules.vtkFiltersCore import vtkAppendPolyData
 from pyvista import Line as pv_Line
 from .view_map import ViewMap
+from ..helpers.helper_functions import freeze_gui_onoff
 from ..orientation_analysis import get_dip_dir_vectors
 from ..helpers.helper_dialogs import (
     input_combo_dialog,
@@ -58,8 +59,6 @@ class ViewXsection(View2D):
 
         # Rename Base View, Menu and Tool
         self.setWindowTitle(f"Xsection View: {self.this_x_section_name}")
-
-        # Clear Ctrl before default VTK mouse handlers to avoid Ctrl-driven rotate.
 
         # Store center and direction in internal variables of this view
         self.set_section_projection()
@@ -139,9 +138,6 @@ class ViewXsection(View2D):
             ],
             exclusive=True,
         )
-        if not opt_dialog:
-            return
-        opt_dialog = opt_dialog[0]  # Extract the first element from the list
         if opt_dialog == "Fit cross-section frame only":
             fit_method = "frame"
         elif opt_dialog == "Fit vertical cross-section plane and frame":

@@ -96,6 +96,7 @@ from .entities_factory import (
     Attitude,
     XsImage,
 )
+from .helpers.helper_functions import freeze_gui_onoff
 from .legend_manager import Legend
 from .orientation_analysis import set_normals
 from .point_clouds import decimate_pc
@@ -317,6 +318,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def disable_actions(self):
         """Freeze all actions while doing something."""
         # self.parent.findChildren(QAction) returns a list of all actions in the application.
+        print("- disabling actions in project window")
         for action in self.findChildren(QAction):
             try:
                 # try - except added to catch an inexplicable bug with an action with text=""
@@ -327,6 +329,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def enable_actions(self):
         """Un-freeze all actions after having done something."""
         # self.parent.findChildren(QAction) returns a list of all actions in the application.
+        print("o enabling actions in project window")
         for action in self.findChildren(QAction):
             try:
                 # try - except added for symmetry with disable_actions (bug with an action with text="")
@@ -762,6 +765,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     dom_uid=dom_uid, map_image_uid=map_image_uid
                 )
 
+    @ freeze_gui_onoff
     def property_add(self):
         # ____________________________________________________ ADD IMAGES
         """Add empty property on geological entity"""

@@ -53,7 +53,7 @@ from vtkmodules.vtkFiltersPoints import (
 from pzero.collections.dom_collection import DomCollection
 from pzero.collections.geological_collection import GeologicalCollection
 from pzero.helpers.helper_dialogs import multiple_input_dialog
-from pzero.helpers.helper_functions import best_fitting_plane, srf
+from pzero.helpers.helper_functions import best_fitting_plane, srf, freeze_gui_onoff
 from pzero.helpers.helper_widgets import Scissors
 from .entities_factory import PCDom, TriSurf, Attitude
 
@@ -107,6 +107,7 @@ def extract_id(vtk_obj, ids):
     return vtk_ps_subset
 
 
+@freeze_gui_onoff
 def cut_pc(self, method="both"):
     """Function used to cut portions of a point cloud. Returns the points inside and outside the loop"""
 
@@ -183,14 +184,12 @@ def cut_pc(self, method="both"):
             self.parent.dom_coll.add_entity_from_dict(entity_dict)
 
         scissors.EnabledOff()
-        self.enable_actions()
+        # self.enable_actions()
         self.clear_selection()
 
     if not self.selected_uids:
         print(" -- No input data selected -- ")
         return
-    # Freeze QT interface
-    self.disable_actions()
 
     # Getting the values that have been typed by the user through the widget
 

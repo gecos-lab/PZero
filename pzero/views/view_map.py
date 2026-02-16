@@ -4,9 +4,6 @@ PZero© Andrea Bistacchi"""
 # PySide6 imports____
 from PySide6.QtGui import QAction
 
-# Standard library imports____
-from math import sqrt
-
 # Numpy imports____
 from numpy import ndarray as np_ndarray
 
@@ -59,7 +56,7 @@ class ViewMap(View2D):
         # append code from superclass
         super().initialize_menu_tools()
 
-
+        # then add new code specific to this class
         self.sectionFromStrikeButton = QAction("Section from strike", self)
         self.sectionFromStrikeButton.triggered.connect(
             lambda: self.vector_by_mouse(section_from_strike)

@@ -25,7 +25,7 @@ This folder contains utility classes and functions that support interactive widg
   - `gen_frame`: Generates transparent frames for GIFs.  
   - `rotate_vec_along`: Rotates a vector along a specified axis.  
   - `srf`: Computes the mean resultant length of vectors.  
-  - `freeze_gui`: Decorator to freeze GUI during processing.
+  - `freeze_gui_onoff`: Decorator to freeze GUI during processing.
 
 - `helper_widgets_qt.py`  
   Qt-based widget helpers for integrating custom controls and dialogs into the GUI.
