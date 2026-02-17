@@ -1954,7 +1954,7 @@ def measure_distance(self, vector):
         "Distance (m): "
         + str(round(vector.length, 2))
         + "\n\n"
-        + "Azimuth: "
+        + "Strike: "
         + str(round(vector.azimuth, 2))
         + "\n\n"
         + "Dip: "

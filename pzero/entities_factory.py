@@ -364,11 +364,11 @@ class PolyData(vtkPolyData):
         pass
 
     @property
-    def points_map_dip_azimuth(self):
-        """Returns dip azimuth (in grad) as Numpy array for map plotting if points have Normals property."""
+    def points_map_dip_direction(self):
+        """Returns dip direction (in grad) as Numpy array for map plotting if points have Normals property."""
         if "Normals" in self.point_data_keys:
             if len(np_shape(self.get_point_data("Normals"))) >= 2:
-                map_dip_azimuth = (
+                map_dip_direction = (
                     np_arctan2(
                         self.get_point_data("Normals")[:, 0],
                         self.get_point_data("Normals")[:, 1],
@@ -378,7 +378,7 @@ class PolyData(vtkPolyData):
                     - 180
                 ) % 360
             else:
-                map_dip_azimuth = (
+                map_dip_direction = (
                     np_arctan2(
                         self.get_point_data("Normals")[0],
                         self.get_point_data("Normals")[1],
@@ -387,7 +387,7 @@ class PolyData(vtkPolyData):
                     / np_pi
                     - 180
                 )
-            return map_dip_azimuth
+            return map_dip_direction
         else:
             return None
 
@@ -1133,7 +1133,7 @@ class XsVertexSet(VertexSet):
             xs_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
             app_dip = np_arctan(
                 np_tan(self.points_map_dip * np_pi / 180)
-                * np_cos((self.points_map_dip_azimuth - xs_strike) * np_pi / 180)
+                * np_cos((self.points_map_dip_direction - xs_strike) * np_pi / 180)
                 * 180
                 / np_pi
             )
@@ -1197,7 +1197,7 @@ class XsPolyLine(PolyLine):
             xs_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
             app_dip = np_arctan(
                 np_tan(self.points_map_dip * np_pi / 180)
-                * np_cos((self.points_map_dip_azimuth - xs_strike) * np_pi / 180)
+                * np_cos((self.points_map_dip_direction - xs_strike) * np_pi / 180)
                 * 180
                 / np_pi
             )
@@ -1343,7 +1343,7 @@ class XsTriSurf(TriSurf):
             xs_strike = self.parent.xsect_coll.get_uid_strike(self.x_section_uid)
             app_dip = np_arctan(
                 np_tan(self.points_map_dip * np_pi / 180)
-                * np_cos((self.points_map_dip_azimuth - xs_strike) * np_pi / 180)
+                * np_cos((self.points_map_dip_direction - xs_strike) * np_pi / 180)
                 * 180
                 / np_pi
             )
@@ -2262,14 +2262,14 @@ class PCDom(PolyData):
     If these problems are resolved then it would be better to switch to vtkPointSet. For now vtkPolyData is used
     """
 
-    # def points_map_dip_azimuth(self):
-    #     """Returns dip azimuth (in grad) as Numpy array for map plotting if points have Normals property.
+    # def points_map_dip_direction(self):
+    #     """Returns dip direction (in grad) as Numpy array for map plotting if points have Normals property.
     #      Must be redefined since we use negative z vectors"""
     #     if "Normals" in self.point_data_keys:
-    #         map_dip_azimuth = (np_arctan2(self.get_point_data("Normals")[:, 0],
+    #         map_dip_direction = (np_arctan2(self.get_point_data("Normals")[:, 0],
     #                                      self.get_point_data("Normals")[:, 1]) * 180 / np_pi + 180) % 360
-    #         map_dip_azimuth = np_where(map_dip_azimuth == 360, 0, map_dip_azimuth)
-    #         return map_dip_azimuth
+    #         map_dip_direction = np_where(map_dip_direction == 360, 0, map_dip_direction)
+    #         return map_dip_direction
     #     else:
     #         return None
 

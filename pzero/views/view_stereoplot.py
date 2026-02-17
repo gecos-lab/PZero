@@ -131,8 +131,8 @@ class ViewStereoplot(ViewMPL):
                     # This check is needed to avoid errors when trying to plot an empty
                     # PolyData, just created at the beginning of a digitizing session.
                     # Check if both these conditions are necessary_________________
-                    #  Dip az needs to be converted to strike (dz-90) to plot with mplstereonet
-                    strike = (plot_entity.points_map_dip_azimuth - 90) % 360
+                    # Dip direction needs to be converted to strike (dz-90) to plot with mplstereonet
+                    strike = (plot_entity.points_map_dip_direction - 90) % 360
                     dip = plot_entity.points_map_dip
 
                     if np_all(strike != None):

@@ -3358,7 +3358,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             data = entity.get_point_data(key)
 
                             if key == "Normals":
-                                df["dip dir"] = entity.points_map_dip_azimuth
+                                df["dip dir"] = entity.points_map_dip_direction
                                 df["dip"] = entity.points_map_dip
                             if data.ndim == 1:
                                 df[key] = data

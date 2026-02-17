@@ -70,14 +70,14 @@ def normals2dd(self):
             print("Normal data not present. Import or create normal data to proceed")
         else:
             dip = vtk_obj.points_map_dip
-            dip_az = vtk_obj.points_map_dip_azimuth
+            dip_dir = vtk_obj.points_map_dip_direction
 
             # print(np.rad2deg(dir))
             vtk_obj.init_point_data("dip", 1)
             vtk_obj.init_point_data("dip direction", 1)
 
             vtk_obj.set_point_data("dip", dip)
-            vtk_obj.set_point_data("dip direction", dip_az)
+            vtk_obj.set_point_data("dip direction", dip_dir)
 
             self.parent.dom_coll.replace_vtk(uid, vtk_obj)
             self.clear_selection()
