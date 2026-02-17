@@ -101,7 +101,16 @@ class CustomHeader(QWidget):
         selected, and gathers their textual representations into a list. This list
         of ordered text values is then returned.
         """
-        order = [button.text() for button in self.buttons if button.isChecked()]
+        # Filter out any buttons that have been deleted (C++ object deleted)
+        # Use try-except to safely check button validity
+        order = []
+        for btn in self.buttons:
+            try:
+                if btn.isChecked():
+                    order.append(btn.text())
+            except RuntimeError:
+                # Button has been deleted, skip it
+                pass
         return order
 
     def dragEnterEvent(self, event):
