@@ -68,19 +68,16 @@ class ViewVTK(BaseView):
         try:
             if "RGB" in plot_entity.point_data_keys:
                 rgb = plot_entity.get_point_data("RGB")
-                if (
-                    isinstance(rgb, np_ndarray)
-                    and (
-                        (
-                            rgb.ndim == 2
-                            and rgb.shape[1] >= 3
-                            and rgb.shape[0] == plot_entity.points_number
-                        )
-                        or (
-                            rgb.ndim == 1
-                            and plot_entity.points_number == 1
-                            and rgb.shape[0] >= 3
-                        )
+                if isinstance(rgb, np_ndarray) and (
+                    (
+                        rgb.ndim == 2
+                        and rgb.shape[1] >= 3
+                        and rgb.shape[0] == plot_entity.points_number
+                    )
+                    or (
+                        rgb.ndim == 1
+                        and plot_entity.points_number == 1
+                        and rgb.shape[0] >= 3
                     )
                 ):
                     if rgb.ndim == 1:
@@ -107,7 +104,6 @@ class ViewVTK(BaseView):
         super().initialize_menu_tools()
 
         # then add new code specific to this class
-        
 
         self.zoomActive = QAction("Zoom to active", self)
         self.zoomActive.triggered.connect(self.zoom_active)
@@ -140,6 +136,7 @@ class ViewVTK(BaseView):
         self.CheckGridView = QAction("Show grid", self, checkable=True)
         self.CheckGridView.triggered.connect(self.toggle_grid)
         self.menuView.insertAction(self.CheckGridView, self.CheckGridView)
+
     # ================================  Methods required by BaseView(), (re-)implemented here =========================
 
     def closeEvent(self, event):
@@ -580,6 +577,7 @@ class ViewVTK(BaseView):
                     plot_texture_option=active_image_texture,
                     plot_rgb_option=False,
                     visible=visible,
+                    opacity=opacity,
                 )
             else:
                 plot_rgb_option = None
@@ -607,6 +605,7 @@ class ViewVTK(BaseView):
                     plot_texture_option=False,
                     plot_rgb_option=plot_rgb_option,
                     visible=visible,
+                    opacity=opacity,
                 )
         elif isinstance(plot_entity, PCDom):
             plot_rgb_option = None
@@ -651,9 +650,9 @@ class ViewVTK(BaseView):
                     try:
                         prop_names = self.parent.dom_coll.get_uid_properties_names(uid)
                         prop_index = prop_names.index(show_property)
-                        n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[
-                            prop_index
-                        ]
+                        n_comp = self.parent.dom_coll.get_uid_properties_components(
+                            uid
+                        )[prop_index]
                         show_property_value = plot_entity.get_point_data(show_property)
                     except Exception:
                         show_property_value = None
@@ -914,16 +913,15 @@ class ViewVTK(BaseView):
         else:
             self.plotter.remove_bounds_axes()
 
-
     def export_screen(self):
         """Open the screenshot export dialog for high-quality figure export.
-        
+
         This dialog provides comprehensive options including resolution presets,
         format selection, colormap options, and quality settings.
         """
         # Determine view name based on class type
         view_name = self._get_view_name()
-        
+
         # Open the screenshot export dialog
         dialog = ScreenshotExportDialog(
             parent=self,
@@ -934,7 +932,7 @@ class ViewVTK(BaseView):
 
     def _get_view_name(self):
         """Get a descriptive name for the current view type.
-        
+
         Returns:
             str: Name of the view (e.g., '3D View', 'Map View', 'XSection View')
         """
@@ -950,14 +948,14 @@ class ViewVTK(BaseView):
 
     def create_gif(self):
         """Open the GIF export dialog for creating animated GIFs.
-        
+
         This dialog provides comprehensive options for creating animated GIFs
         including camera orbit controls, animation presets, and quality settings.
         Perfect for showcasing 3D geomodelling structures in presentations.
         """
         # Determine view name based on class type
         view_name = self._get_view_name()
-        
+
         # Open the GIF export dialog
         dialog = GifExportDialog(
             parent=self,
@@ -1179,7 +1177,8 @@ class ViewVTK(BaseView):
     @freeze_gui_on
     def select_actor_with_mouse(self):
         """Function used for actor selection. As long as selection goes on, other actions are
-        not allowed by @freeze_gui_on, which is relased later on with freeze_gui_off(self)."""
+        not allowed by @freeze_gui_on, which is relased later on with freeze_gui_off(self).
+        """
         # self.disable_actions()
         self.plotter.iren.interactor.AddObserver(
             "LeftButtonPressEvent", self.select_actor
