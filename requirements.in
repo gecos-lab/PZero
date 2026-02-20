@@ -9,7 +9,7 @@ lxml
 mplstereonet
 openpyxl
 pandas
-pyinstaller
+pyinstaller==6.15.0
 pyside6
 pytest
 pyvista
@@ -19,6 +19,7 @@ rasterio
 rioxarray
 seaborn
 segyio
+setuptools
 shapely
 sphinx
 sphinx_rtd_theme

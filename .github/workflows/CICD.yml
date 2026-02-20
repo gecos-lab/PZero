@@ -97,7 +97,7 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller=6.15.0
+          pip install pyinstaller==6.15.0
           pyinstaller --onedir --windowed --hidden-import=pyogrio._geometry --collect-all rasterio pzero.py --name pzero-Windows --icon="_internal/pzero.ico" --add-data "_internal/pzero.ico;." --add-data "_internal/pzero_splash.png;."
       - name: Zip executable (Unix/MacOS)
         if: runner.os != 'Windows'
