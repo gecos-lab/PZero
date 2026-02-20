@@ -1001,6 +1001,141 @@ class ViewInterpretation(ViewMap):
                 "line_width": 5.0,
                 "opacity": 1.0,
             }
+
+    def _set_entity_parent_to_current_seismic(self, entity_dict):
+        """Attach the active seismic uid as parent metadata for generated interpretation entities."""
+        if entity_dict is None:
+            return
+        entity_dict["parent_uid"] = str(self.current_seismic_uid) if self.current_seismic_uid else ""
+
+    def _refresh_properties_legend(self):
+        """Refresh the Properties manager table safely."""
+        try:
+            self.parent.prop_legend.update_widget(self.parent)
+        except Exception:
+            pass
+
+    def _format_slice_range_property_name(self, slice_indices):
+        """Build a human-readable property label from slice indices."""
+        try:
+            clean = sorted({int(i) for i in (slice_indices or [])})
+        except Exception:
+            clean = []
+        if not clean:
+            return "slice_index"
+        return f"slices_{clean[0]}-{clean[-1]}"
+
+    def _extract_slice_indices_from_vtk(self, vtk_obj):
+        """Collect unique slice indices from cell/point `slice_index` arrays."""
+        if vtk_obj is None:
+            return []
+        out = []
+        try:
+            cell_data = vtk_obj.GetCellData()
+            if cell_data and cell_data.HasArray("slice_index"):
+                arr = cell_data.GetArray("slice_index")
+                for i in range(arr.GetNumberOfTuples()):
+                    v = int(arr.GetValue(i))
+                    if v >= 0:
+                        out.append(v)
+            elif vtk_obj.GetPointData() and vtk_obj.GetPointData().HasArray("slice_index"):
+                arr = vtk_obj.GetPointData().GetArray("slice_index")
+                for i in range(arr.GetNumberOfTuples()):
+                    v = int(arr.GetValue(i))
+                    if v >= 0:
+                        out.append(v)
+        except Exception:
+            return []
+        return sorted(set(out))
+
+    def _ensure_slice_range_point_array(self, vtk_obj, prop_name):
+        """Create/update a point-data alias array with the range property name."""
+        if vtk_obj is None or not prop_name or prop_name == "slice_index":
+            return
+        try:
+            point_data = vtk_obj.GetPointData()
+            if point_data is None:
+                return
+            source = point_data.GetArray("slice_index")
+            if source is None:
+                return
+            from vtk import vtkIntArray
+            alias = vtkIntArray()
+            alias.SetName(prop_name)
+            alias.SetNumberOfComponents(1)
+            for i in range(source.GetNumberOfTuples()):
+                alias.InsertNextValue(int(source.GetValue(i)))
+            if point_data.HasArray(prop_name):
+                point_data.RemoveArray(prop_name)
+            point_data.AddArray(alias)
+        except Exception:
+            pass
+
+    def _ensure_slice_index_property_metadata(self, entity_dict=None, uid=None, vtk_obj=None, slice_indices=None):
+        """
+        Ensure `slice_index` appears in properties metadata when the geometry carries
+        a point/cell `slice_index` array.
+        """
+        if not slice_indices:
+            slice_indices = self._extract_slice_indices_from_vtk(vtk_obj)
+        prop_name = self._format_slice_range_property_name(slice_indices)
+        if prop_name == "slice_index" and not slice_indices:
+            return False
+        self._ensure_slice_range_point_array(vtk_obj, prop_name)
+
+        if entity_dict is not None:
+            prop_names = list(entity_dict.get("properties_names") or [])
+            prop_comps = list(entity_dict.get("properties_components") or [])
+            while len(prop_comps) < len(prop_names):
+                prop_comps.append(1)
+            keep_names = []
+            keep_comps = []
+            for i, name in enumerate(prop_names):
+                if name == "slice_index" or (isinstance(name, str) and name.startswith("slices_")):
+                    continue
+                keep_names.append(name)
+                keep_comps.append(prop_comps[i] if i < len(prop_comps) else 1)
+            prop_names = keep_names
+            prop_comps = keep_comps
+            if prop_name not in prop_names:
+                prop_names.append(prop_name)
+                prop_comps.append(1)
+                entity_dict["properties_names"] = prop_names
+                entity_dict["properties_components"] = prop_comps
+                return True
+            return False
+
+        if uid is not None:
+            try:
+                prop_names = list(self.parent.geol_coll.get_uid_properties_names(uid) or [])
+                prop_comps = list(self.parent.geol_coll.get_uid_properties_components(uid) or [])
+            except Exception:
+                return False
+            while len(prop_comps) < len(prop_names):
+                prop_comps.append(1)
+            keep_names = []
+            keep_comps = []
+            for i, name in enumerate(prop_names):
+                if name == "slice_index" or (isinstance(name, str) and name.startswith("slices_")):
+                    continue
+                keep_names.append(name)
+                keep_comps.append(prop_comps[i] if i < len(prop_comps) else 1)
+            prop_names = keep_names
+            prop_comps = keep_comps
+            if prop_name in prop_names:
+                return False
+            prop_names.append(prop_name)
+            prop_comps.append(1)
+            self.parent.geol_coll.set_uid_properties_names(uid=uid, properties_names=prop_names)
+            self.parent.geol_coll.set_uid_properties_components(uid=uid, properties_components=prop_comps)
+            try:
+                self.parent.signals.data_keys_added.emit([uid], self.parent.geol_coll)
+            except Exception:
+                pass
+            self._refresh_properties_legend()
+            return True
+
+        return False
     
     def update_slice_colormap(self):
         """Update the slice colormap when legend changes - called by prop_legend_cmap_modified signal."""
@@ -1114,6 +1249,7 @@ class ViewInterpretation(ViewMap):
         line_dict["topology"] = "PolyLine"
         line_dict["x_section"] = ""
         line_dict["vtk_obj"] = PolyLine()
+        self._set_entity_parent_to_current_seismic(line_dict)
         
         # Store pickability state of all actors, then make only the slice pickable
         self._saved_pickable_state = {}
@@ -1782,6 +1918,7 @@ class ViewInterpretation(ViewMap):
             # This is more efficient than checking geometry, and handles propagated horizons
             cell_data = vtk_obj.GetCellData()
             if cell_data and cell_data.HasArray("slice_index"):
+                self._ensure_slice_index_property_metadata(uid=uid, vtk_obj=vtk_obj)
                 # This is a multipart horizon! Reconstruct its metadata
                 slice_array = cell_data.GetArray("slice_index")
                 n_cells = vtk_obj.GetNumberOfCells()
@@ -1894,6 +2031,7 @@ class ViewInterpretation(ViewMap):
                 seismic_bounds=seismic_bounds,
                 seismic_dims=seismic_dims,
             ):
+                self._ensure_slice_index_property_metadata(uid=uid, vtk_obj=vtk_obj)
                 return
             
             # Calculate spacing on the fly (assuming regular grid)
@@ -2581,6 +2719,7 @@ class ViewInterpretation(ViewMap):
         line_dict["topology"] = "PolyLine"
         line_dict["x_section"] = ""
         line_dict["vtk_obj"] = PolyLine()
+        self._set_entity_parent_to_current_seismic(line_dict)
 
         self._autotrack_line_dict = line_dict
 
@@ -3979,6 +4118,12 @@ class ViewInterpretation(ViewMap):
                 line_dict["topology"] = "PolyLine"
                 line_dict["x_section"] = ""
                 line_dict["vtk_obj"] = multipart_line
+                self._set_entity_parent_to_current_seismic(line_dict)
+                self._ensure_slice_index_property_metadata(
+                    entity_dict=line_dict,
+                    vtk_obj=multipart_line,
+                    slice_indices=cell_slice_indices,
+                )
                 # Keep propagated horizon metadata aligned with the seed interpretation.
                 line_dict["role"] = self._sanitize_legend_value(
                     self.parent.geol_coll.get_uid_role(seed_uid), "top"
@@ -3992,6 +4137,7 @@ class ViewInterpretation(ViewMap):
                 
                 # Add to collection
                 new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
+                self._refresh_properties_legend()
                 
                 # Store multipart horizon metadata for visibility management
                 if not hasattr(self, 'multipart_horizons'):
@@ -4489,6 +4635,12 @@ class ViewInterpretation(ViewMap):
                     fault_dict["topology"] = "PolyLine"
                     fault_dict["x_section"] = ""
                     fault_dict["vtk_obj"] = multipart_fault
+                    self._set_entity_parent_to_current_seismic(fault_dict)
+                    self._ensure_slice_index_property_metadata(
+                        entity_dict=fault_dict,
+                        vtk_obj=multipart_fault,
+                        slice_indices=cell_slice_indices,
+                    )
                     # Keep propagated fault metadata aligned with the seed interpretation.
                     fault_dict["role"] = self._sanitize_legend_value(
                         self.parent.geol_coll.get_uid_role(seed_uid), "fault"
@@ -4501,6 +4653,7 @@ class ViewInterpretation(ViewMap):
                     )
                     
                     new_uid = self.parent.geol_coll.add_entity_from_dict(fault_dict)
+                    self._refresh_properties_legend()
                     
                     # Store metadata
                     if not hasattr(self, 'multipart_faults'):
