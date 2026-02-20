@@ -19,7 +19,7 @@ rasterio
 rioxarray
 seaborn
 segyio
-setuptools
+setuptools<81.0.0
 shapely
 sphinx
 sphinx_rtd_theme
