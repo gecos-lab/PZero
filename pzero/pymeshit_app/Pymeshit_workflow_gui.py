@@ -7998,7 +7998,29 @@ class MeshItWorkflowGUI(QWidget):
                 
                 # Prepare data including segments (explicit boundary constraints)
                 pts3d, seg_arr, holes = self._build_plc_from_selection(s_idx)
+                well_feature_pts_3d, well_feature_sizes = self._collect_well_feature_points_for_surface(s_idx)
 
+                # Add well/surface intersection points into the PLC vertex cloud
+                # (single-point constraints in C++ MeshIt are passed this way).
+                if well_feature_pts_3d:
+                    existing = {
+                        (round(p.x, 9), round(p.y, 9), round(p.z, 9))
+                        for p in pts3d
+                    }
+                    added = 0
+                    for wp in well_feature_pts_3d:
+                        key = (round(wp.x, 9), round(wp.y, 9), round(wp.z, 9))
+                        if key in existing:
+                            continue
+                        pts3d.append(wp)
+                        existing.add(key)
+                        added += 1
+                    if added > 0:
+                        logger.info(
+                            "Surface %s: injected %d well feature point(s) into PLC vertices",
+                            s_idx,
+                            added,
+                        )
                 # Check if multi-patch triangulation is requested for this surface
                 if surface_tri_method == "multipatch":
                     logger.info(f"Using Multi-Patch triangulation for conforming mesh '{name}' (fold_angle={mesh_fold_angle_threshold}°)")
@@ -8095,7 +8117,80 @@ class MeshItWorkflowGUI(QWidget):
         self._update_export_to_pzero_button_state()  # Enable Export to PZero when surfaces are ready
         self.statusBar().showMessage(f"Conforming surface mesh generation finished: {ok}/{total} succeeded.", 6000)
 
+    def _is_well_enabled_in_refine_tree(self, well_idx: int) -> bool:
+        """Return True if the well is checked in the Step 6 constraint tree."""
+        tree = getattr(self, "refine_constraint_tree", None)
+        if not tree:
+            return True
+        for i in range(tree.topLevelItemCount()):
+            item = tree.topLevelItem(i)
+            data = item.data(0, Qt.UserRole) or {}
+            if data.get("type") == "well" and data.get("well_idx") == well_idx:
+                return item.checkState(0) != Qt.Unchecked
+        return True
 
+    def _collect_well_feature_points_for_surface(self, surface_idx: int) -> Tuple[List[Vector3D], List[float]]:
+        """
+        Collect well/surface intersection points to drive C++ triunsuitable-style
+        local grading during constrained surface triangulation.
+        """
+        selected_wells = self._get_selected_well_indices() if hasattr(self, "_get_selected_well_indices") else set()
+        intersections = getattr(self, "refined_intersections_for_visualization", {}).get(surface_idx, [])
+        if not intersections:
+            return [], []
+
+        feature_by_key: Dict[Tuple[float, float, float], Tuple[Vector3D, float]] = {}
+
+        for inter in intersections:
+            if not inter.get("is_polyline_mesh", False):
+                continue
+
+            d1 = inter.get("dataset_id1")
+            d2 = inter.get("dataset_id2")
+            well_idx = None
+
+            if isinstance(d1, int) and 0 <= d1 < len(self.datasets) and self.datasets[d1].get("type") == "WELL":
+                well_idx = d1
+            elif isinstance(d2, int) and 0 <= d2 < len(self.datasets) and self.datasets[d2].get("type") == "WELL":
+                well_idx = d2
+
+            if well_idx is None:
+                continue
+            if selected_wells and well_idx not in selected_wells:
+                continue
+            if not self._is_well_enabled_in_refine_tree(well_idx):
+                continue
+
+            try:
+                well_size = float(self._get_well_refine_length(well_idx))
+            except Exception:
+                well_size = float(self.mesh_target_feature_size_input.value())
+            if well_size <= 1e-9:
+                well_size = float(self.mesh_target_feature_size_input.value())
+
+            for p in inter.get("points", []):
+                if p is None or len(p) < 3:
+                    continue
+                x, y, z = float(p[0]), float(p[1]), float(p[2])
+                key = (round(x, 9), round(y, 9), round(z, 9))
+                previous = feature_by_key.get(key)
+                if previous is None or well_size < previous[1]:
+                    feature_by_key[key] = (
+                        Vector3D(x, y, z, point_type="INTERSECTION_POINT"),
+                        well_size,
+                    )
+
+        if not feature_by_key:
+            return [], []
+
+        points = [value[0] for value in feature_by_key.values()]
+        sizes = [value[1] for value in feature_by_key.values()]
+        logger.info(
+            "Surface %s: collected %d well intersection feature point(s) for triunsuitable refinement",
+            surface_idx,
+            len(points),
+        )
+        return points, sizes
     def _prepare_surface_data_for_triangulation(self, dataset_idx, dataset, config):
         """
         Prepare surface data dictionary for triangulation with projection parameters.
