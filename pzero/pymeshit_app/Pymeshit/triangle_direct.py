@@ -12,13 +12,14 @@ from typing import Dict, List, Optional, Tuple, Union
 from matplotlib.path import Path
 from scipy.spatial.distance import pdist
 
-# Try to import the C++ extension module (fallback if not available)
+# Try to import triunsuitable bridge helpers.
 try:
     from . import triangle_callback
-    HAS_TRIANGLE_CALLBACK = True
+    HAS_TRIANGLE_CALLBACK_BRIDGE = True
 except ImportError:
-    HAS_TRIANGLE_CALLBACK = False
+    HAS_TRIANGLE_CALLBACK_BRIDGE = False
     triangle_callback = None
+    print("WARNING (triangle_direct): triangle_callback not found. Constrained triangulation might be limited.")    
 
 class DirectTriangleWrapper:
     """
@@ -52,6 +53,11 @@ class DirectTriangleWrapper:
         self.feature_sizes = None
         self.logger = logging.getLogger("MeshIt-Workflow")
         self.triangle_opts = None  # Will store custom triangle options if set
+        self.use_cpp_switches = False
+        # Guardrails for Python triunsuitable bridge cost on complex surfaces.
+        self.triunsuitable_max_iterations = 4
+        self.triunsuitable_max_new_points = 1000
+        self.triunsuitable_min_point_spacing = None
         
     def set_feature_points(self, points: np.ndarray, sizes: np.ndarray):
         """
@@ -64,9 +70,23 @@ class DirectTriangleWrapper:
             points: Array of feature points (N, 2)
             sizes: Array of sizes for each feature point (N,)
         """
-        self.feature_points = np.asarray(points, dtype=np.float64)
-        self.feature_sizes = np.asarray(sizes, dtype=np.float64)
-        
+        pts = np.asarray(points, dtype=np.float64)
+        sz = np.asarray(sizes, dtype=np.float64).reshape(-1)
+        if pts.ndim == 1:
+            pts = pts.reshape(1, -1)
+        if pts.ndim != 2 or pts.shape[1] != 2:
+            raise ValueError("Feature points must have shape (N, 2)")
+        if sz.size == 0:
+            sz = np.full((pts.shape[0],), float(self.base_size if self.base_size else 1.0))
+        elif sz.size == 1 and pts.shape[0] > 1:
+            sz = np.full((pts.shape[0],), float(sz[0]))
+        elif sz.size != pts.shape[0]:
+            n = min(pts.shape[0], sz.size)
+            pts = pts[:n]
+            sz = sz[:n]
+
+        self.feature_points = pts
+        self.feature_sizes = np.clip(sz, 1e-12, np.inf)
     def _create_boundary_feature_points(self, hull_points: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Create dense feature points along the convex hull boundary.
@@ -445,23 +465,20 @@ class DirectTriangleWrapper:
             # Check if C++ MeshIt compatible mode is requested
             use_cpp_switches = getattr(self, 'use_cpp_switches', False)
             
-            # Determine if we need 'p' switch (PSLG mode)
-            # Only use 'p' if we have segments or holes, otherwise it might fail on some systems
-            has_constraints = (segments is not None and len(segments) > 0) or \
-                             (holes is not None and len(holes) > 0)
-            p_switch = 'p' if has_constraints else ''
-            
-            effective_min_angle = self.min_angle
-            area_constraint = self.base_size * self.base_size * 0.5
-            
             if use_cpp_switches:
                 # C++ MeshIt compatible switches with better area control
+                # Use "pzY" (no boundary insertion) with area constraint
                 # The C++ version actually uses "pzYYu" but 'u' needs external callback
-                tri_options = f'{p_switch}zYYa{area_constraint:.8f}'
+                area_constraint = self.base_size * self.base_size * 0.5
+                tri_options = f'pzYYa{area_constraint:.8f}'
                 self.logger.info(f"Using C++ MeshIt compatible Triangle options: '{tri_options}'")
             else:
+                # Original fast approach
+                effective_min_angle = self.min_angle
+                area_constraint = self.base_size * self.base_size * 0.5
+                
                 # Simplified options - no expensive callbacks or complex features
-                tri_options = f'{p_switch}zYYa{area_constraint:.8f}'
+                tri_options = f'pzYYa{area_constraint:.8f}'
         else:
             # Non-uniform approach for complex cases
             hull_points = self._get_hull_points_fast(points)
@@ -476,7 +493,38 @@ class DirectTriangleWrapper:
         
         # PERFORMANCE: Direct Triangle call with error handling and C++ fallback
         try:
-            result = tr.triangulate(tri_input, tri_options)
+            use_cpp_switches = getattr(self, 'use_cpp_switches', False)
+            use_triunsuitable_bridge = (
+                use_cpp_switches and
+                self.feature_points is not None and
+                self.feature_sizes is not None and
+                len(self.feature_points) > 0
+            )
+
+            if use_triunsuitable_bridge and HAS_TRIANGLE_CALLBACK and hasattr(triangle_callback, "triangulate_with_cpp_triunsuitable"):
+                self.logger.info(
+                    "Using C++ triunsuitable bridge with %d feature point(s)",
+                    len(self.feature_points),
+                )
+                result = triangle_callback.triangulate_with_cpp_triunsuitable(
+                    tri_input=tri_input,
+                    tri_options=tri_options,
+                    gradient=float(self.gradient),
+                    mesh_size=float(self.base_size),
+                    feature_points=self.feature_points,
+                    feature_sizes=self.feature_sizes,
+                    max_iterations=int(self.triunsuitable_max_iterations),
+                    max_new_points=int(self.triunsuitable_max_new_points),
+                    min_point_spacing=self.triunsuitable_min_point_spacing,
+                    logger=self.logger,
+                )
+            else:
+                if use_triunsuitable_bridge and not HAS_TRIANGLE_CALLBACK:
+                    self.logger.warning(
+                        "Feature points are set but triunsuitable bridge module is unavailable; "
+                        "falling back to standard Triangle call"
+                    )
+                result = tr.triangulate(tri_input, tri_options)
             
             if 'triangles' in result and len(result['triangles']) > 0:
                 self.logger.info(f"FAST triangulation complete: {len(result['triangles'])} triangles, {len(result['vertices'])} vertices")
@@ -532,6 +580,7 @@ class DirectTriangleWrapper:
                 raise RuntimeError(f"Complete triangulation failure: {e2}")
         
         return {}
+    
     
     def _get_hull_points_fast(self, points: np.ndarray) -> np.ndarray:
         """Fast convex hull computation for complex triangulation cases."""
@@ -671,7 +720,8 @@ class DirectTriangleWrapper:
         """
         Enable or disable C++ MeshIt compatible Triangle switches.
         
-        When enabled, uses "pzYYu" switches similar to C++ MeshIt instead of "pzq" switches.
+        When enabled, uses C++-compatible Triangle switches and (if feature points
+        are provided) the triunsuitable bridge that emulates MeshIt's `-u` grading.
         This can produce denser, higher quality meshes that are more compatible with TetGen.
         
         Args:
@@ -679,10 +729,9 @@ class DirectTriangleWrapper:
         """
         self.use_cpp_switches = enable
         if enable:
-            self.logger.info("Enabled C++ MeshIt compatible Triangle switches (pzYYu)")
+            self.logger.info("Enabled C++ MeshIt compatible Triangle switches")
         else:
             self.logger.info("Disabled C++ MeshIt compatible mode, using standard switches")
-
     def _sanitize_segments(self, segments: Optional[np.ndarray], n_vertices: int) -> np.ndarray:
         """
         Remove degenerate/duplicate/out-of-range segments for robust PSLG input.

@@ -6,7 +6,7 @@ import tetgen
 import pyvista as pv
 from typing import Dict, List, Tuple, Optional, Any, Union
 from Pymeshit.intersection_utils import Vector3D
-
+from scipy.spatial import cKDTree
 logger = logging.getLogger("MeshIt-Workflow")
 
 # Try to import netCDF4 for NetCDF export support
@@ -86,7 +86,7 @@ class TetrahedralMeshGenerator:
             if self.plc_vertices is None or len(self.plc_vertices) == 0:
                 logger.error("PLC assembly failed: No vertices found.")
                 return None
-            
+
             # Step 2: Create a TetGen object.
             # Pass per-facet markers into TetGen so trifacemarkerlist mirrors C++
             tet = tetgen.TetGen(self.plc_vertices, self.plc_facets, self.plc_facet_markers)
@@ -107,7 +107,7 @@ class TetrahedralMeshGenerator:
                     # Try the old API first (may work if attributes are set directly)
                     tet.edge_list = self.plc_edge_constraints.tolist()
                     tet.edge_marker_list = self.plc_edge_markers.tolist()
-                    logger.info(f"Added {len(self.plc_edge_constraints)} intersection edge constraints to TetGen.")
+                    logger.info(f"Added {len(self.plc_edge_constraints)} edge constraints to TetGen.")
                 except AttributeError as e:
                     # If old API doesn't work, edges might need to be passed differently
                     logger.warning(f"Could not set edge constraints using old API: {e}")
@@ -195,7 +195,6 @@ class TetrahedralMeshGenerator:
                     # Apply the material attributes to the grid
                     grid = tet.grid
                     if attributes is not None and len(attributes) > 0:
-                        import numpy as np
                         mapped_attributes = self._map_region_ids_to_materials(attributes)
                         grid.cell_data['MaterialID'] = mapped_attributes
                         unique_materials = np.unique(mapped_attributes)
@@ -212,7 +211,7 @@ class TetrahedralMeshGenerator:
                     logger.warning("TetGen detected geometric issues. Attempting C++ style recovery...")
                     # C++ style: Try with detection switches first
                     try:
-                        detection_switches = tetgen_switches.replace('Y', '') + 'd'  # Add detection, remove Y
+                        detection_switches = tetgen_switches if 'd' in tetgen_switches else tetgen_switches + 'd'
                         logger.info(f"Trying TetGen with geometric detection: '{detection_switches}'")
                         tet.tetrahedralize(switches=detection_switches)
                         grid = tet.grid
@@ -322,6 +321,10 @@ class TetrahedralMeshGenerator:
                 global_holes.append(hole)
             logger.info(f"Added {len(self.external_holes)} external holes from GUI")
 
+        # C++ MeshIt behavior: only wells are exported as TetGen edge constraints.
+        # Surface intersections are encoded by matching surface facets, not by extra 3D edges.
+        cpp_well_only_edges = True
+
         # 1) Use precomputed conforming meshes
         surfaces_with_precomputed = set()
         for s_idx in boundary_surfaces | fault_surfaces:
@@ -365,8 +368,9 @@ class TetrahedralMeshGenerator:
                             global_facet_markers.append(marker)
                             fault_marker_map[marker] = s_idx
                         else:
-                            global_facet_markers.append(s_idx)
-                        if s_idx in fault_surfaces:
+                            # Use 1-based markers to avoid collision with TetGen's internal marker 0
+                            global_facet_markers.append(s_idx + 1)
+                        if s_idx in fault_surfaces and not cpp_well_only_edges:
                             for k in range(3):
                                 e = tuple(sorted((gtri[k], gtri[(k + 1) % 3])))
                                 if e[0] != e[1]:
@@ -461,52 +465,93 @@ class TetrahedralMeshGenerator:
                             global_facet_markers.append(marker)
                             fault_marker_map[marker] = s_idx
                         else:
-                            global_facet_markers.append(s_idx)
+                            # Use 1-based markers to avoid collision with TetGen's internal marker 0
+                            global_facet_markers.append(s_idx + 1)
 
                 logger.info(f"✓ Fallback triangulation successful for '{surface_name}': {len(local_tris)} triangles")
 
-        # 3) Add intersection line constraints (existing logic, kept permissive)
-        validated_edge_constraints = set()
-        for s_idx in self.selected_surfaces:
-            if s_idx >= len(self.datasets):
-                continue
-            dataset = self.datasets[s_idx]
-            for constraint in dataset.get("stored_constraints", []):
-                if constraint.get("type") == "intersection_line":
-                    pts = constraint.get("points", [])
-                    if len(pts) < 2:
-                        continue
-                    for i in range(len(pts) - 1):
-                        k1 = (round(pts[i][0], 9), round(pts[i][1], 9), round(pts[i][2], 9))
-                        k2 = (round(pts[i+1][0], 9), round(pts[i+1][1], 9), round(pts[i+1][2], 9))
-                        g1, g2 = key_to_global_idx.get(k1), key_to_global_idx.get(k2)
-                        if g1 is not None and g2 is not None and g1 != g2:
-                            e = tuple(sorted((g1, g2)))
-                            validated_edge_constraints.add(e)
+        # 3) Edge constraints initialization.
+        # Use a dict (edge_tuple -> marker) so edges stay paired with markers.
+        edge_constraint_markers = {}
+        if not cpp_well_only_edges:
+            for e in edge_constraints:
+                edge_constraint_markers[e] = 1
+        else:
+            logger.info("C++ style: skipping extra surface/intersection edge constraints; exporting wells as TetGen edges only")
 
-        # 4) NEW: Add WELL polylines as edge constraints (no triangulation)
+        # 4) Add WELL polylines as edge constraints (C++ style: merge into global
+        #    point list, use selected segments from self.well_data when available).
+        #
+        # C++ uses tetID to guarantee well intersection points share the exact
+        # same global vertex as the surface mesh.  Python stores coordinates
+        # independently, so tiny float differences can cause a well endpoint to
+        # miss the hash and create a new vertex *slightly* off the surface.
+        # That makes the well edge pierce a surface triangle -> TetGen fails.
+        #
+        # Fix: build a KDTree from existing (surface) vertices and snap any
+        # well point within SNAP_TOL to the nearest existing vertex.
+        SNAP_TOL = 1e-6
+        snap_tree = None
+        num_surface_verts = len(global_vertices)
+        if num_surface_verts > 0:
+            snap_tree = cKDTree(np.asarray(global_vertices, dtype=np.float64))
         well_edges_added = 0
-        for d in self.datasets:
-            if d.get('type') == 'WELL':
-                pts = d.get('refined_well_points') or d.get('points')  # prefer refined wells
+        well_snapped = 0
+
+        def _add_well_pts_as_edges(pts, marker: int):
+            """Merge well points into global PLC and create edges."""
+            nonlocal well_edges_added, well_snapped
+            gidxs = []
+            for p in pts:
+                if isinstance(p, Vector3D):
+                    coords = [float(p.x), float(p.y), float(p.z)]
+                else:
+                    coords = [float(p[0]), float(p[1]), float(p[2])]
+                key = (round(coords[0], 9), round(coords[1], 9), round(coords[2], 9))
+                g = key_to_global_idx.get(key)
+                if g is None and snap_tree is not None:
+                    dist, nearest_idx = snap_tree.query(coords, k=1)
+                    if dist <= SNAP_TOL:
+                        g = int(nearest_idx)
+                        key_to_global_idx[key] = g
+                        well_snapped += 1
+                if g is None:
+                    g = len(global_vertices)
+                    key_to_global_idx[key] = g
+                    global_vertices.append(coords)
+                gidxs.append(g)
+            for i in range(len(gidxs) - 1):
+                if gidxs[i] != gidxs[i + 1]:
+                    e = tuple(sorted((gidxs[i], gidxs[i + 1])))
+                    if e not in edge_constraint_markers:
+                        edge_constraint_markers[e] = marker
+                        well_edges_added += 1
+
+        if self.well_data:
+            for w_idx, well_info in self.well_data.items():
+                marker = well_info.get('marker', w_idx + 2)
+                well_edges = well_info.get('edges', [])
+                if well_edges:
+                    for edge_pts in well_edges:
+                        _add_well_pts_as_edges(edge_pts, marker)
+                else:
+                    well_pts = well_info.get('points', [])
+                    if well_pts and len(well_pts) >= 2:
+                        _add_well_pts_as_edges(well_pts, marker)
+                logger.info(f"  Well '{well_info.get('name', w_idx)}': added edges to PLC (marker={marker})")
+        else:
+            for d_idx, d in enumerate(self.datasets):
+                if d.get('type') != 'WELL':
+                    continue
+                pts = d.get('refined_well_points') or d.get('points')
                 if pts is None or len(pts) < 2:
                     continue
-                gidxs = []
-                for p in pts:
-                    key = (round(float(p[0]), 9), round(float(p[1]), 9), round(float(p[2]), 9))
-                    g = key_to_global_idx.get(key)
-                    if g is None:
-                        g = len(global_vertices)
-                        key_to_global_idx[key] = g
-                        global_vertices.append(_xyz(p))
-                    gidxs.append(g)
-                for i in range(len(gidxs) - 1):
-                    if gidxs[i] != gidxs[i + 1]:
-                        e = tuple(sorted((gidxs[i], gidxs[i + 1])))
-                        validated_edge_constraints.add(e)
-                        well_edges_added += 1
+                _add_well_pts_as_edges(pts, d_idx + 2)
+
         if well_edges_added > 0:
-            logger.info(f"✓ Added {well_edges_added} well edge constraints")
+            logger.info(f"✓ Added {well_edges_added} well edge constraints (from {'constraint tree' if self.well_data else 'all wells'})")
+        if well_snapped > 0:
+            logger.info(f"✓ Snapped {well_snapped} well points to existing surface mesh vertices (tol={SNAP_TOL})")
 
         # 5) Validate triangles (light cleanup)
         validated_facets = []
@@ -528,15 +573,20 @@ class TetrahedralMeshGenerator:
         self.plc_vertices = np.asarray(global_vertices, dtype=np.float64)
         self.plc_facets = np.asarray(validated_facets, dtype=np.int32)
         self.plc_facet_markers = np.asarray(validated_facet_markers, dtype=np.int32)
-        self.plc_edge_constraints = np.asarray(list(validated_edge_constraints), dtype=np.int32) if validated_edge_constraints else np.empty((0, 2), dtype=np.int32)
-        self.plc_edge_markers = np.arange(1, len(self.plc_edge_constraints) + 1, dtype=np.int32)
+        if edge_constraint_markers:
+            edge_list = list(edge_constraint_markers.keys())
+            marker_list = [edge_constraint_markers[e] for e in edge_list]
+            self.plc_edge_constraints = np.asarray(edge_list, dtype=np.int32)
+            self.plc_edge_markers = np.asarray(marker_list, dtype=np.int32)
+        else:
+            self.plc_edge_constraints = np.empty((0, 2), dtype=np.int32)
+            self.plc_edge_markers = np.empty(0, dtype=np.int32)
         # Map: facet marker -> dataset surface index (only for faults)
         self.fault_surface_markers = fault_marker_map
         self.plc_holes = np.asarray(global_holes, dtype=np.float64) if global_holes else np.empty((0, 3), dtype=np.float64)
 
         logger.info(f"Final PLC built: {len(self.plc_vertices)} vertices, {len(self.plc_facets)} facets, {len(self.plc_edge_constraints)} edge constraints"
                     + (f", {len(global_holes)} holes" if len(global_holes) > 0 else ""))
-    
     def _collect_holes_from_datasets(self, global_holes):
         """
         Collect hole centers from stored constraints in datasets.
@@ -1135,13 +1185,14 @@ class TetrahedralMeshGenerator:
     def _export_netcdf(self, file_path: str, mesh_data: pv.UnstructuredGrid,
                        custom_block_names: Optional[Dict[int, str]] = None,
                        custom_sideset_names: Optional[Dict[int, str]] = None,
-                       custom_well_names: Optional[Dict[int, str]] = None) -> bool:
+                       custom_well_names: Optional[Dict[int, str]] = None,
+                       well_export_type: str = "Node Sets") -> bool:
         """
         Export tetrahedral mesh to EXODUS II format for GOLEM/MOOSE/ParaView compatibility.
         
         This follows the EXODUS II specification with proper:
         - Element Blocks: One per material domain (3D tetrahedra) with proper naming
-        - Element Blocks: One per well (1D edges/BAR2) - C++ MeshIt style
+        - Node Sets: Well nodes for point sources/sinks (GOLEM DiracKernels)
         - Sidesets: One per surface boundary for boundary conditions
         - All required EXODUS II attributes for ParaView compatibility
 
@@ -1150,7 +1201,8 @@ class TetrahedralMeshGenerator:
             mesh_data: PyVista UnstructuredGrid containing the tetrahedral mesh
             custom_block_names: Optional dict mapping material_id -> custom block name
             custom_sideset_names: Optional dict mapping marker_id -> custom sideset name
-            custom_well_names: Optional dict mapping well_marker -> custom well block name
+            custom_well_names: Optional dict mapping well_marker -> custom well name
+            well_export_type: "Node Sets" (for GOLEM DiracKernels) or "Element Blocks" (BAR2)
 
         Returns:
             bool: True if export successful, False otherwise
@@ -1163,6 +1215,7 @@ class TetrahedralMeshGenerator:
         self._custom_block_names = custom_block_names or {}
         self._custom_sideset_names = custom_sideset_names or {}
         self._custom_well_names = custom_well_names or {}
+        self._well_export_type = well_export_type
 
         try:
             # Get mesh data
@@ -1213,47 +1266,107 @@ class TetrahedralMeshGenerator:
             for mat_id in unique_materials:
                 elem_blocks[mat_id] = np.where(material_ids == mat_id)[0]
             
-            # ========== COLLECT WELL DATA (C++ MeshIt style: 1D element blocks) ==========
-            well_blocks = {}  # {well_marker: {'points': [], 'edges': [], 'name': str}}
+            # ========== COLLECT WELL DATA AND MAP TO EXISTING MESH NODES ==========
+            # CRITICAL FIX: Wells must share node IDs with the tetra mesh, not duplicate points.
+            # This ensures fracture-well connectivity works in MOOSE/GOLEM.
+            # Wells can be exported as Node Sets (for GOLEM DiracKernels) or Element Blocks (BAR2)
+            well_blocks = {}  # {well_marker: {'mapped_indices': [], 'n_edges': int, 'name': str}}
+            well_node_sets = {}  # {well_marker: {'mapped_indices': [], 'name': str}}
             total_well_edges = 0
+            total_well_nodes = 0
+            
+            export_wells_as_nodesets = (self._well_export_type == "Node Sets")
             
             if hasattr(self, 'well_data') and self.well_data:
+                logger.info(f"Processing wells as {'Node Sets' if export_wells_as_nodesets else 'Element Blocks'} (mapping to existing mesh nodes)...")
+
+                def _extract_coord_nc(p):
+                    if hasattr(p, 'x'):
+                        return (float(p.x), float(p.y), float(p.z))
+                    return (float(p[0]), float(p[1]), float(p[2]))
+
                 for well_idx, well_info in self.well_data.items():
-                    well_pts = well_info.get('points')
                     well_marker = well_info.get('marker', well_idx + 2)
                     well_name = well_info.get('name', f'Well_{well_idx}')
-                    
-                    if well_pts is None or len(well_pts) < 2:
-                        continue
-                    
-                    # Get custom name if provided
+                    well_edges = well_info.get('edges', [])
+
                     if hasattr(self, '_custom_well_names') and well_marker in self._custom_well_names:
                         well_name = self._custom_well_names[well_marker]
-                    
-                    # Convert points to array
-                    pts_arr = []
-                    for p in well_pts:
-                        if hasattr(p, 'x'):
-                            pts_arr.append([p.x, p.y, p.z])
-                        elif len(p) >= 3:
-                            pts_arr.append([float(p[0]), float(p[1]), float(p[2])])
-                    
-                    if len(pts_arr) < 2:
+
+                    if well_edges:
+                        unique_pts = []
+                        key_to_local = {}
+                        edge_pairs = []
+                        for edge_pts in well_edges:
+                            if len(edge_pts) < 2:
+                                continue
+                            local_idxs = []
+                            for p in (edge_pts[0], edge_pts[1]):
+                                c = _extract_coord_nc(p)
+                                key = (round(c[0], 9), round(c[1], 9), round(c[2], 9))
+                                if key not in key_to_local:
+                                    key_to_local[key] = len(unique_pts)
+                                    unique_pts.append(list(c))
+                                local_idxs.append(key_to_local[key])
+                            if local_idxs[0] != local_idxs[1]:
+                                edge_pairs.append((local_idxs[0], local_idxs[1]))
+                    else:
+                        well_pts = well_info.get('points')
+                        if well_pts is None or len(well_pts) < 2:
+                            continue
+                        unique_pts = [list(_extract_coord_nc(p)) for p in well_pts]
+                        edge_pairs = [(i, i + 1) for i in range(len(unique_pts) - 1)]
+
+                    if len(unique_pts) < 2 or not edge_pairs:
                         continue
-                    
-                    n_edges = len(pts_arr) - 1
-                    well_blocks[well_marker] = {
-                        'points': np.array(pts_arr),
-                        'n_edges': n_edges,
-                        'name': well_name
-                    }
-                    total_well_edges += n_edges
-                    logger.info(f"  Well block '{well_name}' (marker {well_marker}): {n_edges} edges")
+
+                    pts_arr = np.array(unique_pts, dtype=np.float64)
+                    n_pts = len(pts_arr)
+                    n_edges = len(edge_pairs)
+
+                    try:
+                        mapped_indices = map_well_points_to_mesh_nodes(
+                            points, pts_arr, tolerance=1e-5, precision=9
+                        )
+                        logger.info(f"  Well '{well_name}': mapped {n_pts} unique points to existing mesh nodes")
+                    except ValueError as e:
+                        logger.error(f"  Well '{well_name}' mapping failed: {e}")
+                        raise
+
+                    unused_nodes = validate_well_node_usage(mapped_indices, cells, cell_types)
+                    if unused_nodes:
+                        logger.warning(
+                            f"  Well '{well_name}': {len(unused_nodes)} mapped nodes are not used by any "
+                            f"tetrahedral element. This may indicate incomplete PLC integration. "
+                            f"Unused node indices: {unused_nodes[:5]}{'...' if len(unused_nodes) > 5 else ''}"
+                        )
+
+                    if export_wells_as_nodesets:
+                        well_node_sets[well_marker] = {
+                            'mapped_indices': mapped_indices,
+                            'n_nodes': n_pts,
+                            'name': well_name
+                        }
+                        total_well_nodes += n_pts
+                        logger.info(f"  Well node set '{well_name}' (marker {well_marker}): {n_pts} nodes (shared with mesh)")
+                    else:
+                        well_blocks[well_marker] = {
+                            'mapped_indices': mapped_indices,
+                            'edge_pairs': edge_pairs,
+                            'n_edges': n_edges,
+                            'name': well_name
+                        }
+                        total_well_edges += n_edges
+                        logger.info(f"  Well element block '{well_name}' (marker {well_marker}): {n_edges} BAR2 elements (shared nodes)")
             
-            num_well_blk = len(well_blocks)
+            num_well_blk = len(well_blocks) if not export_wells_as_nodesets else 0
+            num_well_nodesets = len(well_node_sets) if export_wells_as_nodesets else 0
             num_elem_blk = num_tetra_blk + num_well_blk
             
-            logger.info(f"EXODUS export: {num_tetra_blk} tetra blocks + {num_well_blk} well blocks = {num_elem_blk} total")
+            if export_wells_as_nodesets:
+                logger.info(f"EXODUS export: {num_tetra_blk} tetra blocks, {num_well_nodesets} well node sets")
+            else:
+                logger.info(f"EXODUS export: {num_tetra_blk} tetra blocks + {num_well_blk} well element blocks = {num_elem_blk} total")
 
             # Build sidesets from TetGen surface triangles
             sidesets = self._build_exodus_sidesets(mesh_data, tetra_cells, tetra_global_indices)
@@ -1278,17 +1391,15 @@ class TetrahedralMeshGenerator:
                 rootgrp.setncattr('int64_status', np.int32(0))
                 rootgrp.setncattr('title', 'PyMeshIt mesh for GOLEM/MOOSE')
 
-                # ========== PREPARE WELL POINT DATA ==========
-                # Well points need to be added to the coordinate list
-                all_points = points.copy()
-                well_point_offsets = {}  # {well_marker: starting_point_index}
+                # ========== WELL NODE INDICES ARE ALREADY MAPPED ==========
+                # CRITICAL FIX: Do NOT append well points to coordinates.
+                # Wells now use mapped_indices that reference existing mesh nodes.
+                # This ensures wells share node IDs with the tetra mesh for fracture connectivity.
                 
-                for well_marker, well_blk in well_blocks.items():
-                    well_point_offsets[well_marker] = len(all_points)
-                    all_points = np.vstack([all_points, well_blk['points']])
+                total_elements = n_tetrahedra + total_well_edges  # BAR2 elements only if not using node sets
+                total_points = len(points)  # NO extra well points - they're mapped to existing nodes
                 
-                total_elements = n_tetrahedra + total_well_edges
-                total_points = len(all_points)
+                logger.info(f"EXODUS: {total_points} nodes (tetra mesh only, wells use shared node IDs)")
                 
                 # ========== EXODUS II REQUIRED DIMENSIONS ==========
                 rootgrp.createDimension('len_string', 33)
@@ -1299,18 +1410,18 @@ class TetrahedralMeshGenerator:
                 rootgrp.createDimension('num_nodes', total_points)
                 rootgrp.createDimension('num_elem', total_elements)
                 rootgrp.createDimension('num_el_blk', num_elem_blk)
-                rootgrp.createDimension('num_node_sets', 0)
+                rootgrp.createDimension('num_node_sets', num_well_nodesets)  # Well node sets for GOLEM
                 rootgrp.createDimension('num_side_sets', num_side_sets)
                 rootgrp.createDimension('num_qa_rec', 1)
                 rootgrp.createDimension('time_step', 1)  # Fixed size for NETCDF3 compatibility
 
-                # ========== COORDINATES ==========
+                # ========== COORDINATES (tetra mesh nodes only) ==========
                 coordx = rootgrp.createVariable('coordx', 'f8', ('num_nodes',))
                 coordy = rootgrp.createVariable('coordy', 'f8', ('num_nodes',))
                 coordz = rootgrp.createVariable('coordz', 'f8', ('num_nodes',))
-                coordx[:] = all_points[:, 0]
-                coordy[:] = all_points[:, 1]
-                coordz[:] = all_points[:, 2]
+                coordx[:] = points[:, 0]
+                coordy[:] = points[:, 1]
+                coordz[:] = points[:, 2]
 
                 # Coordinate names
                 coor_names = rootgrp.createVariable('coor_names', 'S1', ('num_dim', 'len_name'))
@@ -1368,39 +1479,85 @@ class TetrahedralMeshGenerator:
                     
                     logger.info(f"  Block {blk_num}: '{block_name}' - {num_el_in_blk} elements")
                 
-                # ========== WELL ELEMENT BLOCKS (C++ MeshIt style: BAR2/BEAM2) ==========
-                for well_idx, (well_marker, well_blk) in enumerate(well_blocks.items()):
-                    blk_idx = num_tetra_blk + well_idx
-                    blk_num = blk_idx + 1
+                # ========== WELL ELEMENT BLOCKS (BAR2) - Only if not using Node Sets ==========
+                # CRITICAL FIX: Use mapped_indices to reference existing mesh nodes
+                if not export_wells_as_nodesets and well_blocks:
+                    for well_idx, (well_marker, well_blk) in enumerate(well_blocks.items()):
+                        blk_idx = num_tetra_blk + well_idx
+                        blk_num = blk_idx + 1
+                        
+                        well_name = well_blk['name']
+                        n_edges = well_blk['n_edges']
+                        mapped_indices = well_blk['mapped_indices']  # 0-based mesh node indices
+                        
+                        # Block ID and status
+                        eb_prop1[blk_idx] = int(well_marker) + 1000  # Use marker + 1000 to distinguish from tetra blocks
+                        eb_status[blk_idx] = 1
+                        
+                        # Write block name
+                        self._write_exodus_string_v2(eb_names, blk_idx, well_name, 33)
+                        
+                        # Create dimensions for this well block
+                        rootgrp.createDimension(f'num_el_in_blk{blk_num}', n_edges)
+                        rootgrp.createDimension(f'num_nod_per_el{blk_num}', 2)  # BAR2 = 2 nodes per edge
+                        
+                        # Connectivity variable
+                        connect = rootgrp.createVariable(
+                            f'connect{blk_num}', 'i4',
+                            (f'num_el_in_blk{blk_num}', f'num_nod_per_el{blk_num}')
+                        )
+                        connect.setncattr('elem_type', 'BAR2')  # EXODUS BAR2 element type
+                        
+                        # Write well edge connectivity using edge_pairs and MAPPED mesh node indices (1-based)
+                        edge_pairs = well_blk['edge_pairs']
+                        for edge_idx, (a, b) in enumerate(edge_pairs):
+                            connect[edge_idx, 0] = mapped_indices[a] + 1   # First node (1-based)
+                            connect[edge_idx, 1] = mapped_indices[b] + 1   # Second node (1-based)
+                        
+                        # Validate connectivity references valid nodes
+                        max_node_ref = max(mapped_indices) + 1  # 1-based
+                        if max_node_ref > total_points:
+                            raise ValueError(f"BAR2 connectivity references node {max_node_ref} but only {total_points} nodes exist")
+                        
+                        logger.info(f"  Well Block {blk_num}: '{well_name}' - {n_edges} BAR2 elements (shared nodes with mesh)")
+                
+                # ========== WELL NODE SETS (for GOLEM DiracKernels) ==========
+                # CRITICAL FIX: Use mapped_indices to reference existing mesh nodes
+                if export_wells_as_nodesets and num_well_nodesets > 0:
+                    ns_status = rootgrp.createVariable('ns_status', 'i4', ('num_node_sets',))
+                    ns_prop1 = rootgrp.createVariable('ns_prop1', 'i4', ('num_node_sets',))
+                    ns_prop1.setncattr('name', 'ID')
+                    ns_names = rootgrp.createVariable('ns_names', 'S1', ('num_node_sets', 'len_name'))
                     
-                    well_name = well_blk['name']
-                    n_edges = well_blk['n_edges']
-                    point_offset = well_point_offsets[well_marker]
-                    
-                    # Block ID and status
-                    eb_prop1[blk_idx] = int(well_marker) + 1000  # Use marker + 1000 to distinguish from tetra blocks
-                    eb_status[blk_idx] = 1
-                    
-                    # Write block name
-                    self._write_exodus_string_v2(eb_names, blk_idx, well_name, 33)
-                    
-                    # Create dimensions for this well block
-                    rootgrp.createDimension(f'num_el_in_blk{blk_num}', n_edges)
-                    rootgrp.createDimension(f'num_nod_per_el{blk_num}', 2)  # BAR2 = 2 nodes per edge
-                    
-                    # Connectivity variable
-                    connect = rootgrp.createVariable(
-                        f'connect{blk_num}', 'i4',
-                        (f'num_el_in_blk{blk_num}', f'num_nod_per_el{blk_num}')
-                    )
-                    connect.setncattr('elem_type', 'BAR2')  # EXODUS BAR2 element type
-                    
-                    # Write well edge connectivity (1-based)
-                    for edge_idx in range(n_edges):
-                        connect[edge_idx, 0] = point_offset + edge_idx + 1  # First node (1-based)
-                        connect[edge_idx, 1] = point_offset + edge_idx + 2  # Second node (1-based)
-                    
-                    logger.info(f"  Well Block {blk_num}: '{well_name}' - {n_edges} BAR2 elements")
+                    for ns_idx, (well_marker, well_ns) in enumerate(well_node_sets.items()):
+                        well_name = well_ns['name']
+                        n_nodes = well_ns['n_nodes']
+                        mapped_indices = well_ns['mapped_indices']  # 0-based mesh node indices
+                        
+                        ns_num = ns_idx + 1
+                        ns_prop1[ns_idx] = int(well_marker)  # Node set ID
+                        ns_status[ns_idx] = 1
+                        self._write_exodus_string_v2(ns_names, ns_idx, well_name, 33)
+                        
+                        # Create dimension for this node set
+                        rootgrp.createDimension(f'num_nod_ns{ns_num}', n_nodes)
+                        
+                        # Node list using MAPPED mesh node indices (1-based)
+                        # Wells now reference existing mesh nodes - no duplicate points
+                        node_ns = rootgrp.createVariable(f'node_ns{ns_num}', 'i4', (f'num_nod_ns{ns_num}',))
+                        node_indices = mapped_indices + 1  # Convert 0-based to 1-based
+                        node_ns[:] = node_indices
+                        
+                        # Validate node set references valid nodes
+                        max_node_ref = np.max(node_indices)
+                        if max_node_ref > total_points:
+                            raise ValueError(f"Node set '{well_name}' references node {max_node_ref} but only {total_points} nodes exist")
+                        
+                        # Distribution factors (optional but good practice - all 1.0)
+                        dist_fact_ns = rootgrp.createVariable(f'dist_fact_ns{ns_num}', 'f8', (f'num_nod_ns{ns_num}',))
+                        dist_fact_ns[:] = np.ones(n_nodes, dtype=np.float64)
+                        
+                        logger.info(f"  Well Node Set {ns_num}: '{well_name}' - {n_nodes} nodes (shared with mesh, for DiracKernels)")
 
                 # ========== SIDESETS ==========
                 if num_side_sets > 0:
@@ -1449,13 +1606,17 @@ class TetrahedralMeshGenerator:
 
             logger.info(f"✓ EXODUS II mesh exported: {file_path}")
             logger.info(f"  {n_tetrahedra} tetrahedra in {num_tetra_blk} blocks, {num_side_sets} sidesets")
-            if num_well_blk > 0:
-                logger.info(f"  {total_well_edges} well edges in {num_well_blk} BAR2 element blocks")
+            logger.info(f"  Total nodes: {total_points} (wells share existing mesh nodes)")
+            if export_wells_as_nodesets and num_well_nodesets > 0:
+                logger.info(f"  {total_well_nodes} well nodes in {num_well_nodesets} node sets (shared with mesh, for GOLEM DiracKernels)")
+            elif num_well_blk > 0:
+                logger.info(f"  {total_well_edges} well edges in {num_well_blk} BAR2 element blocks (shared nodes with mesh)")
             
             # Clean up custom names after successful export
             self._custom_block_names = {}
             self._custom_sideset_names = {}
             self._custom_well_names = {}
+            self._well_export_type = "Node Sets"
             
             return True
 
@@ -1465,6 +1626,7 @@ class TetrahedralMeshGenerator:
             self._custom_block_names = {}
             self._custom_sideset_names = {}
             self._custom_well_names = {}
+            self._well_export_type = "Node Sets"
             return False
 
     def _write_exodus_string_v2(self, var, idx, string, max_len):
@@ -2036,58 +2198,93 @@ class TetrahedralMeshGenerator:
             # =========================================================================
             # ADD 1D WELL MATERIALS (C++ MeshIt: edgemarkerlist / edgelist)
             # Wells are added as VTK_LINE cells (type 3) following C++ ExportVTU3D
+            # CRITICAL FIX: Wells now share nodes with the tetra mesh - no duplicate points
             # =========================================================================
             well_edges_added = 0
             if hasattr(self, 'well_data') and self.well_data:
-                logger.info(f"Processing {len(self.well_data)} wells for 1D material export...")
+                logger.info(f"Processing {len(self.well_data)} wells for 1D material export (using shared mesh nodes)...")
                 
-                all_well_points = []
                 all_well_cells = []
                 all_well_material_ids = []
                 
-                current_point_offset = volume_mesh.n_points
+                mesh_points = volume_mesh.points  # Existing mesh points
                 
                 for well_idx, well_info in self.well_data.items():
-                    well_pts = well_info.get('points')
-                    well_marker = well_info.get('marker', well_idx + 2)  # C++ style: markers start at 2
+                    well_marker = well_info.get('marker', well_idx + 2)
                     well_name = well_info.get('name', f'Well_{well_idx}')
-                    
-                    if well_pts is None or len(well_pts) < 2:
-                        continue
-                    
-                    # Convert points to array
-                    pts_arr = []
-                    for p in well_pts:
+                    well_edges = well_info.get('edges', [])
+
+                    # Build unique points and edge index pairs from the edges list.
+                    # This correctly handles non-contiguous segments and avoids
+                    # treating the flat 'points' list as a single polyline.
+                    def _extract_coord(p):
                         if hasattr(p, 'x'):
-                            pts_arr.append([p.x, p.y, p.z])
-                        elif len(p) >= 3:
-                            pts_arr.append([float(p[0]), float(p[1]), float(p[2])])
-                    
-                    if len(pts_arr) < 2:
+                            return (float(p.x), float(p.y), float(p.z))
+                        return (float(p[0]), float(p[1]), float(p[2]))
+
+                    if well_edges:
+                        unique_pts = []
+                        key_to_local = {}
+                        edge_pairs = []
+                        for edge_pts in well_edges:
+                            if len(edge_pts) < 2:
+                                continue
+                            local_idxs = []
+                            for p in (edge_pts[0], edge_pts[1]):
+                                c = _extract_coord(p)
+                                key = (round(c[0], 9), round(c[1], 9), round(c[2], 9))
+                                if key not in key_to_local:
+                                    key_to_local[key] = len(unique_pts)
+                                    unique_pts.append(list(c))
+                                local_idxs.append(key_to_local[key])
+                            if local_idxs[0] != local_idxs[1]:
+                                edge_pairs.append((local_idxs[0], local_idxs[1]))
+                    else:
+                        well_pts = well_info.get('points')
+                        if well_pts is None or len(well_pts) < 2:
+                            continue
+                        unique_pts = []
+                        for p in well_pts:
+                            unique_pts.append(list(_extract_coord(p)))
+                        edge_pairs = [(i, i + 1) for i in range(len(unique_pts) - 1)]
+
+                    if len(unique_pts) < 2 or not edge_pairs:
                         continue
-                    
-                    pts_arr = np.array(pts_arr)
-                    n_pts = len(pts_arr)
-                    n_edges = n_pts - 1
-                    
-                    # Create edge cells for VTK (format: [2, i1, i2, 2, i2, i3, ...])
+
+                    pts_arr = np.array(unique_pts, dtype=np.float64)
+
+                    try:
+                        mapped_indices = map_well_points_to_mesh_nodes(
+                            mesh_points, pts_arr, tolerance=1e-5, precision=9
+                        )
+                        logger.info(f"  Well '{well_name}': mapped {len(pts_arr)} unique points to mesh nodes")
+                    except ValueError as e:
+                        logger.error(f"  Well '{well_name}' mapping failed: {e}")
+                        raise
+
+                    max_node_idx = np.max(mapped_indices)
+                    if max_node_idx >= volume_mesh.n_points:
+                        raise ValueError(
+                            f"Well '{well_name}' mapped to node {max_node_idx} "
+                            f"but mesh only has {volume_mesh.n_points} nodes"
+                        )
+
                     edge_cells = []
-                    for i in range(n_edges):
-                        edge_cells.extend([2, current_point_offset + i, current_point_offset + i + 1])
-                    
-                    all_well_points.append(pts_arr)
+                    for a, b in edge_pairs:
+                        edge_cells.extend([2, mapped_indices[a], mapped_indices[b]])
+                    n_edges = len(edge_pairs)
+
                     all_well_cells.append(np.array(edge_cells, dtype=np.int64))
                     all_well_material_ids.append(np.full(n_edges, well_marker, dtype=np.int32))
-                    
+
                     well_edges_added += n_edges
-                    current_point_offset += n_pts
-                    logger.info(f"  Added well '{well_name}' (marker {well_marker}): {n_edges} edges")
+                    logger.info(f"  Added well '{well_name}' (marker {well_marker}): {n_edges} edges (shared nodes with mesh)")
                 
-                # Merge wells with volume mesh (C++ style: single combined mesh with mixed element types)
+                # Merge well cells with volume mesh (NO new points added)
                 if well_edges_added > 0:
-                    logger.info(f"Merging {well_edges_added} well edges with mesh...")
+                    logger.info(f"Merging {well_edges_added} well edges with mesh (sharing existing nodes)...")
                     
-                    # Get current mesh data
+                    # Get current mesh data - points stay the same!
                     current_points = volume_mesh.points
                     current_cells = volume_mesh.cells
                     current_cell_types = volume_mesh.celltypes
@@ -2097,14 +2294,14 @@ class TetrahedralMeshGenerator:
                     else:
                         current_material_ids = np.zeros(volume_mesh.n_cells, dtype=np.int32)
                     
-                    # Combine with wells
-                    final_points = np.vstack([current_points] + all_well_points)
+                    # Combine cells only - points are NOT modified (wells use existing nodes)
+                    final_points = current_points  # NO vstack - same points
                     final_cells = np.hstack([current_cells] + all_well_cells)
                     final_cell_types = np.hstack([current_cell_types] + 
                                                   [np.full(len(ids), 3, dtype=np.uint8) for ids in all_well_material_ids])  # VTK_LINE = 3
                     final_material_ids = np.hstack([current_material_ids] + all_well_material_ids)
                     
-                    # Create new combined mesh
+                    # Create new combined mesh with SAME point count
                     combined_with_wells = pv.UnstructuredGrid(final_cells, final_cell_types, final_points)
                     combined_with_wells.cell_data['MaterialID'] = final_material_ids
                     
@@ -2117,7 +2314,7 @@ class TetrahedralMeshGenerator:
                     combined_with_wells.cell_data['CellType'] = cell_type_names
                     
                     volume_mesh = combined_with_wells
-                    logger.info(f"✓ Added {well_edges_added} well edges (1D materials) to mesh")
+                    logger.info(f"✓ Added {well_edges_added} well edges (1D materials) to mesh - n_points unchanged: {volume_mesh.n_points}")
             
             # Save the combined mesh
             file_ext = file_path.lower().split('.')[-1]
@@ -2172,7 +2369,6 @@ class TetrahedralMeshGenerator:
             except Exception as e2:
                 logger.error(f"Simple export also failed: {e2}")
                 return False
-    
     def _extract_fault_surface_for_export(self, material_id: int):
         """Extract fault surface from TetGen for export (similar to GUI extraction)."""
         try:

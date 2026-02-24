@@ -18,7 +18,7 @@ from typing import List, Dict, Tuple, Optional, Any, TYPE_CHECKING
 from PySide6.QtWidgets import QAbstractItemView
 from Pymeshit.intersection_utils import align_intersections_to_convex_hull, Vector3D, Intersection, refine_intersection_line_by_length, insert_triple_points, refine_hull_with_interpolation
 from Pymeshit.intersection_utils import prepare_plc_for_surface_triangulation, run_constrained_triangulation_py, calculate_triple_points, TriplePoint
-from Pymeshit.intersection_utils import make_corners_special, Vector3D
+from Pymeshit.intersection_utils import make_corners_special, Vector3D, refine_well_by_length
 from PySide6.QtWidgets import QMenu, QTreeWidgetItemIterator
 import tetgen
 from Pymeshit.tetra_mesh_utils import TetrahedralMeshGenerator
@@ -1346,14 +1346,13 @@ class MeshItWorkflowGUI(QWidget):
         Returns True if successful, False otherwise.
         """
         try:
-            from Pymeshit.intersection_utils import refine_well_by_length, Vector3D
+
             
             ds = self.datasets[dataset_index]
             if ds.get('type') != 'WELL':
                 return False
             
             points = ds.get('points')
-            # Avoid ambiguous truth-value when points is a numpy array
             if points is None or len(points) < 2:
                 logger.warning(f"Well {dataset_index} has insufficient points")
                 return False
@@ -1569,6 +1568,36 @@ class MeshItWorkflowGUI(QWidget):
     def _get_mesh_target_size_for_surface(self, dataset_index: int) -> float:
         unified = float(getattr(self.mesh_target_feature_size_input, "value", lambda: 15.0)())
         return float(self.mesh_length_by_surface.get(dataset_index, unified))
+
+    def _get_constraint_target_size_for_intersection(self, surface_idx: int, intersection_data: Dict) -> float:
+        """
+        Compute C++-style constraint size for one surface/intersection pair.
+        Uses the smaller value between the surface target size and the paired object target size.
+        """
+        surface_target = float(self._get_mesh_target_size_for_surface(surface_idx))
+        ds1 = intersection_data.get('dataset_id1')
+        ds2 = intersection_data.get('dataset_id2')
+
+        other_idx = None
+        if ds1 == surface_idx:
+            other_idx = ds2
+        elif ds2 == surface_idx:
+            other_idx = ds1
+
+        other_target = surface_target
+        try:
+            if other_idx is not None and 0 <= int(other_idx) < len(self.datasets):
+                other_ds = self.datasets[int(other_idx)]
+                other_type = str(other_ds.get('type', '')).upper()
+                if other_type in ('WELL', 'POLYLINE'):
+                    other_target = float(self._get_well_refine_length(int(other_idx)))
+                else:
+                    other_target = float(self._get_mesh_target_size_for_surface(int(other_idx)))
+        except Exception:
+            other_target = surface_target
+
+        return max(1e-6, min(surface_target, other_target))
+
     
     # =========================================================================
     # WELL REFINEMENT TABLE FOR REFINE & MESH TAB
@@ -3846,7 +3875,7 @@ class MeshItWorkflowGUI(QWidget):
         center_layout = QVBoxLayout(center_panel)
 
         toolbar = QHBoxLayout()
-        toolbar.addWidget(QLabel("Surface:"))
+        toolbar.addWidget(QLabel("Filter:"))
         self.refine_surface_selector = QComboBox()
         self.refine_surface_selector.addItem("All Surfaces")
         self.refine_surface_selector.currentTextChanged.connect(self._on_refine_surface_selection_changed)
@@ -3918,10 +3947,33 @@ class MeshItWorkflowGUI(QWidget):
         self.refine_select_intersection_constraints_only_btn.clicked.connect(self._refine_select_intersection_constraints_only)
         self.refine_select_hull_constraints_only_btn = QPushButton("Select Hull")
         self.refine_select_hull_constraints_only_btn.clicked.connect(self._refine_select_hull_constraints_only)
+        self.refine_select_well_constraints_only_btn = QPushButton("Select Wells")
+        self.refine_select_well_constraints_only_btn.clicked.connect(self._refine_select_well_constraints_only)
         btns.addWidget(self.refine_select_intersection_constraints_only_btn)
         btns.addWidget(self.refine_select_hull_constraints_only_btn)
+        btns.addWidget(self.refine_select_well_constraints_only_btn)
         btns.addStretch()
         cl.addLayout(btns)
+
+        filter_group = QGroupBox("Visibility Filters")
+        fl = QVBoxLayout(filter_group)
+        self.show_hull_constraints_checkbox = QCheckBox("Show Hull")
+        self.show_hull_constraints_checkbox.setChecked(True)
+        self.show_hull_constraints_checkbox.toggled.connect(self._update_refined_visualization)
+        fl.addWidget(self.show_hull_constraints_checkbox)
+        self.show_intersection_constraints_checkbox = QCheckBox("Show Intersections")
+        self.show_intersection_constraints_checkbox.setChecked(True)
+        self.show_intersection_constraints_checkbox.toggled.connect(self._update_refined_visualization)
+        fl.addWidget(self.show_intersection_constraints_checkbox)
+        self.show_well_constraints_checkbox = QCheckBox("Show Wells")
+        self.show_well_constraints_checkbox.setChecked(True)
+        self.show_well_constraints_checkbox.toggled.connect(self._update_refined_visualization)
+        fl.addWidget(self.show_well_constraints_checkbox)
+        self.show_selected_only_checkbox = QCheckBox("Selected Only")
+        self.show_selected_only_checkbox.setChecked(False)
+        self.show_selected_only_checkbox.toggled.connect(self._update_refined_visualization)
+        fl.addWidget(self.show_selected_only_checkbox)
+        cl.addWidget(filter_group)
 
         right_tabs.addTab(constraints_tab, "Constraints")
 
@@ -4289,10 +4341,12 @@ class MeshItWorkflowGUI(QWidget):
         # Get constraint type filters
         show_hull = getattr(self, 'show_hull_constraints_checkbox', None)
         show_intersections = getattr(self, 'show_intersection_constraints_checkbox', None)
+        show_wells = getattr(self, 'show_well_constraints_checkbox', None)
         show_selected_only = getattr(self, 'show_selected_only_checkbox', None)
         
         show_hull_constraints = show_hull.isChecked() if show_hull else True
         show_intersection_constraints = show_intersections.isChecked() if show_intersections else True
+        show_well_constraints = show_wells.isChecked() if show_wells else True
         show_selected_only_mode = show_selected_only.isChecked() if show_selected_only else False
 
         # Helper function to check if a surface should be shown
@@ -4315,17 +4369,22 @@ class MeshItWorkflowGUI(QWidget):
             # Track surface distribution
             surface_counts[surf_idx] = surface_counts.get(surf_idx, 0) + 1
             
-            # Check surface filter
-            should_show = should_show_surface(surf_idx)
+            seg_info = getattr(self, '_refine_segment_map', {}).get((surf_idx, seg_uid), {})
+            seg_type = str(seg_info.get("type", "")).lower()
+            
+            if seg_type == "well":
+                should_show = show_well_constraints
+                if should_show and selected_surface != "All Surfaces":
+                    w_idx = seg_info.get("well_idx")
+                    if w_idx is not None and w_idx < len(self.datasets):
+                        should_show = self.datasets[w_idx].get("name", f"Well_{w_idx}") == selected_surface
+            else:
+                should_show = should_show_surface(surf_idx)
             
             if should_show:
-                seg_info = getattr(self, '_refine_segment_map', {}).get((surf_idx, seg_uid), {})
-                
-                # Check constraint type filters
-                seg_type = seg_info.get("type", "")
                 if seg_type == "hull" and not show_hull_constraints:
                     should_show = False
-                elif seg_type == "intersection" and not show_intersection_constraints:
+                elif seg_type in ("intersection", "int") and not show_intersection_constraints:
                     should_show = False
 
                 # Check if in selected-only mode
@@ -4376,16 +4435,22 @@ class MeshItWorkflowGUI(QWidget):
             # Re-add only the actors that should be visible
             actors_readded = 0
             for (surf_idx, seg_uid), actor in self.constraint_segment_actor_refs.items():
-                should_show = should_show_surface(surf_idx)
+                seg_info = getattr(self, '_refine_segment_map', {}).get((surf_idx, seg_uid), {})
+                seg_type = str(seg_info.get("type", "")).lower()
+
+                if seg_type == "well":
+                    should_show = show_well_constraints
+                    if should_show and selected_surface != "All Surfaces":
+                        w_idx = seg_info.get("well_idx")
+                        if w_idx is not None and w_idx < len(self.datasets):
+                            should_show = self.datasets[w_idx].get("name", f"Well_{w_idx}") == selected_surface
+                else:
+                    should_show = should_show_surface(surf_idx)
                 
                 if should_show:
-                    seg_info = getattr(self, '_refine_segment_map', {}).get((surf_idx, seg_uid), {})
-                    
-                    # Check constraint type filters
-                    seg_type = seg_info.get("type", "")
                     if seg_type == "hull" and not show_hull_constraints:
                         should_show = False
-                    elif seg_type == "intersection" and not show_intersection_constraints:
+                    elif seg_type in ("intersection", "int") and not show_intersection_constraints:
                         should_show = False
 
                     # Check if in selected-only mode
@@ -6054,78 +6119,93 @@ class MeshItWorkflowGUI(QWidget):
 
     def _highlight_surface_in_constraint_tree(self, surface_name):
         """
-        Highlights the corresponding surface in the constraint tree when selected in dropdown.
+        Highlights the corresponding surface or well in the constraint tree when
+        selected in the filter dropdown.
         """
         if not hasattr(self, 'refine_constraint_tree') or not self.refine_constraint_tree:
             return
             
-        # Expand/collapse tree items based on selection
         tree = self.refine_constraint_tree
         for i in range(tree.topLevelItemCount()):
-            surface_item = tree.topLevelItem(i)
-            surface_data = surface_item.data(0, Qt.UserRole)
-            
-            if surface_data and surface_data.get('type') == 'surface':
-                if surface_name == "All Surfaces":
-                    # Expand all surfaces when "All Surfaces" is selected
-                    surface_item.setExpanded(True)
-                else:
-                    # Only expand the selected surface
-                    dataset_idx = surface_data.get('surface_idx')
-                    if dataset_idx is not None and dataset_idx < len(self.datasets):
-                        dataset_name = self.datasets[dataset_idx].get("name", f"Surface_{dataset_idx}")
-                        if dataset_name == surface_name:
-                            surface_item.setExpanded(True)
-                            tree.scrollToItem(surface_item)
-                        else:
-                            surface_item.setExpanded(False)
+            item = tree.topLevelItem(i)
+            item_data = item.data(0, Qt.UserRole)
+            if not item_data:
+                continue
+
+            item_type = item_data.get('type')
+
+            if surface_name == "All Surfaces":
+                item.setExpanded(True)
+                continue
+
+            if item_type == 'surface':
+                dataset_idx = item_data.get('surface_idx')
+                if dataset_idx is not None and dataset_idx < len(self.datasets):
+                    ds_name = self.datasets[dataset_idx].get("name", f"Surface_{dataset_idx}")
+                    if ds_name == surface_name:
+                        item.setExpanded(True)
+                        tree.scrollToItem(item)
+                    else:
+                        item.setExpanded(False)
+            elif item_type == 'well':
+                w_idx = item_data.get('well_idx')
+                if w_idx is not None and w_idx < len(self.datasets):
+                    well_name = self.datasets[w_idx].get("name", f"Well_{w_idx}")
+                    if well_name == surface_name:
+                        item.setExpanded(True)
+                        tree.scrollToItem(item)
+                    else:
+                        item.setExpanded(False)
 
     def _populate_surface_selector(self):
         """
-        Populates the surface selector dropdown with available surfaces.
+        Populates the filter dropdown with surfaces and wells.
         Called after refinement operations to update the dropdown options.
         """
         if not hasattr(self, 'refine_surface_selector'):
             return
             
-        # Clear existing items except "All Surfaces"
         self.refine_surface_selector.clear()
         self.refine_surface_selector.addItem("All Surfaces")
         
-        # Get surface names from the constraint tree
-        surfaces_added = set()
+        names_added = set()
         if hasattr(self, 'refine_constraint_tree') and self.refine_constraint_tree:
             tree = self.refine_constraint_tree
-            logger.info(f"Extracting surfaces from constraint tree with {tree.topLevelItemCount()} top-level items")
+            logger.info(f"Extracting entries from constraint tree with {tree.topLevelItemCount()} top-level items")
             
             for i in range(tree.topLevelItemCount()):
-                surface_item = tree.topLevelItem(i)
-                surface_text = surface_item.text(0)
-                surface_data = surface_item.data(0, Qt.UserRole)
+                item = tree.topLevelItem(i)
+                item_data = item.data(0, Qt.UserRole)
                 
-                logger.info(f"Top-level item {i}: text='{surface_text}', data={surface_data}")
-                
-                if surface_data and surface_data.get('type') == 'surface':
-                    surface_idx = surface_data.get('surface_idx')
+                if item_data and item_data.get('type') == 'surface':
+                    surface_idx = item_data.get('surface_idx')
                     if surface_idx is not None and surface_idx < len(self.datasets):
                         surface_name = self.datasets[surface_idx].get("name", f"Surface_{surface_idx}")
-                        if surface_name not in surfaces_added:
+                        if surface_name not in names_added:
                             self.refine_surface_selector.addItem(surface_name)
-                            surfaces_added.add(surface_name)
-                            logger.info(f"Added surface: {surface_name} (idx={surface_idx})")
+                            names_added.add(surface_name)
+
+                elif item_data and item_data.get('type') == 'well':
+                    w_idx = item_data.get('well_idx')
+                    if w_idx is not None and w_idx < len(self.datasets):
+                        well_name = self.datasets[w_idx].get("name", f"Well_{w_idx}")
+                        if well_name not in names_added:
+                            self.refine_surface_selector.addItem(well_name)
+                            names_added.add(well_name)
         else:
             logger.warning("Constraint tree not found or empty")
         
-        # Fallback: Add surfaces from datasets that have constraint data
-        if len(surfaces_added) == 0 and hasattr(self, 'refine_constraint_data'):
+        # Fallback for surfaces
+        if len(names_added) == 0 and hasattr(self, 'refine_constraint_data'):
             for dataset_idx in self.refine_constraint_data.keys():
                 if dataset_idx < len(self.datasets):
-                    surface_name = self.datasets[dataset_idx].get("name", f"Surface_{dataset_idx}")
-                    if surface_name not in surfaces_added:
-                        self.refine_surface_selector.addItem(surface_name)
-                        surfaces_added.add(surface_name)
+                    name = self.datasets[dataset_idx].get("name", f"Surface_{dataset_idx}")
+                    if name not in names_added:
+                        self.refine_surface_selector.addItem(name)
+                        names_added.add(name)
                 
-        logger.info(f"Populated surface selector with {self.refine_surface_selector.count()} items: {[self.refine_surface_selector.itemText(i) for i in range(self.refine_surface_selector.count())]}")
+        logger.info(f"Populated filter selector with {self.refine_surface_selector.count()} items: "
+                     f"{[self.refine_surface_selector.itemText(i) for i in range(self.refine_surface_selector.count())]}")
 
     def _on_target_size_changed(self, value):
         """Provide immediate feedback when target size changes."""
@@ -6145,7 +6225,7 @@ class MeshItWorkflowGUI(QWidget):
             density_desc = "Very Coarse (Fastest)"
             color = "#9C27B0"  # Purple
         
-        self.target_size_info.setText(f"🎯 UNIFIED: {density_desc} | Target Size: {value}")
+        self.target_size_info.setText(f"UNIFIED: {density_desc} | Target Size: {value}")
         self.target_size_info.setStyleSheet(f"color: {color}; font-style: italic; font-weight: bold;")
     def _setup_pre_tetramesh_tab(self):
             """Sets up the Pre-Tetrahedral Mesh tab for surface selection and validation."""
@@ -6372,42 +6452,39 @@ class MeshItWorkflowGUI(QWidget):
         Populate the conforming surface tree with available conforming meshes.
         This creates a simple selection interface for choosing which surfaces to include in tetgen.
         """
-        self.conforming_surface_tree.clear()
-        
-        if not self.conforming_mesh_data:
-            logger.warning("No conforming mesh data to populate tree")
-            return
-        
-        # Add header info
-        header_item = QTreeWidgetItem(self.conforming_surface_tree)
-        header_item.setText(0, f"📋 {len(self.conforming_mesh_data)} Conforming Surfaces Available")
-        header_item.setText(1, "Select")
-        header_item.setText(2, "for")  
-        header_item.setText(3, "TetGen")
-        header_item.setFlags(header_item.flags() & ~Qt.ItemIsUserCheckable)
-        
-        # Add each conforming surface
-        for surface_idx, mesh_data in self.conforming_mesh_data.items():
-            surface_item = QTreeWidgetItem(self.conforming_surface_tree)
-            surface_item.setText(0, f"🔺 {mesh_data['name']}")
-            surface_item.setText(1, str(len(mesh_data['vertices'])))
-            surface_item.setText(2, str(len(mesh_data['triangles'])))
-            surface_item.setText(3, "Ready")
-            
-            # Make surface selectable with checkbox
-            surface_item.setFlags(surface_item.flags() | Qt.ItemIsUserCheckable)
-            surface_item.setCheckState(0, Qt.Checked)  # Default to selected
-            
-            # Store surface index for retrieval
-            surface_item.setData(0, Qt.UserRole, surface_idx)
-            
-            # Add to selected surfaces
-            self.selected_conforming_surfaces.add(surface_idx)
-        
-        # Expand all items
-        self.conforming_surface_tree.expandAll()
-        
-        logger.info(f"Populated conforming surface tree with {len(self.conforming_mesh_data)} surfaces")
+        self.conforming_surface_tree.blockSignals(True)
+        try:
+            self.conforming_surface_tree.clear()
+
+            if not self.conforming_mesh_data:
+                logger.warning("No conforming mesh data to populate tree")
+                return
+
+            header_item = QTreeWidgetItem(self.conforming_surface_tree)
+            header_item.setText(0, f"{len(self.conforming_mesh_data)} Conforming Surfaces Available")
+            header_item.setText(1, "Select")
+            header_item.setText(2, "for")
+            header_item.setText(3, "TetGen")
+            header_item.setFlags(header_item.flags() & ~Qt.ItemIsUserCheckable)
+
+            for surface_idx, mesh_data in self.conforming_mesh_data.items():
+                surface_item = QTreeWidgetItem(self.conforming_surface_tree)
+                surface_item.setText(0, f"{mesh_data['name']}")
+                surface_item.setText(1, str(len(mesh_data['vertices'])))
+                surface_item.setText(2, str(len(mesh_data['triangles'])))
+                surface_item.setText(3, "Ready")
+
+                surface_item.setFlags(surface_item.flags() | Qt.ItemIsUserCheckable)
+                surface_item.setCheckState(0, Qt.Checked)
+
+                surface_item.setData(0, Qt.UserRole, surface_idx)
+
+                self.selected_conforming_surfaces.add(surface_idx)
+
+            self.conforming_surface_tree.expandAll()
+            logger.info(f"Populated conforming surface tree with {len(self.conforming_mesh_data)} surfaces")
+        finally:
+            self.conforming_surface_tree.blockSignals(False)
 
     def _on_conforming_surface_tree_item_changed(self, item, column):
         """Handle changes in the conforming surface tree selection - C++ style: simple state update"""
@@ -6436,29 +6513,36 @@ class MeshItWorkflowGUI(QWidget):
 
     def _select_all_conforming_surfaces(self):
         """Select all conforming surfaces in the tree"""
-        for i in range(self.conforming_surface_tree.topLevelItemCount()):
-            item = self.conforming_surface_tree.topLevelItem(i)
-            surface_idx = item.data(0, Qt.UserRole)
-            if surface_idx is not None:  # Skip header items
-                item.setCheckState(0, Qt.Checked)
-        
-        self.statusBar().showMessage(f"Selected all {len(self.conforming_mesh_data)} conforming surfaces")
+        self.conforming_surface_tree.blockSignals(True)
+        try:
+            for i in range(self.conforming_surface_tree.topLevelItemCount()):
+                item = self.conforming_surface_tree.topLevelItem(i)
+                surface_idx = item.data(0, Qt.UserRole)
+                if surface_idx is not None:
+                    item.setCheckState(0, Qt.Checked)
+                    self.selected_conforming_surfaces.add(surface_idx)
+                    item.setText(3, "Selected")
+        finally:
+            self.conforming_surface_tree.blockSignals(False)
 
+        self._update_conforming_surface_visualization()
+        self.statusBar().showMessage(f"Selected all {len(self.conforming_mesh_data)} conforming surfaces")
     def _deselect_all_conforming_surfaces(self):
         """Deselect all conforming surfaces in the tree"""
-        for i in range(self.conforming_surface_tree.topLevelItemCount()):
-            item = self.conforming_surface_tree.topLevelItem(i)
-            surface_idx = item.data(0, Qt.UserRole)
-            if surface_idx is not None:  # Skip header items
-                item.setCheckState(0, Qt.Unchecked)
-        
-                self.statusBar().showMessage("Deselected all conforming surfaces")
+        self.conforming_surface_tree.blockSignals(True)
+        try:
+            for i in range(self.conforming_surface_tree.topLevelItemCount()):
+                item = self.conforming_surface_tree.topLevelItem(i)
+                surface_idx = item.data(0, Qt.UserRole)
+                if surface_idx is not None:
+                    item.setCheckState(0, Qt.Unchecked)
+                    self.selected_conforming_surfaces.discard(surface_idx)
+                    item.setText(3, "Deselected")
+        finally:
+            self.conforming_surface_tree.blockSignals(False)
 
-
-
-
-
-
+        self._update_conforming_surface_visualization()
+        self.statusBar().showMessage("Deselected all conforming surfaces")
 
     def _update_conforming_surface_visualization(self):
         """
@@ -6482,7 +6566,7 @@ class MeshItWorkflowGUI(QWidget):
             
             # Visualize only selected conforming surfaces
             import pyvista as pv
-            import numpy as np
+
             
             colors = ['lightblue', 'lightgreen', 'lightcoral', 'lightyellow', 
                      'lightpink', 'lightcyan', 'wheat', 'lightgray']
@@ -6527,9 +6611,11 @@ class MeshItWorkflowGUI(QWidget):
                     text_color='white'
                 )
             
-            # Add wells (1D polylines) to the pre-tetramesh visualization
-            # Wells are edge constraints in TetGen, shown with their refined points
-            self._add_wells_polyline_to_plotter(self.pre_tetramesh_plotter, show_intersection_points=True)
+            # Add wells (1D polylines) — only selected segments from constraint tree
+            sel_wd = self._get_selected_well_viz_data()
+            self._add_wells_polyline_to_plotter(
+                self.pre_tetramesh_plotter, show_intersection_points=True,
+                selected_well_data=sel_wd if sel_wd else None)
             
             # Count wells
             well_count = sum(1 for ds in self.datasets if ds.get('type') == 'WELL')
@@ -6537,6 +6623,7 @@ class MeshItWorkflowGUI(QWidget):
             # Add simple legend
             selected_count = len(self.selected_conforming_surfaces)
             total_count = len(self.conforming_mesh_data)
+            
             legend_text = f"Selected Conforming Surfaces: {selected_count}/{total_count}\n"
             if well_count > 0:
                 legend_text += f"Wells (1D edge constraints): {well_count}\n"
@@ -7012,18 +7099,57 @@ class MeshItWorkflowGUI(QWidget):
                 summary += f"• {original_total_points} → {refined_total_points} points<br>"
         
         return summary
-
-    def _add_wells_polyline_to_plotter(self, plotter, color_map=None, show_intersection_points=True):
+    def _get_selected_well_viz_data(self) -> dict:
         """
-        Render all WELL datasets as polylines on the given PyVista plotter.
+        Build selected well data from the constraint tree for visualization.
         
-        Shows:
-        - Well paths as magenta lines (using refined points if available)
-        - Intersection points as red spheres (where wells intersect surfaces)
-        - Start/End points as cyan/blue spheres
+        Returns a dict keyed by dataset index with 'edges' and 'name', only
+        including segments that are checked (selected) in the tree. Returns
+        an empty dict if no constraint tree exists yet.
+        """
+        seg_map = getattr(self, "_refine_segment_map", None)
+        if not seg_map:
+            return {}
+
+        well_data = {}
+        for (key_idx, seg_uid), seg_info in seg_map.items():
+            if str(seg_info.get("type", "")).upper() != "WELL":
+                continue
+            if not seg_info.get("selected", True):
+                continue
+            w_idx = seg_info.get("well_idx")
+            if w_idx is None:
+                continue
+            seg_pts = seg_info.get("points", [])
+            if not seg_pts or len(seg_pts) < 2:
+                continue
+
+            if w_idx not in well_data:
+                ds = self.datasets[w_idx] if w_idx < len(self.datasets) else {}
+                well_data[w_idx] = {
+                    'edges': [],
+                    'name': ds.get('name', f'Well_{w_idx}'),
+                }
+            for j in range(len(seg_pts) - 1):
+                well_data[w_idx]['edges'].append((seg_pts[j], seg_pts[j + 1]))
+        return well_data
+
+    def _add_wells_polyline_to_plotter(self, plotter, color_map=None,
+                                       show_intersection_points=True,
+                                       well_filter_name: str = None,
+                                       selected_well_data: dict = None):
+        """
+        Render WELL datasets as polylines on the given PyVista plotter.
+        
+        Args:
+            well_filter_name: If set, only render the well whose dataset name
+                              matches this string.  None or "All Surfaces" renders all.
+            selected_well_data: If provided, use only the selected edges from
+                                constraint tree instead of the full well path.
+                                Format: {well_idx: {'edges': [...], 'name': str, ...}}
         """
         try:
-            import numpy as np
+
             import pyvista as pv
         except Exception:
             return
@@ -7033,41 +7159,91 @@ class MeshItWorkflowGUI(QWidget):
         for idx, ds in enumerate(self.datasets):
             if ds.get('type') != 'WELL':
                 continue
+            if well_filter_name and well_filter_name != "All Surfaces":
+                if ds.get('name', f'Well_{idx}') != well_filter_name:
+                    continue
             
-            # Prefer refined points, fallback to original
-            raw_pts = ds.get('refined_well_points') or ds.get('points')
-            if raw_pts is None or len(raw_pts) < 2:
+            # If selected_well_data is provided, use only selected edges
+            use_edge_mode = False
+            if selected_well_data is not None and idx in selected_well_data:
+                wd = selected_well_data[idx]
+                well_edges = wd.get('edges', [])
+                if not well_edges:
+                    continue
+                use_edge_mode = True
+            elif selected_well_data is not None and idx not in selected_well_data:
                 continue
+            else:
+                raw_pts = ds.get('refined_well_points') or ds.get('points')
+                if raw_pts is None or len(raw_pts) < 2:
+                    continue
             
-            # Extract coordinates and point types
+            def _extract_pt(p):
+                """Return (coords, point_type) from a point object."""
+                if hasattr(p, 'x'):
+                    coords = [p.x, p.y, p.z]
+                    pt = getattr(p, 'point_type', getattr(p, 'type', 'DEFAULT')) or 'DEFAULT'
+                elif len(p) >= 3:
+                    coords = [float(p[0]), float(p[1]), float(p[2])]
+                    pt = p[3] if len(p) > 3 else 'DEFAULT'
+                    if hasattr(pt, 'item'):
+                        pt = pt.item()
+                    pt = str(pt) if pt else 'DEFAULT'
+                else:
+                    return None, 'DEFAULT'
+                return coords, pt
+
             pts_coords = []
             point_types = []
-            for p in raw_pts:
-                if hasattr(p, 'x'):  # Vector3D
-                    pts_coords.append([p.x, p.y, p.z])
-                    point_types.append(getattr(p, 'point_type', getattr(p, 'type', 'DEFAULT')) or 'DEFAULT')
-                elif len(p) >= 3:
-                    pts_coords.append([float(p[0]), float(p[1]), float(p[2])])
-                    pt_type = p[3] if len(p) > 3 else 'DEFAULT'
-                    if hasattr(pt_type, 'item'):
-                        pt_type = pt_type.item()
-                    point_types.append(str(pt_type) if pt_type else 'DEFAULT')
-            
+            lines_list = []
+
+            if use_edge_mode:
+                # Build unique point list and per-edge line segments from edges.
+                # Handles potentially disconnected segment groups correctly.
+                key_to_idx = {}
+                for edge_pts in well_edges:
+                    if len(edge_pts) < 2:
+                        continue
+                    local_idxs = []
+                    for p in (edge_pts[0], edge_pts[1]):
+                        coords, pt_type = _extract_pt(p)
+                        if coords is None:
+                            continue
+                        key = (round(coords[0], 9), round(coords[1], 9), round(coords[2], 9))
+                        if key not in key_to_idx:
+                            key_to_idx[key] = len(pts_coords)
+                            pts_coords.append(coords)
+                            point_types.append(pt_type)
+                        local_idxs.append(key_to_idx[key])
+                    if len(local_idxs) == 2 and local_idxs[0] != local_idxs[1]:
+                        lines_list.extend([2, local_idxs[0], local_idxs[1]])
+
+                if len(pts_coords) < 2 or not lines_list:
+                    continue
+            else:
+                for p in raw_pts:
+                    coords, pt_type = _extract_pt(p)
+                    if coords:
+                        pts_coords.append(coords)
+                        point_types.append(pt_type)
+                n = len(pts_coords)
+                if n < 2:
+                    continue
+                lines_list = [n] + list(range(n))
+
             pts = np.array(pts_coords, dtype=float)
             if pts.shape[1] < 3:
                 tmp = np.zeros((pts.shape[0], 3))
                 tmp[:, :pts.shape[1]] = pts
                 pts = tmp
 
-            n = len(pts)
-            # Polyline cell format: [n, 0, 1, 2, ... n-1]
-            lines = np.hstack(([n], np.arange(n, dtype=np.int32))).astype(np.int32)
+            lines = np.array(lines_list, dtype=np.int32)
             poly = pv.PolyData(pts, lines=lines)
             
             # Use magenta for wells (C++ MeshIt uses LightMagenta for wells)
             well_color = (1.0, 0.0, 1.0)  # Magenta
             plotter.add_mesh(poly, color=well_color, line_width=4, opacity=0.95, 
-                           label=f"🔵 {ds.get('name', 'Well')}", render_lines_as_tubes=True)
+                           label=f"{ds.get('name', 'Well')}", render_lines_as_tubes=True)
             
             # Show special points if requested
             if show_intersection_points:
@@ -7144,6 +7320,127 @@ class MeshItWorkflowGUI(QWidget):
                     return True
         return False
 
+    def _capture_refine_constraint_state_snapshot(self) -> Dict[str, Dict]:
+        """
+        Capture current Step 6 tree states so they can be restored after rebuild.
+        Uses stable structural keys (surface/line/segment order).
+        """
+        snapshot = {
+            "surface": {},
+            "hull_group": {},
+            "hull_segments": {},
+            "intersection_groups": {},
+            "intersection_segments": {},
+            "well": {},
+            "well_segments": {},
+        }
+        tree = getattr(self, "refine_constraint_tree", None)
+        if not tree:
+            return snapshot
+
+        for i in range(tree.topLevelItemCount()):
+            top_item = tree.topLevelItem(i)
+            top_data = top_item.data(0, Qt.UserRole) or {}
+            top_type = top_data.get("type")
+
+            if top_type == "surface":
+                s_idx = top_data.get("surface_idx")
+                if s_idx is None:
+                    continue
+                snapshot["surface"][s_idx] = top_item.checkState(0)
+
+                for j in range(top_item.childCount()):
+                    group_item = top_item.child(j)
+                    group_data = group_item.data(0, Qt.UserRole) or {}
+                    group_type = group_data.get("type")
+
+                    if group_type == "hull_group":
+                        snapshot["hull_group"][s_idx] = {
+                            "selected": group_item.checkState(0),
+                            "hole": group_item.checkState(4),
+                        }
+                        seg_states = []
+                        for k in range(group_item.childCount()):
+                            seg_item = group_item.child(k)
+                            seg_data = seg_item.data(0, Qt.UserRole) or {}
+                            if seg_data.get("type") == "constraint":
+                                seg_states.append({
+                                    "selected": seg_item.checkState(0),
+                                    "hole": seg_item.checkState(4),
+                                })
+                        snapshot["hull_segments"][s_idx] = seg_states
+
+                    elif group_type == "intersection_group":
+                        line_id = None
+                        try:
+                            line_id = int(group_item.text(0).split(" ")[-1])
+                        except (ValueError, IndexError):
+                            pass
+                        if line_id is None:
+                            continue
+
+                        snapshot["intersection_groups"][(s_idx, line_id)] = {
+                            "selected": group_item.checkState(0),
+                            "hole": group_item.checkState(4),
+                        }
+                        seg_states = []
+                        for k in range(group_item.childCount()):
+                            seg_item = group_item.child(k)
+                            seg_data = seg_item.data(0, Qt.UserRole) or {}
+                            if seg_data.get("type") == "constraint":
+                                seg_states.append({
+                                    "selected": seg_item.checkState(0),
+                                    "hole": seg_item.checkState(4),
+                                })
+                        snapshot["intersection_segments"][(s_idx, line_id)] = seg_states
+
+            elif top_type == "well":
+                w_idx = top_data.get("well_idx")
+                if w_idx is None:
+                    continue
+                snapshot["well"][w_idx] = top_item.checkState(0)
+                seg_states = []
+                for j in range(top_item.childCount()):
+                    seg_item = top_item.child(j)
+                    seg_data = seg_item.data(0, Qt.UserRole) or {}
+                    if seg_data.get("type") == "well_constraint":
+                        seg_states.append(seg_item.checkState(0))
+                snapshot["well_segments"][w_idx] = seg_states
+
+        return snapshot
+
+    def _sync_refine_tree_parent_states_from_children(self):
+        """Recompute parent check states after rebuilding the Step 6 tree."""
+        tree = getattr(self, "refine_constraint_tree", None)
+        if not tree:
+            return
+
+        def merge_states(states):
+            if not states:
+                return Qt.Unchecked
+            if all(s == Qt.Checked for s in states):
+                return Qt.Checked
+            if all(s == Qt.Unchecked for s in states):
+                return Qt.Unchecked
+            return Qt.PartiallyChecked
+
+        def walk(item):
+            if item.childCount() == 0:
+                return
+
+            for i in range(item.childCount()):
+                walk(item.child(i))
+
+            child_sel = [item.child(i).checkState(0) for i in range(item.childCount())]
+            item.setCheckState(0, merge_states(child_sel))
+
+            data = item.data(0, Qt.UserRole) or {}
+            if data.get("type") in ("hull_group", "intersection_group"):
+                child_hole = [item.child(i).checkState(4) for i in range(item.childCount())]
+                item.setCheckState(4, merge_states(child_hole))
+
+        for i in range(tree.topLevelItemCount()):
+            walk(tree.topLevelItem(i))
     def _refine_intersection_lines_action(self):
         """
         Action to refine intersection lines by:
@@ -12643,14 +12940,22 @@ segmentation, triangulation, and visualization.
 
         def walk(item):
             data = item.data(0, Qt.UserRole)
-            if data and data.get("type") == "constraint":
+            if not data:
+                pass
+            elif data.get("type") == "constraint":
                 surf_idx = data.get("surface_idx")
                 seg_uid = data.get("seg_uid")
                 key = (surf_idx, seg_uid)
                 if key in seg_map:
                     seg_map[key]["selected"] = (item.checkState(0) == Qt.Checked)
-                    # Column 4 is the holes checkbox
                     seg_map[key]["is_hole"] = (item.checkState(4) == Qt.Checked)
+            elif data.get("type") == "well_constraint":
+                w_idx = data.get("well_idx")
+                seg_uid = data.get("seg_uid")
+                if w_idx is not None:
+                    key = (-w_idx - 1, seg_uid)
+                    if key in seg_map:
+                        seg_map[key]["selected"] = (item.checkState(0) == Qt.Checked)
             for i in range(item.childCount()):
                 walk(item.child(i))
 
@@ -12663,12 +12968,15 @@ segmentation, triangulation, and visualization.
         show_hull_constraints: bool,
         show_intersection_constraints: bool,
         selected_only_mode: bool,
+        show_well_constraints: bool = True,
+        well_is_visible_fn=None,
     ):
         """
-        Extremely fast Segments renderer: batches into at most 3 actors
+        Extremely fast Segments renderer: batches into at most 4 actors
         - selected NORMAL constraints  (green, thick)
         - selected HOLE constraints    (red,   thick)
         - unselected constraints       (grey,  thin)
+        - well constraints             (magenta, thick)
 
         Includes fallback: if no HULL segments exist in _refine_segment_map
         for a visible surface, draw its hull from dataset['hull_points'].
@@ -12724,7 +13032,11 @@ segmentation, triangulation, and visualization.
             
             # Handle wells separately (they use negative indices)
             if seg_type == "well":
-                # Wells are always visible (not filtered by surface)
+                if not show_well_constraints:
+                    continue
+                w_idx = seg_info.get("well_idx")
+                if well_is_visible_fn and w_idx is not None and not well_is_visible_fn(w_idx):
+                    continue
                 is_selected = bool(seg_info.get("selected", True))
                 if selected_only_mode and not is_selected:
                     continue
@@ -12842,7 +13154,7 @@ segmentation, triangulation, and visualization.
         emit("sel_norm", (0.0, 1.0, 0.0), 4)
         emit("sel_hole", (1.0, 0.0, 0.0), 4)
         emit("unsel",    (0.53, 0.53, 0.53), 2)
-        emit("well",     (1.0, 0.0, 1.0), 5)
+        emit("well",     (1.0, 0.0, 1.0), 5)  # Magenta, thicker for wells (1D elements)
 
         return built
     # ======================================================================
@@ -12873,6 +13185,11 @@ segmentation, triangulation, and visualization.
 
         view = getattr(self, "current_refine_view", 0)
 
+        # Read filter dropdown once for all views
+        _filter_name = "All Surfaces"
+        if hasattr(self, 'refine_surface_selector') and self.refine_surface_selector:
+            _filter_name = self.refine_surface_selector.currentText()
+
         # --- 0: Intersections ---
         if view == 0:
             self.intersection_actor_refs = []
@@ -12880,7 +13197,13 @@ segmentation, triangulation, and visualization.
             if not hasattr(self, 'constraint_segment_actor_refs'):
                 self.constraint_segment_actor_refs = {}
             self._visualize_refined_intersections()
-            self._add_wells_to_intersection_plotter()
+            well_cb = getattr(self, 'show_well_constraints_checkbox', None)
+            if well_cb is None or well_cb.isChecked():
+                sel_wd = self._get_selected_well_viz_data()
+                self._add_wells_polyline_to_plotter(
+                    self._get_current_refine_plotter() or getattr(self, 'intersection_plotter', None),
+                    well_filter_name=_filter_name,
+                    selected_well_data=sel_wd if sel_wd else None)
             return
 
         # --- 1: Meshes ---
@@ -12895,9 +13218,9 @@ segmentation, triangulation, and visualization.
                 self.constraint_segment_actor_refs = {}
 
             for ds in self.datasets:
-                # Skip wells (they're added separately below)
                 if ds.get('type') == 'WELL':
                     continue
+                    
                 cm = ds.get("conforming_mesh")
                 if not cm:
                     continue
@@ -12917,8 +13240,13 @@ segmentation, triangulation, and visualization.
                 )
                 self.conforming_mesh_actor_refs.append(actor)
 
-            # Add wells (1D polylines) to the mesh view
-            self._add_wells_polyline_to_plotter(plotter, show_intersection_points=True)
+            well_cb = getattr(self, 'show_well_constraints_checkbox', None)
+            if well_cb is None or well_cb.isChecked():
+                sel_wd = self._get_selected_well_viz_data()
+                self._add_wells_polyline_to_plotter(
+                    plotter, show_intersection_points=True,
+                    well_filter_name=_filter_name,
+                    selected_well_data=sel_wd if sel_wd else None)
 
             plotter.add_axes()
             plotter.reset_camera()
@@ -12943,13 +13271,15 @@ segmentation, triangulation, and visualization.
 
         show_hull = getattr(self, 'show_hull_constraints_checkbox', None)
         show_intersections = getattr(self, 'show_intersection_constraints_checkbox', None)
+        show_wells = getattr(self, 'show_well_constraints_checkbox', None)
         show_selected_only = getattr(self, 'show_selected_only_checkbox', None)
 
         show_hull_constraints = show_hull.isChecked() if show_hull else True
         show_intersection_constraints = show_intersections.isChecked() if show_intersections else True
+        show_well_constraints = show_wells.isChecked() if show_wells else True
         selected_only_mode = show_selected_only.isChecked() if show_selected_only else False
 
-        def surface_name(idx):
+        def _dataset_name(idx):
             if 0 <= idx < len(self.datasets):
                 return self.datasets[idx].get("name", f"Surface_{idx}")
             return f"Surface_{idx}"
@@ -12957,7 +13287,12 @@ segmentation, triangulation, and visualization.
         def surface_is_visible(idx):
             if selected_surface_name == "All Surfaces":
                 return True
-            return surface_name(idx) == selected_surface_name
+            return _dataset_name(idx) == selected_surface_name
+
+        def well_is_visible(w_idx):
+            if selected_surface_name == "All Surfaces":
+                return True
+            return _dataset_name(w_idx) == selected_surface_name
 
         # Decide rendering mode: batched for speed when mouse selection is OFF
         mouse_sel_on = bool(getattr(self, 'mouse_selection_enabled_btn', None) and self.mouse_selection_enabled_btn.isChecked())
@@ -12971,13 +13306,15 @@ segmentation, triangulation, and visualization.
                 pass
 
         if self._segments_batched_mode:
-            # FAST path: draw everything in 1–3 actors
+            # FAST path: draw everything in 1–4 actors
             built = self._draw_segments_batched_fast(
                 plotter,
                 surface_is_visible_fn=surface_is_visible,
                 show_hull_constraints=show_hull_constraints,
                 show_intersection_constraints=show_intersection_constraints,
                 selected_only_mode=selected_only_mode,
+                show_well_constraints=show_well_constraints,
+                well_is_visible_fn=well_is_visible,
             )
         else:
             # PRECISE path (picking): one actor per segment (original behavior)
@@ -13000,10 +13337,16 @@ segmentation, triangulation, and visualization.
             built = 0
 
             for (surf_idx, seg_uid), seg_info in seg_map.items():
-                if not surface_is_visible(surf_idx):
+                seg_type = str(seg_info.get("type", seg_info.get("ctype", ""))).lower()
+                if seg_type == "well":
+                    if not show_well_constraints:
+                        continue
+                    w_idx = seg_info.get("well_idx")
+                    if w_idx is not None and not well_is_visible(w_idx):
+                        continue
+                elif not surface_is_visible(surf_idx):
                     continue
 
-                seg_type = str(seg_info.get("type", seg_info.get("ctype", ""))).lower()
                 if seg_type == "hull" and not show_hull_constraints:
                     continue
                 if seg_type in ("int", "intersection") and not show_intersection_constraints:
@@ -13021,7 +13364,7 @@ segmentation, triangulation, and visualization.
                     if hasattr(p, "x") and hasattr(p, "y") and hasattr(p, "z"):
                         return float(p.x), float(p.y), float(p.z)
                     try:
-                        import numpy as np
+            
                         if isinstance(p, np.ndarray) and p.size >= 3:
                             return float(p[0]), float(p[1]), float(p[2])
                     except Exception:
@@ -13038,7 +13381,7 @@ segmentation, triangulation, and visualization.
                 if len(xyz_pts) < 2:
                     continue
 
-                import numpy as np, pyvista as pv
+
                 # Create polyline through all points
                 poly = pv.PolyData(np.array(xyz_pts, dtype=float))
                 # Create line connectivity for all points
@@ -13357,24 +13700,37 @@ segmentation, triangulation, and visualization.
                 for i in range(parent.childCount()):
                     child = parent.child(i)
                     child.setCheckState(0, state)
-                    # Update segment map for constraint items
                     child_data = child.data(0, Qt.UserRole)
-                    if child_data and child_data.get("type") == "constraint":
-                        surface_idx = child_data["surface_idx"]
-                        seg_uid = child_data["seg_uid"]
-                        if (surface_idx, seg_uid) in self._refine_segment_map:
-                            self._refine_segment_map[(surface_idx, seg_uid)]["selected"] = (state == Qt.Checked)
+                    if child_data:
+                        child_type = child_data.get("type")
+                        if child_type == "constraint":
+                            surface_idx = child_data["surface_idx"]
+                            seg_uid = child_data["seg_uid"]
+                            if (surface_idx, seg_uid) in self._refine_segment_map:
+                                self._refine_segment_map[(surface_idx, seg_uid)]["selected"] = (state == Qt.Checked)
+                        elif child_type == "well_constraint":
+                            w_idx = child_data.get("well_idx")
+                            seg_uid = child_data.get("seg_uid")
+                            if w_idx is not None and (-w_idx - 1, seg_uid) in self._refine_segment_map:
+                                self._refine_segment_map[(-w_idx - 1, seg_uid)]["selected"] = (state == Qt.Checked)
                     set_all_children_state(child, state)
 
             set_all_children_state(item, item.checkState(0))
             
-            # Also update the current item if it's a constraint
+            # Also update the current item if it's a constraint or well_constraint
             data = item.data(0, Qt.UserRole)
-            if data and data.get("type") == "constraint":
-                surface_idx = data["surface_idx"]
-                seg_uid = data["seg_uid"]
-                if (surface_idx, seg_uid) in self._refine_segment_map:
-                    self._refine_segment_map[(surface_idx, seg_uid)]["selected"] = (item.checkState(0) == Qt.Checked)
+            if data:
+                item_type = data.get("type")
+                if item_type == "constraint":
+                    surface_idx = data["surface_idx"]
+                    seg_uid = data["seg_uid"]
+                    if (surface_idx, seg_uid) in self._refine_segment_map:
+                        self._refine_segment_map[(surface_idx, seg_uid)]["selected"] = (item.checkState(0) == Qt.Checked)
+                elif item_type == "well_constraint":
+                    w_idx = data.get("well_idx")
+                    seg_uid = data.get("seg_uid")
+                    if w_idx is not None and (-w_idx - 1, seg_uid) in self._refine_segment_map:
+                        self._refine_segment_map[(-w_idx - 1, seg_uid)]["selected"] = (item.checkState(0) == Qt.Checked)
 
             # -------- propagate upwards (any unchecked → parent unchecked) ----
             def update_parent_state(child):
@@ -16382,90 +16738,89 @@ segmentation, triangulation, and visualization.
     def _add_wells_to_tetra_visualization(self):
         """
         Add wells to the tetrahedral mesh visualization (C++ MeshIt style).
-        Wells are shown as 1D edge materials based on the material dropdown selection.
+        Only selected segments from the constraint tree are drawn, matching the
+        data actually passed to TetGen.
         """
         if not hasattr(self, 'tetra_plotter') or not self.tetra_plotter:
             return
-        
+
         try:
             import pyvista as pv
-            import numpy as np
-            
-            # Check what's selected in the material dropdown
+
             material_name = ""
             if hasattr(self, 'tetra_material_combo') and self.tetra_material_combo:
                 material_name = self.tetra_material_combo.currentText()
-            
-            # Determine which wells to show
+
             show_all = material_name == "All Materials" or not material_name
             selected_well_idx = None
-            
+
             if not show_all and "Well ID" in material_name:
-                # Extract well ID from dropdown (format: "🔵 WellName (Well ID X)")
                 import re
                 match = re.search(r'Well ID (\d+)', material_name)
                 if match:
                     selected_well_marker = int(match.group(1))
-                    # Convert marker back to dataset index (marker = idx + 2)
                     selected_well_idx = selected_well_marker - 2
-            
-            # Get selected wells for export
-            selected_wells = self._get_selected_well_indices() if hasattr(self, '_get_selected_well_indices') else set()
-            
-            # Color palette for different wells
+
+            sel_wd = self._get_selected_well_viz_data()
+            if not sel_wd:
+                return
+
             well_colors = ['magenta', 'cyan', 'orange', 'lime', 'pink', 'yellow']
-            
             wells_drawn = 0
-            for i, well_idx in enumerate(sorted(selected_wells)):
-                # If specific well selected, only show that one
-                if selected_well_idx is not None and well_idx != selected_well_idx:
+
+            for color_i, (w_idx, info) in enumerate(sorted(sel_wd.items())):
+                if selected_well_idx is not None and w_idx != selected_well_idx:
                     continue
-                
-                if well_idx >= len(self.datasets):
+
+                edges = info.get('edges', [])
+                if not edges:
                     continue
-                    
-                ds = self.datasets[well_idx]
-                if ds.get('type') != 'WELL':
+
+                def _coord(pt):
+                    if hasattr(pt, 'x'):
+                        return [float(pt.x), float(pt.y), float(pt.z)]
+                    return [float(pt[0]), float(pt[1]), float(pt[2])]
+
+                pts_coords = []
+                pts_key_map = {}
+                lines_list = []
+                for edge in edges:
+                    idxs = []
+                    for ep in edge:
+                        c = _coord(ep)
+                        k = (round(c[0], 7), round(c[1], 7), round(c[2], 7))
+                        if k not in pts_key_map:
+                            pts_key_map[k] = len(pts_coords)
+                            pts_coords.append(c)
+                        idxs.append(pts_key_map[k])
+                    if len(idxs) == 2 and idxs[0] != idxs[1]:
+                        lines_list.append([2, idxs[0], idxs[1]])
+
+                if not pts_coords or not lines_list:
                     continue
-                
-                # Get refined or original points
-                pts = ds.get('refined_well_points') or ds.get('points')
-                if pts is None or len(pts) < 2:
-                    continue
-                
-                # Extract coordinates
-                coords = []
-                for p in pts:
-                    if hasattr(p, 'x'):
-                        coords.append([p.x, p.y, p.z])
-                    elif len(p) >= 3:
-                        coords.append([float(p[0]), float(p[1]), float(p[2])])
-                
-                if len(coords) < 2:
-                    continue
-                
-                pts_arr = np.array(coords)
-                n = len(pts_arr)
-                lines = np.hstack(([n], np.arange(n, dtype=np.int32))).astype(np.int32)
-                poly = pv.PolyData(pts_arr, lines=lines)
-                
-                well_name = ds.get('name', f'Well_{well_idx}')
-                color = well_colors[i % len(well_colors)]
-                
+
+                pts_arr = np.array(pts_coords, dtype=np.float64)
+                lines_arr = np.hstack(lines_list).astype(np.int32)
+                poly = pv.PolyData(pts_arr, lines=lines_arr)
+
+                well_name = info.get('name', f'Well_{w_idx}')
+                color = well_colors[color_i % len(well_colors)]
+
                 self.tetra_plotter.add_mesh(
                     poly,
                     color=color,
                     line_width=6,
                     render_lines_as_tubes=True,
-                    name=f"well_{well_idx}_{well_name}"
+                    name=f"well_{w_idx}_{well_name}"
                 )
                 wells_drawn += 1
-            
+
             if wells_drawn > 0:
                 logger.debug(f"Added {wells_drawn} wells to tetra visualization")
-                
+
         except Exception as e:
             logger.warning(f"Failed to add wells to tetra visualization: {e}")
+
 
 
     def _update_constraint_actor_visual(self, surf_idx: int, con_idx: int,
@@ -16691,51 +17046,82 @@ segmentation, triangulation, and visualization.
         """
         Collect selected well data for TetGen edge constraints (C++ MeshIt style).
         
-        In C++ MeshIt (geometry.cpp calculate_tets):
-        - Wells (polylines) are added to TetGen as edge constraints via edgelist
-        - Edge markers are stored in edgemarkerlist (marker = polyline_idx + 2)
-        - Wells are exported as 1D elements (VTK_LINE type 3 in VTU, T3D2 in ABAQUS)
+        Respects constraint tree selections from the Refine & Mesh tab:
+        only well segments that are checked in the tree are included.
+        Falls back to the tetra tab's material1d_list selection if no
+        constraint tree is available.
         
         Returns:
-            dict: {well_idx: {'points': [], 'marker': int, 'name': str}, ...}
+            dict: {well_idx: {'points': [], 'edges': [], 'marker': int, 'name': str}, ...}
         """
         well_data = {}
-        
-        # Get selected wells from the material1d_list checkboxes
+        seg_map = getattr(self, "_refine_segment_map", None)
+
+        if seg_map:
+            # Collect from constraint tree selections
+            for (key_idx, seg_uid), seg_info in seg_map.items():
+                if str(seg_info.get("type", "")).upper() != "WELL":
+                    continue
+                if not seg_info.get("selected", True):
+                    continue
+                w_idx = seg_info.get("well_idx")
+                if w_idx is None:
+                    continue
+
+                seg_pts = seg_info.get("points", [])
+                if not seg_pts or len(seg_pts) < 2:
+                    continue
+
+                if w_idx not in well_data:
+                    ds = self.datasets[w_idx] if w_idx < len(self.datasets) else {}
+                    well_data[w_idx] = {
+                        'points': [],
+                        'edges': [],
+                        'marker': w_idx + 2,
+                        'name': ds.get('name', f'Well_{w_idx}'),
+                    }
+
+                existing_pts = well_data[w_idx]['points']
+                existing_edges = well_data[w_idx]['edges']
+                for p in seg_pts:
+                    existing_pts.append(p)
+                for j in range(len(seg_pts) - 1):
+                    existing_edges.append((seg_pts[j], seg_pts[j + 1]))
+
+            if well_data:
+                for w_idx, wd in well_data.items():
+                    logger.info(f"  Well '{wd['name']}': {len(wd['points'])} pts, "
+                                f"{len(wd['edges'])} edges (constraint-tree), marker={wd['marker']}")
+                logger.info(f"Collected {len(well_data)} wells from constraint tree for TetGen")
+                return well_data
+
+        # Fallback: use tetra-tab material list
         selected_wells = self._get_selected_well_indices()
-        
         if not selected_wells:
             logger.info("No wells selected for TetGen edge constraints")
             return well_data
-        
-        logger.info(f"Collecting {len(selected_wells)} wells for TetGen edge constraints...")
-        
+
+        logger.info(f"Collecting {len(selected_wells)} wells for TetGen edge constraints (fallback)...")
         for well_idx in sorted(selected_wells):
             if well_idx >= len(self.datasets):
                 continue
-                
             ds = self.datasets[well_idx]
             if ds.get('type') != 'WELL':
                 continue
-            
-            # Use refined points if available, otherwise original points
+
             well_pts = ds.get('refined_well_points') or ds.get('points')
             if well_pts is None or len(well_pts) < 2:
                 continue
-            
-            well_name = ds.get('name', f'Well_{well_idx}')
-            # C++ style marker: polyline_idx + 2 (0,1 are reserved)
-            well_marker = well_idx + 2
-            
+
             well_data[well_idx] = {
-                'points': well_pts,
-                'marker': well_marker,
-                'name': well_name
+                'points': list(well_pts),
+                'edges': [],
+                'marker': well_idx + 2,
+                'name': ds.get('name', f'Well_{well_idx}'),
             }
-            
-            logger.info(f"  Well '{well_name}': {len(well_pts)} points, marker={well_marker}")
-        
-        logger.info(f"✓ Collected {len(well_data)} wells for TetGen export")
+            logger.info(f"  Well '{ds.get('name', well_idx)}': {len(well_pts)} points, marker={well_idx + 2}")
+
+        logger.info(f"Collected {len(well_data)} wells for TetGen export")
         return well_data
     
     
@@ -16797,7 +17183,7 @@ segmentation, triangulation, and visualization.
             
         try:
             import pyvista as pv
-            import numpy as np
+
             
             self.tetra_plotter.clear()
             
@@ -16816,6 +17202,9 @@ segmentation, triangulation, and visualization.
             
             # Enhanced visualization like C++ version
             self._add_tetrahedral_mesh_visualization(mesh)
+            
+            # Add wells (only selected segments from constraint tree)
+            self._add_wells_to_tetra_visualization()
             
             # Update material dropdown with available materials
             self._update_material_dropdown()
@@ -22940,6 +23329,7 @@ segmentation, triangulation, and visualization.
             return
 
         tree: QTreeWidget = self.refine_constraint_tree
+        state_snapshot = self._capture_refine_constraint_state_snapshot()
         tree.clear()
         tree.blockSignals(True)
 
@@ -23096,14 +23486,17 @@ segmentation, triangulation, and visualization.
             return segments
 
         for s_idx, ds in enumerate(self.datasets):
-            if ds.get("type") == "polyline":
+            ds_type_upper = str(ds.get("type", "")).upper()
+            if ds_type_upper in ("POLYLINE", "WELL"):
                 continue
 
             surf_item = QTreeWidgetItem(tree)
             surf_item.setText(0, ds.get("name", f"Surface {s_idx}"))
             surf_item.setFlags(surf_item.flags() | Qt.ItemIsUserCheckable)
-            surf_item.setCheckState(0, Qt.Checked)
+            surf_state = state_snapshot.get("surface", {}).get(s_idx, Qt.Checked)
+            surf_item.setCheckState(0, surf_state)
             surf_item.setData(0, Qt.UserRole, {"type": "surface", "surface_idx": s_idx})
+            surface_target_size = float(self._get_mesh_target_size_for_surface(s_idx))
 
             # ----------------------- hull ---------------------------------------
             hull = ds.get("hull_points", [])
@@ -23118,9 +23511,10 @@ segmentation, triangulation, and visualization.
                 hull_item = QTreeWidgetItem(surf_item)
                 hull_item.setText(0, "Hull segments")
                 hull_item.setFlags(hull_item.flags() | Qt.ItemIsUserCheckable)
-                hull_item.setCheckState(0, Qt.Checked)
+                hull_group_state = state_snapshot.get("hull_group", {}).get(s_idx, {})
+                hull_item.setCheckState(0, hull_group_state.get("selected", Qt.Checked))
                 # Add hole checkbox for hull group
-                hull_item.setCheckState(4, Qt.Unchecked)
+                hull_item.setCheckState(4, hull_group_state.get("hole", Qt.Unchecked))
                 hull_item.setData(0, Qt.UserRole, {"type": "hull_group", "surface_idx": s_idx})
 
                 # Segment hull by special points (CORNER and COMMON_INTERSECTION_CONVEXHULL_POINT)
@@ -23143,10 +23537,13 @@ segmentation, triangulation, and visualization.
                     seg_item.setText(0, f"Seg {k} ({short_type(start_type)}→{short_type(end_type)})")
                     seg_item.setText(1, "HULL")  # Set type column
                     seg_item.setFlags(seg_item.flags() | Qt.ItemIsUserCheckable)
-                    seg_item.setCheckState(0, Qt.Checked)
+                    hull_seg_state = state_snapshot.get("hull_segments", {}).get(s_idx, [])
+                    seg_selected = hull_seg_state[k]["selected"] if k < len(hull_seg_state) else Qt.Checked
+                    seg_hole = hull_seg_state[k]["hole"] if k < len(hull_seg_state) else Qt.Unchecked
+                    seg_item.setCheckState(0, seg_selected)
                     # Add hole checkbox in column 4
                     seg_item.setFlags(seg_item.flags() | Qt.ItemIsUserCheckable)
-                    seg_item.setCheckState(4, Qt.Unchecked)  # Default: not a hole
+                    seg_item.setCheckState(4, seg_hole)
                     seg_item.setData(0, Qt.UserRole, {
                         "type": "constraint",
                         "surface_idx": s_idx,
@@ -23156,8 +23553,10 @@ segmentation, triangulation, and visualization.
                         "points": seg_pts,  # Store all points in the segment, not just pairs
                         "type": "HULL",     # normalized
                         "ctype": "HULL",    # keep for compatibility
-                        "is_hole": False,
-                        "selected": True,
+                        "is_hole": (seg_hole == Qt.Checked),
+                        "selected": (seg_selected == Qt.Checked),
+                        "target_size": surface_target_size,
+                        "is_well_intersection": False,
                     }
                     seg_uid += 1
 
@@ -23165,31 +23564,85 @@ segmentation, triangulation, and visualization.
             inters = getattr(self, "refined_intersections_for_visualization", {}).get(s_idx, [])
             for line_id, inter_d in enumerate(inters):
                 raw_pts = inter_d.get("points", [])
-                if len(raw_pts) < 2:
+                if len(raw_pts) < 1:
                     continue
 
-                # DIRECTLY use raw_pts; no deduplication
-                seg_lists = segment_by_triples(raw_pts)
+                is_well_intersection = bool(inter_d.get("is_polyline_mesh", False))
+                if is_well_intersection:
+                    # C++ behavior: polyline-surface intersections are point constraints,
+                    # not connected line segments on the surface.
+                    unique_points = []
+                    seen_keys = set()
+                    for p in raw_pts:
+                        try:
+                            if hasattr(p, "x") and hasattr(p, "y") and hasattr(p, "z"):
+                                key = (round(float(p.x), 9), round(float(p.y), 9), round(float(p.z), 9))
+                            else:
+                                key = (round(float(p[0]), 9), round(float(p[1]), 9), round(float(p[2]), 9))
+                        except Exception:
+                            continue
+                        if key in seen_keys:
+                            continue
+                        seen_keys.add(key)
+                        unique_points.append(p)
+                    seg_lists = [[p] for p in unique_points]
+                else:
+                    if len(raw_pts) == 1:
+                        seg_lists = [raw_pts]
+                    else:
+                        seg_lists = segment_by_triples(raw_pts)
                 if not seg_lists:
                     continue
+
+                inter_target_size = float(self._get_constraint_target_size_for_intersection(s_idx, inter_d))
+                well_dataset_idx = None
+                well_target_size = inter_target_size
+                if is_well_intersection:
+                    for maybe_idx in (inter_d.get("dataset_id1"), inter_d.get("dataset_id2")):
+                        try:
+                            ds_idx = int(maybe_idx)
+                        except Exception:
+                            continue
+                        if ds_idx < 0 or ds_idx >= len(self.datasets):
+                            continue
+                        ds_type = str(self.datasets[ds_idx].get("type", "")).upper()
+                        if ds_type in ("WELL", "POLYLINE"):
+                            well_dataset_idx = ds_idx
+                            break
+                    if well_dataset_idx is not None:
+                        try:
+                            # Match C++ local-size logic (constraint size is the smaller one).
+                            well_target_size = min(
+                                inter_target_size,
+                                float(self._get_well_refine_length(well_dataset_idx)),
+                            )
+                        except Exception:
+                            well_target_size = inter_target_size
 
                 line_item = QTreeWidgetItem(surf_item)
                 line_item.setText(0, f"Intersection {line_id}")
                 line_item.setFlags(line_item.flags() | Qt.ItemIsUserCheckable)
-                line_item.setCheckState(0, Qt.Checked)
+                line_group_state = state_snapshot.get("intersection_groups", {}).get((s_idx, line_id), {})
+                line_item.setCheckState(0, line_group_state.get("selected", Qt.Checked))
                 # Add hole checkbox for intersection group
-                line_item.setCheckState(4, Qt.Unchecked)
+                line_item.setCheckState(4, line_group_state.get("hole", Qt.Unchecked))
                 line_item.setData(0, Qt.UserRole, {"type": "intersection_group", "surface_idx": s_idx})
 
                 for k, seg_pts in enumerate(seg_lists):
                     seg_item = QTreeWidgetItem(line_item)
-                    seg_item.setText(0, f"Seg {k}")
+                    if len(seg_pts) == 1:
+                        seg_item.setText(0, f"Point {k}")
+                    else:
+                        seg_item.setText(0, f"Seg {k}")
                     seg_item.setText(1, "INTERSECTION")  # Set type column
                     seg_item.setFlags(seg_item.flags() | Qt.ItemIsUserCheckable)
-                    seg_item.setCheckState(0, Qt.Checked)
+                    inter_seg_state = state_snapshot.get("intersection_segments", {}).get((s_idx, line_id), [])
+                    seg_selected = inter_seg_state[k]["selected"] if k < len(inter_seg_state) else Qt.Checked
+                    seg_hole = inter_seg_state[k]["hole"] if k < len(inter_seg_state) else Qt.Unchecked
+                    seg_item.setCheckState(0, seg_selected)
                     # Add hole checkbox in column 4
                     seg_item.setFlags(seg_item.flags() | Qt.ItemIsUserCheckable)
-                    seg_item.setCheckState(4, Qt.Unchecked)  # Default: not a hole
+                    seg_item.setCheckState(4, seg_hole)
                     seg_item.setData(0, Qt.UserRole, {
                         "type": "constraint",
                         "surface_idx": s_idx,
@@ -23200,26 +23653,75 @@ segmentation, triangulation, and visualization.
                         "points": seg_pts,           # full block (not pairwise)
                         "type": "INTERSECTION",      # normalized
                         "ctype": "INT",              # keep for compatibility
-                        "is_hole": False,
-                        "selected": True,
+                        "is_hole": (seg_hole == Qt.Checked),
+                        "selected": (seg_selected == Qt.Checked),
                         "line_id": line_id,
+                        "target_size": inter_target_size,
+                        "is_well_intersection": is_well_intersection,
+                        "well_dataset_idx": well_dataset_idx,
+                        "well_target_size": well_target_size,
                     }
                     seg_uid += 1
 
         # ======================== WELLS (1D Polylines) ========================
-        # Add wells as separate top-level items in the constraint tree
-        # Wells are 1D elements that are NOT triangulated but ARE passed to TetGen as edge constraints
+        # Wells are 1D edge constraints for TetGen, segmented at special points
+        # (INTERSECTION_POINT where well cuts a surface, TRIPLE_POINT, etc.)
+        # This mirrors how surfaces segment hulls at CORNER points and
+        # intersection lines at TRIPLE_POINTs.
+
+        WELL_SPLIT_TYPES = {
+            "INTERSECTION_POINT", "TRIPLE_POINT",
+        }
+
+        def is_well_split_point(p):
+            """Return True for any point type that marks a constraint boundary on a well."""
+            return get_type(p) in WELL_SPLIT_TYPES
+
+        def segment_well_by_special_points(pts):
+            """
+            Split a well polyline at every special point (INTERSECTION_POINT,
+            TRIPLE_POINT) and at the endpoints, producing one segment between
+            each consecutive pair of split indices.  Open polylines only (wells
+            are never closed loops).
+            """
+            if len(pts) < 2:
+                return []
+
+            n = len(pts)
+            specials = sorted({i for i, p in enumerate(pts) if is_well_split_point(p)})
+
+            # Build split indices: always include endpoints
+            splits = sorted({0, n - 1} | set(specials))
+
+            segments = []
+            for a, b in zip(splits[:-1], splits[1:]):
+                if b - a >= 1:
+                    seg = pts[a:b + 1]
+                    if len(seg) >= 2:
+                        segments.append(seg)
+            return segments
+
+        def short_well_type(t):
+            mapping = {
+                "INTERSECTION_POINT": "INT-PT",
+                "TRIPLE_POINT": "TRIPLE",
+                "WELL_START": "START",
+                "WELL_END": "END",
+                "START_POINT": "START",
+                "END_POINT": "END",
+                "DEFAULT": "DEF",
+            }
+            return mapping.get(t, t[:6] if len(t) > 6 else t)
+
         well_count = 0
         for w_idx, ds in enumerate(self.datasets):
             if ds.get("type") != "WELL":
                 continue
-            
+
             well_count += 1
             well_name = ds.get("name", f"Well_{w_idx}")
-            
-            # Use refined points if available, otherwise original points
+
             well_pts = ds.get("refined_well_points") or ds.get("points")
-            # Handle numpy arrays properly - avoid truth value ambiguity
             if well_pts is None:
                 continue
             try:
@@ -23228,80 +23730,77 @@ segmentation, triangulation, and visualization.
                 continue
             if pts_len < 2:
                 continue
-            
-            # Create well item
-            well_item = QTreeWidgetItem(tree)
-            well_item.setText(0, f"🔵 {well_name}")
-            well_item.setText(1, "WELL")
-            well_item.setText(2, str(len(well_pts) - 1))  # Number of segments
-            well_item.setFlags(well_item.flags() | Qt.ItemIsUserCheckable)
-            well_item.setCheckState(0, Qt.Checked)
-            well_item.setData(0, Qt.UserRole, {"type": "well", "well_idx": w_idx, "dataset_idx": w_idx})
-            
-            # Convert points to Vector3D for consistency
+
+            # Convert to Vector3D for consistency
             well_vector3d_pts = []
             for p in well_pts:
-                if hasattr(p, 'x'):  # Already Vector3D-like
+                if hasattr(p, 'x'):
                     well_vector3d_pts.append(p)
                 else:
                     pt_type = p[3] if len(p) > 3 else "DEFAULT"
                     if hasattr(pt_type, 'item'):
                         pt_type = pt_type.item()
-                    well_vector3d_pts.append(Vector3D(float(p[0]), float(p[1]), float(p[2]), 
-                                                       point_type=str(pt_type) if pt_type else "DEFAULT"))
-            
-            # Segment wells by intersection points (similar to surfaces)
-            well_seg_lists = segment_by_triples(well_vector3d_pts)
-            
+                    well_vector3d_pts.append(
+                        Vector3D(float(p[0]), float(p[1]), float(p[2]),
+                                 point_type=str(pt_type) if pt_type else "DEFAULT"))
+
+            # Segment at every INTERSECTION_POINT / TRIPLE_POINT
+            well_seg_lists = segment_well_by_special_points(well_vector3d_pts)
             if not well_seg_lists:
-                # If no triple points, treat entire well as one segment
                 well_seg_lists = [well_vector3d_pts]
-            
+
+            # Count special points for summary
+            n_special = sum(1 for p in well_vector3d_pts if is_well_split_point(p))
+
+            well_item = QTreeWidgetItem(tree)
+            well_item.setText(0, f"{well_name}")
+            well_item.setText(1, "WELL")
+            well_item.setText(2, f"{len(well_seg_lists)} seg / {n_special} split pts")
+            well_item.setFlags(well_item.flags() | Qt.ItemIsUserCheckable)
+            well_state = state_snapshot.get("well", {}).get(w_idx, Qt.Checked)
+            well_item.setCheckState(0, well_state)
+            well_item.setData(0, Qt.UserRole, {"type": "well", "well_idx": w_idx, "dataset_idx": w_idx})
+
+            logger.info(f"Well '{well_name}': {pts_len} pts, {n_special} split points → "
+                         f"{len(well_seg_lists)} segments")
+
             for k, seg_pts in enumerate(well_seg_lists):
-                seg_item = QTreeWidgetItem(well_item)
                 start_type = get_type(seg_pts[0]) if seg_pts else "DEFAULT"
                 end_type = get_type(seg_pts[-1]) if seg_pts else "DEFAULT"
-                
-                def short_well_type(t):
-                    if t == "INTERSECTION_POINT":
-                        return "INT"
-                    elif t in ("WELL_START", "WELL_END"):
-                        return t.replace("WELL_", "")
-                    elif t == "TRIPLE_POINT":
-                        return "TRIPLE"
-                    else:
-                        return t[:6] if len(t) > 6 else t
-                
+
+                seg_item = QTreeWidgetItem(well_item)
                 seg_item.setText(0, f"Seg {k} ({short_well_type(start_type)}→{short_well_type(end_type)})")
                 seg_item.setText(1, "WELL")
-                seg_item.setText(2, str(len(seg_pts) - 1))  # Edges in segment
+                seg_item.setText(2, str(len(seg_pts) - 1))
                 seg_item.setFlags(seg_item.flags() | Qt.ItemIsUserCheckable)
-                seg_item.setCheckState(0, Qt.Checked)
+                well_seg_state = state_snapshot.get("well_segments", {}).get(w_idx, [])
+                seg_selected = well_seg_state[k] if k < len(well_seg_state) else Qt.Checked
+                seg_item.setCheckState(0, seg_selected)
                 seg_item.setData(0, Qt.UserRole, {
                     "type": "well_constraint",
                     "well_idx": w_idx,
                     "dataset_idx": w_idx,
-                    "seg_uid": seg_uid
+                    "seg_uid": seg_uid,
                 })
-                
-                # Store in segment map with special well key
-                # Use negative index to distinguish from surface segments
+
                 self._refine_segment_map[(-w_idx - 1, seg_uid)] = {
                     "points": seg_pts,
                     "type": "WELL",
                     "ctype": "WELL",
                     "is_hole": False,
-                    "selected": True,
+                    "selected": (seg_selected == Qt.Checked),
                     "well_idx": w_idx,
                 }
                 seg_uid += 1
-        
+
         if well_count > 0:
             logger.info(f"Added {well_count} wells to constraint tree")
 
+        self._sync_refine_tree_parent_states_from_children()
         tree.expandAll()
         tree.blockSignals(False)
         logger.info("Segment-level constraint tree populated (intersection segments between TRIPLE_POINTs and endpoints, wells included).")
+
     def _collect_selected_refine_segments(self, surface_idx: int) -> List[List]:
         """Return list of point-pairs [p1, p2] for all checked segments."""
         if not hasattr(self, "refine_constraint_tree"):
@@ -23833,7 +24332,34 @@ segmentation, triangulation, and visualization.
             logger.info("Tab 6: Selected hull constraints only")
         finally:
             self._refine_updating_constraint_tree = False
-    
+    def _refine_select_well_constraints_only(self):
+        """Select only well constraints in Tab 6, deselect hull and intersection constraints."""
+        if not hasattr(self, 'refine_constraint_tree'):
+            return
+
+        self._refine_updating_constraint_tree = True
+        try:
+            root = self.refine_constraint_tree.invisibleRootItem()
+            for i in range(root.childCount()):
+                top_item = root.child(i)
+                top_data = top_item.data(0, Qt.UserRole) or {}
+                top_type = top_data.get("type")
+
+                if top_type == "well":
+                    top_item.setCheckState(0, Qt.Checked)
+                    for j in range(top_item.childCount()):
+                        top_item.child(j).setCheckState(0, Qt.Checked)
+                elif top_type == "surface":
+                    top_item.setCheckState(0, Qt.Unchecked)
+                    for j in range(top_item.childCount()):
+                        group = top_item.child(j)
+                        group.setCheckState(0, Qt.Unchecked)
+                        for k in range(group.childCount()):
+                            group.child(k).setCheckState(0, Qt.Unchecked)
+
+            logger.info("Tab 6: Selected well constraints only")
+        finally:
+            self._refine_updating_constraint_tree = False
     def _sync_intersection_selection_across_surfaces(self, changed_item):
         """
         Synchronize intersection line selections across surfaces.

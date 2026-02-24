@@ -2542,6 +2542,7 @@ def refine_intersection_line_by_length(intersection,
     intersection.points = refined
     return refined
 
+
 def refine_well_by_length(points: List, target_length: float, 
                           intersection_points: List = None,
                           trim_to_intersections: bool = False) -> List[Vector3D]:
@@ -2970,6 +2971,21 @@ def run_constrained_triangulation_py(
     target_sz = float(config.get('target_size', 20.0))
     interp    = str(config.get('interp', 'Thin Plate Spline (TPS)'))
     smoothing = float(config.get('smoothing', 0.0))
+    # Accept both current and legacy keys for triunsuitable feature inputs.
+    raw_feature_points = config.get(
+        "triunsuitable_feature_points_2d",
+        config.get("constraint_feature_points_2d", np.empty((0, 2))),
+    )
+    raw_feature_sizes = config.get(
+        "triunsuitable_feature_sizes",
+        config.get("constraint_feature_sizes", np.empty((0,))),
+    )
+    feature_points_2d = np.asarray(raw_feature_points, dtype=float)
+    feature_sizes = np.asarray(raw_feature_sizes, dtype=float).reshape(-1)
+    if bool(config.get("enable_well_gradient_refinement", False)) and feature_points_2d.size == 0:
+        logger.warning(
+            "Well gradient refinement enabled but no triunsuitable feature points were provided"
+        )
 
     # clamp target size
     bb_min = np.min(plc_points_2d, axis=0); bb_max = np.max(plc_points_2d, axis=0)
@@ -2978,6 +2994,65 @@ def run_constrained_triangulation_py(
 
     tri = DirectTriangleWrapper(gradient=gradient, min_angle=min_angle, base_size=target_sz)
     tri.set_cpp_compatible_mode(True)
+    triunsuitable_max_iterations = int(config.get("triunsuitable_max_iterations", 4))
+    triunsuitable_max_new_points = int(
+        config.get(
+            "triunsuitable_max_new_points",
+            max(300, min(1200, int(max(len(plc_points_2d), 1) * 0.35))),
+        )
+    )
+    triunsuitable_max_feature_points = int(config.get("triunsuitable_max_feature_points", 300))
+    triunsuitable_min_local_size_ratio = float(config.get("triunsuitable_min_local_size_ratio", 0.05))
+    tri.triunsuitable_max_iterations = max(1, triunsuitable_max_iterations)
+    tri.triunsuitable_max_new_points = max(50, triunsuitable_max_new_points)
+
+    # Optional C++ triunsuitable bridge inputs (well/fracture feature points).
+    if feature_points_2d.size > 0:
+        if feature_points_2d.ndim == 1:
+            feature_points_2d = feature_points_2d.reshape(1, -1)
+        if feature_points_2d.ndim == 2 and feature_points_2d.shape[1] == 2:
+            if feature_sizes.size == 0:
+                feature_sizes = np.full((feature_points_2d.shape[0],), target_sz * 0.5, dtype=float)
+            elif feature_sizes.size == 1 and feature_points_2d.shape[0] > 1:
+                feature_sizes = np.full((feature_points_2d.shape[0],), float(feature_sizes[0]), dtype=float)
+            elif feature_sizes.size != feature_points_2d.shape[0]:
+                n = min(feature_points_2d.shape[0], feature_sizes.shape[0])
+                feature_points_2d = feature_points_2d[:n]
+                feature_sizes = feature_sizes[:n]
+
+            # Keep local grading numerically safe while allowing very small
+            # well-local sizes when requested (C++-like behavior).
+            min_local_size = max(1e-12, target_sz * max(0.0, triunsuitable_min_local_size_ratio))
+            feature_sizes = np.clip(feature_sizes, min_local_size, target_sz)
+
+            if feature_points_2d.shape[0] > triunsuitable_max_feature_points:
+                keep = np.argsort(feature_sizes)[:triunsuitable_max_feature_points]
+                feature_points_2d = feature_points_2d[keep]
+                feature_sizes = feature_sizes[keep]
+                logger.info(
+                    "Constrained triangulation: capped triunsuitable feature points to %d",
+                    triunsuitable_max_feature_points,
+                )
+
+            if feature_points_2d.shape[0] > 0:
+                tri.set_feature_points(feature_points_2d, feature_sizes)
+                tri.triunsuitable_min_point_spacing = max(
+                    1e-10,
+                    min(float(np.min(feature_sizes)), float(target_sz)) * 0.25,
+                )
+                logger.info(
+                    "Constrained triangulation: enabled C++ triunsuitable bridge with %d feature point(s), "
+                    "max_iterations=%d, max_new_points=%d",
+                    feature_points_2d.shape[0],
+                    tri.triunsuitable_max_iterations,
+                    tri.triunsuitable_max_new_points,
+                )
+        else:
+            logger.warning(
+                "Ignoring triunsuitable feature points with invalid shape %s (expected Nx2)",
+                feature_points_2d.shape,
+            )
+
     tri_res = tri.triangulate(points=plc_points_2d, segments=plc_segments_indices, holes=plc_holes_2d,
                               uniform=True, create_transition=False, create_feature_points=False)
     if tri_res is None or 'vertices' not in tri_res or 'triangles' not in tri_res:
