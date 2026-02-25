@@ -1316,7 +1316,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             "PZero project file saved in folder with the same name, including VTK files and CSV tables.\n"
         )
         fout.write("Last saved revision:\n")
-        fout.write("rev_" + now)
+        fout.write(f"rev_{now}\n")
+        fout.write("CRS EPSG:\n")
+        test_epsg = 'test_epsg'
+        fout.write(f"{test_epsg}\n")
         fout.close()
 
         # --------------------- SAVE LEGENDS ---------------------
@@ -1632,11 +1635,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             # To open a different one, edit the project file.
             # ___________________________________ IN THE FUTURE an option to open a specific revision could be added
             fin = open(in_file_name, "rt")
-            rev_name = fin.readlines()[2].strip()
+            lines = fin.readlines()
+            rev_name = lines[2].strip()
+            try:
+                test_epsg = lines[4].strip()
+            except:
+                test_epsg = 'no_epsg'
             fin.close()
             in_dir_name = in_file_name[:-3] + "_p0/" + rev_name
             self.print_terminal(
                 f"Opening project/revision : {in_file_name}/{rev_name}\n"
+            )
+            self.print_terminal(
+                f"Project CRS : {test_epsg}\n"
             )
             if not os_path.isdir(in_dir_name):
                 self.print_terminal(in_dir_name)
