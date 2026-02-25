@@ -6,6 +6,8 @@ name: CICD
 # Runs on push on the main branch, that actually occurs only after a pull request is accepted or a push to the main branch is made directly.
 on:
   push:
+    tags-ignore:
+      - '**'
 
 jobs:
   test:
@@ -35,6 +37,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     outputs:
       version: ${{ steps.semantic.outputs.version }}
+      released: ${{ steps.semantic.outputs.released }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,6 +51,7 @@ jobs:
           github_token: ${{ secrets.TOKEN }}
 
   deploy:
+    if: needs.release.outputs.released == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
