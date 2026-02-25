@@ -6,8 +6,8 @@ name: CICD
 # Runs on push on the main branch, that actually occurs only after a pull request is accepted or a push to the main branch is made directly.
 on:
   push:
-    tags-ignore:
-      - '**'
+#    tags-ignore:
+#      - '**'
 
 jobs:
   test:
