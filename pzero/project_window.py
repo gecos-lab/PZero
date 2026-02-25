@@ -14,9 +14,9 @@ from numpy import sin as np_sin
 
 from PySide6.QtCore import Signal as pyqtSignal
 from PySide6.QtCore import QObject, QUrl
-from PySide6.QtWidgets import QMainWindow, QMessageBox, QDialog, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QDialog, QLabel, QVBoxLayout, QComboBox
 from PySide6.QtGui import QAction, QDesktopServices, QPixmap
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv
