@@ -79,6 +79,7 @@ def draw_line(self):
     # Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits
     if line_dict_updt is None:
         # self.enable_actions()
+        freeze_gui_off(self)
         return
     # Getting the values that have been typed by the user through the widget
     for key in line_dict_updt:
