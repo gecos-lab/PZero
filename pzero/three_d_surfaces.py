@@ -2032,6 +2032,9 @@ def project_2_xs(self):
     if self.shown_table != "tabGeology":
         self.print_terminal(" -- Only geological objects can be projected -- ")
         return
+    self.print_terminal(
+        "Projection to X-sections: when multiple sections are selected, the first is used as reference; non-parallel sections are discarded (tollerance: ±1°)."
+    )
     if not self.selected_uids:
         self.print_terminal("No input data selected.")
         return
@@ -2103,6 +2106,8 @@ def project_2_xs(self):
     if not parallel_sections:
         self.print_terminal("No parallel XSections found.")
         return
+
+    discarded_sections = len(selected_sections) - len(parallel_sections)
 
     # Parameters dialog without section selector.
     default_proj_trend = round((ref_strike + 90.0) % 360.0, 2)
@@ -2266,6 +2271,9 @@ def project_2_xs(self):
                         self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
                     else:
                         self.print_terminal(" -- empty object -- ")
+    self.print_terminal(
+        f"{discarded_sections} out of {len(selected_sections)} discarded for not being parallel to the reference x-section."
+    )
 
 
 @freeze_gui_onoff
