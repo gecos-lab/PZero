@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QDockWidget
 from pyvista import PolyData as pv_PolyData
 
 from numpy import abs as np_abs
+from numpy import array as np_array
 from numpy import around as np_around
 from numpy import cbrt as np_cbrt
 from numpy import cos as np_cos
@@ -54,6 +55,7 @@ from vtk import (
     vtkDataObject,
     vtkPolyDataConnectivityFilter,
     vtkClipPolyData,
+    vtkIdList,
 )
 from vtkmodules.util import numpy_support
 from vtkmodules.vtkCommonDataModel import vtkBoundingBox
@@ -2057,6 +2059,57 @@ def project_2_xs(self):
         print("No valid input data selected.")
         return
 
+    def _clip_polyline_to_distance_band(polyline_obj, max_dist):
+        """Clip a polyline to the band |signed_distance| <= max_dist using nodal property."""
+        clipped = PolyLine()
+        if polyline_obj.GetNumberOfPoints() <= 0 or polyline_obj.GetNumberOfLines() <= 0:
+            return clipped
+        if "signed_distance" not in polyline_obj.point_data_keys:
+            return clipped
+        points = polyline_obj.points.astype(np_float64)
+        signed_vals = polyline_obj.get_point_data("signed_distance").astype(np_float64)
+        lines = polyline_obj.GetLines()
+        id_list = vtkIdList()
+        eps = 1e-12
+        lines.InitTraversal()
+        while lines.GetNextCell(id_list):
+            n_ids = id_list.GetNumberOfIds()
+            if n_ids < 2:
+                continue
+            for j in range(n_ids - 1):
+                i0 = id_list.GetId(j)
+                i1 = id_list.GetId(j + 1)
+                p0 = points[i0]
+                p1 = points[i1]
+                s0 = signed_vals[i0]
+                s1 = signed_vals[i1]
+                ds = s1 - s0
+                if np_abs(ds) < eps:
+                    if np_abs(s0) <= max_dist:
+                        t0 = 0.0
+                        t1 = 1.0
+                    else:
+                        continue
+                else:
+                    ta = (-max_dist - s0) / ds
+                    tb = (max_dist - s0) / ds
+                    tmin = min(ta, tb)
+                    tmax = max(ta, tb)
+                    t0 = max(0.0, tmin)
+                    t1 = min(1.0, tmax)
+                    if t1 <= t0:
+                        continue
+                q0 = p0 + t0 * (p1 - p0)
+                q1 = p0 + t1 * (p1 - p0)
+                dq = q1 - q0
+                if dq[0] * dq[0] + dq[1] * dq[1] + dq[2] * dq[2] < 1e-16:
+                    continue
+                id0 = clipped.GetNumberOfPoints()
+                clipped.append_point(np_array(q0, dtype=np_float64))
+                clipped.append_point(np_array(q1, dtype=np_float64))
+                clipped.append_cell(np_array([id0, id0 + 1]))
+        return clipped
+
     # Multi-selection dialog as in intersection_xs.
     selected_xs_names = input_checkbox_dialog(
         title="Projection XSection",
@@ -2079,7 +2132,9 @@ def project_2_xs(self):
         selected_sections.append((section_name, section_uid))
 
     # Keep only sections parallel to the first selected one.
-    _, ref_xs_uid = selected_sections[0]
+    ref_xs_name, ref_xs_uid = selected_sections[0]
+    if len(selected_sections) > 1:
+        self.print_terminal(f'Reference XSection: "{ref_xs_name}".')
     ref_strike = np_float64(self.xsect_coll.get_uid_strike(ref_xs_uid))
     ref_dip = np_float64(self.xsect_coll.get_uid_dip(ref_xs_uid))
     strike_tolerance = 1.0
@@ -2121,6 +2176,11 @@ def project_2_xs(self):
         "proj_plunge": ["Projection axis plunge: ", default_proj_plunge, "QLineEdit"],
         "proj_trend": ["Projection axis trend: ", default_proj_trend, "QLineEdit"],
         "dist_sec": ["Maximum distance from section: ", 0.0, "QLineEdit"],
+        "filter_polyline_geometry": [
+            "Polyline filter:",
+            "Filter polyline geometry within max distance",
+            "QCheckBox",
+        ],
     }
     options_dict = general_input_dialog(
         title="Projection to XSection", input_dict=input_dict
@@ -2130,6 +2190,11 @@ def project_2_xs(self):
     xs_dist = options_dict["dist_sec"]
     proj_plunge = np_float64(options_dict["proj_plunge"])
     proj_trend = np_float64(options_dict["proj_trend"])
+    filter_polyline_geometry = options_dict["filter_polyline_geometry"] == "check"
+    if xs_dist > 0 and filter_polyline_geometry:
+        self.print_terminal(
+            "Polyline geometry filtering is ON: only segments within max distance are projected."
+        )
 
     # Check for projection trend parallel to accepted cross-sections.
     for _, section_uid in parallel_sections:
@@ -2163,13 +2228,27 @@ def project_2_xs(self):
 
     # Project each selected entity on each accepted section.
     for xs_name, xs_uid in parallel_sections:
+        # Exclude objects that already belong to the current target section,
+        # so they are not duplicated on the same section.
+        section_filter_query = (
+            f'not (((topology == "XsVertexSet") or (topology == "XsPolyLine")) '
+            f'and (parent_uid == "{xs_uid}"))'
+        )
+        section_input_uids = self.geol_coll.filter_uids(
+            query=section_filter_query, uids=input_uids
+        )
+        section_input_uids_set = set(section_input_uids)
+        section_input_uids = [
+            uid for uid in input_uids if uid in section_input_uids_set
+        ]
+
         ox = np_float64(self.xsect_coll.get_uid_origin_x(xs_uid))
         oy = np_float64(self.xsect_coll.get_uid_origin_y(xs_uid))
         oz = np_float64(self.xsect_coll.get_uid_origin_z(xs_uid))
         nx = np_float64(self.xsect_coll.get_uid_normal_x(xs_uid))
         ny = np_float64(self.xsect_coll.get_uid_normal_y(xs_uid))
         nz = np_float64(self.xsect_coll.get_uid_normal_z(xs_uid))
-        for uid in input_uids:
+        for uid in section_input_uids:
             entity_dict = deepcopy(self.geol_coll.entity_dict)
             entity_dict["name"] = self.geol_coll.get_uid_name(uid) + "_prj_" + xs_name
             entity_dict["role"] = self.geol_coll.get_uid_role(uid)
@@ -2208,6 +2287,7 @@ def project_2_xs(self):
             out_vtk.points_Y[:] = (yo + beta * t).astype(np_float32)
             out_vtk.points_Z[:] = (zo + gamma * t).astype(np_float32)
             out_vtk.set_point_data("distance", np_abs(t))
+            out_vtk.set_point_data("signed_distance", t)
 
             if entity_dict["topology"] == "XsVertexSet":
                 if xs_dist <= 0:
@@ -2231,49 +2311,78 @@ def project_2_xs(self):
                             f'No measure found for group {entity_dict["name"]}, try to extend the maximum distance'
                         )
             elif entity_dict["topology"] == "XsPolyLine":
-                connectivity = vtkPolyDataConnectivityFilter()
-                connectivity.SetInputData(out_vtk)
-                connectivity.SetExtractionModeToAllRegions()
-                connectivity.Update()
-                n_regions = connectivity.GetNumberOfExtractedRegions()
-                connectivity.SetExtractionModeToSpecifiedRegions()
-                connectivity.Update()
-                for region in range(n_regions):
-                    connectivity.InitializeSpecifiedRegionList()
-                    connectivity.AddSpecifiedRegion(region)
-                    connectivity.Update()
-                    connectivity_clean = vtkCleanPolyData()
-                    connectivity_clean.SetInputConnection(connectivity.GetOutputPort())
-                    connectivity_clean.Update()
-                    if xs_dist <= 0:
-                        out_vtk = connectivity_clean.GetOutput()
-                    else:
-                        thresh = vtkThresholdPoints()
-                        thresh.SetInputConnection(connectivity_clean.GetOutputPort())
-                        thresh.ThresholdByLower(xs_dist)
-                        thresh.SetInputArrayToProcess(
-                            0,
-                            0,
-                            0,
-                            vtkDataObject().FIELD_ASSOCIATION_POINTS,
-                            "distance",
-                        )
-                        thresh.Update()
-                        out_vtk = thresh.GetOutput()
-                    if out_vtk.GetNumberOfPoints() > 0:
-                        entity_dict["vtk_obj"] = XsPolyLine(
+                polyline_for_parts = out_vtk
+                if xs_dist > 0 and filter_polyline_geometry:
+                    # Clip full polyline using nodal signed_distance property.
+                    polyline_for_parts = _clip_polyline_to_distance_band(
+                        out_vtk, xs_dist
+                    )
+                    if polyline_for_parts.GetNumberOfPoints() > 0:
+                        # Reconnect contiguous clipped segments into cleaner polylines.
+                        clip_clean = vtkCleanPolyData()
+                        clip_clean.ConvertLinesToPointsOff()
+                        clip_clean.ConvertPolysToLinesOff()
+                        clip_clean.ConvertStripsToPolysOff()
+                        clip_clean.SetTolerance(0.0)
+                        clip_clean.SetInputData(polyline_for_parts)
+                        clip_clean.Update()
+                        clip_strips = vtkStripper()
+                        clip_strips.JoinContiguousSegmentsOn()
+                        clip_strips.SetInputConnection(clip_clean.GetOutputPort())
+                        clip_strips.Update()
+                        merged_polyline = PolyLine()
+                        merged_polyline.DeepCopy(clip_strips.GetOutput())
+                        polyline_for_parts = merged_polyline
+
+                polyline_parts = polyline_for_parts.split_parts()
+                if polyline_parts is None:
+                    polyline_parts = []
+                if not polyline_parts and polyline_for_parts.GetNumberOfPoints() > 0:
+                    # Safety fallback: if split_parts fails to return components,
+                    # still process the geometry as a single part.
+                    polyline_parts = [polyline_for_parts.deep_copy()]
+                for part in polyline_parts:
+                    region_output = part
+                    keep_region = region_output.GetNumberOfPoints() > 0
+                    if xs_dist > 0 and keep_region and not filter_polyline_geometry:
+                        keep_region = False
+                        dist_vtk = region_output.GetPointData().GetArray("distance")
+                        if dist_vtk and dist_vtk.GetNumberOfTuples() > 0:
+                            dist_vals = numpy_support.vtk_to_numpy(dist_vtk)
+                            if dist_vals.min() <= xs_dist:
+                                keep_region = True
+                        # If no sampled point is inside the buffer, still keep lines
+                        # that cross the section (sign change of signed distance).
+                        if not keep_region:
+                            signed_vtk = region_output.GetPointData().GetArray(
+                                "signed_distance"
+                            )
+                            if signed_vtk and signed_vtk.GetNumberOfTuples() > 0:
+                                signed_vals = numpy_support.vtk_to_numpy(signed_vtk)
+                                if (
+                                    signed_vals.min() <= 0.0
+                                    and signed_vals.max() >= 0.0
+                                ):
+                                    keep_region = True
+                    if keep_region:
+                        part_entity_dict = deepcopy(entity_dict)
+                        # Ensure each extracted region gets a fresh uid.
+                        part_entity_dict["uid"] = ""
+                        part_entity_dict["vtk_obj"] = XsPolyLine(
                             x_section_uid=xs_uid, parent=self
                         )
-                        entity_dict["vtk_obj"].DeepCopy(connectivity_clean.GetOutput())
-                        for data_key in entity_dict["vtk_obj"].point_data_keys:
-                            if data_key not in entity_dict["properties_names"]:
-                                entity_dict["vtk_obj"].remove_point_data(data_key)
-                        self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
-                    else:
-                        self.print_terminal(" -- empty object -- ")
-    self.print_terminal(
-        f"{discarded_sections} out of {len(selected_sections)} discarded for not being parallel to the reference x-section."
-    )
+                        part_entity_dict["vtk_obj"].DeepCopy(region_output)
+                        for data_key in part_entity_dict["vtk_obj"].point_data_keys:
+                            if data_key not in part_entity_dict["properties_names"]:
+                                part_entity_dict["vtk_obj"].remove_point_data(data_key)
+                        self.geol_coll.add_entity_from_dict(
+                            entity_dict=part_entity_dict
+                        )
+
+    if discarded_sections > 0:
+        self.print_terminal(
+            f"{discarded_sections} out of {len(selected_sections)} sections were discarded because they are not parallel to the reference x-section."
+        )
 
 
 @freeze_gui_onoff
