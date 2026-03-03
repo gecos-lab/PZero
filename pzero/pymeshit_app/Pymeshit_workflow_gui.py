@@ -1488,6 +1488,7 @@ class MeshItWorkflowGUI(QWidget):
             hull_combo.addItem("Delaunay 2D", "delaunay")
             hull_combo.addItem("Alpha Shape 2D", "alpha_shape_2d")
             hull_combo.addItem("Angular Gap 3D", "angular_gap")
+            hull_combo.addItem("Isomap Unfolding", "isomap")
             # Get current hull method for this surface
             current_hull = self.hull_method_by_surface.get(idx, "auto")
             hull_index = hull_combo.findData(current_hull)
@@ -1501,6 +1502,7 @@ class MeshItWorkflowGUI(QWidget):
             tri_combo.addItem("Auto", "auto")
             tri_combo.addItem("Standard CDT", "standard")
             tri_combo.addItem("Multi-Patch", "multipatch")
+            tri_combo.addItem("Isomap Unfolding", "isomap")
             # Get current tri method for this surface
             current_tri = self.tri_method_by_surface.get(idx, "auto")
             tri_index = tri_combo.findData(current_tri)
@@ -2975,10 +2977,12 @@ class MeshItWorkflowGUI(QWidget):
         self.hull_method_combo.addItem("Delaunay 2D (Default)", "delaunay")
         self.hull_method_combo.addItem("2D Alpha Shapes (Wavy)", "alpha_shape_2d")
         self.hull_method_combo.addItem("3D Angular Gap (Folds)", "angular_gap")
+        self.hull_method_combo.addItem("Isomap Unfolding (Complex Folds)", "isomap")
         self.hull_method_combo.setToolTip(
             "Delaunay 2D: Original method - best for flat/quasi-planar surfaces\n"
             "2D Alpha Shapes: Best for wavy/undulating surfaces with concave boundaries\n"
-            "3D Angular Gap: Advanced method for recumbent/overturned folds that cannot be projected to 2D"
+            "3D Angular Gap: Advanced method for recumbent/overturned folds that cannot be projected to 2D\n"
+            "Isomap Unfolding: Geodesic parameterization for complex folded surfaces (recumbent/overturned)"
         )
         self.hull_method_combo.setCurrentIndex(0)  # Default to Delaunay
         method_layout.addWidget(self.hull_method_combo)
@@ -3177,6 +3181,7 @@ class MeshItWorkflowGUI(QWidget):
             hull_combo.addItem("Delaunay 2D", "delaunay")
             hull_combo.addItem("Alpha Shape 2D", "alpha_shape_2d")
             hull_combo.addItem("Angular Gap 3D", "angular_gap")
+            hull_combo.addItem("Isomap Unfolding", "isomap")
 
             current_hull = self.hull_method_by_surface.get(idx, "auto")
             hull_index = hull_combo.findData(current_hull)
@@ -3267,6 +3272,7 @@ class MeshItWorkflowGUI(QWidget):
             tri_combo.addItem("Auto (Use Global)", "auto")
             tri_combo.addItem("Standard CDT", "standard")
             tri_combo.addItem("Multi-Patch", "multipatch")
+            tri_combo.addItem("Isomap Unfolding", "isomap")
 
             current_tri = self.tri_method_by_surface.get(idx, "auto")
             tri_index = tri_combo.findData(current_tri)
@@ -3451,9 +3457,11 @@ class MeshItWorkflowGUI(QWidget):
         self.tri_method_combo = QComboBox()
         self.tri_method_combo.addItem("Standard CDT (Default)", "standard")
         self.tri_method_combo.addItem("Multi-Patch (Folded Surfaces)", "multipatch")
+        self.tri_method_combo.addItem("Isomap Unfolding (Complex Folds)", "isomap")
         self.tri_method_combo.setToolTip(
             "Standard CDT: Constrained Delaunay Triangulation - best for quasi-planar surfaces\n"
-            "Multi-Patch: Detects fold hinges and triangulates each patch separately - use for recumbent/overturned folds"
+            "Multi-Patch: Detects fold hinges and triangulates each patch separately - use for recumbent/overturned folds\n"
+            "Isomap Unfolding: Geodesic parameterization that unfolds complex folds to 2D - best constraint preservation"
         )
         self.tri_method_combo.setCurrentIndex(0)
         quality_layout.addRow("Tri Method:", self.tri_method_combo)
@@ -3783,9 +3791,11 @@ class MeshItWorkflowGUI(QWidget):
         self.mesh_tri_method_combo = QComboBox()
         self.mesh_tri_method_combo.addItem("Standard CDT (Default)", "standard")
         self.mesh_tri_method_combo.addItem("Multi-Patch (Folded Surfaces)", "multipatch")
+        self.mesh_tri_method_combo.addItem("Isomap Unfolding (Complex Folds)", "isomap")
         self.mesh_tri_method_combo.setToolTip(
             "Standard CDT: Constrained Delaunay Triangulation - best for quasi-planar surfaces\n"
-            "Multi-Patch: Detects fold hinges and triangulates each patch separately - use for recumbent/overturned folds"
+            "Multi-Patch: Detects fold hinges and triangulates each patch separately - use for recumbent/overturned folds\n"
+            "Isomap Unfolding: Geodesic parameterization that unfolds complex folds to 2D - best constraint preservation"
         )
         self.mesh_tri_method_combo.setCurrentIndex(0)
         mg.addRow("Tri Method", self.mesh_tri_method_combo)
@@ -8072,6 +8082,78 @@ class MeshItWorkflowGUI(QWidget):
                             logger.warning(f"Multi-Patch failed for '{name}', falling back to standard")
                             # Fall through to standard triangulation
 
+                # Check if Isomap Unfolding triangulation is requested for this surface
+                if surface_tri_method == "isomap":
+                    logger.info(f"Using Isomap Unfolding triangulation for conforming mesh '{name}'")
+                    
+                    try:
+                        from Pymeshit.isomap_utils import IsomapTriangulator
+                        
+                        # OPTIMIZED: Use original triangulation vertices as REFERENCE points
+                        # for Isomap fitting (learns the fold geometry from dense mesh)
+                        reference_points = None
+                        tri_result = ds.get('triangulation_result', {})
+                        if 'vertices' in tri_result and len(tri_result['vertices']) > 0:
+                            reference_points = np.asarray(tri_result['vertices'], dtype=float)
+                            logger.info(f"Isomap: Using {len(reference_points)} reference points from original triangulation")
+                        else:
+                            # Fallback: use raw dataset points
+                            reference_points = np.asarray(ds.get('points', []), dtype=float)
+                            logger.info(f"Isomap: Using {len(reference_points)} reference points from raw dataset")
+                        
+                        # Build BOUNDARY points from pts3d (the PLC/constraint points)
+                        if len(pts3d) > 0 and hasattr(pts3d[0], "x"):
+                            boundary_points = np.array([[p.x, p.y, p.z] for p in pts3d], dtype=float)
+                        else:
+                            boundary_points = np.asarray(pts3d, dtype=float)
+                        
+                        logger.info(f"Isomap: {len(reference_points)} reference points, "
+                                   f"{len(boundary_points)} boundary points, "
+                                   f"{len(seg_arr) if seg_arr is not None else 0} constraint segments")
+                        
+                        if len(boundary_points) >= 4 and len(reference_points) >= 4:
+                            # Adaptive n_neighbors based on REFERENCE point count
+                            n_neighbors = min(15, max(5, len(reference_points) // 10))
+                            
+                            isomap_triangulator = IsomapTriangulator(
+                                n_neighbors=n_neighbors,
+                                gradient=float(self.mesh_gradient_input.value()),
+                                min_angle=cfg["min_angle"],
+                                base_size=per_surface_target
+                            )
+                            
+                            # Pass reference points for Isomap fitting, boundary points for triangulation
+                            tri_res = isomap_triangulator.triangulate_with_constraints(
+                                points_3d=boundary_points,           # Only boundary points are triangulated
+                                segments=seg_arr,
+                                base_size=per_surface_target,
+                                min_angle=cfg["min_angle"],
+                                uniform=self.mesh_uniform_checkbox.isChecked(),
+                                reference_points_3d=reference_points  # Dense points for Isomap fitting
+                            )
+                            
+                            if tri_res and 'vertices' in tri_res and 'triangles' in tri_res:
+                                ds.setdefault("conforming_mesh", {})
+                                ds["conforming_mesh"]["vertices"] = tri_res['vertices']
+                                ds["conforming_mesh"]["triangles"] = tri_res['triangles']
+                                ds["conforming_mesh"]["holes"] = []
+                                
+                                steiner_count = tri_res.get('steiner_count', 0)
+                                ok += 1
+                                logger.info(f"✓ Isomap conforming mesh generated for '{name}': "
+                                           f"{len(tri_res['vertices'])} vertices ({steiner_count} Steiner), "
+                                           f"{len(tri_res['triangles'])} triangles")
+                                continue  # Skip standard triangulation
+                            else:
+                                logger.warning(f"Isomap failed for '{name}', falling back to standard")
+                                # Fall through to standard triangulation
+                                
+                    except ImportError as e:
+                        logger.warning(f"Isomap import failed ({e}), falling back to standard triangulation...")
+                    except Exception as e:
+                        logger.error(f"Isomap triangulation failed for '{name}': {e}")
+                        logger.warning("Falling back to standard triangulation...")
+
                 surf_data = self._prepare_surface_data_for_triangulation(s_idx, ds, cfg)
                 if not surf_data:
                     raise RuntimeError("surface-data prep failed")
@@ -9571,6 +9653,48 @@ class MeshItWorkflowGUI(QWidget):
                         logger.warning("Angular gap method failed, falling back to 2D alpha shape...")
                         method = "alpha_shape_2d"  # Fall through below
                 
+                if method == "isomap":
+                    # Isomap Geodesic Unfolding for complex folded surfaces
+                    logger.info(f"Computing boundary using Isomap unfolding for '{ds.get('name')}'...")
+                    try:
+                        from Pymeshit.isomap_utils import IsomapTriangulator
+                        
+                        # Adaptive n_neighbors based on point count
+                        n_neighbors = min(15, max(5, len(pts) // 10))
+                        isomap_triangulator = IsomapTriangulator(n_neighbors=n_neighbors)
+                        
+                        # Use alpha hull for concave boundaries, convex hull otherwise
+                        if boundary_sensitivity > 0.5:
+                            hull_pts_np = isomap_triangulator.generate_alpha_hull(
+                                pts, alpha_factor=boundary_sensitivity
+                            )
+                        else:
+                            hull_pts_np = isomap_triangulator.generate_hull(pts)
+                        
+                        if hull_pts_np is not None and len(hull_pts_np) >= 3:
+                            logger.info(f"Isomap hull computed with {len(hull_pts_np)} boundary vertices")
+                        else:
+                            # Fallback to angular gap if Isomap fails
+                            logger.warning("Isomap unfolding failed, falling back to Angular Gap...")
+                            method = "angular_gap"
+                            ordered_indices = self._compute_boundary_angular_gap(pts, boundary_sensitivity)
+                            if ordered_indices is not None and len(ordered_indices) >= 3:
+                                hull_pts_np = pts[ordered_indices]
+                            else:
+                                method = "delaunay"  # Ultimate fallback
+                                
+                    except ImportError as e:
+                        logger.warning(f"Isomap import failed ({e}), falling back to Angular Gap...")
+                        method = "angular_gap"
+                        ordered_indices = self._compute_boundary_angular_gap(pts, boundary_sensitivity)
+                        if ordered_indices is not None and len(ordered_indices) >= 3:
+                            hull_pts_np = pts[ordered_indices]
+                        else:
+                            method = "delaunay"
+                    except Exception as e:
+                        logger.error(f"Isomap hull computation failed: {e}")
+                        method = "delaunay"  # Fallback
+                
                 if method == "alpha_shape_2d":
                     # Alpha shapes for wavy/concave surfaces (formerly "alpha")
                     logger.info(f"Computing 2D alpha shape boundary for '{ds.get('name')}' "
@@ -10864,6 +10988,92 @@ segmentation, triangulation, and visualization.
                 else:
                     logger.warning(f"Multi-Patch triangulation failed for {dataset_name}, falling back to standard method")
                     # Fall through to standard triangulation
+            
+            # Isomap Unfolding triangulation for complex folded surfaces
+            if tri_method == "isomap":
+                logger.info(f"Using Isomap Unfolding triangulation for '{dataset_name}'")
+                
+                try:
+                    from Pymeshit.isomap_utils import IsomapTriangulator
+                    
+                    # OPTIMIZED: Use all raw points as REFERENCE for Isomap fitting
+                    # but only triangulate the BOUNDARY/SEGMENTATION points
+                    reference_points = np.asarray(dataset['points'], dtype=float)
+                    
+                    # Build boundary points from segments_data ONLY (not all_pts)
+                    seg_round = 6
+                    boundary_points_list = []
+                    pmap = {}  # Maps rounded coords to index in boundary_points_list
+                    explicit_segments_list = []
+                    
+                    if segments_data is not None and len(segments_data) > 0:
+                        for s in segments_data:
+                            p1 = np.array(s[0], dtype=float)
+                            p2 = np.array(s[1], dtype=float)
+                            k1 = tuple(np.round(p1, seg_round))
+                            k2 = tuple(np.round(p2, seg_round))
+                            
+                            if k1 not in pmap:
+                                pmap[k1] = len(boundary_points_list)
+                                boundary_points_list.append(p1)
+                            if k2 not in pmap:
+                                pmap[k2] = len(boundary_points_list)
+                                boundary_points_list.append(p2)
+                            explicit_segments_list.append([pmap[k1], pmap[k2]])
+                    
+                    boundary_points = np.array(boundary_points_list)
+                    explicit_segments = np.array(explicit_segments_list, dtype=int) if explicit_segments_list else None
+                    
+                    logger.info(f"Isomap: {len(reference_points)} reference points, "
+                               f"{len(boundary_points)} boundary points, "
+                               f"{len(explicit_segments_list)} constraint segments")
+                    
+                    try:
+                        base_size = float(self._get_seg_target_length_for_dataset(dataset_index))
+                        if base_size <= 1e-6:
+                            base_size = 1.0
+                    except Exception:
+                        base_size = 1.0
+                    
+                    # Adaptive n_neighbors based on REFERENCE point count
+                    n_neighbors = min(15, max(5, len(reference_points) // 10))
+                    
+                    isomap_triangulator = IsomapTriangulator(
+                        n_neighbors=n_neighbors,
+                        gradient=gradient,
+                        min_angle=min_angle,
+                        base_size=base_size
+                    )
+                    
+                    # Pass reference points for Isomap fitting, boundary points for triangulation
+                    tri_res = isomap_triangulator.triangulate_with_constraints(
+                        points_3d=boundary_points,           # Only boundary points are triangulated
+                        segments=explicit_segments,
+                        base_size=base_size,
+                        min_angle=min_angle,
+                        uniform=uniform,
+                        reference_points_3d=reference_points  # All raw points for Isomap fitting
+                    )
+                    
+                    if tri_res and 'vertices' in tri_res and 'triangles' in tri_res:
+                        dataset['triangulation_result'] = {
+                            'vertices': tri_res['vertices'],
+                            'triangles': tri_res['triangles']
+                        }
+                        steiner_count = tri_res.get('steiner_count', 0)
+                        logger.info(f"Isomap triangulation for {dataset_name} completed. "
+                                   f"V={len(tri_res['vertices'])} ({steiner_count} Steiner), "
+                                   f"T={len(tri_res['triangles'])}")
+                        return True
+                    else:
+                        logger.warning(f"Isomap triangulation failed for {dataset_name}, falling back to standard method")
+                        # Fall through to standard triangulation
+                        
+                except ImportError as e:
+                    logger.warning(f"Isomap import failed ({e}), falling back to standard triangulation...")
+                except Exception as e:
+                    logger.error(f"Isomap triangulation failed for {dataset_name}: {e}", exc_info=True)
+                    logger.warning("Falling back to standard triangulation...")
             
             # Standard triangulation method (original code)
             # Common rotation basis (C++ rotate-by-normal)
