@@ -8123,13 +8123,19 @@ class MeshItWorkflowGUI(QWidget):
                             )
                             
                             # Pass reference points for Isomap fitting, boundary points for triangulation
+                            # Interpolation method from GUI: TPS for smooth folds, IDW for speed
+                            tps_smoothing = cfg.get("smoothing", 0.0)
+                            interp_method = cfg.get("interp", "Thin Plate Spline (TPS)")
+                            
                             tri_res = isomap_triangulator.triangulate_with_constraints(
                                 points_3d=boundary_points,           # Only boundary points are triangulated
                                 segments=seg_arr,
                                 base_size=per_surface_target,
                                 min_angle=cfg["min_angle"],
                                 uniform=self.mesh_uniform_checkbox.isChecked(),
-                                reference_points_3d=reference_points  # Dense points for Isomap fitting
+                                reference_points_3d=reference_points,  # Dense points for Isomap fitting
+                                smoothing=tps_smoothing,               # Smoothing parameter
+                                interpolator=interp_method             # TPS or IDW from GUI combo
                             )
                             
                             if tri_res and 'vertices' in tri_res and 'triangles' in tri_res:
@@ -11046,13 +11052,16 @@ segmentation, triangulation, and visualization.
                     )
                     
                     # Pass reference points for Isomap fitting, boundary points for triangulation
+                    # Interpolation method from GUI: TPS for smooth folds, IDW for speed
                     tri_res = isomap_triangulator.triangulate_with_constraints(
                         points_3d=boundary_points,           # Only boundary points are triangulated
                         segments=explicit_segments,
                         base_size=base_size,
                         min_angle=min_angle,
                         uniform=uniform,
-                        reference_points_3d=reference_points  # All raw points for Isomap fitting
+                        reference_points_3d=reference_points,  # All raw points for Isomap fitting
+                        smoothing=smoothing,                   # Smoothing parameter
+                        interpolator=interp_label              # TPS or IDW from GUI combo
                     )
                     
                     if tri_res and 'vertices' in tri_res and 'triangles' in tri_res:

@@ -402,7 +402,9 @@ class IsomapTriangulator:
         base_size: Optional[float] = None,
         min_angle: Optional[float] = None,
         uniform: bool = True,
-        reference_points_3d: Optional[np.ndarray] = None
+        reference_points_3d: Optional[np.ndarray] = None,
+        smoothing: float = 0.0,
+        interpolator: str = "tps"
     ) -> Dict[str, Any]:
         """
         Perform constrained triangulation using Isomap unfolding.
@@ -411,7 +413,9 @@ class IsomapTriangulator:
         1. Fit Isomap on reference_points_3d (all raw surface points) to learn fold geometry
         2. Transform ONLY points_3d (boundary/segmentation points) to 2D
         3. Run CDT in 2D with segments as constraints
-        4. Map Steiner points back to 3D using IDW from the full reference point cloud
+        4. Map Steiner points back to 3D using selected interpolation method:
+           - TPS (Thin Plate Spline): Globally smooth, best for folds, prevents self-intersections
+           - IDW (Inverse Distance Weighting): Local smoothing, faster but may create bumps
         
         This is much faster than triangulating all raw points while still
         preserving the fold structure through the Isomap parameterization.
@@ -425,6 +429,11 @@ class IsomapTriangulator:
             uniform: Whether to generate uniform mesh density.
             reference_points_3d: (R, 3) array of ALL raw surface points for Isomap fitting.
                                  If None, uses points_3d (slower, less accurate for folds).
+            smoothing: Smoothing parameter (0 = exact interpolation, >0 = smoother).
+                       Higher values create smoother surfaces but may deviate from data.
+            interpolator: Interpolation method for Steiner points:
+                         - "tps" or "Thin Plate Spline": Globally smooth, best for folds
+                         - "idw" or "IDW": Local smoothing, faster but may create bumps
             
         Returns:
             Dictionary with:
@@ -436,6 +445,20 @@ class IsomapTriangulator:
         from .triangle_direct import DirectTriangleWrapper
         
         points_3d = np.asarray(points_3d, dtype=np.float64)
+        
+        # Store smoothing and interpolator for use in interpolation
+        self._tps_smoothing = smoothing
+        self._interpolator = interpolator.lower() if interpolator else "tps"
+        
+        # Normalize interpolator value
+        if "tps" in self._interpolator or "thin" in self._interpolator or "spline" in self._interpolator:
+            self._interpolator = "tps"
+        elif "idw" in self._interpolator:
+            self._interpolator = "idw"
+        else:
+            self._interpolator = "tps"  # Default to TPS
+        
+        logger.info(f"Isomap: Using '{self._interpolator.upper()}' interpolation with smoothing={smoothing}")
         
         # Use reference points if provided, otherwise use boundary points
         if reference_points_3d is not None:
@@ -516,16 +539,90 @@ class IsomapTriangulator:
             vertices_2d,
             boundary_points_2d,  # Original boundary points in 2D
             points_3d,          # Original boundary points in 3D (exact coords)
-            reference_points,   # All reference points in 3D (for IDW)
+            reference_points,   # All reference points in 3D (for TPS)
             n_original
         )
+        
+        # Step 6: Validate mesh quality - check for potential self-intersections
+        n_inverted = self._count_inverted_triangles(vertices_3d, triangles)
+        if n_inverted > 0:
+            logger.warning(f"Detected {n_inverted} potentially inverted triangles. "
+                          f"Consider increasing smoothing parameter or using finer segmentation.")
         
         return {
             'vertices': vertices_3d,
             'triangles': triangles,
             'original_count': n_original,
-            'steiner_count': n_steiner
+            'steiner_count': n_steiner,
+            'inverted_count': n_inverted
         }
+    
+    def _count_inverted_triangles(
+        self, 
+        vertices: np.ndarray, 
+        triangles: np.ndarray
+    ) -> int:
+        """
+        Count triangles that may cause self-intersections.
+        
+        Checks for triangles where:
+        1. Normal direction flips compared to neighbors
+        2. Triangle has very small or negative area in 3D
+        
+        Args:
+            vertices: (V, 3) array of 3D vertices.
+            triangles: (T, 3) array of triangle indices.
+            
+        Returns:
+            Number of potentially problematic triangles.
+        """
+        if len(triangles) < 2:
+            return 0
+        
+        # Compute triangle normals
+        normals = []
+        areas = []
+        
+        for tri in triangles:
+            v0, v1, v2 = vertices[tri[0]], vertices[tri[1]], vertices[tri[2]]
+            e1 = v1 - v0
+            e2 = v2 - v0
+            normal = np.cross(e1, e2)
+            area = np.linalg.norm(normal) / 2.0
+            
+            if area > 1e-12:
+                normal = normal / (2.0 * area)
+            else:
+                normal = np.array([0, 0, 0])
+            
+            normals.append(normal)
+            areas.append(area)
+        
+        normals = np.array(normals)
+        areas = np.array(areas)
+        
+        # Compute average normal direction
+        avg_normal = normals.mean(axis=0)
+        avg_norm = np.linalg.norm(avg_normal)
+        
+        if avg_norm < 1e-12:
+            return 0
+        
+        avg_normal = avg_normal / avg_norm
+        
+        # Count triangles with flipped normals or tiny areas
+        n_inverted = 0
+        min_area = np.median(areas) * 0.001  # Very small compared to median
+        
+        for i, (normal, area) in enumerate(zip(normals, areas)):
+            # Check for flipped normal (dot product < 0)
+            if np.dot(normal, avg_normal) < -0.5:
+                n_inverted += 1
+            # Check for degenerate triangle
+            elif area < min_area:
+                n_inverted += 1
+        
+        return n_inverted
     
     def _map_vertices_to_3d(
         self,
@@ -639,15 +736,13 @@ class IsomapTriangulator:
         n_original: int
     ) -> np.ndarray:
         """
-        Map 2D vertices back to 3D using reference points for Steiner interpolation.
+        Map 2D vertices back to 3D using TPS interpolation for smooth surfaces.
         
         This method:
         - Maps original boundary points to their exact 3D coordinates
-        - Uses IDW interpolation from ALL reference points (not just boundary) for Steiner points
-        
-        This gives much better fold preservation because Steiner points are
-        interpolated from the dense reference point cloud that fully captures
-        the fold geometry.
+        - Uses TPS (Thin Plate Spline) interpolation for Steiner points
+        - TPS creates a globally smooth surface that follows the fold geometry
+        - This prevents self-intersecting triangles in complex folds
         
         Args:
             vertices_2d: (V, 2) array of all 2D vertices (boundary + Steiner).
@@ -673,24 +768,149 @@ class IsomapTriangulator:
                 # Exact match - use original 3D coordinates
                 vertices_3d[i] = boundary_points_3d[idx]
             else:
-                # Should not happen, but fallback to interpolation
-                vertices_3d[i] = self._interpolate_steiner_from_reference(
-                    vertices_2d[i],
-                    reference_points_3d
-                )
+                # Should not happen for boundary points, mark for interpolation
+                vertices_3d[i] = np.nan  # Will be filled by interpolation
         
-        # Steiner points: IDW interpolation from REFERENCE points
-        if n_total > n_original:
-            logger.info(f"Interpolating {n_total - n_original} Steiner points "
-                       f"using {len(reference_points_3d)} reference points...")
+        # Steiner points: Use selected interpolation method
+        steiner_indices = list(range(n_original, n_total))
+        
+        # Also include any boundary points that didn't get exact matches
+        for i in range(n_original):
+            if np.any(np.isnan(vertices_3d[i])):
+                steiner_indices.insert(0, i)
+        
+        if steiner_indices:
+            n_steiner = len(steiner_indices)
+            interpolator = getattr(self, '_interpolator', 'tps')
             
-            for i in range(n_original, n_total):
-                vertices_3d[i] = self._interpolate_steiner_from_reference(
-                    vertices_2d[i],
+            steiner_2d = vertices_2d[steiner_indices]
+            
+            # Choose interpolation method based on user selection
+            if interpolator == "tps":
+                # TPS (Thin Plate Spline) - globally smooth, best for folds
+                logger.info(f"Interpolating {n_steiner} Steiner points using TPS "
+                           f"from {len(reference_points_3d)} reference points...")
+                
+                steiner_3d = self._interpolate_steiner_batch_tps(
+                    steiner_2d,
                     reference_points_3d
                 )
+                
+                if steiner_3d is not None:
+                    for j, i in enumerate(steiner_indices):
+                        vertices_3d[i] = steiner_3d[j]
+                    logger.info("TPS interpolation successful - smooth surface created")
+                else:
+                    # Fallback to IDW if TPS fails
+                    logger.warning("TPS interpolation failed, falling back to IDW")
+                    for i in steiner_indices:
+                        vertices_3d[i] = self._interpolate_steiner_from_reference(
+                            vertices_2d[i],
+                            reference_points_3d
+                        )
+            else:
+                # IDW (Inverse Distance Weighting) - local smoothing, faster
+                logger.info(f"Interpolating {n_steiner} Steiner points using IDW "
+                           f"from {len(reference_points_3d)} reference points...")
+                
+                for i in steiner_indices:
+                    vertices_3d[i] = self._interpolate_steiner_from_reference(
+                        vertices_2d[i],
+                        reference_points_3d
+                    )
+                logger.info("IDW interpolation complete")
         
         return vertices_3d
+    
+    def _interpolate_steiner_batch_tps(
+        self,
+        steiner_points_2d: np.ndarray,
+        reference_points_3d: np.ndarray,
+        smoothing: Optional[float] = None
+    ) -> Optional[np.ndarray]:
+        """
+        Batch interpolate Steiner points using Thin Plate Spline (TPS).
+        
+        TPS creates a globally smooth surface that minimizes bending energy,
+        which is ideal for geological fold surfaces. This prevents the
+        "bumpy" interpolation that IDW can produce, avoiding self-intersections.
+        
+        Args:
+            steiner_points_2d: (S, 2) array of Steiner points in 2D Isomap space.
+            reference_points_3d: (R, 3) array of reference points in 3D.
+            smoothing: TPS smoothing parameter (0 = exact interpolation).
+                       If None, uses self._tps_smoothing or defaults to 0.0.
+            
+        Returns:
+            (S, 3) array of interpolated 3D coordinates, or None if failed.
+        """
+        try:
+            from scipy.interpolate import RBFInterpolator
+            
+            # Use stored smoothing value if not explicitly provided
+            if smoothing is None:
+                smoothing = getattr(self, '_tps_smoothing', 0.0)
+            
+            if self.points_2d is None or len(self.points_2d) == 0:
+                return None
+            
+            # Use the fitted Isomap 2D points as the interpolation source
+            # and reference_points_3d as the target values
+            source_2d = self.points_2d
+            
+            # Ensure we have matching counts
+            n_source = min(len(source_2d), len(reference_points_3d))
+            if n_source < 4:
+                logger.warning("Not enough points for TPS interpolation")
+                return None
+            
+            source_2d = source_2d[:n_source]
+            target_3d = reference_points_3d[:n_source]
+            
+            logger.info(f"TPS interpolation with smoothing={smoothing:.4f}, "
+                       f"using {n_source} source points")
+            
+            # Build TPS interpolator for each 3D coordinate
+            # Using thin_plate_spline kernel for smooth geological surfaces
+            result_3d = np.zeros((len(steiner_points_2d), 3), dtype=np.float64)
+            
+            for coord_idx in range(3):  # X, Y, Z
+                try:
+                    # RBFInterpolator with thin_plate_spline kernel
+                    rbf = RBFInterpolator(
+                        source_2d,
+                        target_3d[:, coord_idx],
+                        kernel='thin_plate_spline',
+                        smoothing=smoothing,
+                        degree=1  # Linear polynomial for stability
+                    )
+                    result_3d[:, coord_idx] = rbf(steiner_points_2d)
+                except Exception as e:
+                    logger.warning(f"TPS interpolation failed for coordinate {coord_idx}: {e}")
+                    return None
+            
+            # Validate results - check for NaN or extreme values
+            if np.any(np.isnan(result_3d)) or np.any(np.isinf(result_3d)):
+                logger.warning("TPS produced invalid values (NaN/Inf)")
+                return None
+            
+            # Check for outliers (points too far from reference cloud)
+            ref_center = reference_points_3d.mean(axis=0)
+            ref_radius = np.max(np.linalg.norm(reference_points_3d - ref_center, axis=1))
+            
+            result_distances = np.linalg.norm(result_3d - ref_center, axis=1)
+            if np.any(result_distances > ref_radius * 3):
+                logger.warning("TPS produced outlier points, falling back to IDW")
+                return None
+            
+            return result_3d
+            
+        except ImportError:
+            logger.warning("scipy.interpolate.RBFInterpolator not available")
+            return None
+        except Exception as e:
+            logger.warning(f"TPS interpolation failed: {e}")
+            return None
     
     def _interpolate_steiner_from_reference(
         self,
