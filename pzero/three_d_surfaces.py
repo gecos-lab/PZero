@@ -82,7 +82,7 @@ from .entities_factory import (
     XsVertexSet,
     Attitude,
 )
-from .helpers.helper_functions import freeze_gui
+from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 
 
 def get_boundary_obb_transform(boundary_coll, boundary_uid):
@@ -354,7 +354,7 @@ def get_aligned_bounds_from_obb(boundary_coll, boundary_uid, obb_info):
     return origin_x, origin_y, origin_z, max_x, max_y, max_z
 
 
-@freeze_gui
+@freeze_gui_onoff
 def interpolation_delaunay_2d(self):
     """The vtkDelaunay2D object takes vtkPointSet (or any of its subclasses) as input and
     generates a vtkPolyData on output - typically a triangle mesh if Alpha value is not defined.
@@ -462,7 +462,7 @@ def interpolation_delaunay_2d(self):
         self.print_terminal(" -- empty object -- ")
 
 
-@freeze_gui
+@freeze_gui_onoff
 def poisson_interpolation(self):
     """vtkSurfaceReconstructionFilter can be used to reconstruct surfaces from point clouds. Input is a vtkDataSet
     defining points assumed to lie on the surface of a 3D object."""
@@ -580,7 +580,7 @@ def poisson_interpolation(self):
         self.print_terminal(" -- empty object -- ")
 
 
-@freeze_gui
+@freeze_gui_onoff
 def implicit_model_loop_structural(self):
     """Function to call LoopStructural's implicit modelling algorithms.
     Input Data is organized as the following columns:
@@ -1037,7 +1037,7 @@ def implicit_model_loop_structural(self):
     self.print_terminal("Loop interpolation completed.")
 
 
-@freeze_gui
+@freeze_gui_onoff
 def surface_smoothing(
     self, mode=0, convergence_value=1, boundary_smoothing=False, edge_smoothing=False
 ):
@@ -1132,7 +1132,7 @@ def surface_smoothing(
     #     print(" -- empty object -- ")
 
 
-@freeze_gui
+@freeze_gui_onoff
 def linear_extrusion(self):
     """vtkLinearExtrusionFilter sweeps the generating primitives along a straight line path. This tool is here
     used to create fault surfaces from faults traces."""
@@ -1256,7 +1256,7 @@ def linear_extrusion(self):
         self.print_terminal(" -- empty object -- ")
 
 
-@freeze_gui
+@freeze_gui_onoff
 def decimation_pro_resampling(self):
     """Decimation reduces the number of triangles in a triangle mesh while maintaining a faithful approximation to
     the original mesh."""
@@ -1348,7 +1348,7 @@ def decimation_pro_resampling(self):
         self.print_terminal(" -- empty object -- ")
 
 
-@freeze_gui
+@freeze_gui_onoff
 def decimation_quadric_resampling(self):
     """Decimation reduces the number of triangles in a triangle mesh while maintaining a faithful approximation to
     the original mesh."""
@@ -1403,7 +1403,7 @@ def decimation_quadric_resampling(self):
         self.print_terminal(" -- empty object -- ")
 
 
-@freeze_gui
+@freeze_gui_onoff
 def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
     """Different types of subdivisions. Subdivides a triangular, polygonal surface; four new triangles are created for each triangle of the polygonal surface.:
 
@@ -1464,7 +1464,7 @@ def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
             return
 
 
-@freeze_gui
+@freeze_gui_onoff
 def intersection_xs(self):
     """vtkCutter is a filter to cut through data using any subclass of vtkImplicitFunction.
     HOW TO USE: select one or more Geological objects, DOMs or 3D Meshes (Source data), then function asks for XSection
@@ -1838,7 +1838,7 @@ def intersection_xs(self):
             )
 
 
-@freeze_gui
+@freeze_gui_onoff
 def project_2_dem(self):
     """vtkProjectedTerrainPath projects an input polyline onto a terrain image.
     HOW TO USE: at the moment, as vtkProjectedTerrainPath takes vtkImageData as input, we need to import
@@ -2026,7 +2026,7 @@ def project_2_dem(self):
             dock.canvas.clear_selection()
 
 
-@freeze_gui
+@freeze_gui_onoff
 def project_2_xs(self):
     """Projection of a copy of point and polyline geological entities to a planar cross section, along an axis specified with plunge/trend."""
     # self.print_terminal("Projection to cross section")
@@ -2058,10 +2058,17 @@ def project_2_xs(self):
         return
     # Define projection parameters (float64 needed for "t" afterwards)
     xs_names = self.xsect_coll.get_names
+    default_xs_uid = self.xsect_coll.df.loc[
+        self.xsect_coll.df["name"] == xs_names[0], "uid"
+    ].values[0]
+    default_strike = np_float64(self.xsect_coll.get_uid_strike(default_xs_uid))
+    default_dip = np_float64(self.xsect_coll.get_uid_dip(default_xs_uid))
+    default_proj_trend = round((default_strike + 90.0) % 360.0, 2)
+    default_proj_plunge = round(90.0 - default_dip, 2)
     input_dict = {
         "xs_name": ["XSection: ", xs_names],
-        "proj_plunge": ["Projection axis plunge: ", 0.0],
-        "proj_trend": ["Projection axis trend: ", 0.0],
+        "proj_plunge": ["Projection axis plunge: ", default_proj_plunge],
+        "proj_trend": ["Projection axis trend: ", default_proj_trend],
         "dist_sec": ["Maximum distance from section: ", 0.0],
     }
     options_dict = multiple_input_dialog(
@@ -2076,14 +2083,20 @@ def project_2_xs(self):
     ].values[0]
     proj_plunge = np_float64(options_dict["proj_plunge"])
     proj_trend = np_float64(options_dict["proj_trend"])
-    # Constrain to 0-180.
-    if proj_trend > 180.0:
-        proj_trend -= 180.0
-        proj_plunge = -proj_plunge
     # Check for projection trend parallel to cross section.
     if (
-        abs(self.xsect_coll.get_uid_strike(xs_uid) - proj_trend) < 10.0
-        or abs(self.xsect_coll.get_uid_strike(xs_uid) - 180.0 - proj_trend) < 10.0
+        abs((proj_trend - self.xsect_coll.get_uid_strike(xs_uid) + 180.0) % 360.0 - 180.0)
+        < 10.0
+        or abs(
+            (
+                proj_trend
+                - ((self.xsect_coll.get_uid_strike(xs_uid) + 180.0) % 360.0)
+                + 180.0
+            )
+            % 360.0
+            - 180.0
+        )
+        < 10.0
     ):
         self.print_terminal(
             "Plunge too close to being parallel to XSection (angle < 10°)"
@@ -2233,7 +2246,7 @@ def project_2_xs(self):
                     self.print_terminal(" -- empty object -- ")
 
 
-@freeze_gui
+@freeze_gui_onoff
 def split_surf(self):
     """Split two surfaces. This should be integrated with intersection_xs in one function since is the same thing"""
     if self.shown_table != "tabGeology":
@@ -2358,7 +2371,7 @@ def split_surf(self):
         # 1. Calculate the implicit distance of the target surface[1,2,3,4,..] from the reference surface[0]
 
 
-@freeze_gui
+@freeze_gui_onoff
 def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
     """Function used to retopologize a given surface. This is useful in the case of
     semplifying irregular triangulated meshes for CAD exporting or aesthetic reasons.

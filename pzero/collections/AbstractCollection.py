@@ -493,6 +493,9 @@ class BaseTableModel(QAbstractTableModel):
 
     def flags(self, index):
         """Set editable columns."""
+        column_name = str(self.collection.df.columns[index.column()])
+        if column_name == "role" and getattr(self.collection, "valid_roles", []):
+            return Qt.ItemIsEnabled | Qt.ItemIsSelectable
         if index.column() in self.collection.editable_columns:
             return Qt.ItemFlags(
                 QAbstractTableModel.flags(self, index) | Qt.ItemIsEditable
@@ -504,6 +507,14 @@ class BaseTableModel(QAbstractTableModel):
         "self.parent" is used to point to parent, because the standard Qt setData
         method does not allow for extra variables to be passed into this method."""
         if index.isValid():
+            column_name = str(self.collection.df.columns[index.column()])
+            if column_name == "role":
+                valid_roles = [
+                    str(role) for role in getattr(self.collection, "valid_roles", [])
+                ]
+                value = str(value)
+                if valid_roles and value not in valid_roles:
+                    return False
             self.collection.df.iloc[index.row(), index.column()] = value
             if self.data(index, Qt.DisplayRole) == value:
                 self.dataChanged.emit(index, index)
@@ -512,5 +523,3 @@ class BaseTableModel(QAbstractTableModel):
                 # a list of uids is emitted, even if the entity is just one
                 self.parent.signals.metadata_modified.emit([uid], self.collection)
                 return True
-        # return QVariant()
-        return None

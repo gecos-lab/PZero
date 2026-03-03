@@ -15,6 +15,7 @@ from .abstract_view_2d import View2D
 from vtkmodules.vtkFiltersCore import vtkAppendPolyData
 from pyvista import Line as pv_Line
 from .view_map import ViewMap
+from ..helpers.helper_functions import freeze_gui_onoff
 from ..orientation_analysis import get_dip_dir_vectors
 from ..helpers.helper_dialogs import (
     input_combo_dialog,
@@ -26,35 +27,27 @@ from ..helpers.helper_dialogs import (
 
 class ViewXsection(View2D):
     def __init__(self, parent=None, *args, **kwargs):
-        # If requested by caller, open directly on a specific section uid.
-        preferred_uid = getattr(parent, "_next_xsection_uid", None)
-        if preferred_uid and preferred_uid in parent.xsect_coll.get_uids:
-            self.this_x_section_uid = preferred_uid
-            self.this_x_section_name = parent.xsect_coll.get_uid_name(preferred_uid)
-            parent._next_xsection_uid = None
+        # Choose section name with dialog.
+        if parent.xsect_coll.get_names:
+            self.this_x_section_name = input_combo_dialog(
+                parent=None,
+                title="Xsection",
+                label="Choose Xsection",
+                choice_list=parent.xsect_coll.get_names,
+            )
         else:
-            parent._next_xsection_uid = None
-            # Choose section name with dialog.
-            if parent.xsect_coll.get_names:
-                self.this_x_section_name = input_combo_dialog(
-                    parent=None,
-                    title="Xsection",
-                    label="Choose Xsection",
-                    choice_list=parent.xsect_coll.get_names,
-                )
-            else:
-                message_dialog(title="Xsection", message="No Xsection in project")
-                return
-            # Select section uid from name.
-            if self.this_x_section_name:
-                self.this_x_section_uid = parent.xsect_coll.df.loc[
-                    parent.xsect_coll.df["name"] == self.this_x_section_name, "uid"
-                ].values[0]
-            else:
-                return
-        # Set filter for entities belonging to this cross section.
-        # Note that this filter does not return the cross section itself. If we want its frame to be shown we must
-        # find a different solution to add it to the plotter.
+            message_dialog(title="Xsection", message="No Xsection in project")
+            return
+        # Select section uid from name.
+        if self.this_x_section_name:
+            self.this_x_section_uid = parent.xsect_coll.df.loc[
+                parent.xsect_coll.df["name"] == self.this_x_section_name, "uid"
+            ].values[0]
+        else:
+            return
+        # Set a filter for entities belonging to this cross-section.
+        # Note that in past releases this filter was not returning the cross-section itself.
+        # This is now fixed since cross-sections have their own uid as parent_uid.
         self.view_filter = (
             f'parent_uid.str.contains("{self.this_x_section_uid}", na=False)'
         )
@@ -145,6 +138,10 @@ class ViewXsection(View2D):
             ],
             exclusive=True,
         )
+        if not opt_dialog:
+            return
+        opt_dialog = opt_dialog[0]  # Extract the first element from the list
+
         if opt_dialog == "Fit cross-section frame only":
             fit_method = "frame"
         elif opt_dialog == "Fit vertical cross-section plane and frame":

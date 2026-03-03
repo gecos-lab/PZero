@@ -3,9 +3,11 @@ PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
 from PySide6.QtGui import QAction
+from PySide6.QtCore import QEvent, Qt
 
 # PZero imports____
 from .abstract_view_vtk import ViewVTK
+from ..helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 from ..helpers.helper_widgets import Vector
 
 
@@ -18,9 +20,22 @@ class View2D(ViewVTK):
         self.line_dict = None
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
+        self._ctrl_suppression_observer_tag = None
+        self._install_ctrl_suppression_observers()
 
+        def blank_keypress(interactor, event):
+            """Blanks/cancels/overrides a keypress event.
+            Directly accessing VTK events is necessary since the PyVista
+            interface has a lower priority. See issue #174."""
+            if interactor.GetKeyCode() not in ["w", "s"]:
+                interactor.SetKeyCode("")
+                # interactor.SetKeySym("")
+                #print("blank called")
+
+        self.plotter.iren.interactor.AddObserver("KeyPressEvent", blank_keypress, 10)
+        self.plotter.clear_events_for_key("v")
     # ================================  General methods shared by all views - built incrementally =====================
-
+    
     def initialize_menu_tools(self):
         """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
         # append code from superclass
@@ -47,7 +62,6 @@ class View2D(ViewVTK):
             copy_kink,
             copy_similar,
             measure_distance,
-            clean_intersection,
         )
 
         # ------------------------------------
@@ -88,11 +102,11 @@ class View2D(ViewVTK):
         )
         self.menuModify.addAction(self.splitLineByPointButton)
 
-        self.mergeLineButton = QAction("Merge lines", self)
+        self.mergeLineButton = QAction("Weld lines", self)
         self.mergeLineButton.triggered.connect(lambda: merge_lines(self))
         self.menuModify.addAction(self.mergeLineButton)
 
-        self.snapLineButton = QAction("Snap line", self)
+        self.snapLineButton = QAction("Snap to intersection", self)
         self.snapLineButton.triggered.connect(lambda: snap_line(self))
         self.menuModify.addAction(self.snapLineButton)
 
@@ -131,11 +145,6 @@ class View2D(ViewVTK):
             lambda: self.vector_by_mouse(measure_distance)
         )
         self.menuView.addAction(self.measureDistanceButton)
-
-        self.cleanSectionButton = QAction("Clean intersections", self)
-        self.cleanSectionButton.triggered.connect(lambda: clean_intersection(self))
-        self.menuModify.addAction(self.cleanSectionButton)
-
     # ================================  Methods required by ViewVTK(), (re-)implemented here ==========================
 
     def show_qt_canvas(self):
@@ -143,10 +152,30 @@ class View2D(ViewVTK):
         self.show()
 
     # ================================  Methods specific to 2D views ==================================================
+    def _clear_ctrl_modifier(self, interactor, _event):
+        """VTK observer callback: clear Ctrl modifier before default handlers."""
+        if interactor and interactor.GetControlKey():
+            interactor.SetControlKey(0)
 
+    def _install_ctrl_suppression_observers(self):
+        """Install a high-priority VTK observer for Ctrl+left-click suppression."""
+        interactor = self.plotter.iren.interactor
+
+        self._ctrl_suppression_observer_tag = interactor.AddObserver(
+            "LeftButtonPressEvent", self._clear_ctrl_modifier, 10.0
+        )
+
+    
+    def blank_keypress(interactor, event):
+            """Blanks/cancels/overrides a keypress event.
+            Directly accessing VTK events is necessary since the PyVista
+            key event handling is not easily overridden."""
+            # Do nothing, effectively blanking the event
+            pass
     def end_pick(self, pos):
         """Function used to disable actor picking. Due to some slight difference,
-        must be reimplemented in subclasses."""
+        must be reimplemented in subclasses.
+        Do not use @freeze_gui_onoff here, that is used at a higher level."""
         # Remove the selector observer
         self.plotter.iren.interactor.RemoveObservers("LeftButtonPressEvent")
         # Remove the right click observer
@@ -159,9 +188,15 @@ class View2D(ViewVTK):
         # Closing settings
         self.plotter.reset_key_events()
         self.selected_uids = self.parent.selected_uids
-        self.enable_actions()
+        # self.enable_actions()
+        freeze_gui_off(self)
 
+    @freeze_gui_on
     def vector_by_mouse(self, func):
-        self.disable_actions()
+        """Vector by mouse points to the pzero Vector() class, derived from VTK vtkContourWidget(),
+        which includes several sub-methods that are specified in the pass_func argument.
+        All these are placed here under the hood of @freeze_gui_onoff. Linked functions, i.e. functions
+        passed as "func", should not be placed under @freeze_gui, but must end with @freeze_gui_off."""
+        # self.disable_actions()
         vector = Vector(parent=self, pass_func=func)
         vector.EnabledOn()

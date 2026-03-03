@@ -62,8 +62,7 @@ class Legend(QObject):
     }
 
     well_legend_dict = {
-        "Loc ID": "undef",
-        "feature": "undef",
+        "name": "undef",
         "color_R": int(255),
         "color_G": int(255),
         "color_B": int(255),
@@ -399,27 +398,27 @@ class Legend(QObject):
                         )
                     )
 
-        for locid in pd_unique(parent.well_legend_df["Loc ID"]):
+        for well_name in pd_unique(parent.well_legend_df["name"]):
             llevel_1 = QTreeWidgetItem(
                 parent.LegendTreeWidget, ["Wells"]
             )  # self.GeologyTreeWidget as parent -> top level
             llevel_2 = QTreeWidgetItem(
-                llevel_1, [locid]
+                llevel_1, [well_name]
             )  # llevel_1 as parent -> 2nd level
             color_R = parent.well_legend_df.loc[
-                parent.well_legend_df["Loc ID"] == locid, "color_R"
+                parent.well_legend_df["name"] == well_name, "color_R"
             ].values[0]
             color_G = parent.well_legend_df.loc[
-                parent.well_legend_df["Loc ID"] == locid, "color_G"
+                parent.well_legend_df["name"] == well_name, "color_G"
             ].values[0]
             color_B = parent.well_legend_df.loc[
-                parent.well_legend_df["Loc ID"] == locid, "color_B"
+                parent.well_legend_df["name"] == well_name, "color_B"
             ].values[0]
             line_thick = parent.well_legend_df.loc[
-                parent.well_legend_df["Loc ID"] == locid, "line_thick"
+                parent.well_legend_df["name"] == well_name, "line_thick"
             ].values[0]
             opacity = parent.well_legend_df.loc[
-                parent.well_legend_df["Loc ID"] == locid, "opacity"
+                parent.well_legend_df["name"] == well_name, "opacity"
             ].values[0]
             # if not isinstance(sequence_value, str):
             #     print("sequence_value: ", sequence_value)
@@ -428,7 +427,7 @@ class Legend(QObject):
             "well_color_dialog_btn > QPushButton used to select color"
             well_color_dialog_btn = QPushButton()
             well_color_dialog_btn.locid = (
-                locid  # this is to pass these values to the update function below
+                well_name  # this is to pass these values to the update function below
             )
             well_color_dialog_btn.setStyleSheet(
                 "background-color:rgb({},{},{})".format(color_R, color_G, color_B)
@@ -436,12 +435,12 @@ class Legend(QObject):
             "well_line_thick_spn > QSpinBox used to select line thickness"
             well_line_thick_spn = QSpinBox()
             well_line_thick_spn.locid = (
-                locid  # this is to pass these values to the update function below
+                well_name  # this is to pass these values to the update function below
             )
             well_line_thick_spn.setValue(line_thick)
             "well_line_opacity_spn > QSpinBox used to select line thickness"
             well_line_opacity_spn = QSpinBox()
-            well_line_opacity_spn.locid = locid
+            well_line_opacity_spn.locid = well_name
             well_line_opacity_spn.setMaximum(100)
             well_line_opacity_spn.setValue(opacity)
             "Create items"
@@ -1122,13 +1121,13 @@ class Legend(QObject):
         locid = sender.locid
         # Here we use the same query as above to GET the color from the legend.
         old_color_R = parent.well_legend_df.loc[
-            parent.well_legend_df["Loc ID"] == locid, "color_R"
+            parent.well_legend_df["name"] == locid, "color_R"
         ].values[0]
         old_color_G = parent.well_legend_df.loc[
-            parent.well_legend_df["Loc ID"] == locid, "color_G"
+            parent.well_legend_df["name"] == locid, "color_G"
         ].values[0]
         old_color_B = parent.well_legend_df.loc[
-            parent.well_legend_df["Loc ID"] == locid, "color_B"
+            parent.well_legend_df["name"] == locid, "color_B"
         ].values[0]
         # https://doc.qt.io/qtforpython/PySide2/QtGui/QColor.html#PySide2.QtGui.QColor
         color_in = QColor(old_color_R, old_color_G, old_color_B)
@@ -1141,13 +1140,13 @@ class Legend(QObject):
         new_color_B = color_out.blue()
         # Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend.
         parent.well_legend_df.loc[
-            parent.well_legend_df["Loc ID"] == locid, "color_R"
+            parent.well_legend_df["name"] == locid, "color_R"
         ] = new_color_R
         parent.well_legend_df.loc[
-            parent.well_legend_df["Loc ID"] == locid, "color_G"
+            parent.well_legend_df["name"] == locid, "color_G"
         ] = new_color_G
         parent.well_legend_df.loc[
-            parent.well_legend_df["Loc ID"] == locid, "color_B"
+            parent.well_legend_df["name"] == locid, "color_B"
         ] = new_color_B
         # Update sender color.
         # self.sender().setStyleSheet(
@@ -1173,7 +1172,7 @@ class Legend(QObject):
         line_thick = sender.value()
         # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.well_legend_df.loc[
-            parent.well_legend_df["Loc ID"] == locid, "line_thick"
+            parent.well_legend_df["name"] == locid, "line_thick"
         ] = line_thick
         # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.well_coll.df.loc[
@@ -1189,7 +1188,7 @@ class Legend(QObject):
         opacity = sender.value()
         # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
         parent.well_legend_df.loc[
-            parent.well_legend_df["Loc ID"] == locid, "opacity"
+            parent.well_legend_df["name"] == locid, "opacity"
         ] = opacity
         # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.well_coll.df.loc[
