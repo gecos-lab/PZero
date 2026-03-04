@@ -21,6 +21,8 @@ from numpy import pi as np_pi
 from numpy import sin as np_sin
 from numpy import sqrt as np_sqrt
 from numpy import zeros as np_zeros
+from numpy import array as np_array
+from numpy import sum as np_sum
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import concat as pd_concat
@@ -1037,7 +1039,728 @@ def implicit_model_loop_structural(self):
     self.print_terminal("Loop interpolation completed.")
 
 
-@freeze_gui_onoff
+def _compute_fault_geometric_features(points):
+    """
+    Compute geometric features of fault data using PCA (Principal Component Analysis).
+    
+    Analyzes the point cloud to determine the fault's center, principal axes,
+    and their lengths. Used for LoopStructural fault interpolation parameters.
+    
+    Args:
+        points: numpy array of shape (n, 3) with X, Y, Z coordinates
+    
+    Returns:
+        center: numpy array [x, y, z] of the fault center
+        axes: numpy array of shape (3, 3) with principal axes as rows
+              (major, intermediate, minor axes - sorted by length descending)
+        lengths: numpy array [major_len, intermediate_len, minor_len]
+    """
+    from numpy import array as np_array
+    from numpy import mean as np_mean
+    from numpy import cov as np_cov
+    from numpy import linalg as np_linalg
+    from numpy import argsort as np_argsort
+    from numpy import ptp as np_ptp
+    from numpy import identity as np_identity
+    from numpy import cross as np_cross
+    from numpy import dot as np_dot
+
+    if points is None or len(points) == 0:
+        return np_array([0, 0, 0]), np_identity(3), np_array([0, 0, 0])
+    
+    points = np_array(points)
+    center = np_mean(points, axis=0)
+    
+    if len(points) <= 1:
+        return center, np_identity(3), np_zeros(3)
+    
+    centered_points = points - center
+    
+    if len(points) == 2:
+        # Special handling for 2 points (a line)
+        vec = centered_points[1] - centered_points[0]
+        length1 = np_linalg.norm(vec)
+        axis1 = vec / length1 if length1 > 1e-6 else np_array([1, 0, 0])
+        
+        # Create two orthogonal axes
+        temp_axis = np_array([0, 0, 1]) if abs(np_dot(axis1, np_array([0, 0, 1]))) < 0.9 else np_array([0, 1, 0])
+        axis2 = np_cross(axis1, temp_axis)
+        axis2_norm = np_linalg.norm(axis2)
+        if axis2_norm > 1e-6:
+            axis2 = axis2 / axis2_norm
+        
+        axis3 = np_cross(axis1, axis2)
+        axis3_norm = np_linalg.norm(axis3)
+        if axis3_norm > 1e-6:
+            axis3 = axis3 / axis3_norm
+        
+        return center, np_array([axis1, axis2, axis3]), np_array([length1, 0, 0])
+    
+    # Calculate covariance matrix
+    cov_matrix = np_cov(centered_points.T)
+    eigenvalues, eigenvectors_cols = np_linalg.eigh(cov_matrix)
+    
+    # Sort by eigenvalues in descending order
+    sort_idx = np_argsort(eigenvalues)[::-1]
+    axes = eigenvectors_cols[:, sort_idx].T  # Transpose to get axes as rows
+    
+    # Compute lengths based on point cloud extents along these axes
+    projected_coords = centered_points @ axes.T
+    lengths = np_ptp(projected_coords, axis=0)
+    
+    # Ensure axes are normalized
+    for i in range(3):
+        norm = np_linalg.norm(axes[i])
+        if norm > 1e-6:
+            axes[i] = axes[i] / norm
+        else:
+            default_axes = np_identity(3)
+            axes[i] = default_axes[i]
+    
+    # Sort axes by length (descending)
+    sort_idx = np_argsort(lengths)[::-1]
+    axes = axes[sort_idx]
+    lengths = lengths[sort_idx]
+    
+    # Ensure right-handed coordinate system
+    if np_dot(np_cross(axes[0], axes[1]), axes[2]) < 0:
+        axes[2] = -axes[2]
+    
+    return center, axes, lengths
+
+
+@freeze_gui
+def implicit_model_loop_structural_with_faults(self):
+    """
+    Enhanced LoopStructural implicit modelling with fault support.
+    
+    This function extends the standard implicit modelling to properly handle
+    faults by:
+    1. Separating fault entities from stratigraphy entities based on role
+    2. Computing fault geometry using PCA analysis
+    3. Creating faults using LoopStructural's create_and_add_fault()
+    4. Creating foliations that are properly affected by faults
+    
+    Input Data Organization (same as implicit_model_loop_structural):
+    X, Y, Z - cartesian coordinates
+    feature_name - unique name from legend sequence
+    val - scalar field value from legend time
+    nx, ny, nz - gradient norm components (if available)
+    """
+    self.print_terminal(
+        "LoopStructural implicit geomodeller WITH FAULT SUPPORT\n"
+        "github.com/Loop3D/LoopStructural"
+    )
+    if self.shown_table != "tabGeology":
+        self.print_terminal(" -- Only geological objects can be interpolated -- ")
+        return
+    
+    # Check if some vtkPolyData is selected
+    if not self.selected_uids:
+        self.print_terminal("No input data selected.")
+        return
+    
+    input_uids = deepcopy(self.selected_uids)
+    
+    # Separate fault entities from stratigraphy entities
+    fault_uids = []
+    strati_uids = []
+    for uid in input_uids:
+        role = self.geol_coll.get_uid_role(uid)
+        if role == "fault":
+            fault_uids.append(uid)
+        else:
+            strati_uids.append(uid)
+    
+    self.print_terminal(f"Found {len(fault_uids)} fault entities and {len(strati_uids)} stratigraphy entities")
+    
+    if not fault_uids:
+        self.print_terminal("No fault entities found. Use standard implicit_model_loop_structural for surfaces only.")
+        return
+    
+    if not strati_uids:
+        self.print_terminal("WARNING: No stratigraphy entities found. Model will only contain faults.")
+    
+    # Dictionary for Loop input data
+    loop_input_dict = {
+        "X": None, "Y": None, "Z": None,
+        "feature_name": None, "val": None, "interface": None,
+        "nx": None, "ny": None, "nz": None,
+        "gx": None, "gy": None, "gz": None,
+        "tx": None, "ty": None, "tz": None,
+        "coord": None,
+    }
+    
+    # Create dataframes to collect input data
+    self.print_terminal("-> Creating input dataframes...")
+    tic(parent=self)
+    
+    all_input_data_df = pd_DataFrame(columns=list(loop_input_dict.keys()))
+    fault_data = {}  # Store fault-specific data and geometry
+    
+    # Process fault entities
+    prgs_bar = progress_dialog(
+        max_value=len(fault_uids),
+        title_txt="Processing Faults",
+        label_txt="Analyzing fault geometry...",
+        cancel_txt=None,
+        parent=self,
+    )
+    
+    for uid in fault_uids:
+        entity_df = pd_DataFrame(columns=list(loop_input_dict.keys()))
+        vtk_obj = self.geol_coll.get_uid_vtk_obj(uid)
+        points = vtk_obj.points
+        entity_df[["X", "Y", "Z"]] = points
+        
+        # Compute fault geometry using PCA FIRST (need axes for normals)
+        center, axes, lengths = _compute_fault_geometric_features(points)
+        
+        # Get fault normal from PCA (minor axis = perpendicular to fault plane)
+        fault_normal_pca = axes[2] if len(axes) > 2 else np_array([0, 0, 1])
+        
+        # Check if entity already has normals, otherwise use PCA-computed normal
+        if "Normals" in self.geol_coll.get_uid_properties_names(uid):
+            entity_df[["nx", "ny", "nz"]] = self.geol_coll.get_uid_property(
+                uid=uid, property_name="Normals"
+            )
+            self.print_terminal(f"    Using existing normals from entity data")
+        else:
+            # Add the PCA-computed fault normal to ALL fault points
+            # This tells LoopStructural the fault plane orientation
+            entity_df["nx"] = fault_normal_pca[0]
+            entity_df["ny"] = fault_normal_pca[1]
+            entity_df["nz"] = fault_normal_pca[2]
+            self.print_terminal(f"    Adding PCA fault normal: [{fault_normal_pca[0]:.4f}, {fault_normal_pca[1]:.4f}, {fault_normal_pca[2]:.4f}]")
+        
+        # IMPORTANT: Use a UNIQUE fault feature name (not the shared sequence!)
+        # Faults need their own unique name to be created separately from stratigraphy
+        fault_feature_name = self.geol_coll.get_uid_feature(uid)
+        # If feature name is too generic, use entity name instead
+        entity_name = self.geol_coll.get_uid_name(uid)
+        if not fault_feature_name or fault_feature_name == "undef":
+            fault_feature_name = entity_name
+        # Prefix with "fault_" to ensure uniqueness
+        fault_feature_name = f"fault_{fault_feature_name}"
+        
+        entity_df["feature_name"] = fault_feature_name
+        entity_df["val"] = 0  # Fault surface is at value 0
+        
+        # Store fault data with the unique fault name
+        fault_data[fault_feature_name] = {
+            "uid": uid,
+            "center": center,
+            "axes": axes,
+            "lengths": lengths,
+            "name": entity_name,
+            "feature": self.geol_coll.get_uid_feature(uid),
+            "scenario": self.geol_coll.get_uid_scenario(uid),
+        }
+        
+        self.print_terminal(f"  Fault '{fault_feature_name}': center={center}, lengths={lengths}")
+        
+        all_input_data_df = pd_concat([all_input_data_df, entity_df], ignore_index=True)
+        prgs_bar.add_one()
+    
+    prgs_bar.close()
+    
+    # Process stratigraphy entities
+    if strati_uids:
+        prgs_bar = progress_dialog(
+            max_value=len(strati_uids),
+            title_txt="Processing Stratigraphy",
+            label_txt="Adding stratigraphy to dataframe...",
+            cancel_txt=None,
+            parent=self,
+        )
+        
+        # Use a single consistent name for all stratigraphy data
+        strati_feature_name = "stratigraphy"
+        
+        for uid in strati_uids:
+            entity_df = pd_DataFrame(columns=list(loop_input_dict.keys()))
+            entity_df[["X", "Y", "Z"]] = self.geol_coll.get_uid_vtk_obj(uid).points
+            
+            if "Normals" in self.geol_coll.get_uid_properties_names(uid):
+                entity_df[["nx", "ny", "nz"]] = self.geol_coll.get_uid_property(
+                    uid=uid, property_name="Normals"
+                )
+            
+            # Use consistent stratigraphy feature name for all non-fault entities
+            entity_df["feature_name"] = strati_feature_name
+            
+            val_single = self.geol_coll.legend_df.loc[
+                (self.geol_coll.legend_df["role"] == self.geol_coll.get_uid_role(uid))
+                & (self.geol_coll.legend_df["feature"] == self.geol_coll.get_uid_feature(uid))
+                & (self.geol_coll.legend_df["scenario"] == self.geol_coll.get_uid_scenario(uid)),
+                "time",
+            ].values[0]
+            if val_single == -999999.0:
+                val_single = float("nan")
+            entity_df["val"] = val_single
+            
+            all_input_data_df = pd_concat([all_input_data_df, entity_df], ignore_index=True)
+            prgs_bar.add_one()
+        
+        prgs_bar.close()
+    
+    toc(parent=self)
+    
+    # Drop empty columns
+    self.print_terminal("-> Drop empty columns...")
+    tic(parent=self)
+    all_input_data_df.dropna(axis=1, how="all", inplace=True)
+    toc(parent=self)
+    
+    # Ask for model parameters
+    input_dict = {
+        "boundary": ["Boundary: ", self.boundary_coll.get_names],
+        "method": ["Interpolation method: ", ["PLI", "FDI", "surfe"]],
+    }
+    options_dict = multiple_input_dialog(
+        title="Implicit Modelling with Faults", input_dict=input_dict
+    )
+    if options_dict is None:
+        options_dict = {
+            "boundary": self.boundary_coll.get_names[0],
+            "method": "PLI"
+        }
+    
+    # Get bounding box from boundary
+    boundary_uid = self.boundary_coll.df.loc[
+        self.boundary_coll.df["name"] == options_dict["boundary"], "uid"
+    ].values[0]
+    bounds = self.boundary_coll.get_uid_vtk_obj(boundary_uid).GetBounds()
+    origin_x, maximum_x = bounds[0], bounds[1]
+    origin_y, maximum_y = bounds[2], bounds[3]
+    
+    if bounds[4] == bounds[5]:
+        # 2D boundary - ask for vertical extension
+        vertical_extension_in = {
+            "message": ["Model vertical extension", 
+                       "Define MAX and MIN vertical extension of the 3D implicit model.",
+                       "QLabel"],
+            "top": ["Insert top", 1000.0, "QLineEdit"],
+            "bottom": ["Insert bottom", -1000.0, "QLineEdit"],
+        }
+        vertical_extension_updt = general_input_dialog(
+            title="Implicit Modelling with Faults",
+            input_dict=vertical_extension_in,
+        )
+        origin_z = float(vertical_extension_updt.get("bottom", -1000.0))
+        maximum_z = float(vertical_extension_updt.get("top", 1000.0))
+        if origin_z > maximum_z:
+            origin_z, maximum_z = maximum_z, origin_z
+    else:
+        origin_z, maximum_z = bounds[4], bounds[5]
+    
+    edge_x = maximum_x - origin_x
+    edge_y = maximum_y - origin_y
+    edge_z = maximum_z - origin_z
+    origin = [origin_x, origin_y, origin_z]
+    maximum = [maximum_x, maximum_y, maximum_z]
+    
+    self.print_terminal(f"Model origin: {origin}")
+    self.print_terminal(f"Model maximum: {maximum}")
+    
+    # Check overlap
+    if (all_input_data_df["X"].min() > maximum_x or all_input_data_df["X"].max() < origin_x
+        or all_input_data_df["Y"].min() > maximum_y or all_input_data_df["Y"].max() < origin_y
+        or all_input_data_df["Z"].min() > maximum_z or all_input_data_df["Z"].max() < origin_z):
+        self.print_terminal("ERROR: Bounding Box does not intersect input data")
+        return
+    
+    # Ask for grid spacing
+    default_spacing = np_cbrt(edge_x * edge_y * edge_z / (50 * 50 * 25))
+    target_spacing = input_one_value_dialog(
+        title="Implicit Modelling with Faults",
+        label="Grid target spacing in model units",
+        default_value=default_spacing,
+    )
+    if target_spacing is None or target_spacing <= 0:
+        target_spacing = default_spacing
+    
+    dimension_x = max(1, int(np_around(edge_x / target_spacing)))
+    dimension_y = max(1, int(np_around(edge_y / target_spacing)))
+    dimension_z = max(1, int(np_around(edge_z / target_spacing)))
+    dimensions = [dimension_x, dimension_y, dimension_z]
+    spacing = [edge_x / dimension_x, edge_y / dimension_y, edge_z / dimension_z]
+    
+    self.print_terminal(f"Grid dimensions: {dimensions}")
+    self.print_terminal(f"Grid spacing: {spacing}")
+    
+    # Calculate a sensible default displacement based on model size
+    model_diagonal = np_sqrt(edge_x**2 + edge_y**2 + edge_z**2)
+    default_displacement = model_diagonal * 0.05  # 5% of model diagonal as default
+    
+    # Ask for fault parameters
+    fault_params_input = {
+        "message": [
+            "Fault Parameters",
+            f"Model size: {edge_x:.0f} x {edge_y:.0f} x {edge_z:.0f}\n"
+            f"Suggested displacement: {default_displacement:.1f} (5% of diagonal)\n"
+            "Use negative displacement to flip fault polarity.",
+            "QLabel",
+        ],
+        "displacement": ["Fault displacement (negative to flip)", default_displacement, "QLineEdit"],
+        "rake": ["Fault rake (degrees)", -90, "QLineEdit"],
+        "rake_info": [
+            "Rake conventions",
+            "0°=Sinistral, 90°=Reverse, -90°=Normal, ±180°=Dextral\n"
+            "If displacement is wrong direction, try negative value or add/subtract 180° from rake.",
+            "QLabel",
+        ],
+        "nelements": ["Number of elements", 1000, "QLineEdit"],
+        "fault_buffer": ["Fault buffer", 0.5, "QLineEdit"],
+    }
+    fault_params = general_input_dialog(
+        title="Fault Parameters",
+        input_dict=fault_params_input,
+    )
+    if fault_params is None:
+        fault_params = {"displacement": default_displacement, "rake": -90, "nelements": 1000, "fault_buffer": 0.5}
+    
+    displacement = float(fault_params.get("displacement", default_displacement))
+    fault_rake = float(fault_params.get("rake", -90))  # Default -90 = normal fault
+    nelements = int(fault_params.get("nelements", 1000))
+    fault_buffer = float(fault_params.get("fault_buffer", 0.5))
+    
+    self.print_terminal(f"Fault parameters: displacement={displacement:.2f}, rake={fault_rake}°, nelements={nelements}, buffer={fault_buffer}")
+    
+    # Create LoopStructural model
+    self.print_terminal("-> Creating LoopStructural model...")
+    tic(parent=self)
+    model = GeologicalModel(origin, maximum)
+    # Use set_model_data() method - this is the correct way to assign data
+    model.set_model_data(all_input_data_df)
+    toc(parent=self)
+    
+    self.print_terminal(f"all_input_data_df:\n{all_input_data_df}")
+    
+    # Create faults FIRST (they must exist before foliation that references them)
+    self.print_terminal("-> Creating faults...")
+    tic(parent=self)
+    created_fault_features = []
+    
+    for fault_name, fault_info in fault_data.items():
+        self.print_terminal(f"  Creating fault: {fault_name}")
+        
+        center = fault_info["center"]
+        axes = fault_info["axes"]
+        lengths = fault_info["lengths"]
+        
+        # Calculate fault extent - use larger values to ensure fault covers model
+        major_len = float(lengths[0]) if lengths[0] > 0 else max(edge_x, edge_y) * 2
+        intermediate_len = float(lengths[1]) if lengths[1] > 0 else max(edge_x, edge_y)
+        minor_len = float(lengths[2]) if lengths[2] > 0 else edge_z
+        
+        # Ensure minimum values for fault extent
+        major_len = max(major_len, max(edge_x, edge_y, edge_z) * 0.5)
+        intermediate_len = max(intermediate_len, max(edge_x, edge_y, edge_z) * 0.3)
+        minor_len = max(minor_len, max(edge_x, edge_y, edge_z) * 0.1)
+        
+        self.print_terminal(f"    Fault geometry: center={center}")
+        self.print_terminal(f"    major={major_len:.2f}, intermediate={intermediate_len:.2f}, minor={minor_len:.2f}")
+        
+        # IMPORTANT: Convert numpy array to list for LoopStructural compatibility
+        # LoopStructural's parameter comparison fails with numpy arrays
+        center_list = center.tolist() if hasattr(center, 'tolist') else list(center)
+        
+        # Get the fault axes from PCA
+        major_axis = axes[0] if len(axes) > 0 else np_array([1, 0, 0])  # Strike direction
+        intermediate_axis = axes[1] if len(axes) > 1 else np_array([0, 1, 0])  # Dip direction
+        fault_normal = axes[2] if len(axes) > 2 else np_array([0, 0, 1])  # Normal to fault
+        
+        # Convert to lists for LoopStructural
+        fault_normal_list = fault_normal.tolist() if hasattr(fault_normal, 'tolist') else list(fault_normal)
+        
+        # Log the axes for debugging
+        self.print_terminal(f"    Fault axes (PCA):")
+        self.print_terminal(f"      major (strike): {axes[0]}")
+        self.print_terminal(f"      intermediate (dip): {axes[1]}")
+        self.print_terminal(f"      minor (normal): {axes[2]}")
+        
+        # Compute actual 3D slip vector from rake angle
+        # Rake conventions:
+        # - 0° = along major axis (sinistral/strike-slip)
+        # - 90° = along intermediate axis (reverse/thrust)
+        # - -90° = opposite to intermediate axis (normal)
+        # - ±180° = opposite to major axis (dextral/strike-slip)
+        import math
+        rake_rad = math.radians(fault_rake)
+        slip_vector_3d = (math.cos(rake_rad) * major_axis + 
+                         math.sin(rake_rad) * intermediate_axis)
+        
+        # Normalize the slip vector
+        slip_norm = np_sqrt(np_sum(slip_vector_3d**2))
+        if slip_norm > 1e-6:
+            slip_vector_3d = slip_vector_3d / slip_norm
+        
+        slip_vector_list = slip_vector_3d.tolist() if hasattr(slip_vector_3d, 'tolist') else list(slip_vector_3d)
+        
+        # Build fault parameters - use correct parameter names for LoopStructural
+        # Use points=True to let LoopStructural build fault frame from data points
+        fault_params_ls = {
+            "nelements": nelements,
+            "interpolator_type": options_dict["method"],  # NOTE: underscore, not camelCase
+            "fault_buffer": fault_buffer,
+            "fault_centre": center_list,  # NOTE: British spelling + must be list, not numpy array!
+            "major_axis": major_len,
+            "minor_axis": minor_len,
+            "intermediate_axis": intermediate_len,
+            "points": True,  # Let LoopStructural use data points to build fault frame
+        }
+        
+        # Only add slip_vector if rake is not the default (let LoopStructural auto-compute otherwise)
+        if fault_rake != 0:
+            fault_params_ls["slip_vector"] = slip_vector_list
+            self.print_terminal(f"    slip_vector (3D): {slip_vector_list}")
+        
+        self.print_terminal(f"    rake={fault_rake}° (0=sinistral, 90=reverse, -90=normal, ±180=dextral)")
+        self.print_terminal(f"    fault_normal_vector: {fault_normal_list}")
+        self.print_terminal(f"    Using points=True for fault frame construction")
+        
+        try:
+            # Create the fault with displacement
+            model.create_and_add_fault(
+                fault_name,
+                displacement,
+                **fault_params_ls
+            )
+            
+            # Get the created fault feature
+            fault_feature = model.get_feature_by_name(fault_name)
+            if fault_feature is not None:
+                created_fault_features.append(fault_feature)
+                self.print_terminal(f"    Fault '{fault_name}' created successfully (type: {fault_feature.type})")
+            else:
+                self.print_terminal(f"    WARNING: Could not retrieve fault feature '{fault_name}'")
+        except Exception as e:
+            self.print_terminal(f"    ERROR creating fault '{fault_name}': {e}")
+            import traceback
+            self.print_terminal(traceback.format_exc())
+    
+    toc(parent=self)
+    
+    # Create foliations AFTER faults (so they can be affected by faults)
+    strati_feature_name = "stratigraphy"  # Must match name used in dataframe
+    
+    if strati_uids:
+        self.print_terminal("-> Creating foliations (affected by faults)...")
+        tic(parent=self)
+        
+        try:
+            # Pass the fault features list so foliation is displaced by faults
+            foliation_faults = created_fault_features if created_fault_features else None
+            self.print_terminal(f"  Faults affecting foliation: {[f.name for f in created_fault_features] if created_fault_features else 'None'}")
+            
+            model.create_and_add_foliation(
+                strati_feature_name,  # Use consistent name
+                interpolator_type=options_dict["method"],  # NOTE: underscore
+                nelements=(dimensions[0] * dimensions[1] * dimensions[2]),
+                faults=foliation_faults,
+            )
+            self.print_terminal(f"  Foliation '{strati_feature_name}' created (affected by faults)")
+        except Exception as e:
+            self.print_terminal(f"  ERROR creating foliation: {e}")
+            import traceback
+            self.print_terminal(traceback.format_exc())
+        
+        toc(parent=self)
+    
+    # Evaluate and visualize
+    self.print_terminal("-> Evaluating model on regular grid...")
+    tic(parent=self)
+    regular_grid = model.regular_grid(nsteps=dimensions, shuffle=False, rescale=False)
+    toc(parent=self)
+    
+    # Create output Voxet
+    self.print_terminal("-> Creating output Voxet...")
+    tic(parent=self)
+    
+    model_name = input_text_dialog(
+        title="Implicit Modelling with Faults",
+        label="Name of the output Voxet",
+        default_text="Loop_model_faults",
+    )
+    if model_name is None:
+        model_name = "Loop_model_faults"
+    
+    voxet_dict = deepcopy(self.mesh3d_coll.entity_dict)
+    voxet_dict["name"] = model_name
+    voxet_dict["topology"] = "Voxet"
+    voxet_dict["properties_names"] = []
+    voxet_dict["properties_components"] = []
+    voxet_dict["vtk_obj"] = Voxet()
+    voxet_dict["vtk_obj"].origin = [
+        origin_x + spacing[0] / 2,
+        origin_y + spacing[1] / 2,
+        origin_z + spacing[2] / 2,
+    ]
+    voxet_dict["vtk_obj"].dimensions = dimensions
+    voxet_dict["vtk_obj"].spacing = spacing
+    
+    # Log all model features
+    self.print_terminal(f"  Model features: {[f.name for f in model.features]}")
+    
+    # Evaluate each feature and store in voxet
+    for feature in model.features:
+        self.print_terminal(f"  Evaluating feature: {feature.name} (type: {feature.type})")
+        try:
+            scalar_field = model.evaluate_feature_value(feature.name, regular_grid, scale=False)
+            scalar_field = scalar_field.reshape((dimension_x, dimension_y, dimension_z))
+            scalar_field = scalar_field.transpose(2, 1, 0)
+            scalar_field = scalar_field.ravel()
+            
+            voxet_dict["vtk_obj"].set_point_data(
+                data_key=feature.name, attribute_matrix=scalar_field
+            )
+            voxet_dict["properties_names"].append(feature.name)
+            voxet_dict["properties_components"].append(1)
+            self.print_terminal(f"    Feature '{feature.name}' evaluated successfully")
+        except Exception as e:
+            self.print_terminal(f"    ERROR evaluating {feature.name}: {e}")
+            import traceback
+            self.print_terminal(traceback.format_exc())
+    
+    if voxet_dict["vtk_obj"].points_number > 0:
+        self.mesh3d_coll.add_entity_from_dict(voxet_dict)
+        self.print_terminal(f"  Voxet '{model_name}' created with properties: {voxet_dict['properties_names']}")
+    
+    toc(parent=self)
+    
+    # Extract FAULT isosurfaces (at value 0 for the fault feature)
+    self.print_terminal("-> Extracting fault surfaces...")
+    tic(parent=self)
+    
+    for fault_name, fault_info in fault_data.items():
+        try:
+            # Check if the fault feature exists in the voxet
+            if fault_name not in voxet_dict["properties_names"]:
+                self.print_terminal(f"  WARNING: Fault '{fault_name}' not found in voxet properties")
+                continue
+            
+            voxet_dict["vtk_obj"].GetPointData().SetActiveScalars(fault_name)
+            
+            iso_surface = vtkContourFilter()
+            iso_surface.SetInputData(voxet_dict["vtk_obj"])
+            iso_surface.ComputeScalarsOn()
+            iso_surface.ComputeGradientsOn()
+            iso_surface.SetArrayComponent(0)
+            iso_surface.GenerateTrianglesOn()
+            iso_surface.UseScalarTreeOn()
+            iso_surface.SetValue(0, 0.0)  # Fault surface is at scalar value 0
+            iso_surface.Update()
+            
+            n_points = iso_surface.GetOutput().GetNumberOfPoints()
+            self.print_terminal(f"  Fault '{fault_name}' isosurface: {n_points} points")
+            
+            if n_points > 0:
+                surf_dict = deepcopy(self.geol_coll.entity_dict)
+                surf_dict["name"] = f"{fault_info['feature']}_surface_from_{model_name}"
+                surf_dict["topology"] = "TriSurf"
+                surf_dict["role"] = "fault"
+                surf_dict["feature"] = fault_info["feature"]
+                surf_dict["scenario"] = fault_info["scenario"]
+                surf_dict["vtk_obj"] = TriSurf()
+                surf_dict["vtk_obj"].ShallowCopy(iso_surface.GetOutput())
+                surf_dict["vtk_obj"].Modified()
+                
+                if isinstance(surf_dict["vtk_obj"].points, np_ndarray) and len(surf_dict["vtk_obj"].points) > 0:
+                    self.geol_coll.add_entity_from_dict(surf_dict)
+                    self.print_terminal(f"    Fault surface '{fault_name}' extracted ({n_points} points)")
+                else:
+                    self.print_terminal(f"    WARNING: Fault surface '{fault_name}' is empty after copy")
+            else:
+                self.print_terminal(f"    WARNING: Fault surface '{fault_name}' has no points")
+        except Exception as e:
+            self.print_terminal(f"  ERROR extracting fault surface '{fault_name}': {e}")
+            import traceback
+            self.print_terminal(traceback.format_exc())
+    
+    toc(parent=self)
+    
+    # Extract STRATIGRAPHY isosurfaces
+    strati_feature_name = "stratigraphy"  # Must match name used above
+    
+    if strati_uids:
+        self.print_terminal("-> Extracting stratigraphy isosurfaces...")
+        tic(parent=self)
+        
+        try:
+            # Check if stratigraphy feature exists
+            if strati_feature_name not in voxet_dict["properties_names"]:
+                self.print_terminal(f"  WARNING: '{strati_feature_name}' not found in voxet properties")
+                self.print_terminal(f"  Available properties: {voxet_dict['properties_names']}")
+            else:
+                voxet_dict["vtk_obj"].GetPointData().SetActiveScalars(strati_feature_name)
+                
+                # Get unique stratigraphic values (excluding fault data)
+                # Filter by feature_name == strati_feature_name to get only stratigraphy values
+                strati_values = all_input_data_df.loc[
+                    all_input_data_df["feature_name"] == strati_feature_name, "val"
+                ].dropna().unique()
+                
+                self.print_terminal(f"  Stratigraphic values to extract: {strati_values}")
+                
+                for value in strati_values:
+                    value = float(value)
+                    self.print_terminal(f"  Extracting iso-surface at value = {value}")
+                    
+                    # Get metadata from legend
+                    legend_match = self.geol_coll.legend_df[self.geol_coll.legend_df["time"] == value]
+                    if legend_match.empty:
+                        self.print_terminal(f"    WARNING: No legend entry for time={value}")
+                        continue
+                    
+                    role = legend_match["role"].values[0]
+                    feature = legend_match["feature"].values[0]
+                    scenario = legend_match["scenario"].values[0]
+                    
+                    iso_surface = vtkContourFilter()
+                    iso_surface.SetInputData(voxet_dict["vtk_obj"])
+                    iso_surface.ComputeScalarsOn()
+                    iso_surface.ComputeGradientsOn()
+                    iso_surface.SetArrayComponent(0)
+                    iso_surface.GenerateTrianglesOn()
+                    iso_surface.UseScalarTreeOn()
+                    iso_surface.SetValue(0, value)
+                    iso_surface.Update()
+                    
+                    n_points = iso_surface.GetOutput().GetNumberOfPoints()
+                    self.print_terminal(f"    Isosurface at {value}: {n_points} points")
+                    
+                    if n_points > 0:
+                        surf_dict = deepcopy(self.geol_coll.entity_dict)
+                        surf_dict["name"] = f"{feature}_from_{model_name}"
+                        surf_dict["topology"] = "TriSurf"
+                        surf_dict["role"] = role
+                        surf_dict["feature"] = feature
+                        surf_dict["scenario"] = scenario
+                        surf_dict["vtk_obj"] = TriSurf()
+                        surf_dict["vtk_obj"].ShallowCopy(iso_surface.GetOutput())
+                        surf_dict["vtk_obj"].Modified()
+                        
+                        if isinstance(surf_dict["vtk_obj"].points, np_ndarray) and len(surf_dict["vtk_obj"].points) > 0:
+                            self.geol_coll.add_entity_from_dict(surf_dict)
+                            self.print_terminal(f"      Iso-surface at value = {value} created ({n_points} points)")
+                        else:
+                            self.print_terminal(f"      WARNING: Isosurface at {value} is empty after copy")
+                    else:
+                        self.print_terminal(f"      WARNING: Isosurface at {value} has no points")
+                        
+        except Exception as e:
+            self.print_terminal(f"  ERROR extracting stratigraphy surfaces: {e}")
+            import traceback
+            self.print_terminal(traceback.format_exc())
+        
+        toc(parent=self)
+    
+    voxet_dict["vtk_obj"].Modified()
+    self.print_terminal("Loop interpolation with faults completed.")
+
+
+@freeze_gui
 def surface_smoothing(
     self, mode=0, convergence_value=1, boundary_smoothing=False, edge_smoothing=False
 ):
