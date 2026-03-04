@@ -1320,6 +1320,7 @@ def _fault_obb_settings_dialog(
     """
     from numpy import array as np_array
     from PySide6.QtWidgets import (
+        QCheckBox,
         QComboBox,
         QDialog,
         QDialogButtonBox,
@@ -1353,6 +1354,10 @@ def _fault_obb_settings_dialog(
             "major_scale_pct": 100.0,
             "intermediate_scale_pct": 100.0,
             "minor_scale_pct": 100.0,
+            "has_abutting": False,
+            "abutting_fault": None,
+            "has_splay": False,
+            "splay_fault": None,
         }
 
     dialog = QDialog(parent)
@@ -1362,7 +1367,8 @@ def _fault_obb_settings_dialog(
     root_layout = QVBoxLayout(dialog)
     info_label = QLabel(
         "Configure each fault independently.\n"
-        "Use OBB scale controls to enlarge/shrink the fault box before interpolation."
+        "Use OBB scale controls to enlarge/shrink the fault box before interpolation.\n"
+        "Optional: define abutting/splay relations with other faults."
     )
     root_layout.addWidget(info_label)
 
@@ -1437,6 +1443,18 @@ def _fault_obb_settings_dialog(
     obb_form.addRow("Raw OBB lengths", raw_lengths_label)
     obb_form.addRow("Scaled OBB lengths", scaled_lengths_label)
     controls_layout.addLayout(obb_form, 0, 1)
+
+    relations_form = QFormLayout()
+    abutting_check = QCheckBox("Present")
+    abutting_target_combo = QComboBox(dialog)
+    splay_check = QCheckBox("Present")
+    splay_target_combo = QComboBox(dialog)
+
+    relations_form.addRow("Abutting", abutting_check)
+    relations_form.addRow("Abutting with", abutting_target_combo)
+    relations_form.addRow("Splay", splay_check)
+    relations_form.addRow("Splay with", splay_target_combo)
+    controls_layout.addLayout(relations_form, 0, 2)
 
     preview_group = QGroupBox("OBB Preview", dialog)
     preview_layout = QVBoxLayout(preview_group)
@@ -1561,6 +1579,33 @@ def _fault_obb_settings_dialog(
         )
         return base_lengths * scales
 
+    def update_relation_controls_enabled():
+        has_other_faults = len(fault_names) > 1
+        abutting_target_combo.setEnabled(has_other_faults and abutting_check.isChecked())
+        splay_target_combo.setEnabled(has_other_faults and splay_check.isChecked())
+
+    def populate_relation_targets(fault_name, preferred_abutting=None, preferred_splay=None):
+        target_faults = [name for name in fault_names if name != fault_name]
+
+        def _populate_combo(combo, preferred_target):
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItem("None", None)
+            for target_name in target_faults:
+                target_label = f"{fault_data[target_name]['name']} ({target_name})"
+                combo.addItem(target_label, target_name)
+            idx = 0
+            if preferred_target is not None:
+                found_idx = combo.findData(preferred_target)
+                if found_idx >= 0:
+                    idx = found_idx
+            combo.setCurrentIndex(idx)
+            combo.blockSignals(False)
+
+        _populate_combo(abutting_target_combo, preferred_abutting)
+        _populate_combo(splay_target_combo, preferred_splay)
+        update_relation_controls_enabled()
+
     def save_current_fault_settings():
         fault_name = current_fault["name"]
         defaults_by_fault[fault_name]["displacement"] = float(displacement_spin.value())
@@ -1572,6 +1617,10 @@ def _fault_obb_settings_dialog(
             intermediate_scale_spin.value()
         )
         defaults_by_fault[fault_name]["minor_scale_pct"] = float(minor_scale_spin.value())
+        defaults_by_fault[fault_name]["has_abutting"] = bool(abutting_check.isChecked())
+        defaults_by_fault[fault_name]["abutting_fault"] = abutting_target_combo.currentData()
+        defaults_by_fault[fault_name]["has_splay"] = bool(splay_check.isChecked())
+        defaults_by_fault[fault_name]["splay_fault"] = splay_target_combo.currentData()
 
     def update_lengths_labels(fault_name):
         base_lengths = np_array(fault_data[fault_name]["lengths"], dtype=float)
@@ -1633,8 +1682,16 @@ def _fault_obb_settings_dialog(
             major_scale_spin.setValue(params["major_scale_pct"])
             intermediate_scale_spin.setValue(params["intermediate_scale_pct"])
             minor_scale_spin.setValue(params["minor_scale_pct"])
+            abutting_check.setChecked(bool(params.get("has_abutting", False)))
+            splay_check.setChecked(bool(params.get("has_splay", False)))
+            populate_relation_targets(
+                fault_name,
+                preferred_abutting=params.get("abutting_fault"),
+                preferred_splay=params.get("splay_fault"),
+            )
         finally:
             is_loading["active"] = False
+        update_relation_controls_enabled()
         update_lengths_labels(fault_name)
         update_preview(fault_name)
 
@@ -1647,6 +1704,7 @@ def _fault_obb_settings_dialog(
     def on_controls_changed(*_):
         if is_loading["active"]:
             return
+        update_relation_controls_enabled()
         save_current_fault_settings()
         selected_fault = current_fault["name"]
         update_lengths_labels(selected_fault)
@@ -1660,6 +1718,10 @@ def _fault_obb_settings_dialog(
     major_scale_spin.valueChanged.connect(on_controls_changed)
     intermediate_scale_spin.valueChanged.connect(on_controls_changed)
     minor_scale_spin.valueChanged.connect(on_controls_changed)
+    abutting_check.toggled.connect(on_controls_changed)
+    splay_check.toggled.connect(on_controls_changed)
+    abutting_target_combo.currentIndexChanged.connect(on_controls_changed)
+    splay_target_combo.currentIndexChanged.connect(on_controls_changed)
 
     load_fault_settings(current_fault["name"])
 
@@ -1679,6 +1741,10 @@ def _fault_obb_settings_dialog(
             "center": fault_data[fault_name]["center"],
             "axes": fault_data[fault_name]["axes"],
             "lengths": get_scaled_lengths(fault_name),
+            "has_abutting": bool(params.get("has_abutting", False)),
+            "abutting_fault": params.get("abutting_fault"),
+            "has_splay": bool(params.get("has_splay", False)),
+            "splay_fault": params.get("splay_fault"),
         }
 
     return per_fault_settings
@@ -2067,6 +2133,10 @@ def implicit_model_loop_structural_with_faults(self):
                 "center": fault_info["center"],
                 "axes": fault_info["axes"],
                 "lengths": fault_info["lengths"],
+                "has_abutting": False,
+                "abutting_fault": None,
+                "has_splay": False,
+                "splay_fault": None,
             }
     else:
         self.print_terminal("Per-fault parameters configured:")
@@ -2075,7 +2145,9 @@ def implicit_model_loop_structural_with_faults(self):
                 f"  {fault_name}: displacement={params['displacement']:.2f}, "
                 f"rake={params['rake']:.1f} deg, nelements={params['nelements']}, "
                 f"buffer={params['fault_buffer']:.2f}, "
-                f"lengths={params['lengths']}"
+                f"lengths={params['lengths']}, "
+                f"abutting={params.get('abutting_fault') if params.get('has_abutting') else 'None'}, "
+                f"splay={params.get('splay_fault') if params.get('has_splay') else 'None'}"
             )    
     # Create LoopStructural model
     self.print_terminal("-> Creating LoopStructural model...")
@@ -2091,6 +2163,7 @@ def implicit_model_loop_structural_with_faults(self):
     self.print_terminal("-> Creating faults...")
     tic(parent=self)
     created_fault_features = []
+    created_fault_features_by_name = {}
     
     for fault_name, fault_info in fault_data.items():
         self.print_terminal(f"  Creating fault: {fault_name}")
@@ -2229,6 +2302,7 @@ def implicit_model_loop_structural_with_faults(self):
             fault_feature = model.get_feature_by_name(fault_name)
             if fault_feature is not None:
                 created_fault_features.append(fault_feature)
+                created_fault_features_by_name[fault_name] = fault_feature
                 self.print_terminal(f"    Fault '{fault_name}' created successfully (type: {fault_feature.type})")
             else:
                 self.print_terminal(f"    WARNING: Could not retrieve fault feature '{fault_name}'")
@@ -2236,6 +2310,77 @@ def implicit_model_loop_structural_with_faults(self):
             self.print_terminal(f"    ERROR creating fault '{fault_name}': {e}")
             import traceback
             self.print_terminal(traceback.format_exc())
+
+    # Apply optional fault-fault interactions after all faults are available.
+    if created_fault_features_by_name:
+        self.print_terminal("-> Applying fault interactions (abutting/splay)...")
+        for source_fault_name, params in fault_params_by_name.items():
+            source_fault = created_fault_features_by_name.get(source_fault_name)
+            if source_fault is None:
+                continue
+
+            # Splay relation
+            if params.get("has_splay", False):
+                target_fault_name = params.get("splay_fault")
+                if target_fault_name is None:
+                    self.print_terminal(
+                        f"  WARNING: Splay enabled for '{source_fault_name}' but no target fault selected."
+                    )
+                elif target_fault_name == source_fault_name:
+                    self.print_terminal(
+                        f"  WARNING: Fault '{source_fault_name}' cannot splay with itself."
+                    )
+                else:
+                    target_fault = created_fault_features_by_name.get(target_fault_name)
+                    if target_fault is None:
+                        self.print_terminal(
+                            f"  WARNING: Splay target '{target_fault_name}' not found for '{source_fault_name}'."
+                        )
+                    else:
+                        try:
+                            if hasattr(source_fault, "builder") and hasattr(source_fault.builder, "add_splay"):
+                                region = source_fault.builder.add_splay(target_fault)
+                                if hasattr(source_fault, "splay"):
+                                    source_fault.splay[target_fault.name] = region
+                                self.print_terminal(
+                                    f"  Splay relation applied: '{source_fault_name}' with '{target_fault_name}'."
+                                )
+                            else:
+                                self.print_terminal(
+                                    f"  WARNING: Fault '{source_fault_name}' does not expose builder.add_splay()."
+                                )
+                        except Exception as e:
+                            self.print_terminal(
+                                f"  ERROR applying splay '{source_fault_name}' -> '{target_fault_name}': {e}"
+                            )
+
+            # Abutting relation
+            if params.get("has_abutting", False):
+                target_fault_name = params.get("abutting_fault")
+                if target_fault_name is None:
+                    self.print_terminal(
+                        f"  WARNING: Abutting enabled for '{source_fault_name}' but no target fault selected."
+                    )
+                elif target_fault_name == source_fault_name:
+                    self.print_terminal(
+                        f"  WARNING: Fault '{source_fault_name}' cannot abut itself."
+                    )
+                else:
+                    target_fault = created_fault_features_by_name.get(target_fault_name)
+                    if target_fault is None:
+                        self.print_terminal(
+                            f"  WARNING: Abutting target '{target_fault_name}' not found for '{source_fault_name}'."
+                        )
+                    else:
+                        try:
+                            source_fault.add_abutting_fault(target_fault, positive=None)
+                            self.print_terminal(
+                                f"  Abutting relation applied: '{source_fault_name}' with '{target_fault_name}'."
+                            )
+                        except Exception as e:
+                            self.print_terminal(
+                                f"  ERROR applying abutting '{source_fault_name}' -> '{target_fault_name}': {e}"
+                            )
     
     toc(parent=self)
     
