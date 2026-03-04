@@ -1129,7 +1129,7 @@ def _compute_fault_geometric_features(points):
     return center, axes, lengths
 
 
-@freeze_gui
+@freeze_gui_onoff
 def implicit_model_loop_structural_with_faults(self):
     """
     Enhanced LoopStructural implicit modelling with fault support.
@@ -1760,7 +1760,7 @@ def implicit_model_loop_structural_with_faults(self):
     self.print_terminal("Loop interpolation with faults completed.")
 
 
-@freeze_gui
+@freeze_gui_onoff
 def surface_smoothing(
     self, mode=0, convergence_value=1, boundary_smoothing=False, edge_smoothing=False
 ):
