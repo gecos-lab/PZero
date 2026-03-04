@@ -606,6 +606,12 @@ class GifExportDialog(QDialog):
                     orig_line_width = prop.GetLineWidth() if prop else 1.0
                     orig_point_size = prop.GetPointSize() if prop else 5.0
                     representation = prop.GetRepresentation() if prop else 2
+                    render_points_as_spheres = (
+                        bool(prop.GetRenderPointsAsSpheres()) if prop else False
+                    )
+                    render_lines_as_tubes = (
+                        bool(prop.GetRenderLinesAsTubes()) if prop else False
+                    )
                     visibility = actor.GetVisibility()
 
                     if not visibility:
@@ -642,6 +648,8 @@ class GifExportDialog(QDialog):
                         style=style,
                         line_width=scaled_line_width,
                         point_size=scaled_point_size,
+                        render_points_as_spheres=render_points_as_spheres,
+                        render_lines_as_tubes=render_lines_as_tubes,
                         show_scalar_bar=show_scalar_bar and scalars is not None,
                         scalar_bar_args={
                             "color": text_color,
