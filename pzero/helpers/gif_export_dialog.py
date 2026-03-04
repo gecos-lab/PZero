@@ -781,6 +781,47 @@ class GifExportDialog(QDialog):
         else:
             return t
 
+    @staticmethod
+    def _normalize_vector(vector, fallback):
+        """Return a normalized vector, or the normalized fallback if degenerate."""
+        vec = np.array(vector, dtype=float)
+        norm = np.linalg.norm(vec)
+        if norm < 1e-12:
+            fb = np.array(fallback, dtype=float)
+            fb_norm = np.linalg.norm(fb)
+            if fb_norm < 1e-12:
+                return np.array([0.0, 0.0, 1.0], dtype=float)
+            return fb / fb_norm
+        return vec / norm
+
+    @staticmethod
+    def _rotate_vector_around_axis(vector, axis, angle_rad):
+        """Rotate a 3D vector around an axis using Rodrigues' rotation formula."""
+        v = np.array(vector, dtype=float)
+        k = GifExportDialog._normalize_vector(axis, fallback=[0.0, 0.0, 1.0])
+        c = np.cos(angle_rad)
+        s = np.sin(angle_rad)
+        return v * c + np.cross(k, v) * s + k * np.dot(k, v) * (1.0 - c)
+
+    @staticmethod
+    def _compute_orbit_view_up(position, focal_point, orbit_axis, fallback_up):
+        """Compute a stable up-vector aligned with orbit axis to avoid rolling."""
+        forward = np.array(focal_point, dtype=float) - np.array(position, dtype=float)
+        f_norm = np.linalg.norm(forward)
+        if f_norm < 1e-12:
+            return tuple(GifExportDialog._normalize_vector(fallback_up, [0.0, 0.0, 1.0]))
+        forward /= f_norm
+
+        axis = GifExportDialog._normalize_vector(orbit_axis, [0.0, 0.0, 1.0])
+        right = np.cross(forward, axis)
+        r_norm = np.linalg.norm(right)
+        if r_norm < 1e-12:
+            return tuple(GifExportDialog._normalize_vector(fallback_up, [0.0, 0.0, 1.0]))
+        right /= r_norm
+
+        up = np.cross(right, forward)
+        return tuple(GifExportDialog._normalize_vector(up, fallback_up))
+
     def _generate_camera_path(self, plotter, num_frames):
         """Generate camera positions for the animation.
         
@@ -830,6 +871,7 @@ class GifExportDialog(QDialog):
         focal_point = np.array(cam.focal_point)
         start_pos = np.array(cam.position)
         view_up = np.array(cam.up)
+        stable_fallback_up = self._normalize_vector(view_up, [0.0, 0.0, 1.0])
         
         camera_positions = []
         
@@ -841,6 +883,17 @@ class GifExportDialog(QDialog):
             # Fallback if camera is at focal point
             radius = 1.0
             camera_vector = np.array([0, -radius, 0])
+
+        # Select orbit axis
+        if "Vertical" in axis_choice:
+            orbit_axis = np.array([0.0, 0.0, 1.0], dtype=float)
+        elif "X-axis" in axis_choice:
+            orbit_axis = np.array([1.0, 0.0, 0.0], dtype=float)
+        elif "Y-axis" in axis_choice:
+            orbit_axis = np.array([0.0, 1.0, 0.0], dtype=float)
+        else:  # Camera Up Vector
+            orbit_axis = stable_fallback_up
+        orbit_axis = self._normalize_vector(orbit_axis, [0.0, 0.0, 1.0])
         
         # Normalize the camera vector for direction
         camera_dir = camera_vector / radius
@@ -871,18 +924,34 @@ class GifExportDialog(QDialog):
                 angle = swing_angle * np.sin(eased_t * 2 * np.pi)
                 
                 if "Vertical" in axis_choice or "Up" in axis_choice:
-                    new_azimuth = initial_azimuth + angle
-                    new_elevation = initial_elevation + elevation_offset
+                    base_vector = camera_vector
+                    if abs(elevation_offset) > 1e-12:
+                        right_axis = self._normalize_vector(
+                            np.cross(orbit_axis, base_vector), [1.0, 0.0, 0.0]
+                        )
+                        base_vector = self._rotate_vector_around_axis(
+                            base_vector, right_axis, elevation_offset
+                        )
+                    rotated_vector = self._rotate_vector_around_axis(
+                        base_vector, orbit_axis, angle
+                    )
+                    new_pos = focal_point + rotated_vector
+                    frame_up = self._compute_orbit_view_up(
+                        new_pos, focal_point, orbit_axis, stable_fallback_up
+                    )
+                    camera_positions.append(
+                        (tuple(new_pos), tuple(focal_point), frame_up)
+                    )
                 else:
                     new_azimuth = initial_azimuth
                     new_elevation = initial_elevation + angle
-                
-                # Calculate new position using spherical coordinates
-                new_x = focal_point[0] + radius * np.cos(new_elevation) * np.cos(new_azimuth)
-                new_y = focal_point[1] + radius * np.cos(new_elevation) * np.sin(new_azimuth)
-                new_z = focal_point[2] + radius * np.sin(new_elevation)
-                
-                camera_positions.append(((new_x, new_y, new_z), tuple(focal_point), tuple(view_up)))
+                    # Calculate new position using spherical coordinates
+                    new_x = focal_point[0] + radius * np.cos(new_elevation) * np.cos(new_azimuth)
+                    new_y = focal_point[1] + radius * np.cos(new_elevation) * np.sin(new_azimuth)
+                    new_z = focal_point[2] + radius * np.sin(new_elevation)
+                    camera_positions.append(
+                        ((new_x, new_y, new_z), tuple(focal_point), tuple(view_up))
+                    )
                 
             elif "tilt" in anim_type:
                 # Tilt animation: camera tilts up and down
@@ -903,43 +972,22 @@ class GifExportDialog(QDialog):
             else:
                 # Orbit/Turntable animation - rotate around the model
                 angle_rad = np.radians(total_angle * eased_t) * direction
-                
-                if "Vertical" in axis_choice or "Up" in axis_choice:
-                    # Rotate around Z axis (vertical turntable)
-                    new_azimuth = initial_azimuth + angle_rad
-                    new_elevation = initial_elevation + elevation_offset
-                    
-                    new_x = focal_point[0] + radius * np.cos(new_elevation) * np.cos(new_azimuth)
-                    new_y = focal_point[1] + radius * np.cos(new_elevation) * np.sin(new_azimuth)
-                    new_z = focal_point[2] + radius * np.sin(new_elevation)
-                    
-                elif "X-axis" in axis_choice:
-                    # Rotate around X axis
-                    cos_a = np.cos(angle_rad)
-                    sin_a = np.sin(angle_rad)
-                    
-                    # Rotate camera_vector around X axis
-                    rot_y = camera_vector[1] * cos_a - camera_vector[2] * sin_a
-                    rot_z = camera_vector[1] * sin_a + camera_vector[2] * cos_a
-                    
-                    new_x = focal_point[0] + camera_vector[0]
-                    new_y = focal_point[1] + rot_y
-                    new_z = focal_point[2] + rot_z
-                    
-                else:  # Y-axis
-                    # Rotate around Y axis
-                    cos_a = np.cos(angle_rad)
-                    sin_a = np.sin(angle_rad)
-                    
-                    # Rotate camera_vector around Y axis
-                    rot_x = camera_vector[0] * cos_a + camera_vector[2] * sin_a
-                    rot_z = -camera_vector[0] * sin_a + camera_vector[2] * cos_a
-                    
-                    new_x = focal_point[0] + rot_x
-                    new_y = focal_point[1] + camera_vector[1]
-                    new_z = focal_point[2] + rot_z
-                
-                camera_positions.append(((new_x, new_y, new_z), tuple(focal_point), tuple(view_up)))
+                base_vector = camera_vector
+                if abs(elevation_offset) > 1e-12 and ("Vertical" in axis_choice or "Up" in axis_choice):
+                    right_axis = self._normalize_vector(
+                        np.cross(orbit_axis, base_vector), [1.0, 0.0, 0.0]
+                    )
+                    base_vector = self._rotate_vector_around_axis(
+                        base_vector, right_axis, elevation_offset
+                    )
+                rotated_vector = self._rotate_vector_around_axis(
+                    base_vector, orbit_axis, angle_rad
+                )
+                new_pos = focal_point + rotated_vector
+                frame_up = self._compute_orbit_view_up(
+                    new_pos, focal_point, orbit_axis, stable_fallback_up
+                )
+                camera_positions.append((tuple(new_pos), tuple(focal_point), frame_up))
         
         # Handle ping-pong looping
         if hasattr(self, 'loop_check') and self.loop_check.isChecked():
