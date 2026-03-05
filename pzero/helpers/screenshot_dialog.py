@@ -423,6 +423,7 @@ class ScreenshotExportDialog(QDialog):
 
         line_scale = self.line_scale_spin.value()
         point_scale = self.point_scale_spin.value()
+        resolution_scale = self._get_resolution_scale(target_plotter)
         selected_cmap = self.colormap_combo.currentText()
         use_custom_cmap = selected_cmap != "(Use Current)"
         show_scalar_bar = self.show_scalar_bar_check.isChecked()
@@ -457,13 +458,18 @@ class ScreenshotExportDialog(QDialog):
                         bool(prop.GetRenderLinesAsTubes()) if prop else False
                     )
                     visibility = actor.GetVisibility()
+                    texture = actor.GetTexture() if hasattr(actor, "GetTexture") else None
 
                     if not visibility:
                         continue
 
                     # Scale line width and point size
-                    scaled_line_width = max(orig_line_width * line_scale, 1.0)
-                    scaled_point_size = max(orig_point_size * point_scale, 3.0)
+                    scaled_line_width = max(
+                        orig_line_width * line_scale * resolution_scale, 1.0
+                    )
+                    scaled_point_size = max(
+                        orig_point_size * point_scale * resolution_scale, 3.0
+                    )
 
                     # Determine style
                     style = "surface"
@@ -483,11 +489,12 @@ class ScreenshotExportDialog(QDialog):
                     # Add mesh to target plotter
                     target_plotter.add_mesh(
                         mesh,
-                        color=color if scalars is None else None,
+                        color=color if scalars is None and texture is None else None,
                         scalars=scalars,
                         cmap=cmap,
                         rgb=rgb,
                         clim=clim,
+                        texture=texture,
                         opacity=opacity,
                         style=style,
                         line_width=scaled_line_width,
@@ -506,6 +513,36 @@ class ScreenshotExportDialog(QDialog):
                     continue
         except Exception:
             pass
+
+    @staticmethod
+    def _get_plotter_size(plotter):
+        """Safely read plotter window size."""
+        if plotter is None:
+            return None, None
+        try:
+            size = plotter.window_size
+            if size and len(size) == 2 and size[0] > 0 and size[1] > 0:
+                return float(size[0]), float(size[1])
+        except Exception:
+            pass
+        return None, None
+
+    def _get_resolution_scale(self, target_plotter):
+        """Scale widths/sizes so exports match on-screen legend proportions."""
+        src_w, src_h = self._get_plotter_size(self.plotter)
+        dst_w, dst_h = self._get_plotter_size(target_plotter)
+        if (
+            src_w is None
+            or src_h is None
+            or dst_w is None
+            or dst_h is None
+            or src_w <= 0
+            or src_h <= 0
+        ):
+            return 1.0
+        scale_x = dst_w / src_w
+        scale_y = dst_h / src_h
+        return max((scale_x + scale_y) * 0.5, 0.1)
 
     @staticmethod
     def _normalize_property_name(prop_name):
