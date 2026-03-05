@@ -14,7 +14,15 @@ from numpy import sin as np_sin
 
 from PySide6.QtCore import Signal as pyqtSignal
 from PySide6.QtCore import QObject, QUrl
-from PySide6.QtWidgets import QMainWindow, QMessageBox, QDialog, QLabel, QVBoxLayout, QComboBox
+from PySide6.QtWidgets import (
+    QMainWindow,
+    QMessageBox,
+    QDialog,
+    QLabel,
+    QVBoxLayout,
+    QComboBox,
+    QMenu,
+)
 from PySide6.QtGui import QAction, QDesktopServices, QPixmap
 from PySide6.QtCore import Qt, QTimer
 
@@ -394,6 +402,170 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def selected_collection(self):
         """Returns which collection is shown, based on shown_table."""
         return self.tab_collection_dict[self.shown_table]
+
+    @property
+    def table_view_collection_dict(self):
+        """Map table view widgets to collection attribute names."""
+        return {
+            self.GeologyTableView: "geol_coll",
+            self.XSectionsTableView: "xsect_coll",
+            self.DOMsTableView: "dom_coll",
+            self.ImagesTableView: "image_coll",
+            self.Meshes3DTableView: "mesh3d_coll",
+            self.BoundariesTableView: "boundary_coll",
+            self.WellsTableView: "well_coll",
+            self.FluidsTableView: "fluid_coll",
+            self.BackgroundsTableView: "backgrnd_coll",
+        }
+
+    def collection_display_name(self, collection_name: str = None) -> str:
+        """Return a user-facing collection name."""
+        names = {
+            "geol_coll": "Geology",
+            "xsect_coll": "X Sections",
+            "dom_coll": "DEMs and DOMs",
+            "image_coll": "Images",
+            "mesh3d_coll": "Meshes and Grids",
+            "boundary_coll": "Boundaries",
+            "well_coll": "Wells",
+            "fluid_coll": "Fluids",
+            "backgrnd_coll": "Background",
+        }
+        return names.get(collection_name, str(collection_name))
+
+    def bind_collection_table_context_menus(self):
+        """Bind right-click context menus for all entities table views."""
+        for table_view, collection_name in self.table_view_collection_dict.items():
+            old_handler = getattr(table_view, "_transfer_context_handler", None)
+            if old_handler:
+                try:
+                    table_view.customContextMenuRequested.disconnect(old_handler)
+                except Exception:
+                    pass
+            table_view.setContextMenuPolicy(Qt.CustomContextMenu)
+            handler = (
+                lambda pos, tv=table_view, src=collection_name: self.on_entities_table_context_menu(
+                    table_view=tv, source_collection_name=src, position=pos
+                )
+            )
+            table_view._transfer_context_handler = handler
+            table_view.customContextMenuRequested.connect(handler)
+
+    def get_selected_uids_from_table(self, table_view=None) -> list:
+        """Get selected entity UIDs from a given table view."""
+        if table_view is None or table_view.selectionModel() is None:
+            return []
+        selected_rows = table_view.selectionModel().selectedRows(column=0)
+        return list(dict.fromkeys([idx.data() for idx in selected_rows if idx.data()]))
+
+    def on_entities_table_context_menu(
+        self, table_view=None, source_collection_name: str = None, position=None
+    ):
+        """Open table right-click menu with Copy to / Move to actions."""
+        if table_view is None or not source_collection_name:
+            return
+
+        idx = table_view.indexAt(position)
+        if idx.isValid():
+            selected_rows = {
+                selected_idx.row()
+                for selected_idx in table_view.selectionModel().selectedRows()
+            }
+            if idx.row() not in selected_rows:
+                table_view.clearSelection()
+                table_view.selectRow(idx.row())
+
+        selected_uids = self.get_selected_uids_from_table(table_view=table_view)
+        if not selected_uids:
+            return
+
+        source_collection = getattr(self, source_collection_name, None)
+        if source_collection is None:
+            return
+
+        menu = QMenu(table_view)
+        copy_menu = menu.addMenu("Copy to")
+        move_menu = menu.addMenu("Move to")
+
+        action_map = {}
+        for destination_collection_name in self.tab_collection_dict.values():
+            destination_collection = getattr(self, destination_collection_name, None)
+            if destination_collection is None:
+                continue
+
+            label = self.collection_display_name(destination_collection_name)
+            copy_action = copy_menu.addAction(label)
+            move_action = move_menu.addAction(label)
+            action_map[copy_action] = (destination_collection_name, False)
+            action_map[move_action] = (destination_collection_name, True)
+
+            compatible = True
+            for uid in selected_uids:
+                can_transfer, _ = source_collection.can_transfer_uid_to_collection(
+                    uid=uid, destination_collection=destination_collection
+                )
+                if not can_transfer:
+                    compatible = False
+                    break
+
+            copy_action.setEnabled(compatible)
+            move_action.setEnabled(
+                compatible and destination_collection_name != source_collection_name
+            )
+
+        chosen_action = menu.exec(table_view.viewport().mapToGlobal(position))
+        if chosen_action not in action_map:
+            return
+
+        destination_collection_name, move = action_map[chosen_action]
+        self.transfer_entities_between_collections(
+            source_collection_name=source_collection_name,
+            destination_collection_name=destination_collection_name,
+            selected_uids=selected_uids,
+            move=move,
+        )
+
+    def transfer_entities_between_collections(
+        self,
+        source_collection_name: str = None,
+        destination_collection_name: str = None,
+        selected_uids: list = None,
+        move: bool = False,
+    ) -> dict:
+        """Copy/move selected UIDs between collections and log the result."""
+        source_collection = getattr(self, source_collection_name, None)
+        destination_collection = getattr(self, destination_collection_name, None)
+        if source_collection is None or destination_collection is None or not selected_uids:
+            return {"added_uids": [], "removed_uids": [], "failed": []}
+
+        if move and source_collection_name == destination_collection_name:
+            self.print_terminal(
+                "Move cancelled: source and destination collections are the same."
+            )
+            return {
+                "added_uids": [],
+                "removed_uids": [],
+                "failed": [{"uid": None, "reason": "same source and destination"}],
+            }
+
+        report = source_collection.transfer_uids_to_collection(
+            destination_collection=destination_collection,
+            uids=selected_uids,
+            move=move,
+            keep_uid_on_move=False,
+        )
+
+        operation = "Moved" if move else "Copied"
+        self.print_terminal(
+            f"{operation} {len(report['added_uids'])} entities from "
+            f"{self.collection_display_name(source_collection_name)} to "
+            f"{self.collection_display_name(destination_collection_name)}."
+        )
+        for failed in report["failed"]:
+            self.print_terminal(
+                f"{operation} skipped for uid {failed['uid']}: {failed['reason']}"
+            )
+        return report
 
     @property
     def selected_uids(self):
@@ -1181,6 +1353,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             (self.BackgroundsTableView, self.backgrnd_coll),
         ]:
             self.bind_role_click_editor(table_view=table_view, collection=collection)
+        self.bind_collection_table_context_menus()
 
         # Create the geol_coll.legend_df legend table (a Pandas dataframe), create the corresponding QT
         # Legend self.legend (a Qt QTreeWidget that is internally connected to its data source),

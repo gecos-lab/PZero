@@ -9,6 +9,7 @@ from PySide6.QtCore import (
 )
 
 from abc import abstractmethod, ABC
+from copy import deepcopy
 
 from pandas import DataFrame as pd_DataFrame
 
@@ -443,6 +444,161 @@ class BaseCollection(ABC):
             self.parent.print_terminal(
                 "ERROR - replace_vtk with vtk of a different type not allowed."
             )
+
+    @staticmethod
+    def _copy_entity_value(value=None):
+        """Safely deep-copy entity values, including VTK-like objects when possible."""
+        if value is None:
+            return None
+        if hasattr(value, "deep_copy") and callable(getattr(value, "deep_copy")):
+            try:
+                return value.deep_copy()
+            except Exception:
+                pass
+        if hasattr(value, "NewInstance") and hasattr(value, "DeepCopy"):
+            try:
+                copied = value.NewInstance()
+                copied.DeepCopy(value)
+                return copied
+            except Exception:
+                pass
+        try:
+            return deepcopy(value)
+        except Exception:
+            return value
+
+    def is_topology_compatible(self, topology=None) -> bool:
+        """Return True when topology is accepted by this collection."""
+        if "topology" not in self.entity_dict_keys:
+            return topology in (None, "", "undef")
+        if not self.valid_topologies:
+            return True
+        return topology in self.valid_topologies
+
+    def can_transfer_uid_to_collection(self, uid: str = None, destination_collection=None):
+        """Validate whether an entity uid can be copied/moved to a destination collection."""
+        if (
+            uid is None
+            or destination_collection is None
+            or uid not in self.get_uids
+        ):
+            return False, "invalid source uid or destination collection"
+
+        source_row = self.df.loc[self.df["uid"] == uid]
+        if source_row.empty:
+            return False, f"uid {uid} not found"
+        source_entity = source_row.iloc[0].to_dict()
+        source_topology = source_entity.get("topology", None)
+
+        if "topology" in destination_collection.entity_dict_keys:
+            if source_topology in (None, "", "undef"):
+                return False, "source entity has no transferable topology"
+            if not destination_collection.is_topology_compatible(source_topology):
+                return (
+                    False,
+                    f"topology '{source_topology}' is not valid for {destination_collection.collection_name}",
+                )
+        elif source_topology not in (None, "", "undef"):
+            return (
+                False,
+                f"destination {destination_collection.collection_name} does not support topology entities",
+            )
+
+        return True, ""
+
+    def build_transfer_entity_dict(
+        self, uid: str = None, destination_collection=None, keep_uid: bool = False
+    ):
+        """
+        Build an entity dictionary valid for destination_collection by copying only shared keys.
+        Non-shared keys are ignored to avoid dataframe schema corruption.
+        """
+        can_transfer, reason = self.can_transfer_uid_to_collection(
+            uid=uid, destination_collection=destination_collection
+        )
+        if not can_transfer:
+            return None, reason
+
+        source_entity = self.df.loc[self.df["uid"] == uid].iloc[0].to_dict()
+        out_entity = deepcopy(destination_collection.entity_dict)
+
+        for key in destination_collection.entity_dict_keys:
+            if key == "uid" or key not in source_entity:
+                continue
+            out_entity[key] = self._copy_entity_value(source_entity[key])
+
+        if "uid" in out_entity:
+            out_entity["uid"] = source_entity["uid"] if keep_uid else ""
+
+        if "role" in out_entity and hasattr(destination_collection, "valid_roles"):
+            valid_roles = getattr(destination_collection, "valid_roles", [])
+            if valid_roles and out_entity.get("role") not in valid_roles:
+                out_entity["role"] = destination_collection.entity_dict.get("role")
+
+        return out_entity, ""
+
+    def transfer_uids_to_collection(
+        self,
+        destination_collection=None,
+        uids: list = None,
+        move: bool = False,
+        keep_uid_on_move: bool = False,
+    ) -> dict:
+        """
+        Copy or move entities to another collection.
+        Returns a report dictionary with transferred and failed uids.
+        """
+        report = {
+            "added_uids": [],
+            "removed_uids": [],
+            "failed": [],
+        }
+        if destination_collection is None:
+            report["failed"].append(
+                {"uid": None, "reason": "destination collection is missing"}
+            )
+            return report
+
+        if not uids:
+            return report
+
+        ordered_uids = list(dict.fromkeys([uid for uid in uids if uid]))
+        for uid in ordered_uids:
+            entity_dict, reason = self.build_transfer_entity_dict(
+                uid=uid,
+                destination_collection=destination_collection,
+                keep_uid=move and keep_uid_on_move,
+            )
+            if entity_dict is None:
+                report["failed"].append({"uid": uid, "reason": reason})
+                continue
+
+            try:
+                new_uid = destination_collection.add_entity_from_dict(
+                    entity_dict=entity_dict
+                )
+            except Exception as exc:
+                report["failed"].append({"uid": uid, "reason": str(exc)})
+                continue
+
+            report["added_uids"].append(new_uid)
+
+            if move:
+                try:
+                    self.remove_entity(uid=uid)
+                    report["removed_uids"].append(uid)
+                except Exception as exc:
+                    report["failed"].append(
+                        {
+                            "uid": uid,
+                            "reason": (
+                                f"copied to {destination_collection.collection_name} "
+                                f"as {new_uid}, but remove failed: {exc}"
+                            ),
+                        }
+                    )
+
+        return report
 
     # =================== Common QT methods slightly adapted to the data source ====================================
 
