@@ -181,6 +181,7 @@ def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
 
     # Create the widget and set size and title.
     widget = QWidget()
+    widget.setWindowModality(Qt.ApplicationModal)
     widget.resize(len(input_dict) * 100, len(input_dict))
     widget.setWindowTitle(title)
 
@@ -305,6 +306,7 @@ def input_checkbox_dialog(
     If exclusive=True, only one checkbox can be selected at a time (radio button behavior).
     """
     widget = QWidget()
+    widget.setWindowModality(Qt.ApplicationModal)
     widget.setWindowTitle(title)
 
     # Place the scroll area inside a top-level layout so buttons can be placed below it
@@ -421,6 +423,7 @@ def general_input_dialog(title="title", input_dict=None):
 
     # Create the widget and set size and title.
     widget = QWidget()
+    widget.setWindowModality(Qt.ApplicationModal)
     # widget.resize(len(input_dict) * 100, len(input_dict))
     widget.setWindowTitle(title)
     # Define a grid layout.
