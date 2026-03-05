@@ -1263,6 +1263,69 @@ def _orient_fault_axes_for_rake(axes, center_normal=None):
     return np_array([major, intermediate, normal], dtype=float)
 
 
+def _compute_fault_slip_vector_from_rake(axes, rake_deg):
+    """
+    Convert rake angle on fault plane to a 3D unit slip vector.
+
+    Rake is interpreted in the local fault plane basis:
+    - 0 deg: along major (strike) axis
+    - +90 deg: along intermediate axis
+    - -90 deg: opposite intermediate axis
+    """
+    from numpy import array as np_array
+    from numpy import cross as np_cross
+    from numpy import dot as np_dot
+    from numpy import identity as np_identity
+    from numpy import linalg as np_linalg
+    from numpy import deg2rad as np_deg2rad
+    from numpy import cos as np_cos
+    from numpy import sin as np_sin
+
+    axes = np_array(axes, dtype=float)
+    if axes.shape != (3, 3):
+        axes = np_identity(3)
+
+    def _normed(vec, fallback=None):
+        v = np_array(vec, dtype=float)
+        n = np_linalg.norm(v)
+        if n > 1e-9:
+            return v / n
+        if fallback is not None:
+            f = np_array(fallback, dtype=float)
+            nf = np_linalg.norm(f)
+            if nf > 1e-9:
+                return f / nf
+        return np_array([1.0, 0.0, 0.0], dtype=float)
+
+    major = _normed(axes[0], fallback=[1.0, 0.0, 0.0])
+    intermediate = _normed(axes[1], fallback=[0.0, 1.0, 0.0])
+    normal = _normed(axes[2], fallback=np_cross(major, intermediate))
+
+    # Re-project to the fault plane and re-normalize to guarantee an orthonormal in-plane basis.
+    major = _normed(
+        major - np_dot(major, normal) * normal,
+        fallback=np_cross(intermediate, normal),
+    )
+    intermediate = _normed(
+        intermediate - np_dot(intermediate, normal) * normal,
+        fallback=np_cross(normal, major),
+    )
+
+    # Keep right-handed local basis.
+    if np_dot(np_cross(major, intermediate), normal) < 0.0:
+        intermediate = -intermediate
+
+    rake_rad = np_deg2rad(float(rake_deg))
+    rake_components = np_array([np_cos(rake_rad), np_sin(rake_rad)], dtype=float)
+    slip_vector = rake_components[0] * major + rake_components[1] * intermediate
+
+    # Numerical guard: keep slip vector exactly in-plane and normalized.
+    slip_vector = slip_vector - np_dot(slip_vector, normal) * normal
+    slip_vector = _normed(slip_vector, fallback=major)
+
+    return slip_vector, major, intermediate, normal, rake_components
+
+
 def _build_obb_wireframe_polydata(center, axes, lengths):
     """Build a line-only pyvista PolyData representing an oriented 3D box."""
     from numpy import array as np_array
@@ -2235,56 +2298,49 @@ def implicit_model_loop_structural_with_faults(self):
         center_list = center.tolist() if hasattr(center, 'tolist') else list(center)
         
         # Get the fault axes from OBB (fallback PCA for degenerate geometries).
-        major_axis = axes[0] if len(axes) > 0 else np_array([1, 0, 0])  # Strike direction
-        intermediate_axis = axes[1] if len(axes) > 1 else np_array([0, 1, 0])  # Dip direction
-        fault_normal = axes[2] if len(axes) > 2 else np_array([0, 0, 1])  # Normal to fault
-        
+        slip_vector_3d, major_axis, intermediate_axis, fault_normal, rake_components = (
+            _compute_fault_slip_vector_from_rake(axes, fault_rake)
+        )
+
         # Convert to lists for LoopStructural
-        fault_normal_list = fault_normal.tolist() if hasattr(fault_normal, 'tolist') else list(fault_normal)
-        
-        # Log the axes for debugging
-        self.print_terminal(f"    Fault axes (OBB/PCA, oriented for rake):")
-        self.print_terminal(f"      major (strike): {axes[0]}")
-        self.print_terminal(f"      intermediate (dip): {axes[1]}")
-        self.print_terminal(f"      minor (normal): {axes[2]}")
-        
-        # Compute actual 3D slip vector from rake angle.
-        # Intermediate axis is oriented toward the upper face (up-dip),
-        # so -90° is down-dip (normal) and +90° is up-dip (reverse).
+        fault_normal_list = (
+            fault_normal.tolist() if hasattr(fault_normal, "tolist") else list(fault_normal)
+        )
+        slip_vector_list = (
+            slip_vector_3d.tolist()
+            if hasattr(slip_vector_3d, "tolist")
+            else list(slip_vector_3d)
+        )
+
+        # Log the basis and rake decomposition used for the slip vector.
+        self.print_terminal("    Fault axes (OBB/PCA, oriented for rake):")
+        self.print_terminal(f"      major (strike): {major_axis}")
+        self.print_terminal(f"      intermediate (dip): {intermediate_axis}")
+        self.print_terminal(f"      minor (normal): {fault_normal}")
+        self.print_terminal(
+            f"      rake components (major, intermediate): [{rake_components[0]:.4f}, {rake_components[1]:.4f}]"
+        )
         # Rake conventions:
-        # - 0° = along major axis (sinistral/strike-slip)
-        # - 90° = along intermediate axis (reverse/thrust)
-        # - -90° = opposite to intermediate axis (normal)
-        # - ±180° = opposite to major axis (dextral/strike-slip)
-        import math
-        rake_rad = math.radians(fault_rake)
-        slip_vector_3d = (math.cos(rake_rad) * major_axis + 
-                         math.sin(rake_rad) * intermediate_axis)
-        
-        # Normalize the slip vector
-        slip_norm = np_sqrt(np_sum(slip_vector_3d**2))
-        if slip_norm > 1e-6:
-            slip_vector_3d = slip_vector_3d / slip_norm
-        
-        slip_vector_list = slip_vector_3d.tolist() if hasattr(slip_vector_3d, 'tolist') else list(slip_vector_3d)
-        
-        # Build fault parameters - use correct parameter names for LoopStructural
-        # Use points=True to let LoopStructural build fault frame from data points
+        # - 0 deg = along major axis (strike-slip)
+        # - +90 deg = along intermediate axis (reverse)
+        # - -90 deg = opposite intermediate axis (normal)
+        # - +/-180 deg = opposite major axis (strike-slip)
+
+        # Build fault parameters using LoopStructural's expected argument names.
+        # Rake-driven slip vector is always provided from the local fault basis.
         fault_params_ls = {
             "nelements": nelements,
-            "interpolator_type": options_dict["method"],  # NOTE: underscore, not camelCase
+            "interpolatortype": options_dict["method"],
             "fault_buffer": fault_buffer,
-            "fault_centre": center_list,  # NOTE: British spelling + must be list, not numpy array!
+            "fault_center": center_list,
+            "fault_normal_vector": fault_normal_list,
             "major_axis": major_len,
             "minor_axis": minor_len,
             "intermediate_axis": intermediate_len,
-            "points": True,  # Let LoopStructural use data points to build fault frame
+            "fault_slip_vector": slip_vector_list,
+            "points": True,
         }
-        
-        # Only add slip_vector if rake is not the default (let LoopStructural auto-compute otherwise)
-        if fault_rake != 0:
-            fault_params_ls["slip_vector"] = slip_vector_list
-            self.print_terminal(f"    slip_vector (3D): {slip_vector_list}")
+        self.print_terminal(f"    fault_slip_vector (3D): {slip_vector_list}")
         
         self.print_terminal(f"    rake={fault_rake}° (0=sinistral, 90=reverse, -90=normal, ±180=dextral)")
         self.print_terminal(f"    fault_normal_vector: {fault_normal_list}")
