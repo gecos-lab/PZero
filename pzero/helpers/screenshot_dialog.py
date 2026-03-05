@@ -210,7 +210,7 @@ class ScreenshotExportDialog(QDialog):
 
         # Show axes
         self.show_axes_check = QCheckBox("Show coordinate axes")
-        self.show_axes_check.setChecked(False)
+        self.show_axes_check.setChecked(True)
         form.addRow("", self.show_axes_check)
 
         # Show bounding box

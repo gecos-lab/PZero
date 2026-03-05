@@ -59,6 +59,7 @@ class GifExportDialog(QDialog):
 
     # Animation type presets
     ANIMATION_PRESETS = [
+        ("Turntable (360°)", "turntable", 360),
         ("Full Orbit (360°)", "orbit_360", 360),
         ("Half Orbit (180°)", "orbit_180", 180),
         ("Quarter Orbit (90°)", "orbit_90", 90),
@@ -66,7 +67,6 @@ class GifExportDialog(QDialog):
         ("Oscillate (±90°)", "oscillate_90", 180),
         ("Vertical Tilt (30°)", "tilt_30", 30),
         ("Zoom In/Out", "zoom", 0),
-        ("Turntable (360°)", "turntable", 360),
         ("Custom Orbit", "custom", 0),
     ]
 
@@ -192,7 +192,7 @@ class GifExportDialog(QDialog):
         # Duration
         self.duration_spin = QDoubleSpinBox()
         self.duration_spin.setRange(0.5, 30.0)
-        self.duration_spin.setValue(4.0)
+        self.duration_spin.setValue(6.0)
         self.duration_spin.setSingleStep(0.5)
         self.duration_spin.setSuffix(" seconds")
         self.duration_spin.setToolTip("Total duration of the animation")
@@ -329,7 +329,7 @@ class GifExportDialog(QDialog):
 
         # Show axes
         self.show_axes_check = QCheckBox("Show coordinate axes")
-        self.show_axes_check.setChecked(False)
+        self.show_axes_check.setChecked(True)
         form.addRow("", self.show_axes_check)
 
         # Show bounding box
