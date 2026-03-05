@@ -2977,12 +2977,10 @@ class MeshItWorkflowGUI(QWidget):
         self.hull_method_combo.addItem("Delaunay 2D (Default)", "delaunay")
         self.hull_method_combo.addItem("2D Alpha Shapes (Wavy)", "alpha_shape_2d")
         self.hull_method_combo.addItem("3D Angular Gap (Folds)", "angular_gap")
-        self.hull_method_combo.addItem("Isomap Unfolding (Complex Folds)", "isomap")
         self.hull_method_combo.setToolTip(
             "Delaunay 2D: Original method - best for flat/quasi-planar surfaces\n"
             "2D Alpha Shapes: Best for wavy/undulating surfaces with concave boundaries\n"
-            "3D Angular Gap: Advanced method for recumbent/overturned folds that cannot be projected to 2D\n"
-            "Isomap Unfolding: Geodesic parameterization for complex folded surfaces (recumbent/overturned)"
+            "3D Angular Gap: Advanced method for recumbent/overturned folds that cannot be projected to 2D"
         )
         self.hull_method_combo.setCurrentIndex(0)  # Default to Delaunay
         method_layout.addWidget(self.hull_method_combo)
@@ -3181,7 +3179,6 @@ class MeshItWorkflowGUI(QWidget):
             hull_combo.addItem("Delaunay 2D", "delaunay")
             hull_combo.addItem("Alpha Shape 2D", "alpha_shape_2d")
             hull_combo.addItem("Angular Gap 3D", "angular_gap")
-            hull_combo.addItem("Isomap Unfolding", "isomap")
 
             current_hull = self.hull_method_by_surface.get(idx, "auto")
             hull_index = hull_combo.findData(current_hull)
@@ -9617,6 +9614,9 @@ class MeshItWorkflowGUI(QWidget):
                 method = hull_method_combo.currentData() or "delaunay"
             else:
                 method = "delaunay"
+        if method == "isomap":
+            logger.info("Hull method 'isomap' is disabled in Convex Hull tab; falling back to 'angular_gap'.")
+            method = "angular_gap"
 
         logger.info(f"Hull computation for dataset {dataset_index} using method='{method}'")
 
@@ -9658,48 +9658,6 @@ class MeshItWorkflowGUI(QWidget):
                         # Fallback to 2D alpha shapes if 3D fails
                         logger.warning("Angular gap method failed, falling back to 2D alpha shape...")
                         method = "alpha_shape_2d"  # Fall through below
-                
-                if method == "isomap":
-                    # Isomap Geodesic Unfolding for complex folded surfaces
-                    logger.info(f"Computing boundary using Isomap unfolding for '{ds.get('name')}'...")
-                    try:
-                        from Pymeshit.isomap_utils import IsomapTriangulator
-                        
-                        # Adaptive n_neighbors based on point count
-                        n_neighbors = min(15, max(5, len(pts) // 10))
-                        isomap_triangulator = IsomapTriangulator(n_neighbors=n_neighbors)
-                        
-                        # Use alpha hull for concave boundaries, convex hull otherwise
-                        if boundary_sensitivity > 0.5:
-                            hull_pts_np = isomap_triangulator.generate_alpha_hull(
-                                pts, alpha_factor=boundary_sensitivity
-                            )
-                        else:
-                            hull_pts_np = isomap_triangulator.generate_hull(pts)
-                        
-                        if hull_pts_np is not None and len(hull_pts_np) >= 3:
-                            logger.info(f"Isomap hull computed with {len(hull_pts_np)} boundary vertices")
-                        else:
-                            # Fallback to angular gap if Isomap fails
-                            logger.warning("Isomap unfolding failed, falling back to Angular Gap...")
-                            method = "angular_gap"
-                            ordered_indices = self._compute_boundary_angular_gap(pts, boundary_sensitivity)
-                            if ordered_indices is not None and len(ordered_indices) >= 3:
-                                hull_pts_np = pts[ordered_indices]
-                            else:
-                                method = "delaunay"  # Ultimate fallback
-                                
-                    except ImportError as e:
-                        logger.warning(f"Isomap import failed ({e}), falling back to Angular Gap...")
-                        method = "angular_gap"
-                        ordered_indices = self._compute_boundary_angular_gap(pts, boundary_sensitivity)
-                        if ordered_indices is not None and len(ordered_indices) >= 3:
-                            hull_pts_np = pts[ordered_indices]
-                        else:
-                            method = "delaunay"
-                    except Exception as e:
-                        logger.error(f"Isomap hull computation failed: {e}")
-                        method = "delaunay"  # Fallback
                 
                 if method == "alpha_shape_2d":
                     # Alpha shapes for wavy/concave surfaces (formerly "alpha")
