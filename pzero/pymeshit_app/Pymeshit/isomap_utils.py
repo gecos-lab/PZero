@@ -15,9 +15,10 @@ even on complex fold geometries.
 
 import numpy as np
 import logging
+import time
 from typing import Optional, Tuple, Dict, List, Any
 from scipy.spatial import ConvexHull, cKDTree
-from scipy.spatial.distance import pdist, squareform
+from scipy.spatial.distance import pdist
 
 logger = logging.getLogger("MeshIt-Workflow")
 
@@ -115,31 +116,37 @@ class IsomapTriangulator:
         self._tree_3d = cKDTree(self.points_3d)
         
         # Fit Isomap
+        fit_start = time.perf_counter()
         try:
             self.isomap_model = Isomap(
                 n_neighbors=effective_neighbors,
                 n_components=self.n_components,
                 metric='euclidean',
-                p=2
+                p=2,
+                neighbors_algorithm='kd_tree',
+                n_jobs=-1,
+                eigen_solver='arpack',
+                path_method='D'
             )
-            self.points_2d = self.isomap_model.fit_transform(points_3d)
+            self.points_2d = self.isomap_model.fit_transform(self.points_3d)
             
         except Exception as e:
             logger.error(f"Isomap fitting failed: {e}")
             # Fallback: Use PCA projection
             logger.warning("Falling back to PCA projection")
-            self.points_2d = self._pca_fallback(points_3d)
+            self.points_2d = self._pca_fallback(self.points_3d)
         
         # Build 2D KDTree for interpolation
+        self._tree_3d = cKDTree(self.points_3d)
         self._tree_2d = cKDTree(self.points_2d)
         
         self._fitted = True
-        logger.info(f"Isomap fit complete. 2D point range: "
+        logger.info(f"Isomap fit complete in {time.perf_counter() - fit_start:.3f}s. 2D point range: "
                    f"X=[{self.points_2d[:,0].min():.2f}, {self.points_2d[:,0].max():.2f}], "
                    f"Y=[{self.points_2d[:,1].min():.2f}, {self.points_2d[:,1].max():.2f}]")
         
         return self
-    
+
     def _pca_fallback(self, points_3d: np.ndarray) -> np.ndarray:
         """
         PCA-based 2D projection as fallback when Isomap fails.
@@ -185,29 +192,25 @@ class IsomapTriangulator:
         
         n_query = len(points_3d)
         result_2d = np.zeros((n_query, 2), dtype=np.float64)
-        
-        # For each query point, check if it's an original point
-        # or needs interpolation
-        for i, pt3d in enumerate(points_3d):
-            # Check if this is an original point (within tolerance)
-            dist, idx = self._tree_3d.query(pt3d)
-            
-            if dist < 1e-10:  # Exact match
-                result_2d[i] = self.points_2d[idx]
-            else:
-                # Interpolate using IDW from nearest original points
-                k = min(5, len(self.points_3d))
-                dists, idxs = self._tree_3d.query(pt3d, k=k)
-                
-                if k == 1:
-                    dists = np.array([dists])
-                    idxs = np.array([idxs])
-                
-                # IDW interpolation
-                weights = 1.0 / np.maximum(dists ** 2, 1e-12)
-                weights /= weights.sum()
-                
-                result_2d[i] = np.sum(weights[:, np.newaxis] * self.points_2d[idxs], axis=0)
+
+        exact_dists, exact_idxs = self._tree_3d.query(points_3d, k=1)
+        exact_mask = exact_dists < 1e-10
+
+        if np.any(exact_mask):
+            result_2d[exact_mask] = self.points_2d[exact_idxs[exact_mask]]
+
+        interp_mask = ~exact_mask
+        if np.any(interp_mask):
+            k = min(5, len(self.points_3d))
+            dists, idxs = self._tree_3d.query(points_3d[interp_mask], k=k)
+
+            if k == 1:
+                dists = dists[:, np.newaxis]
+                idxs = idxs[:, np.newaxis]
+
+            weights = 1.0 / np.maximum(dists ** 2, 1e-12)
+            weights /= weights.sum(axis=1, keepdims=True)
+            result_2d[interp_mask] = np.einsum('ij,ijk->ik', weights, self.points_2d[idxs])
         
         return result_2d
     
@@ -487,20 +490,28 @@ class IsomapTriangulator:
                    f"{len(segments) if segments is not None else 0} segments, "
                    f"base_size={base_size:.4f}")
         
+        total_start = time.perf_counter()
+
         # Step 1: Fit Isomap on REFERENCE points (all raw points)
         # This learns the fold geometry from the dense point cloud
+        fit_start = time.perf_counter()
         self.fit(reference_points)
+        logger.info(f"Isomap triangulation stage: fit={time.perf_counter() - fit_start:.3f}s")
         
         # Step 2: Transform ONLY the boundary points to 2D
         # This is fast since we only transform a small subset
+        transform_start = time.perf_counter()
         boundary_points_2d = self.transform(points_3d)
+        logger.info(f"Isomap triangulation stage: boundary_transform={time.perf_counter() - transform_start:.3f}s")
         
         n_original = len(points_3d)
         
         # Step 3: Transform hole markers if provided
         holes_2d = None
         if holes is not None and len(holes) > 0:
+            holes_start = time.perf_counter()
             holes_2d = self.transform(holes)
+            logger.info(f"Isomap triangulation stage: hole_transform={time.perf_counter() - holes_start:.3f}s")
         
         # Step 4: Run CDT in 2D using DirectTriangleWrapper
         # Only triangulates the boundary points with segments as constraints
@@ -510,6 +521,7 @@ class IsomapTriangulator:
             base_size=base_size
         )
         
+        triangulation_start = time.perf_counter()
         try:
             tri_result = triangulator.triangulate(
                 points=boundary_points_2d,
@@ -531,10 +543,12 @@ class IsomapTriangulator:
         n_steiner = n_total - n_original
         
         logger.info(f"2D triangulation complete: {n_total} vertices "
-                   f"({n_steiner} Steiner points), {len(triangles)} triangles")
+                   f"({n_steiner} Steiner points), {len(triangles)} triangles "
+                   f"in {time.perf_counter() - triangulation_start:.3f}s")
         
         # Step 5: Map back to 3D using the REFERENCE points for interpolation
         # Boundary points get exact 3D coords, Steiner points get IDW-interpolated
+        map_start = time.perf_counter()
         vertices_3d = self._map_vertices_to_3d_with_reference(
             vertices_2d,
             boundary_points_2d,  # Original boundary points in 2D
@@ -542,12 +556,17 @@ class IsomapTriangulator:
             reference_points,   # All reference points in 3D (for TPS)
             n_original
         )
+        logger.info(f"Isomap triangulation stage: map_to_3d={time.perf_counter() - map_start:.3f}s")
         
         # Step 6: Validate mesh quality - check for potential self-intersections
+        validate_start = time.perf_counter()
         n_inverted = self._count_inverted_triangles(vertices_3d, triangles)
+        logger.info(f"Isomap triangulation stage: validate={time.perf_counter() - validate_start:.3f}s")
         if n_inverted > 0:
             logger.warning(f"Detected {n_inverted} potentially inverted triangles. "
                           f"Consider increasing smoothing parameter or using finer segmentation.")
+
+        logger.info(f"Isomap triangulation total={time.perf_counter() - total_start:.3f}s")
         
         return {
             'vertices': vertices_3d,
@@ -578,28 +597,16 @@ class IsomapTriangulator:
         """
         if len(triangles) < 2:
             return 0
-        
-        # Compute triangle normals
-        normals = []
-        areas = []
-        
-        for tri in triangles:
-            v0, v1, v2 = vertices[tri[0]], vertices[tri[1]], vertices[tri[2]]
-            e1 = v1 - v0
-            e2 = v2 - v0
-            normal = np.cross(e1, e2)
-            area = np.linalg.norm(normal) / 2.0
-            
-            if area > 1e-12:
-                normal = normal / (2.0 * area)
-            else:
-                normal = np.array([0, 0, 0])
-            
-            normals.append(normal)
-            areas.append(area)
-        
-        normals = np.array(normals)
-        areas = np.array(areas)
+
+        tri_vertices = vertices[triangles]
+        edge_1 = tri_vertices[:, 1] - tri_vertices[:, 0]
+        edge_2 = tri_vertices[:, 2] - tri_vertices[:, 0]
+        raw_normals = np.cross(edge_1, edge_2)
+        areas = 0.5 * np.linalg.norm(raw_normals, axis=1)
+
+        normals = np.zeros_like(raw_normals)
+        valid_mask = areas > 1e-12
+        normals[valid_mask] = raw_normals[valid_mask] / (2.0 * areas[valid_mask, np.newaxis])
         
         # Compute average normal direction
         avg_normal = normals.mean(axis=0)
@@ -611,18 +618,10 @@ class IsomapTriangulator:
         avg_normal = avg_normal / avg_norm
         
         # Count triangles with flipped normals or tiny areas
-        n_inverted = 0
         min_area = np.median(areas) * 0.001  # Very small compared to median
-        
-        for i, (normal, area) in enumerate(zip(normals, areas)):
-            # Check for flipped normal (dot product < 0)
-            if np.dot(normal, avg_normal) < -0.5:
-                n_inverted += 1
-            # Check for degenerate triangle
-            elif area < min_area:
-                n_inverted += 1
-        
-        return n_inverted
+        alignment = normals @ avg_normal
+
+        return int(np.count_nonzero((alignment < -0.5) | (areas < min_area)))
     
     def _map_vertices_to_3d(
         self,
@@ -719,13 +718,11 @@ class IsomapTriangulator:
         weights = 1.0 / np.power(dists, power)
         weights /= weights.sum()
         
-        # Weighted average of 3D coordinates
-        result_3d = np.zeros(3)
-        for w, idx in zip(weights, idxs):
-            if idx < len(original_points_3d):
-                result_3d += w * original_points_3d[idx]
-        
-        return result_3d
+        valid_mask = idxs < len(original_points_3d)
+        if not np.any(valid_mask):
+            return np.zeros(3, dtype=np.float64)
+
+        return weights[valid_mask] @ original_points_3d[idxs[valid_mask]]
     
     def _map_vertices_to_3d_with_reference(
         self,
@@ -755,31 +752,30 @@ class IsomapTriangulator:
             (V, 3) array of 3D vertex coordinates.
         """
         n_total = len(vertices_2d)
-        vertices_3d = np.zeros((n_total, 3), dtype=np.float64)
+        vertices_3d = np.full((n_total, 3), np.nan, dtype=np.float64)
         
         # Build KDTree for boundary points in 2D for exact matching
         boundary_tree_2d = cKDTree(boundary_points_2d)
         
         # Original boundary points: exact mapping
-        for i in range(min(n_original, n_total)):
-            dist, idx = boundary_tree_2d.query(vertices_2d[i])
-            
-            if dist < 1e-10 and idx < len(boundary_points_3d):
-                # Exact match - use original 3D coordinates
-                vertices_3d[i] = boundary_points_3d[idx]
-            else:
-                # Should not happen for boundary points, mark for interpolation
-                vertices_3d[i] = np.nan  # Will be filled by interpolation
+        n_boundary = min(n_original, n_total)
+        if n_boundary > 0:
+            boundary_dists, boundary_idxs = boundary_tree_2d.query(vertices_2d[:n_boundary], k=1)
+            exact_boundary_mask = (boundary_dists < 1e-10) & (boundary_idxs < len(boundary_points_3d))
+            if np.any(exact_boundary_mask):
+                exact_positions = np.flatnonzero(exact_boundary_mask)
+                vertices_3d[exact_positions] = boundary_points_3d[boundary_idxs[exact_boundary_mask]]
+        else:
+            exact_boundary_mask = np.zeros(0, dtype=bool)
         
         # Steiner points: Use selected interpolation method
-        steiner_indices = list(range(n_original, n_total))
-        
+        steiner_indices = np.arange(n_original, n_total, dtype=int)
+
         # Also include any boundary points that didn't get exact matches
-        for i in range(n_original):
-            if np.any(np.isnan(vertices_3d[i])):
-                steiner_indices.insert(0, i)
+        if n_boundary > 0 and np.any(~exact_boundary_mask):
+            steiner_indices = np.concatenate([np.flatnonzero(~exact_boundary_mask), steiner_indices])
         
-        if steiner_indices:
+        if len(steiner_indices) > 0:
             n_steiner = len(steiner_indices)
             interpolator = getattr(self, '_interpolator', 'tps')
             
@@ -797,27 +793,24 @@ class IsomapTriangulator:
                 )
                 
                 if steiner_3d is not None:
-                    for j, i in enumerate(steiner_indices):
-                        vertices_3d[i] = steiner_3d[j]
+                    vertices_3d[steiner_indices] = steiner_3d
                     logger.info("TPS interpolation successful - smooth surface created")
                 else:
                     # Fallback to IDW if TPS fails
                     logger.warning("TPS interpolation failed, falling back to IDW")
-                    for i in steiner_indices:
-                        vertices_3d[i] = self._interpolate_steiner_from_reference(
-                            vertices_2d[i],
-                            reference_points_3d
-                        )
+                    vertices_3d[steiner_indices] = self._interpolate_steiner_batch_idw(
+                        steiner_2d,
+                        reference_points_3d
+                    )
             else:
                 # IDW (Inverse Distance Weighting) - local smoothing, faster
                 logger.info(f"Interpolating {n_steiner} Steiner points using IDW "
                            f"from {len(reference_points_3d)} reference points...")
                 
-                for i in steiner_indices:
-                    vertices_3d[i] = self._interpolate_steiner_from_reference(
-                        vertices_2d[i],
-                        reference_points_3d
-                    )
+                vertices_3d[steiner_indices] = self._interpolate_steiner_batch_idw(
+                    steiner_2d,
+                    reference_points_3d
+                )
                 logger.info("IDW interpolation complete")
         
         return vertices_3d
@@ -870,24 +863,29 @@ class IsomapTriangulator:
             logger.info(f"TPS interpolation with smoothing={smoothing:.4f}, "
                        f"using {n_source} source points")
             
-            # Build TPS interpolator for each 3D coordinate
-            # Using thin_plate_spline kernel for smooth geological surfaces
-            result_3d = np.zeros((len(steiner_points_2d), 3), dtype=np.float64)
-            
-            for coord_idx in range(3):  # X, Y, Z
-                try:
-                    # RBFInterpolator with thin_plate_spline kernel
-                    rbf = RBFInterpolator(
-                        source_2d,
-                        target_3d[:, coord_idx],
-                        kernel='thin_plate_spline',
-                        smoothing=smoothing,
-                        degree=1  # Linear polynomial for stability
-                    )
-                    result_3d[:, coord_idx] = rbf(steiner_points_2d)
-                except Exception as e:
-                    logger.warning(f"TPS interpolation failed for coordinate {coord_idx}: {e}")
-                    return None
+            tps_start = time.perf_counter()
+            tps_neighbors = None
+            if n_source > 2000:
+                tps_neighbors = min(256, max(96, n_source // 80))
+
+            try:
+                rbf = RBFInterpolator(
+                    source_2d,
+                    target_3d,
+                    kernel='thin_plate_spline',
+                    smoothing=smoothing,
+                    neighbors=tps_neighbors,
+                    degree=1  # Linear polynomial for stability
+                )
+                result_3d = rbf(steiner_points_2d)
+            except Exception as e:
+                logger.warning(f"TPS interpolation solve failed: {e}")
+                return None
+
+            logger.info(
+                f"TPS interpolation evaluated in {time.perf_counter() - tps_start:.3f}s "
+                f"(neighbors={tps_neighbors if tps_neighbors is not None else 'all'})"
+            )
             
             # Validate results - check for NaN or extreme values
             if np.any(np.isnan(result_3d)) or np.any(np.isinf(result_3d)):
@@ -911,6 +909,46 @@ class IsomapTriangulator:
         except Exception as e:
             logger.warning(f"TPS interpolation failed: {e}")
             return None
+
+    def _interpolate_steiner_batch_idw(
+        self,
+        points_2d: np.ndarray,
+        reference_points_3d: np.ndarray,
+        k: int = 12,
+        power: float = 2.0
+    ) -> np.ndarray:
+        """
+        Batch IDW interpolation in Isomap 2D space for one or more points.
+        """
+        points_2d = np.asarray(points_2d, dtype=np.float64)
+        if points_2d.ndim == 1:
+            points_2d = points_2d.reshape(1, -1)
+
+        if len(points_2d) == 0:
+            return np.empty((0, 3), dtype=np.float64)
+
+        if self._tree_2d is None:
+            raise RuntimeError("Isomap model not fitted - call fit() first")
+
+        k_actual = min(k, len(self.points_2d))
+        dists, idxs = self._tree_2d.query(points_2d, k=k_actual)
+
+        if k_actual == 1:
+            dists = dists[:, np.newaxis]
+            idxs = idxs[:, np.newaxis]
+
+        weights = 1.0 / np.power(np.maximum(dists, 1e-12), power)
+        weights /= weights.sum(axis=1, keepdims=True)
+
+        results = np.einsum('ij,ijk->ik', weights, reference_points_3d[idxs])
+
+        exact_rows = np.any(dists < 1e-12, axis=1)
+        if np.any(exact_rows):
+            exact_cols = np.argmax(dists[exact_rows] < 1e-12, axis=1)
+            exact_indices = idxs[exact_rows, exact_cols]
+            results[exact_rows] = reference_points_3d[exact_indices]
+
+        return results
     
     def _interpolate_steiner_from_reference(
         self,
@@ -936,33 +974,13 @@ class IsomapTriangulator:
         """
         if self._tree_2d is None:
             raise RuntimeError("Isomap model not fitted - call fit() first")
-        
-        # Find k nearest neighbors in 2D Isomap space
-        k_actual = min(k, len(self.points_2d))
-        
-        dists, idxs = self._tree_2d.query(point_2d, k=k_actual)
-        
-        if k_actual == 1:
-            dists = np.array([dists])
-            idxs = np.array([idxs])
-        
-        # Handle exact matches
-        if np.any(dists < 1e-12):
-            zero_idx = np.where(dists < 1e-12)[0][0]
-            idx = idxs[zero_idx]
-            if idx < len(reference_points_3d):
-                return reference_points_3d[idx].copy()
-        
-        # IDW interpolation from reference points
-        weights = 1.0 / np.power(np.maximum(dists, 1e-12), power)
-        weights /= weights.sum()
-        
-        result_3d = np.zeros(3)
-        for w, idx in zip(weights, idxs):
-            if idx < len(reference_points_3d):
-                result_3d += w * reference_points_3d[idx]
-        
-        return result_3d
+
+        return self._interpolate_steiner_batch_idw(
+            point_2d,
+            reference_points_3d,
+            k=k,
+            power=power
+        )[0]
 
     def is_surface_suitable_for_isomap(self, points_3d: np.ndarray, threshold: float = 0.5) -> bool:
         """
