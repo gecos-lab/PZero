@@ -22,6 +22,76 @@ from ..helpers.helper_dialogs import multiple_input_dialog, input_one_value_dial
 from ..helpers.helper_widgets import Tracer
 
 class ViewInterpretation(ViewMap):
+    def add_all_entities(self):
+        """
+        Override BaseView bootstrap so slice-aware multipart geology is not added as a
+        raw full actor before interpretation-specific filtering is ready.
+        """
+        from pandas import DataFrame as pd_DataFrame
+        from pandas import concat as pd_concat
+        from ..helpers.helper_dialogs import progress_dialog
+
+        for collection_name in self.tree_collection_dict.values():
+            try:
+                collection = getattr(self.parent, collection_name)
+                uid_list = collection.df.query(self.view_filter)["uid"].tolist()
+                prgs_bar = progress_dialog(
+                    max_value=len(uid_list),
+                    title_txt="Opening view",
+                    label_txt=f"Adding objects from {collection_name}...",
+                    cancel_txt=None,
+                    parent=self,
+                )
+                for uid in uid_list:
+                    skip_raw_actor = False
+                    if collection_name == "geol_coll":
+                        try:
+                            vtk_obj = collection.get_uid_vtk_obj(uid)
+                            cell_data = vtk_obj.GetCellData() if vtk_obj is not None else None
+                            field_data = vtk_obj.GetFieldData() if vtk_obj is not None else None
+                            skip_raw_actor = bool(
+                                (cell_data is not None and cell_data.HasArray("slice_index"))
+                                or (
+                                    field_data is not None
+                                    and field_data.HasArray("single_slice_index")
+                                    and field_data.HasArray("single_slice_axis")
+                                )
+                            )
+                        except Exception:
+                            skip_raw_actor = False
+
+                    if skip_raw_actor:
+                        this_actor = None
+                    else:
+                        this_actor = self.show_actor_with_property(
+                            uid=uid,
+                            coll_name=collection_name,
+                            show_property=None,
+                            visible=True,
+                        )
+
+                    self.actors_df = pd_concat(
+                        [
+                            self.actors_df,
+                            pd_DataFrame(
+                                [
+                                    {
+                                        "uid": uid,
+                                        "actor": this_actor,
+                                        "show": True,
+                                        "collection": collection_name,
+                                        "show_property": None,
+                                    }
+                                ]
+                            ),
+                        ],
+                        ignore_index=True,
+                    )
+                    prgs_bar.add_one()
+            except Exception:
+                self.print_terminal(f"ERROR in add_all_entities: {collection_name}")
+                pass
+
     def __init__(self, *args, **kwargs):
         super(ViewInterpretation, self).__init__(*args, **kwargs)
         self.setWindowTitle("Interpretation Window")
@@ -100,6 +170,7 @@ class ViewInterpretation(ViewMap):
             # Ensure cache is populated before scanning
             self._populate_seismic_cache()
             self.scan_and_index_existing_horizons()
+            self._suppress_full_multipart_actors()
         
     def show_actor_with_property(self, uid=None, coll_name=None, show_property=None, visible=None):
         """Override to prevent showing full seismic volumes and full multipart horizons - we only show slices."""
@@ -120,6 +191,18 @@ class ViewInterpretation(ViewMap):
             try:
                 vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
                 cell_data = vtk_obj.GetCellData() if vtk_obj is not None else None
+                # During BaseView bootstrap the interpretation-specific state is not ready yet.
+                # Block raw multipart actors from being added by the abstract view.
+                if (
+                    cell_data
+                    and cell_data.HasArray("slice_index")
+                    and (
+                        not hasattr(self, "current_seismic_uid")
+                        or not hasattr(self, "current_axis")
+                        or not hasattr(self, "current_slice_index")
+                    )
+                ):
+                    return
                 if cell_data and cell_data.HasArray("slice_index"):
                     # Reconstruct multipart metadata before the raw actor is added.
                     self.scan_and_index_single_horizon(uid)
@@ -430,6 +513,7 @@ class ViewInterpretation(ViewMap):
             self.update_camera_orientation()
             # Scan for existing horizons compatible with this volume
             self.scan_and_index_existing_horizons()
+            self._suppress_full_multipart_actors()
             self.update_slice()
         
     def on_view_type_changed(self, text):
@@ -1066,6 +1150,71 @@ class ViewInterpretation(ViewMap):
         self.multipart_faults.pop(uid, None)
         return "horizon"
 
+    def _store_single_slice_interpretation_metadata(self, uid=None, slice_info=None):
+        """Persist exact slice metadata on a single-slice interpretation line."""
+        if not uid or not slice_info:
+            return
+        try:
+            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            if vtk_obj is None:
+                return
+            from vtk import vtkIntArray, vtkStringArray
+
+            field_data = vtk_obj.GetFieldData()
+            if field_data is None:
+                return
+
+            axis_arr = vtkStringArray()
+            axis_arr.SetName("single_slice_axis")
+            axis_arr.SetNumberOfValues(1)
+            axis_arr.SetValue(0, str(slice_info.get("axis", self.current_axis)))
+            if field_data.HasArray("single_slice_axis"):
+                field_data.RemoveArray("single_slice_axis")
+            field_data.AddArray(axis_arr)
+
+            slice_arr = vtkIntArray()
+            slice_arr.SetName("single_slice_index")
+            slice_arr.SetNumberOfComponents(1)
+            slice_arr.InsertNextValue(int(slice_info.get("slice_index", self.current_slice_index)))
+            if field_data.HasArray("single_slice_index"):
+                field_data.RemoveArray("single_slice_index")
+            field_data.AddArray(slice_arr)
+            vtk_obj.Modified()
+        except Exception:
+            pass
+
+    def _extract_single_slice_interpretation_metadata(self, uid=None, vtk_obj=None):
+        """Read explicit slice metadata stored on a single-slice interpretation line."""
+        if vtk_obj is None and uid is not None:
+            try:
+                vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            except Exception:
+                vtk_obj = None
+        if vtk_obj is None:
+            return None
+
+        try:
+            field_data = vtk_obj.GetFieldData()
+            if field_data is None:
+                return None
+            if not (field_data.HasArray("single_slice_axis") and field_data.HasArray("single_slice_index")):
+                return None
+
+            axis_array = field_data.GetAbstractArray("single_slice_axis")
+            slice_array = field_data.GetArray("single_slice_index")
+            if axis_array is None or slice_array is None or slice_array.GetNumberOfTuples() <= 0:
+                return None
+
+            axis = axis_array.GetValue(0)
+            slice_index = int(slice_array.GetValue(0))
+            return {
+                "seismic_uid": self._get_entity_parent_seismic_uid(uid),
+                "axis": axis,
+                "slice_index": slice_index,
+            }
+        except Exception:
+            return None
+
     def _refresh_properties_legend(self):
         """Refresh the Properties manager table safely."""
         try:
@@ -1605,6 +1754,7 @@ class ViewInterpretation(ViewMap):
     def register_interpretation_line(self, uid, slice_info):
         """Register a line in both the main dict and the spatial index."""
         self.interpretation_lines[uid] = slice_info
+        self._store_single_slice_interpretation_metadata(uid=uid, slice_info=slice_info)
         
         key = (slice_info['seismic_uid'], slice_info['axis'], slice_info['slice_index'])
         if key not in self.interpretation_lines_by_slice:
@@ -2000,6 +2150,14 @@ class ViewInterpretation(ViewMap):
             if not vtk_obj or vtk_obj.GetNumberOfPoints() == 0:
                 return
 
+            explicit_slice_info = self._extract_single_slice_interpretation_metadata(
+                uid=uid, vtk_obj=vtk_obj
+            )
+            if explicit_slice_info is not None:
+                self.register_interpretation_line(uid, explicit_slice_info)
+                self.set_actor_visibility(uid, False)
+                return
+
             # First check if this is a multipart horizon (has slice_index cell data)
             # This is more efficient than checking geometry, and handles propagated horizons
             cell_data = vtk_obj.GetCellData()
@@ -2337,6 +2495,23 @@ class ViewInterpretation(ViewMap):
             self._actor_cache.clear()
         elif uid in self._actor_cache:
             del self._actor_cache[uid]
+
+    def _remove_raw_actor_for_uid(self, uid):
+        """Remove any raw full-geometry actor for a slice-filtered entity."""
+        for actor_name in (uid, f"geol_coll_{uid}", f"geo_{uid}"):
+            try:
+                if actor_name in self.plotter.renderer.actors:
+                    self.plotter.remove_actor(actor_name)
+            except Exception:
+                pass
+        self._invalidate_actor_cache(uid)
+
+    def _suppress_full_multipart_actors(self):
+        """Ensure propagated multipart entities are never shown as full actors."""
+        for uid in list(getattr(self, "multipart_horizons", {}).keys()):
+            self._remove_raw_actor_for_uid(uid)
+        for uid in list(getattr(self, "multipart_faults", {}).keys()):
+            self._remove_raw_actor_for_uid(uid)
         # Also invalidate the visibility key to force update
         if hasattr(self, '_last_visibility_key'):
             del self._last_visibility_key
@@ -5024,9 +5199,26 @@ class ViewInterpretation(ViewMap):
         except Exception:
             return self.actors_df.iloc[0:0]
 
+    def _qt_object_is_alive(self, obj):
+        """Return True when a Qt wrapper still owns a live C++ object."""
+        if obj is None:
+            return False
+        try:
+            from shiboken6 import isValid as shiboken_is_valid
+
+            return bool(shiboken_is_valid(obj))
+        except Exception:
+            try:
+                obj.metaObject()
+                return True
+            except RuntimeError:
+                return False
+            except Exception:
+                return True
+
     def _update_tree_properties_for_existing_uids(self, tree=None, uids=None):
         """Refresh property combos only for tree items that are already present."""
-        if tree is None:
+        if not self._qt_object_is_alive(tree):
             return
 
         try:
@@ -5038,6 +5230,8 @@ class ViewInterpretation(ViewMap):
             return
 
         try:
+            if not self._qt_object_is_alive(tree):
+                return
             tree.blockSignals(True)
             all_items = tree.findItems("", Qt.MatchContains | Qt.MatchRecursive)
             items_by_uid = {}
@@ -5073,7 +5267,8 @@ class ViewInterpretation(ViewMap):
                     continue
         finally:
             try:
-                tree.blockSignals(False)
+                if self._qt_object_is_alive(tree):
+                    tree.blockSignals(False)
             except Exception:
                 pass
 
