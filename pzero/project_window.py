@@ -8,15 +8,15 @@ from copy import deepcopy
 
 from datetime import datetime
 
-from PySide6.QtCore import Signal as pyqtSignal, Qt
-from PySide6.QtCore import QObject
-from PySide6.QtWidgets import (
-    QMainWindow,
-    QMessageBox,
-    QDockWidget,
-    QAbstractItemView,
-)
-from PySide6.QtGui import QAction
+from numpy import cos as np_cos
+from numpy import pi as np_pi
+from numpy import sin as np_sin
+
+from PySide6.QtCore import Signal as pyqtSignal
+from PySide6.QtCore import QObject, QUrl
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QDialog, QLabel, QVBoxLayout, QComboBox
+from PySide6.QtGui import QAction, QDesktopServices, QPixmap
+from PySide6.QtCore import Qt, QTimer
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv
@@ -97,6 +97,7 @@ from .entities_factory import (
     Attitude,
     XsImage,
 )
+from .helpers.helper_functions import freeze_gui_onoff
 from .legend_manager import Legend
 from .orientation_analysis import set_normals
 from .point_clouds import decimate_pc
@@ -359,6 +360,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def disable_actions(self):
         """Freeze all actions while doing something."""
         # self.parent.findChildren(QAction) returns a list of all actions in the application.
+        print("- disabling actions in project window")
         for action in self.findChildren(QAction):
             try:
                 # try - except added to catch an inexplicable bug with an action with text=""
@@ -369,6 +371,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def enable_actions(self):
         """Un-freeze all actions after having done something."""
         # self.parent.findChildren(QAction) returns a list of all actions in the application.
+        print("o enabling actions in project window")
         for action in self.findChildren(QAction):
             try:
                 # try - except added for symmetry with disable_actions (bug with an action with text="")
@@ -804,6 +807,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     dom_uid=dom_uid, map_image_uid=map_image_uid
                 )
 
+    @ freeze_gui_onoff
     def property_add(self):
         # ____________________________________________________ ADD IMAGES
         """Add empty property on geological entity"""
@@ -1380,9 +1384,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # Ui_ProjectWindow). Setting the model also updates the view.
         self.backgrnd_coll = BackgroundCollection(parent=self)
         self.BackgroundsTableView.setModel(self.backgrnd_coll.proxy_table_model)
-
-        # Enable drag from collection table views to PyMeshIt
-        self._enable_drag_on_table_views()
+        for table_view, collection in [
+            (self.GeologyTableView, self.geol_coll),
+            (self.FluidsTableView, self.fluid_coll),
+            (self.BackgroundsTableView, self.backgrnd_coll),
+        ]:
+            self.bind_role_click_editor(table_view=table_view, collection=collection)
 
         # Create the geol_coll.legend_df legend table (a Pandas dataframe), create the corresponding QT
         # Legend self.legend (a Qt QTreeWidget that is internally connected to its data source),
@@ -1410,26 +1417,87 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.prop_legend = PropertiesCMaps()
         self.prop_legend.update_widget(parent=self)
 
-    def _enable_drag_on_table_views(self):
-        """Enable drag functionality on all collection table views for PyMeshIt integration."""
-        # List of all table views that should support drag
-        table_views = [
-            self.GeologyTableView,
-            self.XSectionsTableView,
-            self.DOMsTableView,
-            self.ImagesTableView,
-            self.Meshes3DTableView,
-            self.BoundariesTableView,
-            self.WellsTableView,
-            self.FluidsTableView,
-            self.BackgroundsTableView,
-        ]
-        
-        for table_view in table_views:
-            # Enable drag on the table view
-            table_view.setDragEnabled(True)
-            table_view.setDragDropMode(QAbstractItemView.DragOnly)
-            table_view.setDefaultDropAction(Qt.CopyAction)
+    def bind_role_click_editor(self, table_view=None, collection=None):
+        """Bind click-to-dropdown behavior for role cells using collection.valid_roles."""
+        if table_view is None or collection is None:
+            return
+        if "role" not in collection.df.columns or not collection.valid_roles:
+            return
+        role_col = collection.df.columns.get_loc("role")
+
+        old_handler = getattr(table_view, "_role_click_handler", None)
+        if old_handler:
+            try:
+                table_view.clicked.disconnect(old_handler)
+            except:
+                pass
+
+        handler = lambda idx, tv=table_view, coll=collection, rc=role_col: self.on_role_cell_clicked(
+            table_view=tv, collection=coll, role_col=rc, index=idx
+        )
+        table_view._role_click_handler = handler
+        table_view.clicked.connect(handler)
+
+    def on_role_cell_clicked(self, table_view=None, collection=None, role_col=None, index=None):
+        """Open an in-table combo editor for role values when clicking the role column."""
+        if table_view is None or collection is None or index is None:
+            return
+        if not index.isValid():
+            return
+        if index.column() != role_col:
+            self.clear_role_cell_editor(table_view=table_view)
+            return
+
+        valid_roles = [str(role) for role in collection.valid_roles]
+        if not valid_roles:
+            return
+
+        self.clear_role_cell_editor(table_view=table_view)
+        current_role = index.data(Qt.DisplayRole)
+        current_role = "" if current_role is None else str(current_role)
+        current_idx = (
+            valid_roles.index(current_role) if current_role in valid_roles else 0
+        )
+
+        combo = QComboBox(table_view)
+        combo.setEditable(False)
+        combo.addItems(valid_roles)
+        combo.setCurrentIndex(current_idx)
+
+        table_view.setIndexWidget(index, combo)
+        table_view._active_role_editor = (index, combo)
+
+        combo.activated.connect(
+            lambda _=None, tv=table_view, idx=index, cb=combo: self.commit_role_cell_editor(
+                table_view=tv, index=idx, combo=cb
+            )
+        )
+        QTimer.singleShot(0, combo.showPopup)
+
+    def commit_role_cell_editor(self, table_view=None, index=None, combo=None):
+        if table_view is None or index is None or combo is None:
+            return
+        if index.isValid():
+            selected_role = str(combo.currentText())
+            if selected_role:
+                table_view.model().setData(index, selected_role, Qt.EditRole)
+        self.clear_role_cell_editor(table_view=table_view)
+
+    def clear_role_cell_editor(self, table_view=None):
+        if table_view is None:
+            return
+        active_editor = getattr(table_view, "_active_role_editor", None)
+        if not active_editor:
+            return
+        editor_index, editor_combo = active_editor
+        try:
+            table_view.setIndexWidget(editor_index, None)
+        except:
+            pass
+        if editor_combo:
+            editor_combo.deleteLater()
+        table_view._active_role_editor = None
+
 
     def save_project(self):
         # ________________________________________WRITERS TO BE MOVED TO COLLECTIONS
@@ -1457,7 +1525,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             "PZero project file saved in folder with the same name, including VTK files and CSV tables.\n"
         )
         fout.write("Last saved revision:\n")
-        fout.write("rev_" + now)
+        fout.write(f"rev_{now}\n")
+        fout.write("CRS EPSG:\n")
+        test_epsg = 'test_epsg'
+        fout.write(f"{test_epsg}\n")
         fout.close()
 
         # --------------------- SAVE LEGENDS ---------------------
@@ -1773,11 +1844,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             # To open a different one, edit the project file.
             # ___________________________________ IN THE FUTURE an option to open a specific revision could be added
             fin = open(in_file_name, "rt")
-            rev_name = fin.readlines()[2].strip()
+            lines = fin.readlines()
+            rev_name = lines[2].strip()
+            try:
+                test_epsg = lines[4].strip()
+            except:
+                test_epsg = 'no_epsg'
             fin.close()
             in_dir_name = in_file_name[:-3] + "_p0/" + rev_name
             self.print_terminal(
                 f"Opening project/revision : {in_file_name}/{rev_name}\n"
+            )
+            self.print_terminal(
+                f"Project CRS : {test_epsg}\n"
             )
             if not os_path.isdir(in_dir_name):
                 self.print_terminal(in_dir_name)
@@ -1861,7 +1940,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     for diff in diffs:
                         self.well_legend_df[diff] = Legend.well_legend_dict[diff]
                     self.well_legend_df.sort_values(
-                        by="Loc ID", ascending=True, inplace=True
+                        by="name", ascending=True, inplace=True
                     )
 
             # Read fluids legend tables.
@@ -2587,13 +2666,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 # reindex new_dom_coll_df to catch any problem with non-consecutive indices
                 new_well_coll_df.reset_index(drop=True, inplace=True)
 
-                if "Loc ID" in new_well_coll_df.columns:
-                    new_well_coll_df.rename(
-                        columns={"Loc ID": "name"}, inplace=True
-                    )
-                    self.print_terminal(
-                        "column Loc ID renamed as name in wells table"
-                    )
                 if not new_well_coll_df.empty:
                     if "x_section" in new_well_coll_df.columns:
                         new_well_coll_df.rename(
@@ -3506,7 +3578,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             data = entity.get_point_data(key)
 
                             if key == "Normals":
-                                df["dip dir"] = entity.points_map_dip_azimuth
+                                df["dip dir"] = entity.points_map_dip_direction
                                 df["dip"] = entity.points_map_dip
                             if data.ndim == 1:
                                 df[key] = data

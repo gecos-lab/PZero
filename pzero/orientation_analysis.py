@@ -15,7 +15,7 @@ from numpy import squeeze as np_squeeze
 
 from pzero.helpers.helper_dialogs import multiple_input_dialog
 
-from .helpers.helper_functions import freeze_gui
+from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 
 # -----IN THE FUTURE add functions for orientation analysis.-----
 
@@ -111,7 +111,7 @@ def vset_set_normals(VertexSet=None, dip_name=None, dir_name=None):
     VertexSet.set_point_data(data_key="Normals", attribute_matrix=normals)
 
 
-@freeze_gui
+@freeze_gui_onoff
 def set_normals(self):
     """
     General function to set normals on different entities.

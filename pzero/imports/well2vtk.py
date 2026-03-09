@@ -31,7 +31,7 @@ from pzero.entities_factory import Well, VertexSet
 def well2vtk(self, path=None):
     data = pd_read_excel(path, sheet_name=None)
     well_data = data["INFO"]
-    well_id = well_data["WELL"].values[0]
+    well_id = well_data["NAME"].values[0]
 
     # Get and set well head data
 
@@ -174,11 +174,11 @@ def well2vtk(self, path=None):
                     xyz[i, :] = points_arr[idx, :]
 
                 well_obj.add_trace_data(name=f"{col}", tr_data=tr_data, xyz=xyz)
-                
-                #only add as marker to the well object, for labeling
-                #well_obj.add_marker_data(
+
+                # only add as marker to the well object, for labeling
+                # well_obj.add_marker_data(
                 #    name=col, mrk_pos=xyz, mrk_data=tr_data
-                #)
+                # )
 
     trace_keys = well_obj.get_trace_names()
     components = []
@@ -327,7 +327,7 @@ def well2vtk(self, path=None):
 
     #     # curr_obj_attributes = deepcopy(WellCollection.entity_dict)
     #     # curr_obj_attributes['uid'] = str(uuid4())
-    #     # curr_obj_attributes['Loc ID'] = f'{unique_id[0]}'
+    #     # curr_obj_attributes['name'] = f'{unique_id[0]}'
     #     # curr_obj_attributes['feature'] = f'{geo_code}'
     #     # curr_obj_attributes['properties_names'] = []
     #     # curr_obj_attributes['properties_components'] = []

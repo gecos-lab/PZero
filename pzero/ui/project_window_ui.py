@@ -549,11 +549,11 @@ class Ui_ProjectWindow(object):
             QCoreApplication.translate("ProjectWindow", "Connected Parts", None)
         )
         self.actionMergeEntities.setText(
-            QCoreApplication.translate("ProjectWindow", "Merge Entities", None)
+            QCoreApplication.translate("ProjectWindow", "Merge to Multipart", None)
         )
         self.actionSplitMultipart.setText(
             QCoreApplication.translate(
-                "ProjectWindow", "Split Multipart Entities", None
+                "ProjectWindow", "Split to Single Part", None
             )
         )
         self.actionDecimatePointCloud.setText(

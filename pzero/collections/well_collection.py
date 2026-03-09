@@ -63,16 +63,6 @@ class WellCollection(BaseCollection):
         self, entity_dict: pd_DataFrame = None, color: np_ndarray = None
     ):
         """Add an entity from a dictionary shaped as self.entity_dict."""
-        # # Legacy files sometimes use 'Loc ID' instead of 'name'. Keep backwards compatibility
-        # # while ensuring the collection dataframe only exposes the 'name' column.
-        # if "Loc ID" in entity_dict:
-        #     loc_id_value = entity_dict.pop("Loc ID")
-        #     if (
-        #         not entity_dict.get("name")
-        #         or entity_dict.get("name") == "undef"
-        #         or entity_dict.get("name") == ""
-        #     ):
-        #         entity_dict["name"] = loc_id_value
         # Create a new uid if it is not included in the dictionary.
         if not entity_dict["uid"]:
             entity_dict["uid"] = str(uuid4())
@@ -86,11 +76,9 @@ class WellCollection(BaseCollection):
         # Then update the legend if needed.
         # Note that for performance reasons this is done explicitly here, when adding an entity to the
         # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
-        # _____________ to be updated since we no more use "Loc ID"
         name = entity_dict["name"]
-        # The well legend uses 'Loc ID' as the key column (see Legend.well_legend_dict)
         if self.parent.well_legend_df.loc[
-            self.parent.well_legend_df["Loc ID"] == name
+            self.parent.well_legend_df["name"] == name
         ].empty:
             R, G, B = np_round(np_random.random(3) * 255)
             # New Pandas >= 2.0.0
@@ -100,11 +88,12 @@ class WellCollection(BaseCollection):
                     pd_DataFrame(
                         [
                             {
-                                "Loc ID": name,
+                                "name": name,
                                 "color_R": R,
                                 "color_G": G,
                                 "color_B": B,
                                 "line_thick": 2.0,
+                                "point_size": 0.0,
                                 "opacity": 100,
                             }
                         ]
@@ -135,19 +124,15 @@ class WellCollection(BaseCollection):
 
     def attr_modified_update_legend_table(self):
         """Update legend table when attributes are changed."""
-        # First remove unused name / feature.
+        # First remove unused names.
         legend_updated = self.remove_unused_from_legend()
-        # Then add new name / feature.
+        # Then add new names.
         for uid in self.parent.well_coll.df["uid"].to_list():
             name = self.parent.well_coll.df.loc[
                 self.parent.well_coll.df["uid"] == uid, "name"
             ].values[0]
-            feature = self.parent.well_coll.df.loc[
-                self.parent.well_coll.df["uid"] == uid, "feature"
-            ].values[0]
             if self.parent.well_legend_df.loc[
-                (self.parent.well_legend_df["name"] == name)
-                & (self.parent.well_legend_df["feature"] == feature)
+                self.parent.well_legend_df["name"] == name
             ].empty:
                 # New Pandas >= 2.0.0
                 self.parent.well_legend_df = pd_concat(
@@ -157,11 +142,12 @@ class WellCollection(BaseCollection):
                             [
                                 {
                                     "name": name,
-                                    "feature": feature,
                                     "color_R": round(np_random.random() * 255),
                                     "color_G": round(np_random.random() * 255),
                                     "color_B": round(np_random.random() * 255),
                                     "line_thick": 2.0,
+                                    "point_size": 0.0,
+                                    "opacity": 100,
                                 }
                             ]
                         ),
@@ -174,39 +160,16 @@ class WellCollection(BaseCollection):
             self.parent.legend.update_widget(self.parent)
 
     def remove_unused_from_legend(self):
-        """Remove unused roles / features from a legend table."""
+        """Remove unused names from the well legend table."""
         legend_updated = False
         name_in_legend = pd_unique(self.parent.well_legend_df["name"])
-        features_in_legend = pd_unique(self.parent.well_legend_df["feature"])
-        for loc_id in name_in_legend:
+        for name in name_in_legend:
             if self.parent.well_coll.df.loc[
-                self.parent.well_coll.df["name"] == loc_id
+                self.parent.well_coll.df["name"] == name
             ].empty:
                 # Get index of row to be removed, then remove it in place with .drop().
                 idx_remove = self.parent.well_legend_df[
-                    self.parent.well_legend_df["name"] == loc_id
-                ].index
-                self.parent.well_legend_df.drop(idx_remove, inplace=True)
-                legend_updated = legend_updated or True
-            for feature in features_in_legend:
-                if self.parent.well_coll.df.loc[
-                    (self.parent.well_coll.df["name"] == loc_id)
-                    & (self.parent.well_coll.df["feature"] == feature)
-                ].empty:
-                    # Get index of row to be removed, then remove it in place with .drop().
-                    idx_remove = self.parent.well_legend_df[
-                        (self.parent.well_legend_df["name"] == loc_id)
-                        & (self.parent.well_legend_df["feature"] == feature)
-                    ].index
-                    self.parent.well_legend_df.drop(idx_remove, inplace=True)
-                    legend_updated = legend_updated or True
-        for feature in features_in_legend:
-            if self.parent.well_coll.df.loc[
-                self.parent.well_coll.df["feature"] == feature
-            ].empty:
-                # Get index of row to be removed, then remove it in place with .drop().
-                idx_remove = self.parent.well_legend_df[
-                    self.parent.well_legend_df["feature"] == feature
+                    self.parent.well_legend_df["name"] == name
                 ].index
                 self.parent.well_legend_df.drop(idx_remove, inplace=True)
                 legend_updated = legend_updated or True
@@ -216,13 +179,9 @@ class WellCollection(BaseCollection):
         """Get legend for a particular uid."""
         name = self.df.loc[self.df["uid"] == uid, "name"].values[0]
         legend_dict = self.parent.well_legend_df.loc[
-            self.parent.well_legend_df["Loc ID"] == name
+            self.parent.well_legend_df["name"] == name
         ].to_dict("records")
         return legend_dict[0]
-
-    def get_uid_well_locid(self, uid=None):
-        """Get the well Loc ID (alias of name for wells)."""
-        return self.df.loc[self.df["uid"] == uid, "name"].values[0]
 
     def set_uid_legend(
         self,

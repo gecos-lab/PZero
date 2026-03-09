@@ -9,7 +9,7 @@ from vtkmodules.util.numpy_support import numpy_to_vtk
 from vtkmodules.vtkFiltersGeneral import vtkTransformFilter
 
 from pzero.helpers.helper_dialogs import general_input_dialog
-from pzero.helpers.helper_functions import freeze_gui
+from pzero.helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 
 EPSG_dict = {
     "EPSG:6707": "RDN2008 / UTM zone 32N (N-E) / Nord, Est",
@@ -90,7 +90,7 @@ def CRS_apply_transformation(uid=None, collection=None, transformation_matrix=No
     collection.replace_vtk(uid=uid, vtk_object=out_entity)
 
 
-@freeze_gui
+@freeze_gui_onoff
 def CRS_transform_selected(self):
     """Function used to transform CRS of selected entities.
     Only the transformation of entities exposing the .points property is accurate.

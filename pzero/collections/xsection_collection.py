@@ -23,6 +23,7 @@ from numpy import sign as np_sign
 from numpy import float32 as np_float32
 from numpy import float64 as np_float64
 from numpy.linalg import inv as np_linalg_inv
+from numpy import round as np_round
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv
@@ -35,7 +36,7 @@ from vtkmodules.vtkFiltersCore import vtkAppendPolyData
 
 from pzero.entities_factory import Plane, XsPolyLine
 from pzero.helpers.helper_dialogs import general_input_dialog, open_file_dialog
-from pzero.helpers.helper_functions import auto_sep, best_fitting_plane
+from pzero.helpers.helper_functions import auto_sep, best_fitting_plane, freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 from pzero.orientation_analysis import dip_directions2normals, get_dip_dir_vectors
 
 from .AbstractCollection import BaseCollection
@@ -55,23 +56,22 @@ def section_from_strike(self, vector):
             "QLabel",
         ],
         "name": ["Insert Xsection name", "new_section", "QLineEdit"],
-        "origin_x": ["Insert origin X coord", vector.p1[0], "QLineEdit"],
-        "origin_y": ["Insert origin Y coord", vector.p1[1], "QLineEdit"],
-        "origin_z": ["Insert origin Z coord", vector.p1[2], "QLineEdit"],
-        "strike": ["Insert strike", vector.azimuth, "QLineEdit"],
+        "origin_x": ["Insert origin X coord", np_round(vector.p1[0]), "QLineEdit"],
+        "origin_y": ["Insert origin Y coord", np_round(vector.p1[1]), "QLineEdit"],
+        "origin_z": ["Insert origin Z coord", np_round(vector.p1[2]), "QLineEdit"],
+        "strike": ["Insert strike", np_round(vector.azimuth), "QLineEdit"],
         "dip": ["Insert dip", 90.0, "QLineEdit"],
-        "length": ["Insert length", vector.length, "QLineEdit"],
-        "height": ["Insert height", 0.0, "QLineEdit"],
+        "length": ["Insert length", np_round(vector.length), "QLineEdit"],
+        "height": ["Insert height", np_round(vector.length/200)*100, "QLineEdit"],
         "num_xs": ["Number of XSections", 1, "QLineEdit"],
-        "spacing": ["Spacing of XSections (+o-)", 1000.0, "QLineEdit"],
+        "spacing": ["Spacing of XSections (+o-)", np_round(vector.length/200)*100, "QLineEdit"],
     }
     section_dict_updt = general_input_dialog(
         title="New XSection from points", input_dict=section_dict_in
     )
     if section_dict_updt is None:
         # Check for a valid input dictionary.
-        # If None un-freeze the Qt interface and return.
-        self.enable_actions()
+        freeze_gui_off(self)
         return
 
     section_dict = deepcopy(self.parent.xsect_coll.entity_dict)
@@ -114,8 +114,8 @@ def section_from_strike(self, vector):
         section_dict["origin_z"] = origin_z + normal_z * i
 
         self.parent.xsect_coll.add_entity_from_dict(entity_dict=section_dict)
-    # At the end un-freeze the Qt interface before returning.
-    self.enable_actions()
+
+    freeze_gui_off(self)
 
 
 # def sections_from_file(self):
@@ -642,28 +642,32 @@ class XSectionCollection(BaseCollection):
 
     def world2plane(self, section_uid=None, X=None, Y=None, Z=None, as_arr=False):
         """Get UV cross-section plane coordinates from XYZ world coordinates."""
-        # the following are strike, dip, normal unit vectors and the
-        # position vector origin of the cross-section plane in world XYZ coordinates
-        strike_vct = np_float64(
-            self.get_uid_strike_vect(section_uid=section_uid).reshape(1, 3)
+        # strike, dip, normal and origin are 3-element vectors in world XYZ coordinates
+        strike_vct = np_array(
+            self.get_uid_strike_vect(section_uid=section_uid), dtype=np_float64
+        ).reshape(3)
+        dip_vct = np_array(
+            self.get_uid_dip_vect(section_uid=section_uid), dtype=np_float64
+        ).reshape(3)
+        normal_vct = np_array(
+            self.get_uid_normal_vect(section_uid=section_uid), dtype=np_float64
+        ).reshape(3)
+        origin = np_array(self.get_uid_origin(uid=section_uid), dtype=np_float64).reshape(
+            3
         )
-        dip_vct = np_float64(
-            self.get_uid_dip_vect(section_uid=section_uid).reshape(1, 3)
-        )
-        normal_vct = np_float64(
-            self.get_uid_normal_vect(section_uid=section_uid).reshape(1, 3)
-        )
-        origin = self.get_uid_origin(uid=section_uid).reshape(1, 3)
-        XYZ = np_array([X, Y, Z]).T
-        # the following is the vector from the origin of the cross-section plane
-        # to the point XYZ, still in world XYZ coordinates
-        origin_2_point = np_float64(XYZ - origin)
-        # and here we convert to the UVW coordinates of the cross-section plane with dot products
-        # W is just to check and can be commented in the future
-        U = np_float32(np_dot(origin_2_point, strike_vct.T))
-        V = np_float32(np_dot(origin_2_point, dip_vct.T))
-        W = np_float32(np_dot(origin_2_point, normal_vct.T))
-        if any(W**2 > 1e-10):
+        X_arr = np_array(X, dtype=np_float64)
+        Y_arr = np_array(Y, dtype=np_float64)
+        Z_arr = np_array(Z, dtype=np_float64)
+        if X_arr.shape != Y_arr.shape or X_arr.shape != Z_arr.shape:
+            raise ValueError("X, Y and Z must have the same shape in world2plane.")
+        XYZ = np_array([X_arr, Y_arr, Z_arr], dtype=np_float64).T
+        # vector from cross-section origin to points, in world XYZ coordinates
+        origin_2_point = XYZ - origin
+        # convert to UVW coordinates with dot products; output keeps flat input shape
+        U = np_float32(np_dot(origin_2_point, strike_vct))
+        V = np_float32(np_dot(origin_2_point, dip_vct))
+        W = np_float32(np_dot(origin_2_point, normal_vct))
+        if np_array(W**2 > 1e-10).any():
             print(" ---> check W (should be zero): ", W)
         if as_arr:
             return np_array([U, V]).T
@@ -672,24 +676,31 @@ class XSectionCollection(BaseCollection):
 
     def plane2world(self, section_uid=None, U=None, V=None, as_arr=False):
         """Get XYZ world coordinates from UV cross-section plane coordinates."""
-        # the following are strike, dip, normal unit vectors and the
-        # position vector origin of the cross-section plane in world XYZ coordinates
-        strike_vct = np_float64(self.get_uid_strike_vect(section_uid=section_uid))
-        dip_vct = np_float64(self.get_uid_dip_vect(section_uid=section_uid))
-        origin = np_float64(self.get_uid_origin(uid=section_uid))
-        # the following is the vector from the origin of the cross-section plane
-        # to the point UV, already in world XYZ coordinates
-        origin_2_point = strike_vct * U + dip_vct * V
-        # then we add the vector from the origin of the cross-section plane to
-        # world coordinates origin (0,0,0), and we get the position in world XYZ coordinates
-        XYZ = np_float32(origin_2_point + origin)
-        X = XYZ[0]
-        Y = XYZ[1]
-        Z = XYZ[2]
+        # strike, dip and origin are treated as 3-element vectors in world XYZ coordinates
+        strike_vct = np_array(
+            self.get_uid_strike_vect(section_uid=section_uid), dtype=np_float64
+        ).reshape(3)
+        dip_vct = np_array(
+            self.get_uid_dip_vect(section_uid=section_uid), dtype=np_float64
+        ).reshape(3)
+        origin = np_array(self.get_uid_origin(uid=section_uid), dtype=np_float64).reshape(
+            3
+        )
+        # U and V can be scalars or arrays; keep their shape and broadcast on the XYZ axis
+        U_arr = np_array(U, dtype=np_float64)
+        V_arr = np_array(V, dtype=np_float64)
+        if U_arr.shape != V_arr.shape:
+            raise ValueError("U and V must have the same shape in plane2world.")
+        XYZ = np_float32(
+            origin + U_arr[..., None] * strike_vct + V_arr[..., None] * dip_vct
+        )
+        if U_arr.ndim == 0:
+            if as_arr:
+                return XYZ
+            return XYZ[0], XYZ[1], XYZ[2]
         if as_arr:
             return XYZ
-        else:
-            return X, Y, Z
+        return XYZ[..., 0], XYZ[..., 1], XYZ[..., 2]
 
     def set_geometry(self, uid=None):
         """Given all parameters, sets the vtkPlane origin and normal properties, and builds the frame used for
@@ -872,18 +883,31 @@ class XSectionCollection(BaseCollection):
             Y=append_points[:, 1],
             Z=append_points[:, 2],
         )
-        max_U = max(append_points_U)
-        min_U = min(append_points_U)
-        max_V = max(append_points_V)
-        min_V = min(append_points_V)
-        new_length = max_U - min_U
-        new_height = max_V - min_V
-        shift_origin = self.plane2world(section_uid=xuid, U=min_U, V=min_V, as_arr=True)
+        # world2plane returns column vectors (N, 1); flatten to scalar-compatible 1D arrays.
+        # why not going back to the old world2plane that was simply returning flat arrays? ----------------------------
+        append_points_U = np_array(append_points_U, dtype=np_float64).reshape(-1)
+        append_points_V = np_array(append_points_V, dtype=np_float64).reshape(-1)
+        max_U = float(
+            append_points_U.max()
+        )  # why these float? they are float aready --------------------------------
+        min_U = float(append_points_U.min())
+        max_V = float(append_points_V.max())
+        min_V = float(append_points_V.min())
+        new_length = float(max_U - min_U)
+        new_height = float(max_V - min_V)
+        shift_origin = np_array(
+            self.plane2world(section_uid=xuid, U=min_U, V=min_V, as_arr=True),
+            dtype=np_float64,
+        ).reshape(
+            -1
+        )  # no need for float64 here, jst internally in the rotation --------------------------------------
         self.set_uid_length(xuid, new_length)
         self.set_uid_width(xuid, new_height)
-        self.set_uid_origin_x(xuid, shift_origin[0])
-        self.set_uid_origin_y(xuid, shift_origin[1])
-        self.set_uid_origin_z(xuid, shift_origin[2])
+        self.set_uid_origin_x(
+            xuid, float(shift_origin[0])
+        )  # why these float? they are float aready ----------------
+        self.set_uid_origin_y(xuid, float(shift_origin[1]))
+        self.set_uid_origin_z(xuid, float(shift_origin[2]))
         self.set_geometry(uid=xuid)
         # Reset data model
         self.modelReset.emit()
