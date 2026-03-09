@@ -119,6 +119,9 @@ from .three_d_surfaces import (
 
 from pzero.views.dock_window import DockWindow
 from .processing.CRS import CRS_list, CRS_transform_selected
+# import json
+from json import dump as json_dump
+from json import load as json_load
 
 
 class ProjectSignals(QObject):
@@ -1463,16 +1466,33 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             elif self.image_coll.df.loc[
                 self.image_coll.df["uid"] == uid, "topology"
             ].values[0] in ["Seismics"]:
-                # For seismic data, save only metadata reference instead of full VTK file
-                # This dramatically speeds up save operations for large seismic volumes
+                source_file = None
+                if "seismic_source_file" in self.image_coll.df.columns:
+                    try:
+                        source_file = self.image_coll.df.loc[
+                            self.image_coll.df["uid"] == uid, "seismic_source_file"
+                        ].values[0]
+                    except Exception:
+                        source_file = None
+
+                source_file = source_file if isinstance(source_file, str) and source_file.strip() else None
+                source_exists = bool(source_file and os_path.isfile(source_file))
+
+                # Fast path: keep only a reference to the original SEG-Y source when it is available.
+                # Fallback: persist a VTK copy only when the source cannot be reused on reopen.
+                if not source_exists:
+                    sg_writer = vtkXMLStructuredGridWriter()
+                    sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
+                    sg_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
+                    sg_writer.Write()
+
                 seismic_metadata = {
                     "uid": uid,
-                    "source_file": self.image_coll.df.loc[
-                        self.image_coll.df["uid"] == uid, "seismic_source_file"
-                    ].values[0] if "seismic_source_file" in self.image_coll.df.columns else None
+                    "source_file": source_file,
+                    "storage": "source_file" if source_exists else "embedded_vts",
                 }
                 with open(out_dir_name + "/" + uid + "_seismic_metadata.json", "w") as f:
-                    json.dump(seismic_metadata, f, indent=2)
+                    json_dump(seismic_metadata, f, indent=2)
                 prgs_bar.add_one()
 
         # Save mesh3d collection table to JSON file and entities as VTK.
@@ -2244,14 +2264,38 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     elif self.image_coll.df.loc[
                         self.image_coll.df["uid"] == uid, "topology"
                     ].values[0] in ["Seismics"]:
-                        if not os_path.isfile((in_dir_name + "/" + uid + ".vts")):
-                            print("error: missing VTK file")
-                            return
                         vtk_object = Seismics()
-                        sg_reader = vtkXMLStructuredGridReader()
-                        sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
-                        sg_reader.Update()
-                        vtk_object.ShallowCopy(sg_reader.GetOutput())
+                        seismic_vts_path = in_dir_name + "/" + uid + ".vts"
+                        seismic_metadata_path = (
+                            in_dir_name + "/" + uid + "_seismic_metadata.json"
+                        )
+
+                        if os_path.isfile(seismic_vts_path):
+                            sg_reader = vtkXMLStructuredGridReader()
+                            sg_reader.SetFileName(seismic_vts_path)
+                            sg_reader.Update()
+                            vtk_object.ShallowCopy(sg_reader.GetOutput())
+                        else:
+                            source_file = None
+                            if os_path.isfile(seismic_metadata_path):
+                                try:
+                                    with open(seismic_metadata_path, "r") as fin:
+                                        seismic_metadata = json_load(fin)
+                                    source_file = seismic_metadata.get("source_file")
+                                except Exception:
+                                    source_file = None
+                            if not source_file:
+                                try:
+                                    source_file = self.image_coll.df.loc[
+                                        self.image_coll.df["uid"] == uid,
+                                        "seismic_source_file",
+                                    ].values[0]
+                                except Exception:
+                                    source_file = None
+                            if not source_file or not os_path.isfile(source_file):
+                                print("error: missing seismic VTK file and source file")
+                                return
+                            vtk_object.ShallowCopy(read_segy_file(in_file_name=source_file))
                         vtk_object.Modified()
                     self.image_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                     prgs_bar.add_one()

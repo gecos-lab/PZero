@@ -57,6 +57,7 @@ class ViewInterpretation(ViewMap):
         # Track multipart horizons (efficient single-entity containing multiple slices)
         # Format: {uid: {'seismic_uid': str, 'axis': str, 'slice_indices': list, 'slice_to_cell_index': dict}}
         self.multipart_horizons = {}
+        self.multipart_faults = {}
         
         # Flag to batch updates during propagation
         self._is_propagating = False
@@ -116,6 +117,15 @@ class ViewInterpretation(ViewMap):
         
         # Check if this is a multipart horizon - NEVER show the full version
         if coll_name == 'geol_coll' and uid:
+            try:
+                vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+                cell_data = vtk_obj.GetCellData() if vtk_obj is not None else None
+                if cell_data and cell_data.HasArray("slice_index"):
+                    # Reconstruct multipart metadata before the raw actor is added.
+                    self.scan_and_index_single_horizon(uid)
+            except Exception:
+                pass
+
             if hasattr(self, 'multipart_horizons') and uid in self.multipart_horizons:
                 # Don't show the full multipart horizon - we show filtered slices instead
                 # Just update the visibility of our filtered version
@@ -402,6 +412,7 @@ class ViewInterpretation(ViewMap):
             self.interpretation_lines_by_slice.clear()
             # Also clear multipart horizons tracking when volume changes
             self.multipart_horizons.clear()
+            self.multipart_faults.clear()
             
             self._camera_initialized = False  # Reset camera on volume change
             self.scalar_range = None  # Reset scalar range
@@ -1007,6 +1018,53 @@ class ViewInterpretation(ViewMap):
         if entity_dict is None:
             return
         entity_dict["parent_uid"] = str(self.current_seismic_uid) if self.current_seismic_uid else ""
+
+    def _get_entity_parent_seismic_uid(self, uid):
+        """Resolve the seismic parent uid stored on an interpretation entity."""
+        try:
+            parent_uid = self.parent.geol_coll.get_uid_x_section(uid)
+            if isinstance(parent_uid, str) and parent_uid.strip():
+                return parent_uid.strip()
+        except Exception:
+            pass
+        return self.current_seismic_uid
+
+    def _is_fault_interpretation_entity(self, uid):
+        """Best-effort classification for propagated interpretation entities."""
+        for getter_name in ("get_uid_role", "get_uid_feature"):
+            try:
+                value = getattr(self.parent.geol_coll, getter_name)(uid)
+            except Exception:
+                value = None
+            if isinstance(value, str) and "fault" in value.strip().lower():
+                return True
+        return False
+
+    def _register_multipart_interpretation_entity(
+        self, uid, axis, slice_indices, slice_to_cell_index
+    ):
+        """Register a multipart interpretation entity in the correct slice-aware registry."""
+        if not hasattr(self, "multipart_horizons"):
+            self.multipart_horizons = {}
+        if not hasattr(self, "multipart_faults"):
+            self.multipart_faults = {}
+
+        metadata = {
+            'seismic_uid': self._get_entity_parent_seismic_uid(uid),
+            'axis': axis,
+            'slice_indices': list(slice_indices),
+            'slice_to_cell_index': dict(slice_to_cell_index),
+            'seed_slice': slice_indices[0] if slice_indices else 0,
+        }
+
+        if self._is_fault_interpretation_entity(uid):
+            self.multipart_faults[uid] = metadata
+            self.multipart_horizons.pop(uid, None)
+            return "fault"
+
+        self.multipart_horizons[uid] = metadata
+        self.multipart_faults.pop(uid, None)
+        return "horizon"
 
     def _refresh_properties_legend(self):
         """Refresh the Properties manager table safely."""
@@ -2015,19 +2073,16 @@ class ViewInterpretation(ViewMap):
                     axis = self.current_axis
                     self.print_terminal(f"  Using current axis as fallback: {axis}")
                     
-                # Register as multipart horizon
-                if not hasattr(self, 'multipart_horizons'):
-                    self.multipart_horizons = {}
+                entity_kind = self._register_multipart_interpretation_entity(
+                    uid=uid,
+                    axis=axis,
+                    slice_indices=slice_indices,
+                    slice_to_cell_index=slice_to_cell_index,
+                )
                 
-                self.multipart_horizons[uid] = {
-                    'seismic_uid': self.current_seismic_uid,
-                    'axis': axis,
-                    'slice_indices': slice_indices,
-                    'slice_to_cell_index': slice_to_cell_index,
-                    'seed_slice': slice_indices[0] if slice_indices else 0
-                }
-                
-                self.print_terminal(f"Registered multipart horizon {uid}: {len(slice_indices)} slices on {axis}")
+                self.print_terminal(
+                    f"Registered multipart {entity_kind} {uid}: {len(slice_indices)} slices on {axis}"
+                )
                 # IMPORTANT: Hide the full horizon actor - we will only show filtered slices
                 self.set_actor_visibility(uid, False)
                 # Also try to remove it from renderer completely to prevent it showing
@@ -2259,15 +2314,12 @@ class ViewInterpretation(ViewMap):
             vtk_obj.GetFieldData().AddArray(axis_arr)
             vtk_obj.Modified()
 
-            if not hasattr(self, 'multipart_horizons'):
-                self.multipart_horizons = {}
-            self.multipart_horizons[uid] = {
-                'seismic_uid': self.current_seismic_uid,
-                'axis': axis_name,
-                'slice_indices': unique_slices,
-                'slice_to_cell_index': {sidx: cid for cid, sidx in per_cell.items()},
-                'seed_slice': unique_slices[0],
-            }
+            self._register_multipart_interpretation_entity(
+                uid=uid,
+                axis=axis_name,
+                slice_indices=unique_slices,
+                slice_to_cell_index={sidx: cid for cid, sidx in per_cell.items()},
+            )
 
             self.print_terminal(
                 f"Recovered multipart slice metadata for {uid[:8]}... ({axis_name}, {len(unique_slices)} slices)"
@@ -4936,6 +4988,198 @@ class ViewInterpretation(ViewMap):
         self.update_all_multipart_horizons_visibility()
         self.update_all_multipart_faults_visibility()
         self.plotter.render()
+
+    def _refresh_multipart_entities_for_uids(self, updated_uids=None, collection=None):
+        """Rebuild filtered multipart actors after generic collection updates."""
+        try:
+            if collection is not self.parent.geol_coll:
+                return
+        except Exception:
+            return
+
+        try:
+            changed = set(updated_uids or [])
+        except Exception:
+            changed = set()
+
+        if not changed:
+            return
+
+        horizon_uids = changed & set(getattr(self, "multipart_horizons", {}).keys())
+        fault_uids = changed & set(getattr(self, "multipart_faults", {}).keys())
+        if not horizon_uids and not fault_uids:
+            return
+
+        for uid in horizon_uids:
+            self.update_multipart_horizon_visibility(uid)
+        for uid in fault_uids:
+            self.update_multipart_fault_visibility(uid)
+
+        self.plotter.render()
+
+    def _actors_df_row_safe(self, uid=None):
+        """Return the actor dataframe row for a uid, if present in this view."""
+        try:
+            return self.actors_df.loc[self.actors_df["uid"] == uid]
+        except Exception:
+            return self.actors_df.iloc[0:0]
+
+    def _update_tree_properties_for_existing_uids(self, tree=None, uids=None):
+        """Refresh property combos only for tree items that are already present."""
+        if tree is None:
+            return
+
+        try:
+            uid_list = list(uids or [])
+        except Exception:
+            uid_list = []
+
+        if not uid_list:
+            return
+
+        try:
+            tree.blockSignals(True)
+            all_items = tree.findItems("", Qt.MatchContains | Qt.MatchRecursive)
+            items_by_uid = {}
+            for item in all_items:
+                try:
+                    item_uid = tree.get_item_uid(item)
+                except Exception:
+                    item_uid = None
+                if item_uid:
+                    items_by_uid[str(item_uid)] = item
+
+            for uid in uid_list:
+                item = items_by_uid.get(str(uid))
+                if item is None:
+                    continue
+                try:
+                    row = tree.collection.df.loc[
+                        tree.collection.df[tree.uid_label] == uid
+                    ].iloc[0]
+                except Exception:
+                    continue
+                try:
+                    tree.removeItemWidget(item, tree.columnCount() - 1)
+                except Exception:
+                    pass
+                try:
+                    tree.setItemWidget(
+                        item,
+                        tree.columnCount() - 1,
+                        tree.create_property_combo(row=row),
+                    )
+                except Exception:
+                    continue
+        finally:
+            try:
+                tree.blockSignals(False)
+            except Exception:
+                pass
+
+    def change_actor_color(self, updated_uids=None, collection=None):
+        """Update actor color without assuming every uid has a raw actor."""
+        actors = getattr(self.plotter.renderer, "actors", {})
+        for uid in updated_uids or []:
+            if uid not in self.uids_in_view or uid not in actors:
+                continue
+            color_R = collection.get_uid_legend(uid=uid)["color_R"]
+            color_G = collection.get_uid_legend(uid=uid)["color_G"]
+            color_B = collection.get_uid_legend(uid=uid)["color_B"]
+            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            actors[uid].GetProperty().SetColor(color_RGB)
+
+    def change_actor_opacity(self, updated_uids=None, collection=None):
+        """Update actor opacity without assuming every uid has a raw actor."""
+        actors = getattr(self.plotter.renderer, "actors", {})
+        for uid in updated_uids or []:
+            if uid not in self.uids_in_view or uid not in actors:
+                continue
+            opacity = collection.get_uid_legend(uid=uid)["opacity"] / 100
+            actors[uid].GetProperty().SetOpacity(opacity)
+
+    def change_actor_line_thick(self, updated_uids=None, collection=None):
+        """Update actor line width without assuming every uid has a raw actor."""
+        actors = getattr(self.plotter.renderer, "actors", {})
+        for uid in updated_uids or []:
+            if uid not in self.uids_in_view or uid not in actors:
+                continue
+            line_thick = collection.get_uid_legend(uid=uid)["line_thick"]
+            actors[uid].GetProperty().SetLineWidth(line_thick)
+
+    def change_actor_point_size(self, updated_uids=None, collection=None):
+        """Update actor point size without assuming every uid has a raw actor."""
+        actors = getattr(self.plotter.renderer, "actors", {})
+        for uid in updated_uids or []:
+            if uid not in self.uids_in_view or uid not in actors:
+                continue
+            point_size = collection.get_uid_legend(uid=uid)["point_size"]
+            actors[uid].GetProperty().SetPointSize(point_size)
+
+    def entities_metadata_modified_update_views(self, collection=None, updated_uids=None):
+        """Keep multipart interpretation actors slice-filtered after metadata edits."""
+        super().entities_metadata_modified_update_views(
+            collection=collection, updated_uids=updated_uids
+        )
+        self._refresh_multipart_entities_for_uids(
+            updated_uids=updated_uids, collection=collection
+        )
+
+    def entities_data_keys_added_update_views(self, updated_uids=None, collection=None):
+        """Refresh multipart filtered actors after property schema changes."""
+        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+        tree = self.tree_from_coll(coll=collection)
+        for uid in updated_uids:
+            actor_row = self._actors_df_row_safe(uid)
+            if actor_row.empty:
+                continue
+            shown_property = actor_row["show_property"].to_list()[0]
+            if shown_property is None:
+                continue
+            if shown_property in collection.get_uid_properties_names(uid):
+                continue
+            show = actor_row["show"].to_list()[0]
+            self.show_actor_with_property(
+                uid=uid,
+                coll_name=collection.collection_name,
+                show_property=None,
+                visible=show,
+            )
+            self.actors_df.loc[self.actors_df["uid"] == uid, ["show_property"]] = None
+        self._update_tree_properties_for_existing_uids(tree=tree, uids=updated_uids)
+        self._refresh_multipart_entities_for_uids(
+            updated_uids=updated_uids, collection=collection
+        )
+
+    def entities_data_keys_removed_update_views(self, updated_uids=None, collection=None):
+        """Refresh multipart filtered actors after property removals."""
+        self.entities_data_keys_added_update_views(
+            updated_uids=updated_uids, collection=collection
+        )
+
+    def entities_data_val_modified_update_views(self, updated_uids=None, collection=None):
+        """Refresh multipart filtered actors after property value edits."""
+        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+        for uid in updated_uids:
+            actor_row = self._actors_df_row_safe(uid)
+            if actor_row.empty:
+                continue
+            shown_property = actor_row["show_property"].to_list()[0]
+            if shown_property is None:
+                continue
+            if shown_property in collection.get_uid_properties_names(uid):
+                continue
+            show = actor_row["show"].to_list()[0]
+            self.show_actor_with_property(
+                uid=uid,
+                coll_name=collection.collection_name,
+                show_property=None,
+                visible=show,
+            )
+            self.actors_df.loc[self.actors_df["uid"] == uid, ["show_property"]] = None
+        self._refresh_multipart_entities_for_uids(
+            updated_uids=updated_uids, collection=collection
+        )
 
     def show_qt_canvas(self):
         """Show the Qt Window and refresh the volume list."""
