@@ -59,6 +59,7 @@ class GifExportDialog(QDialog):
 
     # Animation type presets
     ANIMATION_PRESETS = [
+        ("Turntable (360°)", "turntable", 360),
         ("Full Orbit (360°)", "orbit_360", 360),
         ("Half Orbit (180°)", "orbit_180", 180),
         ("Quarter Orbit (90°)", "orbit_90", 90),
@@ -66,7 +67,6 @@ class GifExportDialog(QDialog):
         ("Oscillate (±90°)", "oscillate_90", 180),
         ("Vertical Tilt (30°)", "tilt_30", 30),
         ("Zoom In/Out", "zoom", 0),
-        ("Turntable (360°)", "turntable", 360),
         ("Custom Orbit", "custom", 0),
     ]
 
@@ -192,7 +192,7 @@ class GifExportDialog(QDialog):
         # Duration
         self.duration_spin = QDoubleSpinBox()
         self.duration_spin.setRange(0.5, 30.0)
-        self.duration_spin.setValue(4.0)
+        self.duration_spin.setValue(6.0)
         self.duration_spin.setSingleStep(0.5)
         self.duration_spin.setSuffix(" seconds")
         self.duration_spin.setToolTip("Total duration of the animation")
@@ -329,7 +329,7 @@ class GifExportDialog(QDialog):
 
         # Show axes
         self.show_axes_check = QCheckBox("Show coordinate axes")
-        self.show_axes_check.setChecked(False)
+        self.show_axes_check.setChecked(True)
         form.addRow("", self.show_axes_check)
 
         # Show bounding box
@@ -579,6 +579,7 @@ class GifExportDialog(QDialog):
 
         line_scale = self.line_scale_spin.value()
         point_scale = self.point_scale_spin.value()
+        resolution_scale = self._get_resolution_scale(target_plotter)
         selected_cmap = self.colormap_combo.currentText()
         use_custom_cmap = selected_cmap != "(Use Current)"
         show_scalar_bar = self.show_scalar_bar_check.isChecked()
@@ -606,14 +607,25 @@ class GifExportDialog(QDialog):
                     orig_line_width = prop.GetLineWidth() if prop else 1.0
                     orig_point_size = prop.GetPointSize() if prop else 5.0
                     representation = prop.GetRepresentation() if prop else 2
+                    render_points_as_spheres = (
+                        bool(prop.GetRenderPointsAsSpheres()) if prop else False
+                    )
+                    render_lines_as_tubes = (
+                        bool(prop.GetRenderLinesAsTubes()) if prop else False
+                    )
                     visibility = actor.GetVisibility()
+                    texture = actor.GetTexture() if hasattr(actor, "GetTexture") else None
 
                     if not visibility:
                         continue
 
                     # Scale line width and point size
-                    scaled_line_width = max(orig_line_width * line_scale, 1.0)
-                    scaled_point_size = max(orig_point_size * point_scale, 3.0)
+                    scaled_line_width = max(
+                        orig_line_width * line_scale * resolution_scale, 1.0
+                    )
+                    scaled_point_size = max(
+                        orig_point_size * point_scale * resolution_scale, 3.0
+                    )
 
                     # Determine style
                     style = "surface"
@@ -622,24 +634,29 @@ class GifExportDialog(QDialog):
                     elif representation == 1:
                         style = "wireframe"
 
-                    # Check for scalars
-                    scalars = None
-                    cmap = None
-                    if mesh.n_arrays > 0:
-                        scalars = mesh.active_scalars_name
-                        if use_custom_cmap and scalars is not None:
-                            cmap = selected_cmap
+                    scalars, cmap, rgb, clim = self._get_actor_scalar_rendering(
+                        actor_uid=uid,
+                        mapper=mapper,
+                        mesh=mesh,
+                        use_custom_cmap=use_custom_cmap,
+                        selected_cmap=selected_cmap,
+                    )
 
                     # Add mesh to target plotter
                     target_plotter.add_mesh(
                         mesh,
-                        color=color if scalars is None else None,
+                        color=color if scalars is None and texture is None else None,
                         scalars=scalars,
                         cmap=cmap,
+                        rgb=rgb,
+                        clim=clim,
+                        texture=texture,
                         opacity=opacity,
                         style=style,
                         line_width=scaled_line_width,
                         point_size=scaled_point_size,
+                        render_points_as_spheres=render_points_as_spheres,
+                        render_lines_as_tubes=render_lines_as_tubes,
                         show_scalar_bar=show_scalar_bar and scalars is not None,
                         scalar_bar_args={
                             "color": text_color,
@@ -650,6 +667,140 @@ class GifExportDialog(QDialog):
                     continue
         except Exception:
             pass
+
+    @staticmethod
+    def _get_plotter_size(plotter):
+        """Safely read plotter window size."""
+        if plotter is None:
+            return None, None
+        try:
+            size = plotter.window_size
+            if size and len(size) == 2 and size[0] > 0 and size[1] > 0:
+                return float(size[0]), float(size[1])
+        except Exception:
+            pass
+        return None, None
+
+    def _get_resolution_scale(self, target_plotter):
+        """Scale widths/sizes so exports match on-screen legend proportions."""
+        src_w, src_h = self._get_plotter_size(self.plotter)
+        dst_w, dst_h = self._get_plotter_size(target_plotter)
+        if (
+            src_w is None
+            or src_h is None
+            or dst_w is None
+            or dst_h is None
+            or src_w <= 0
+            or src_h <= 0
+        ):
+            return 1.0
+        scale_x = dst_w / src_w
+        scale_y = dst_h / src_h
+        return max((scale_x + scale_y) * 0.5, 0.1)
+
+    @staticmethod
+    def _normalize_property_name(prop_name):
+        if prop_name is None:
+            return None
+        if isinstance(prop_name, str):
+            prop_name = prop_name.strip()
+            return None if prop_name.lower() == "none" or prop_name == "" else prop_name
+        try:
+            if np.isnan(prop_name):
+                return None
+        except Exception:
+            pass
+        return prop_name
+
+    def _get_shown_property_for_actor(self, actor_uid):
+        if self.parent_view is None or not hasattr(self.parent_view, "actors_df"):
+            return None
+        try:
+            shown = self.parent_view.actors_df.loc[
+                self.parent_view.actors_df["uid"] == actor_uid, "show_property"
+            ]
+            if len(shown) == 0:
+                return None
+            return self._normalize_property_name(shown.values[0])
+        except Exception:
+            return None
+
+    def _get_property_cmap(self, property_name):
+        property_name = self._normalize_property_name(property_name)
+        if property_name is None:
+            return None
+
+        project_window = getattr(self.parent_view, "parent", None)
+        if project_window is None or not hasattr(project_window, "prop_legend_df"):
+            return None
+        try:
+            cmap_row = project_window.prop_legend_df.loc[
+                project_window.prop_legend_df["property_name"] == property_name,
+                "colormap",
+            ]
+            if len(cmap_row) == 0:
+                return None
+            cmap = cmap_row.values[0]
+            if isinstance(cmap, str) and cmap.strip():
+                return cmap
+        except Exception:
+            return None
+        return None
+
+    def _get_actor_scalar_rendering(
+        self, actor_uid, mapper, mesh, use_custom_cmap, selected_cmap
+    ):
+        """Resolve scalar/rgb/cmap settings from the source actor mapper."""
+        if mapper is None or not mapper.GetScalarVisibility():
+            return None, None, False, None
+
+        scalars = mapper.GetArrayName()
+        if scalars and scalars not in mesh.array_names:
+            scalars = None
+        if scalars is None:
+            scalars = mesh.active_scalars_name
+        if scalars is None:
+            return None, None, False, None
+
+        rgb = False
+        try:
+            color_mode = mapper.GetColorModeAsString().lower()
+            rgb = "direct" in color_mode
+        except Exception:
+            rgb = False
+
+        if not rgb:
+            try:
+                scalar_values = mesh[scalars]
+                if (
+                    hasattr(scalar_values, "shape")
+                    and len(scalar_values.shape) > 1
+                    and scalar_values.shape[-1] in (3, 4)
+                ):
+                    rgb = True
+            except Exception:
+                pass
+
+        cmap = None
+        if not rgb:
+            if use_custom_cmap:
+                cmap = selected_cmap
+            else:
+                shown_property = self._get_shown_property_for_actor(actor_uid)
+                cmap = self._get_property_cmap(shown_property)
+                if cmap is None:
+                    cmap = self._get_property_cmap(scalars)
+
+        clim = None
+        if not rgb:
+            try:
+                scalar_range = mapper.GetScalarRange()
+                if scalar_range and len(scalar_range) == 2:
+                    clim = scalar_range
+            except Exception:
+                pass
+
+        return scalars, cmap, rgb, clim
 
     def _apply_easing(self, t, easing_type):
         """Apply easing function to normalized time value.
@@ -674,6 +825,47 @@ class GifExportDialog(QDialog):
             return t * (2 - t)
         else:
             return t
+
+    @staticmethod
+    def _normalize_vector(vector, fallback):
+        """Return a normalized vector, or the normalized fallback if degenerate."""
+        vec = np.array(vector, dtype=float)
+        norm = np.linalg.norm(vec)
+        if norm < 1e-12:
+            fb = np.array(fallback, dtype=float)
+            fb_norm = np.linalg.norm(fb)
+            if fb_norm < 1e-12:
+                return np.array([0.0, 0.0, 1.0], dtype=float)
+            return fb / fb_norm
+        return vec / norm
+
+    @staticmethod
+    def _rotate_vector_around_axis(vector, axis, angle_rad):
+        """Rotate a 3D vector around an axis using Rodrigues' rotation formula."""
+        v = np.array(vector, dtype=float)
+        k = GifExportDialog._normalize_vector(axis, fallback=[0.0, 0.0, 1.0])
+        c = np.cos(angle_rad)
+        s = np.sin(angle_rad)
+        return v * c + np.cross(k, v) * s + k * np.dot(k, v) * (1.0 - c)
+
+    @staticmethod
+    def _compute_orbit_view_up(position, focal_point, orbit_axis, fallback_up):
+        """Compute a stable up-vector aligned with orbit axis to avoid rolling."""
+        forward = np.array(focal_point, dtype=float) - np.array(position, dtype=float)
+        f_norm = np.linalg.norm(forward)
+        if f_norm < 1e-12:
+            return tuple(GifExportDialog._normalize_vector(fallback_up, [0.0, 0.0, 1.0]))
+        forward /= f_norm
+
+        axis = GifExportDialog._normalize_vector(orbit_axis, [0.0, 0.0, 1.0])
+        right = np.cross(forward, axis)
+        r_norm = np.linalg.norm(right)
+        if r_norm < 1e-12:
+            return tuple(GifExportDialog._normalize_vector(fallback_up, [0.0, 0.0, 1.0]))
+        right /= r_norm
+
+        up = np.cross(right, forward)
+        return tuple(GifExportDialog._normalize_vector(up, fallback_up))
 
     def _generate_camera_path(self, plotter, num_frames):
         """Generate camera positions for the animation.
@@ -724,6 +916,7 @@ class GifExportDialog(QDialog):
         focal_point = np.array(cam.focal_point)
         start_pos = np.array(cam.position)
         view_up = np.array(cam.up)
+        stable_fallback_up = self._normalize_vector(view_up, [0.0, 0.0, 1.0])
         
         camera_positions = []
         
@@ -735,6 +928,17 @@ class GifExportDialog(QDialog):
             # Fallback if camera is at focal point
             radius = 1.0
             camera_vector = np.array([0, -radius, 0])
+
+        # Select orbit axis
+        if "Vertical" in axis_choice:
+            orbit_axis = np.array([0.0, 0.0, 1.0], dtype=float)
+        elif "X-axis" in axis_choice:
+            orbit_axis = np.array([1.0, 0.0, 0.0], dtype=float)
+        elif "Y-axis" in axis_choice:
+            orbit_axis = np.array([0.0, 1.0, 0.0], dtype=float)
+        else:  # Camera Up Vector
+            orbit_axis = stable_fallback_up
+        orbit_axis = self._normalize_vector(orbit_axis, [0.0, 0.0, 1.0])
         
         # Normalize the camera vector for direction
         camera_dir = camera_vector / radius
@@ -765,18 +969,34 @@ class GifExportDialog(QDialog):
                 angle = swing_angle * np.sin(eased_t * 2 * np.pi)
                 
                 if "Vertical" in axis_choice or "Up" in axis_choice:
-                    new_azimuth = initial_azimuth + angle
-                    new_elevation = initial_elevation + elevation_offset
+                    base_vector = camera_vector
+                    if abs(elevation_offset) > 1e-12:
+                        right_axis = self._normalize_vector(
+                            np.cross(orbit_axis, base_vector), [1.0, 0.0, 0.0]
+                        )
+                        base_vector = self._rotate_vector_around_axis(
+                            base_vector, right_axis, elevation_offset
+                        )
+                    rotated_vector = self._rotate_vector_around_axis(
+                        base_vector, orbit_axis, angle
+                    )
+                    new_pos = focal_point + rotated_vector
+                    frame_up = self._compute_orbit_view_up(
+                        new_pos, focal_point, orbit_axis, stable_fallback_up
+                    )
+                    camera_positions.append(
+                        (tuple(new_pos), tuple(focal_point), frame_up)
+                    )
                 else:
                     new_azimuth = initial_azimuth
                     new_elevation = initial_elevation + angle
-                
-                # Calculate new position using spherical coordinates
-                new_x = focal_point[0] + radius * np.cos(new_elevation) * np.cos(new_azimuth)
-                new_y = focal_point[1] + radius * np.cos(new_elevation) * np.sin(new_azimuth)
-                new_z = focal_point[2] + radius * np.sin(new_elevation)
-                
-                camera_positions.append(((new_x, new_y, new_z), tuple(focal_point), tuple(view_up)))
+                    # Calculate new position using spherical coordinates
+                    new_x = focal_point[0] + radius * np.cos(new_elevation) * np.cos(new_azimuth)
+                    new_y = focal_point[1] + radius * np.cos(new_elevation) * np.sin(new_azimuth)
+                    new_z = focal_point[2] + radius * np.sin(new_elevation)
+                    camera_positions.append(
+                        ((new_x, new_y, new_z), tuple(focal_point), tuple(view_up))
+                    )
                 
             elif "tilt" in anim_type:
                 # Tilt animation: camera tilts up and down
@@ -797,43 +1017,22 @@ class GifExportDialog(QDialog):
             else:
                 # Orbit/Turntable animation - rotate around the model
                 angle_rad = np.radians(total_angle * eased_t) * direction
-                
-                if "Vertical" in axis_choice or "Up" in axis_choice:
-                    # Rotate around Z axis (vertical turntable)
-                    new_azimuth = initial_azimuth + angle_rad
-                    new_elevation = initial_elevation + elevation_offset
-                    
-                    new_x = focal_point[0] + radius * np.cos(new_elevation) * np.cos(new_azimuth)
-                    new_y = focal_point[1] + radius * np.cos(new_elevation) * np.sin(new_azimuth)
-                    new_z = focal_point[2] + radius * np.sin(new_elevation)
-                    
-                elif "X-axis" in axis_choice:
-                    # Rotate around X axis
-                    cos_a = np.cos(angle_rad)
-                    sin_a = np.sin(angle_rad)
-                    
-                    # Rotate camera_vector around X axis
-                    rot_y = camera_vector[1] * cos_a - camera_vector[2] * sin_a
-                    rot_z = camera_vector[1] * sin_a + camera_vector[2] * cos_a
-                    
-                    new_x = focal_point[0] + camera_vector[0]
-                    new_y = focal_point[1] + rot_y
-                    new_z = focal_point[2] + rot_z
-                    
-                else:  # Y-axis
-                    # Rotate around Y axis
-                    cos_a = np.cos(angle_rad)
-                    sin_a = np.sin(angle_rad)
-                    
-                    # Rotate camera_vector around Y axis
-                    rot_x = camera_vector[0] * cos_a + camera_vector[2] * sin_a
-                    rot_z = -camera_vector[0] * sin_a + camera_vector[2] * cos_a
-                    
-                    new_x = focal_point[0] + rot_x
-                    new_y = focal_point[1] + camera_vector[1]
-                    new_z = focal_point[2] + rot_z
-                
-                camera_positions.append(((new_x, new_y, new_z), tuple(focal_point), tuple(view_up)))
+                base_vector = camera_vector
+                if abs(elevation_offset) > 1e-12 and ("Vertical" in axis_choice or "Up" in axis_choice):
+                    right_axis = self._normalize_vector(
+                        np.cross(orbit_axis, base_vector), [1.0, 0.0, 0.0]
+                    )
+                    base_vector = self._rotate_vector_around_axis(
+                        base_vector, right_axis, elevation_offset
+                    )
+                rotated_vector = self._rotate_vector_around_axis(
+                    base_vector, orbit_axis, angle_rad
+                )
+                new_pos = focal_point + rotated_vector
+                frame_up = self._compute_orbit_view_up(
+                    new_pos, focal_point, orbit_axis, stable_fallback_up
+                )
+                camera_positions.append((tuple(new_pos), tuple(focal_point), frame_up))
         
         # Handle ping-pong looping
         if hasattr(self, 'loop_check') and self.loop_check.isChecked():

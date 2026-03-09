@@ -210,7 +210,7 @@ class ScreenshotExportDialog(QDialog):
 
         # Show axes
         self.show_axes_check = QCheckBox("Show coordinate axes")
-        self.show_axes_check.setChecked(False)
+        self.show_axes_check.setChecked(True)
         form.addRow("", self.show_axes_check)
 
         # Show bounding box
@@ -423,6 +423,7 @@ class ScreenshotExportDialog(QDialog):
 
         line_scale = self.line_scale_spin.value()
         point_scale = self.point_scale_spin.value()
+        resolution_scale = self._get_resolution_scale(target_plotter)
         selected_cmap = self.colormap_combo.currentText()
         use_custom_cmap = selected_cmap != "(Use Current)"
         show_scalar_bar = self.show_scalar_bar_check.isChecked()
@@ -450,14 +451,25 @@ class ScreenshotExportDialog(QDialog):
                     orig_line_width = prop.GetLineWidth() if prop else 1.0
                     orig_point_size = prop.GetPointSize() if prop else 5.0
                     representation = prop.GetRepresentation() if prop else 2
+                    render_points_as_spheres = (
+                        bool(prop.GetRenderPointsAsSpheres()) if prop else False
+                    )
+                    render_lines_as_tubes = (
+                        bool(prop.GetRenderLinesAsTubes()) if prop else False
+                    )
                     visibility = actor.GetVisibility()
+                    texture = actor.GetTexture() if hasattr(actor, "GetTexture") else None
 
                     if not visibility:
                         continue
 
                     # Scale line width and point size
-                    scaled_line_width = max(orig_line_width * line_scale, 1.0)
-                    scaled_point_size = max(orig_point_size * point_scale, 3.0)
+                    scaled_line_width = max(
+                        orig_line_width * line_scale * resolution_scale, 1.0
+                    )
+                    scaled_point_size = max(
+                        orig_point_size * point_scale * resolution_scale, 3.0
+                    )
 
                     # Determine style
                     style = "surface"
@@ -466,24 +478,29 @@ class ScreenshotExportDialog(QDialog):
                     elif representation == 1:
                         style = "wireframe"
 
-                    # Check for scalars
-                    scalars = None
-                    cmap = None
-                    if mesh.n_arrays > 0:
-                        scalars = mesh.active_scalars_name
-                        if use_custom_cmap and scalars is not None:
-                            cmap = selected_cmap
+                    scalars, cmap, rgb, clim = self._get_actor_scalar_rendering(
+                        actor_uid=uid,
+                        mapper=mapper,
+                        mesh=mesh,
+                        use_custom_cmap=use_custom_cmap,
+                        selected_cmap=selected_cmap,
+                    )
 
                     # Add mesh to target plotter
                     target_plotter.add_mesh(
                         mesh,
-                        color=color if scalars is None else None,
+                        color=color if scalars is None and texture is None else None,
                         scalars=scalars,
                         cmap=cmap,
+                        rgb=rgb,
+                        clim=clim,
+                        texture=texture,
                         opacity=opacity,
                         style=style,
                         line_width=scaled_line_width,
                         point_size=scaled_point_size,
+                        render_points_as_spheres=render_points_as_spheres,
+                        render_lines_as_tubes=render_lines_as_tubes,
                         show_scalar_bar=show_scalar_bar and scalars is not None,
                         scalar_bar_args={
                             "color": text_color,
@@ -496,6 +513,140 @@ class ScreenshotExportDialog(QDialog):
                     continue
         except Exception:
             pass
+
+    @staticmethod
+    def _get_plotter_size(plotter):
+        """Safely read plotter window size."""
+        if plotter is None:
+            return None, None
+        try:
+            size = plotter.window_size
+            if size and len(size) == 2 and size[0] > 0 and size[1] > 0:
+                return float(size[0]), float(size[1])
+        except Exception:
+            pass
+        return None, None
+
+    def _get_resolution_scale(self, target_plotter):
+        """Scale widths/sizes so exports match on-screen legend proportions."""
+        src_w, src_h = self._get_plotter_size(self.plotter)
+        dst_w, dst_h = self._get_plotter_size(target_plotter)
+        if (
+            src_w is None
+            or src_h is None
+            or dst_w is None
+            or dst_h is None
+            or src_w <= 0
+            or src_h <= 0
+        ):
+            return 1.0
+        scale_x = dst_w / src_w
+        scale_y = dst_h / src_h
+        return max((scale_x + scale_y) * 0.5, 0.1)
+
+    @staticmethod
+    def _normalize_property_name(prop_name):
+        if prop_name is None:
+            return None
+        if isinstance(prop_name, str):
+            prop_name = prop_name.strip()
+            return None if prop_name.lower() == "none" or prop_name == "" else prop_name
+        try:
+            if np.isnan(prop_name):
+                return None
+        except Exception:
+            pass
+        return prop_name
+
+    def _get_shown_property_for_actor(self, actor_uid):
+        if self.parent_view is None or not hasattr(self.parent_view, "actors_df"):
+            return None
+        try:
+            shown = self.parent_view.actors_df.loc[
+                self.parent_view.actors_df["uid"] == actor_uid, "show_property"
+            ]
+            if len(shown) == 0:
+                return None
+            return self._normalize_property_name(shown.values[0])
+        except Exception:
+            return None
+
+    def _get_property_cmap(self, property_name):
+        property_name = self._normalize_property_name(property_name)
+        if property_name is None:
+            return None
+
+        project_window = getattr(self.parent_view, "parent", None)
+        if project_window is None or not hasattr(project_window, "prop_legend_df"):
+            return None
+        try:
+            cmap_row = project_window.prop_legend_df.loc[
+                project_window.prop_legend_df["property_name"] == property_name,
+                "colormap",
+            ]
+            if len(cmap_row) == 0:
+                return None
+            cmap = cmap_row.values[0]
+            if isinstance(cmap, str) and cmap.strip():
+                return cmap
+        except Exception:
+            return None
+        return None
+
+    def _get_actor_scalar_rendering(
+        self, actor_uid, mapper, mesh, use_custom_cmap, selected_cmap
+    ):
+        """Resolve scalar/rgb/cmap settings from the source actor mapper."""
+        if mapper is None or not mapper.GetScalarVisibility():
+            return None, None, False, None
+
+        scalars = mapper.GetArrayName()
+        if scalars and scalars not in mesh.array_names:
+            scalars = None
+        if scalars is None:
+            scalars = mesh.active_scalars_name
+        if scalars is None:
+            return None, None, False, None
+
+        rgb = False
+        try:
+            color_mode = mapper.GetColorModeAsString().lower()
+            rgb = "direct" in color_mode
+        except Exception:
+            rgb = False
+
+        if not rgb:
+            try:
+                scalar_values = mesh[scalars]
+                if (
+                    hasattr(scalar_values, "shape")
+                    and len(scalar_values.shape) > 1
+                    and scalar_values.shape[-1] in (3, 4)
+                ):
+                    rgb = True
+            except Exception:
+                pass
+
+        cmap = None
+        if not rgb:
+            if use_custom_cmap:
+                cmap = selected_cmap
+            else:
+                shown_property = self._get_shown_property_for_actor(actor_uid)
+                cmap = self._get_property_cmap(shown_property)
+                if cmap is None:
+                    cmap = self._get_property_cmap(scalars)
+
+        clim = None
+        if not rgb:
+            try:
+                scalar_range = mapper.GetScalarRange()
+                if scalar_range and len(scalar_range) == 2:
+                    clim = scalar_range
+            except Exception:
+                pass
+
+        return scalars, cmap, rgb, clim
 
     def _apply_camera_view(self, plotter, view_choice):
         """Apply the selected camera view to the plotter.
