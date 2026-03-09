@@ -1136,6 +1136,34 @@ class ViewInterpretation(ViewMap):
             return True
 
         return False
+
+    def _build_propagated_entity_name(self, seed_uid, slice_indices, fallback_name):
+        """
+        Build a propagated entity name from the seed interpretation name.
+
+        The suffix uses the actual propagated slice interval, formatted as
+        ``(start-end)`` so repeated tracking keeps the correct positioning.
+        """
+        base_name = fallback_name
+        try:
+            seed_name = self.parent.geol_coll.get_uid_name(seed_uid)
+            if isinstance(seed_name, str) and seed_name.strip():
+                base_name = seed_name.strip()
+        except Exception:
+            pass
+
+        try:
+            clean = sorted({int(idx) for idx in (slice_indices or [])})
+        except Exception:
+            clean = []
+
+        if isinstance(base_name, str):
+            import re
+            base_name = re.sub(r"\s*\(\d+\s*-\s*\d+\)\s*$", "", base_name).strip()
+
+        if not clean:
+            return base_name
+        return f"{base_name} ({clean[0]}-{clean[-1]})"
     
     def update_slice_colormap(self):
         """Update the slice colormap when legend changes - called by prop_legend_cmap_modified signal."""
@@ -4114,7 +4142,11 @@ class ViewInterpretation(ViewMap):
                 
                 # Create entity dictionary
                 line_dict = deepcopy(self.parent.geol_coll.entity_dict)
-                line_dict["name"] = f"horizon_{current_idx}_multipart"
+                line_dict["name"] = self._build_propagated_entity_name(
+                    seed_uid=seed_uid,
+                    slice_indices=cell_slice_indices,
+                    fallback_name="auto_horizon",
+                )
                 line_dict["topology"] = "PolyLine"
                 line_dict["x_section"] = ""
                 line_dict["vtk_obj"] = multipart_line
@@ -4631,7 +4663,11 @@ class ViewInterpretation(ViewMap):
                     
                     # Create entity
                     fault_dict = deepcopy(self.parent.geol_coll.entity_dict)
-                    fault_dict["name"] = f"fault_{current_idx}_multipart"
+                    fault_dict["name"] = self._build_propagated_entity_name(
+                        seed_uid=seed_uid,
+                        slice_indices=cell_slice_indices,
+                        fallback_name="auto_fault",
+                    )
                     fault_dict["topology"] = "PolyLine"
                     fault_dict["x_section"] = ""
                     fault_dict["vtk_obj"] = multipart_fault
