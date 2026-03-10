@@ -18,7 +18,11 @@ from scipy import ndimage
 # PZero imports
 from .view_map import ViewMap
 from ..entities_factory import Seismics, PolyLine
-from ..helpers.helper_dialogs import multiple_input_dialog, input_one_value_dialog
+from ..helpers.helper_dialogs import (
+    message_dialog,
+    multiple_input_dialog,
+    input_one_value_dialog,
+)
 from ..helpers.helper_widgets import Tracer
 
 class ViewInterpretation(ViewMap):
@@ -1371,7 +1375,280 @@ class ViewInterpretation(ViewMap):
         if not clean:
             return base_name
         return f"{base_name} ({clean[0]}-{clean[-1]})"
-    
+
+    def _copy_selected_numeric_arrays(
+        self, source_data, target_data, selected_ids, skip_names=None, skip_prefixes=None
+    ):
+        """Copy numeric data arrays for a subset of tuples."""
+        if source_data is None or target_data is None:
+            return
+        skip_names = set(skip_names or [])
+        skip_prefixes = tuple(skip_prefixes or ())
+        for array_idx in range(source_data.GetNumberOfArrays()):
+            source_array = source_data.GetArray(array_idx)
+            if source_array is None:
+                continue
+            array_name = source_array.GetName() or ""
+            if array_name in skip_names:
+                continue
+            if array_name and any(array_name.startswith(prefix) for prefix in skip_prefixes):
+                continue
+            copied_array = source_array.NewInstance()
+            copied_array.SetName(array_name)
+            copied_array.SetNumberOfComponents(source_array.GetNumberOfComponents())
+            copied_array.SetNumberOfTuples(len(selected_ids))
+            for new_idx, old_idx in enumerate(selected_ids):
+                copied_array.SetTuple(new_idx, source_array.GetTuple(old_idx))
+            target_data.AddArray(copied_array)
+
+    def _copy_field_data_arrays(self, source_data, target_data):
+        """Copy field-data arrays as-is."""
+        if source_data is None or target_data is None:
+            return
+        for array_idx in range(source_data.GetNumberOfArrays()):
+            source_array = source_data.GetAbstractArray(array_idx)
+            if source_array is None:
+                continue
+            copied_array = source_array.NewInstance()
+            copied_array.DeepCopy(source_array)
+            target_data.AddArray(copied_array)
+
+    def _build_multipart_subset_vtk(self, vtk_obj=None, kept_cell_ids=None):
+        """Create a new multipart PolyLine keeping only the requested cells."""
+        if vtk_obj is None or not kept_cell_ids:
+            return None, [], {}
+
+        from vtk import vtkCellArray, vtkIntArray, vtkPoints
+
+        source_cell_data = vtk_obj.GetCellData()
+        cell_slice_array = (
+            source_cell_data.GetArray("slice_index")
+            if source_cell_data is not None and source_cell_data.HasArray("slice_index")
+            else None
+        )
+
+        new_points = vtkPoints()
+        new_lines = vtkCellArray()
+        point_map = {}
+        kept_point_ids = []
+        point_slice_values = []
+        kept_slice_values = []
+
+        for old_cell_id in kept_cell_ids:
+            cell = vtk_obj.GetCell(old_cell_id)
+            if cell is None:
+                continue
+            n_pts = cell.GetNumberOfPoints()
+            if n_pts <= 0:
+                continue
+
+            slice_idx = (
+                int(cell_slice_array.GetValue(old_cell_id))
+                if cell_slice_array is not None
+                else -1
+            )
+            new_line_point_ids = []
+            for point_idx in range(n_pts):
+                old_point_id = cell.GetPointId(point_idx)
+                if old_point_id not in point_map:
+                    new_point_id = new_points.InsertNextPoint(vtk_obj.GetPoint(old_point_id))
+                    point_map[old_point_id] = new_point_id
+                    kept_point_ids.append(old_point_id)
+                    point_slice_values.append(slice_idx)
+                new_line_point_ids.append(point_map[old_point_id])
+
+            new_lines.InsertNextCell(len(new_line_point_ids))
+            for new_point_id in new_line_point_ids:
+                new_lines.InsertCellPoint(new_point_id)
+            kept_slice_values.append(slice_idx)
+
+        if new_points.GetNumberOfPoints() == 0 or new_lines.GetNumberOfCells() == 0:
+            return None, [], {}
+
+        subset_line = PolyLine()
+        subset_line.SetPoints(new_points)
+        subset_line.SetLines(new_lines)
+
+        self._copy_selected_numeric_arrays(
+            source_data=vtk_obj.GetPointData(),
+            target_data=subset_line.GetPointData(),
+            selected_ids=kept_point_ids,
+            skip_names={"slice_index"},
+            skip_prefixes=("slices_",),
+        )
+        self._copy_selected_numeric_arrays(
+            source_data=vtk_obj.GetCellData(),
+            target_data=subset_line.GetCellData(),
+            selected_ids=kept_cell_ids,
+            skip_names={"slice_index"},
+            skip_prefixes=("slices_",),
+        )
+        self._copy_field_data_arrays(
+            source_data=vtk_obj.GetFieldData(),
+            target_data=subset_line.GetFieldData(),
+        )
+
+        point_slice_out = vtkIntArray()
+        point_slice_out.SetName("slice_index")
+        point_slice_out.SetNumberOfComponents(1)
+        for slice_idx in point_slice_values:
+            point_slice_out.InsertNextValue(int(slice_idx))
+        subset_line.GetPointData().AddArray(point_slice_out)
+
+        cell_slice_out = vtkIntArray()
+        cell_slice_out.SetName("slice_index")
+        cell_slice_out.SetNumberOfComponents(1)
+        for slice_idx in kept_slice_values:
+            cell_slice_out.InsertNextValue(int(slice_idx))
+        subset_line.GetCellData().AddArray(cell_slice_out)
+
+        remaining_slices = sorted({int(idx) for idx in kept_slice_values if int(idx) >= 0})
+        slice_to_cell_index = {}
+        for new_cell_idx, slice_idx in enumerate(kept_slice_values):
+            slice_idx = int(slice_idx)
+            if slice_idx not in slice_to_cell_index:
+                slice_to_cell_index[slice_idx] = new_cell_idx
+
+        self._ensure_slice_index_property_metadata(
+            vtk_obj=subset_line, slice_indices=remaining_slices
+        )
+        subset_line.Modified()
+        return subset_line, remaining_slices, slice_to_cell_index
+
+    def delete_multipart_slices(self):
+        """Delete a slice interval from the selected propagated multipart horizon/fault."""
+        selected_uids = [
+            uid
+            for uid in list(getattr(self.parent, "selected_uids", []) or [])
+            if uid in set(self.parent.geol_coll.get_uids)
+        ]
+        if len(selected_uids) != 1:
+            message_dialog(
+                title="Delete Multipart Slices",
+                message="Select exactly one propagated horizon or fault in the geology tree.",
+            )
+            return
+
+        uid = selected_uids[0]
+        self.scan_and_index_single_horizon(uid)
+
+        entity_kind = None
+        entity_info = None
+        if uid in getattr(self, "multipart_horizons", {}):
+            entity_kind = "horizon"
+            entity_info = self.multipart_horizons[uid]
+        elif uid in getattr(self, "multipart_faults", {}):
+            entity_kind = "fault"
+            entity_info = self.multipart_faults[uid]
+
+        if entity_info is None:
+            message_dialog(
+                title="Delete Multipart Slices",
+                message="The selected entity is not a propagated multipart horizon or fault.",
+            )
+            return
+
+        vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        if vtk_obj is None or vtk_obj.GetNumberOfCells() == 0:
+            message_dialog(
+                title="Delete Multipart Slices",
+                message="The selected entity has no geometry to edit.",
+            )
+            return
+
+        cell_data = vtk_obj.GetCellData()
+        if cell_data is None or not cell_data.HasArray("slice_index"):
+            message_dialog(
+                title="Delete Multipart Slices",
+                message="The selected multipart entity has no slice_index cell data.",
+            )
+            return
+
+        available_slices = sorted(
+            {int(idx) for idx in entity_info.get("slice_indices", [])}
+            or set(self._extract_slice_indices_from_vtk(vtk_obj))
+        )
+        if not available_slices:
+            message_dialog(
+                title="Delete Multipart Slices",
+                message="No slice indices were found on the selected entity.",
+            )
+            return
+
+        range_in = multiple_input_dialog(
+            title=f"Delete Multipart Slices ({available_slices[0]}-{available_slices[-1]})",
+            input_dict={
+                "slice_from": ["Delete from slice:", available_slices[0]],
+                "slice_to": ["Delete to slice:", available_slices[-1]],
+            },
+        )
+        if range_in is None:
+            return
+
+        slice_from = int(range_in["slice_from"])
+        slice_to = int(range_in["slice_to"])
+        if slice_from > slice_to:
+            slice_from, slice_to = slice_to, slice_from
+
+        slices_to_delete = {
+            slice_idx
+            for slice_idx in available_slices
+            if slice_from <= slice_idx <= slice_to
+        }
+        if not slices_to_delete:
+            message_dialog(
+                title="Delete Multipart Slices",
+                message="The requested interval does not match any slices in the selected entity.",
+            )
+            return
+
+        slice_array = cell_data.GetArray("slice_index")
+        kept_cell_ids = [
+            cell_idx
+            for cell_idx in range(vtk_obj.GetNumberOfCells())
+            if int(slice_array.GetValue(cell_idx)) not in slices_to_delete
+        ]
+
+        if not kept_cell_ids:
+            self.parent.geol_coll.remove_entity(uid=uid)
+            self.print_terminal(
+                f"Deleted multipart {entity_kind} {uid[:8]}... because all slices were removed."
+            )
+            return
+
+        new_vtk, remaining_slices, slice_to_cell_index = self._build_multipart_subset_vtk(
+            vtk_obj=vtk_obj,
+            kept_cell_ids=kept_cell_ids,
+        )
+        if new_vtk is None or new_vtk.GetNumberOfCells() == 0:
+            self.parent.geol_coll.remove_entity(uid=uid)
+            self.print_terminal(
+                f"Deleted multipart {entity_kind} {uid[:8]}... because no valid slices remained."
+            )
+            return
+
+        axis = entity_info.get("axis", self.current_axis)
+        self._remove_filtered_actor(f"multipart_slice_{uid}")
+        self._remove_filtered_actor(f"multipart_fault_slice_{uid}")
+        self._remove_raw_actor_for_uid(uid)
+        self._register_multipart_interpretation_entity(
+            uid=uid,
+            axis=axis,
+            slice_indices=remaining_slices,
+            slice_to_cell_index=slice_to_cell_index,
+        )
+        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=new_vtk)
+        self._mark_slice_visibility_dirty()
+        if uid in getattr(self, "multipart_horizons", {}):
+            self.update_multipart_horizon_visibility(uid)
+        if uid in getattr(self, "multipart_faults", {}):
+            self.update_multipart_fault_visibility(uid)
+        self.plotter.render()
+        self.print_terminal(
+            f"Deleted slices {slice_from}-{slice_to} from multipart {entity_kind} {uid[:8]}.... "
+            f"Remaining slices: {remaining_slices[0]}-{remaining_slices[-1]}"
+        )
+
     def update_slice_colormap(self):
         """Update the slice colormap when legend changes - called by prop_legend_cmap_modified signal."""
         if self.slice_actor is not None:
@@ -5078,16 +5355,12 @@ class ViewInterpretation(ViewMap):
         super().initialize_menu_tools()
 
         # Interpretation view does not use the generic 2D "Modify" workflow.
-        # Hide the menu and remove inherited actions to avoid inconsistent behavior.
+        # Keep only the local multipart-edit tools in the Modify menu.
         try:
             if hasattr(self, "menuModify") and self.menuModify is not None:
                 self.menuModify.clear()
-                self.menuModify.setEnabled(False)
-                self.menuModify.menuAction().setVisible(False)
-                try:
-                    self.menuBar().removeAction(self.menuModify.menuAction())
-                except Exception:
-                    pass
+                self.menuModify.setEnabled(True)
+                self.menuModify.menuAction().setVisible(True)
         except Exception:
             pass
 
@@ -5133,6 +5406,10 @@ class ViewInterpretation(ViewMap):
         self.propagateFaultButton = QAction("Propagate Fault (Auto-Track 3D)", self)
         self.propagateFaultButton.triggered.connect(self.propagate_fault)
         self.menuCreate.addAction(self.propagateFaultButton)
+
+        self.deleteMultipartSlicesButton = QAction("Delete Multipart Slices...", self)
+        self.deleteMultipartSlicesButton.triggered.connect(self.delete_multipart_slices)
+        self.menuModify.addAction(self.deleteMultipartSlicesButton)
 
         # Connect our custom handler for additional processing (volume list refresh)
         try:
