@@ -1692,7 +1692,10 @@ class ViewInterpretation(ViewMap):
         
         try:
             # 1. Get the set of UIDs that SHOULD be visible on this slice
-            target_uids = self.interpretation_lines_by_slice.get(cache_key, set())
+            target_uids = set(self.interpretation_lines_by_slice.get(cache_key, set()))
+            target_uids = {
+                uid for uid in target_uids if self._is_uid_enabled_in_tree(uid)
+            }
             
             # 2. Track currently visible lines to minimize VTK calls
             if not hasattr(self, 'vis_lines_on_display'):
@@ -1772,7 +1775,8 @@ class ViewInterpretation(ViewMap):
         matches_current = (
             slice_info['seismic_uid'] == self.current_seismic_uid and
             slice_info['axis'] == self.current_axis and
-            slice_info['slice_index'] == self.current_slice_index
+            slice_info['slice_index'] == self.current_slice_index and
+            self._is_uid_enabled_in_tree(uid)
         )
         
         self.set_actor_visibility(uid, matches_current)
@@ -1829,18 +1833,13 @@ class ViewInterpretation(ViewMap):
             # ALWAYS remove the old filtered actor first to prevent accumulation
             # Try multiple methods to ensure it's removed
             try:
-                self.plotter.remove_actor(actor_name)
-            except:
+                self._remove_filtered_actor(actor_name)
+            except Exception:
                 pass
-            
-            # Also try to remove from renderer.actors dict directly
-            try:
-                if actor_name in self.plotter.renderer.actors:
-                    actor = self.plotter.renderer.actors[actor_name]
-                    self.plotter.renderer.RemoveActor(actor)
-                    del self.plotter.renderer.actors[actor_name]
-            except:
-                pass
+
+            if not self._is_uid_enabled_in_tree(horizon_uid):
+                self.set_actor_visibility(horizon_uid, False)
+                continue
             
             # Check if this horizon matches current view context
             if (horizon_info['seismic_uid'] != self.current_seismic_uid or 
@@ -1986,18 +1985,13 @@ class ViewInterpretation(ViewMap):
             # ALWAYS remove the old filtered actor first to prevent accumulation
             # Try multiple methods to ensure it's removed
             try:
-                self.plotter.remove_actor(actor_name)
-            except:
+                self._remove_filtered_actor(actor_name)
+            except Exception:
                 pass
-            
-            # Also try to remove from renderer.actors dict directly
-            try:
-                if actor_name in self.plotter.renderer.actors:
-                    actor = self.plotter.renderer.actors[actor_name]
-                    self.plotter.renderer.RemoveActor(actor)
-                    del self.plotter.renderer.actors[actor_name]
-            except:
-                pass
+
+            if not self._is_uid_enabled_in_tree(fault_uid):
+                self.set_actor_visibility(fault_uid, False)
+                continue
             
             # Check if this fault matches current view context
             if (fault_info['seismic_uid'] != self.current_seismic_uid or
@@ -2515,6 +2509,129 @@ class ViewInterpretation(ViewMap):
         # Also invalidate the visibility key to force update
         if hasattr(self, '_last_visibility_key'):
             del self._last_visibility_key
+
+    def _remove_filtered_actor(self, actor_name):
+        """Remove a slice-filtered actor if it exists in the renderer."""
+        if not actor_name:
+            return
+        try:
+            self.plotter.remove_actor(actor_name)
+        except Exception:
+            pass
+        try:
+            actors = getattr(self.plotter.renderer, "actors", {})
+            if actor_name in actors:
+                actor = actors[actor_name]
+                self.plotter.renderer.RemoveActor(actor)
+                del actors[actor_name]
+        except Exception:
+            pass
+
+    def _is_uid_enabled_in_tree(self, uid=None):
+        """Return the current checkbox-driven visibility state for a uid."""
+        actor_row = self._actors_df_row_safe(uid=uid)
+        if actor_row.empty:
+            return True
+        try:
+            return bool(actor_row["show"].to_list()[0])
+        except Exception:
+            return True
+
+    def _is_slice_filtered_uid(self, uid=None):
+        """Return True for interpretation entities controlled by slice-aware visibility."""
+        if not uid:
+            return False
+        if uid in getattr(self, "interpretation_lines", {}):
+            return True
+        if uid in getattr(self, "multipart_horizons", {}):
+            return True
+        if uid in getattr(self, "multipart_faults", {}):
+            return True
+
+        actor_row = self._actors_df_row_safe(uid=uid)
+        if actor_row.empty:
+            return False
+        try:
+            if actor_row["collection"].to_list()[0] != "geol_coll":
+                return False
+        except Exception:
+            return False
+
+        try:
+            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        except Exception:
+            return False
+        if vtk_obj is None:
+            return False
+
+        try:
+            cell_data = vtk_obj.GetCellData()
+            if cell_data and cell_data.HasArray("slice_index"):
+                return True
+        except Exception:
+            pass
+
+        return self._extract_single_slice_interpretation_metadata(
+            uid=uid, vtk_obj=vtk_obj
+        ) is not None
+
+    def _mark_slice_visibility_dirty(self):
+        """Force the next slice-aware visibility refresh to recompute state."""
+        self._visibility_dirty = True
+        if hasattr(self, "_last_visibility_key"):
+            try:
+                del self._last_visibility_key
+            except Exception:
+                pass
+
+    def toggle_visibility(
+        self, collection_name=None, turn_on_uids=None, turn_off_uids=None
+    ):
+        """
+        Keep tree checkbox visibility in sync with slice-aware interpretation actors.
+        """
+        turn_on_uids = list(turn_on_uids or [])
+        turn_off_uids = list(turn_off_uids or [])
+        slice_filtered_uids = set()
+
+        for uid in turn_on_uids:
+            actor_row = self._actors_df_row_safe(uid=uid)
+            if actor_row.empty:
+                continue
+            self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = True
+            if self._is_slice_filtered_uid(uid):
+                slice_filtered_uids.add(uid)
+                self.scan_and_index_single_horizon(uid)
+                self.set_actor_visibility(uid, False)
+                continue
+            self.set_actor_visible(uid=uid, visible=True)
+
+        for uid in turn_off_uids:
+            actor_row = self._actors_df_row_safe(uid=uid)
+            if actor_row.empty:
+                continue
+            self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
+            if self._is_slice_filtered_uid(uid):
+                slice_filtered_uids.add(uid)
+                self.set_actor_visibility(uid, False)
+                self._remove_filtered_actor(f"multipart_slice_{uid}")
+                self._remove_filtered_actor(f"multipart_fault_slice_{uid}")
+                if hasattr(self, "vis_lines_on_display"):
+                    self.vis_lines_on_display.discard(uid)
+                continue
+            self.set_actor_visible(uid=uid, visible=False)
+
+        if not slice_filtered_uids:
+            return
+
+        self._mark_slice_visibility_dirty()
+        self.update_interpretation_line_visibility()
+        for uid in slice_filtered_uids:
+            if uid in getattr(self, "multipart_horizons", {}):
+                self.update_multipart_horizon_visibility(uid)
+            if uid in getattr(self, "multipart_faults", {}):
+                self.update_multipart_fault_visibility(uid)
+        self.plotter.render()
 
     # ==================== Semi-Auto Tracking Methods ====================
     
