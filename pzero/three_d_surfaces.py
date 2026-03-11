@@ -1161,6 +1161,38 @@ def _compute_fault_geometric_features(points):
     return center, axes, lengths
 
 
+def _normalise_fault_obb_lengths(
+    lengths,
+    zero_tol=1e-6,
+    minor_ratio=0.1,
+    collapse_ratio=1e-3,
+):
+    """
+    Prevent numerically flat fault OBBs from carrying a zero minor length.
+
+    LoopStructural needs a non-zero fault thickness. When the OBB collapses
+    the minor axis for a very planar point set, reuse the fault's own in-plane
+    scale and assign a default thickness as a fraction of the major length.
+    """
+    from numpy import array as np_array
+
+    lengths = np_array(lengths, dtype=float).copy()
+    if lengths.size < 3:
+        return lengths
+
+    reference_length = 0.0
+    if lengths[0] > zero_tol:
+        reference_length = float(lengths[0])
+    elif lengths[1] > zero_tol:
+        reference_length = float(lengths[1])
+
+    collapsed_minor_limit = max(zero_tol, reference_length * collapse_ratio)
+    if lengths[2] <= collapsed_minor_limit and reference_length > zero_tol:
+        lengths[2] = max(reference_length * minor_ratio, 1e-3)
+
+    return lengths
+
+
 def _compute_fault_geometric_features_obb(points):
     """
     Compute fault geometric features using vtkOBBTree minimum-volume OBB.
@@ -1220,6 +1252,8 @@ def _compute_fault_geometric_features_obb(points):
         axis_vectors[0] + axis_vectors[1] + axis_vectors[2]
     )
 
+    lengths = _normalise_fault_obb_lengths(lengths)
+
     # Keep a right-handed frame.
     if np_dot(np_cross(axes[0], axes[1]), axes[2]) < 0:
         axes[2] = -axes[2]
@@ -1260,7 +1294,7 @@ def _compute_fault_box_in_axes(points, axes):
     projected_coords = points @ normed_axes.T
     min_coords = projected_coords.min(axis=0)
     max_coords = projected_coords.max(axis=0)
-    lengths = max_coords - min_coords
+    lengths = _normalise_fault_obb_lengths(max_coords - min_coords)
     center_local = 0.5 * (min_coords + max_coords)
     center = center_local @ normed_axes
 
@@ -1527,13 +1561,392 @@ def _extract_fault_surface_local_grid(model, fault_name, center, axes, lengths, 
     return None
 
 
+def _safe_relative_time(value):
+    """Convert legend time values to a usable float, preserving NaN for unknown ages."""
+    try:
+        time_value = float(value)
+    except (TypeError, ValueError):
+        return float("nan")
+    if time_value == -999999.0:
+        return float("nan")
+    return time_value
+
+
+def _sorted_fault_names_by_time(fault_data, older_first=False):
+    """Return fault names sorted by legend time with NaN values last."""
+
+    def _key(fault_name):
+        time_value = _safe_relative_time(fault_data[fault_name].get("time"))
+        is_nan = time_value != time_value
+        if older_first:
+            order_value = -time_value if not is_nan else 0.0
+        else:
+            order_value = time_value if not is_nan else 0.0
+        return (is_nan, order_value, fault_name)
+
+    return sorted(fault_data.keys(), key=_key)
+
+
+def _fault_affects_sequence(fault_time, sequence_youngest_time):
+    """
+    Determine whether a fault should affect a geological sequence.
+
+    Lower legend times are younger. At sequence granularity we use the youngest
+    interface in the sequence as the conservative cutoff, so an older fault does
+    not cut any younger interface contained in that series.
+    """
+    fault_time = _safe_relative_time(fault_time)
+    sequence_youngest_time = _safe_relative_time(sequence_youngest_time)
+    if fault_time != fault_time or sequence_youngest_time != sequence_youngest_time:
+        return True
+    return fault_time <= sequence_youngest_time
+
+
+def _make_fault_group_name(feature, scenario, fallback_name="fault"):
+    """Create a stable LoopStructural feature name for a merged fault group."""
+
+    def _clean(value):
+        text = str(value).strip()
+        if not text or text == "undef":
+            return ""
+        cleaned = "".join(ch if ch.isalnum() else "_" for ch in text)
+        while "__" in cleaned:
+            cleaned = cleaned.replace("__", "_")
+        return cleaned.strip("_")
+
+    feature_token = _clean(feature)
+    scenario_token = _clean(scenario)
+    fallback_token = _clean(fallback_name) or "fault"
+    tokens = ["fault", feature_token or fallback_token]
+    if scenario_token:
+        tokens.append(scenario_token)
+    return "_".join(tokens)
+
+
+def _compute_fault_geometry_for_rake(points, plane_axes, center_normal, rake_deg):
+    """
+    Build LoopStructural fault geometry from an OBB-derived fault plane and rake.
+
+    The returned basis matches LoopStructural's actual semantics:
+    axis 0 = trace direction = cross(normal, slip)
+    axis 1 = slip direction
+    axis 2 = fault normal
+    """
+    from numpy import array as np_array
+    from numpy import cross as np_cross
+    from numpy import dot as np_dot
+    from numpy import identity as np_identity
+    from numpy import linalg as np_linalg
+
+    points = np_array(points, dtype=float)
+    oriented_plane_axes = _orient_fault_axes_for_rake(
+        plane_axes, center_normal=center_normal
+    )
+    (
+        slip_vector,
+        strike_axis,
+        dip_axis,
+        fault_normal,
+        rake_components,
+    ) = _compute_fault_slip_vector_from_rake(oriented_plane_axes, rake_deg)
+
+    trace_axis = np_cross(fault_normal, slip_vector)
+    trace_norm = np_linalg.norm(trace_axis)
+    if trace_norm <= 1e-9:
+        trace_axis = strike_axis
+    else:
+        trace_axis = trace_axis / trace_norm
+
+    loop_axes = np_array([trace_axis, slip_vector, fault_normal], dtype=float)
+    if np_dot(np_cross(loop_axes[0], loop_axes[1]), loop_axes[2]) < 0.0:
+        loop_axes[0] = -loop_axes[0]
+
+    if points.size == 0:
+        center = np_array([0.0, 0.0, 0.0], dtype=float)
+        lengths = np_array([0.0, 0.0, 0.0], dtype=float)
+        loop_axes = np_identity(3)
+    else:
+        center, loop_axes, lengths = _compute_fault_box_in_axes(points, loop_axes)
+
+    return {
+        "center": center,
+        "axes": loop_axes,
+        "lengths": _normalise_fault_obb_lengths(lengths),
+        "plane_axes": oriented_plane_axes,
+        "trace_axis": loop_axes[0],
+        "slip_axis": loop_axes[1],
+        "normal": loop_axes[2],
+        "strike_axis": strike_axis,
+        "dip_axis": dip_axis,
+        "slip_vector": slip_vector,
+        "rake_components": rake_components,
+    }
+
+
+def _compute_scaled_fault_geometry(fault_info, rake_deg, scale_factors=None):
+    """Return raw and scaled Loop-basis fault geometry for the requested rake."""
+    from numpy import array as np_array
+
+    if scale_factors is None:
+        scale_factors = [1.0, 1.0, 1.0]
+
+    geometry = _compute_fault_geometry_for_rake(
+        fault_info.get("points", []),
+        fault_info.get("plane_axes", fault_info.get("axes")),
+        fault_info.get("center_normal"),
+        rake_deg,
+    )
+    scales = np_array(scale_factors, dtype=float)
+    geometry["scaled_lengths"] = _normalise_fault_obb_lengths(
+        geometry["lengths"] * scales
+    )
+    return geometry
+
+
+def _build_fault_box_corners(center, axes, lengths):
+    """Return the eight corners of an oriented fault support box."""
+    from numpy import array as np_array
+
+    center = np_array(center, dtype=float)
+    axes = np_array(axes, dtype=float)
+    half_lengths = 0.5 * np_array(lengths, dtype=float)
+    signs = np_array(
+        [
+            [-1, -1, -1],
+            [1, -1, -1],
+            [1, 1, -1],
+            [-1, 1, -1],
+            [-1, -1, 1],
+            [1, -1, 1],
+            [1, 1, 1],
+            [-1, 1, 1],
+        ],
+        dtype=float,
+    )
+    return center + (
+        signs[:, [0]] * half_lengths[0] * axes[[0]]
+        + signs[:, [1]] * half_lengths[1] * axes[[1]]
+        + signs[:, [2]] * half_lengths[2] * axes[[2]]
+    )
+
+
+def _point_to_fault_box_distance(point, center, axes, lengths):
+    """Distance from a point to an oriented fault support box."""
+    from numpy import abs as np_abs
+    from numpy import array as np_array
+    from numpy import maximum as np_maximum
+
+    point = np_array(point, dtype=float)
+    center = np_array(center, dtype=float)
+    axes = np_array(axes, dtype=float)
+    half_lengths = 0.5 * np_array(lengths, dtype=float)
+    local_point = (point - center) @ axes.T
+    delta = np_abs(local_point) - half_lengths
+    outside = np_maximum(delta, 0.0)
+    return float(np_sqrt(np_sum(outside**2)))
+
+
+def _fault_bounds_overlap(bounds_a, bounds_b, padding=0.0):
+    """Check overlap between two axis-aligned bounds tuples."""
+    for dim_idx in range(3):
+        min_a = bounds_a[0][dim_idx] - padding
+        max_a = bounds_a[1][dim_idx] + padding
+        min_b = bounds_b[0][dim_idx] - padding
+        max_b = bounds_b[1][dim_idx] + padding
+        if max_a < min_b or max_b < min_a:
+            return False
+    return True
+
+
+def _compute_fault_relation_suggestions(fault_data, default_rake=-90.0):
+    """
+    Compute heuristic abutting/splay suggestions for manual confirmation.
+
+    Suggestions are intentionally conservative:
+    - only younger-to-older relations are considered
+    - equal or unknown times are ignored
+    - splay is suggested only for close faults with small acute trace angles
+    """
+    from numpy import clip as np_clip
+    from numpy import degrees as np_degrees
+    from numpy import arccos as np_arccos
+    from numpy import dot as np_dot
+
+    suggestions = {
+        fault_name: {
+            "has_abutting": False,
+            "abutting_fault": None,
+            "has_splay": False,
+            "splay_fault": None,
+        }
+        for fault_name in fault_data.keys()
+    }
+    if len(fault_data) < 2:
+        return suggestions
+
+    geometry_cache = {}
+    for fault_name, fault_info in fault_data.items():
+        geometry = _compute_scaled_fault_geometry(
+            fault_info, default_rake, scale_factors=[1.0, 1.0, 1.0]
+        )
+        corners = _build_fault_box_corners(
+            geometry["center"], geometry["axes"], geometry["scaled_lengths"]
+        )
+        mins = corners.min(axis=0)
+        maxs = corners.max(axis=0)
+        tips = np_array(
+            [
+                geometry["center"] - 0.5 * geometry["scaled_lengths"][0] * geometry["axes"][0],
+                geometry["center"] + 0.5 * geometry["scaled_lengths"][0] * geometry["axes"][0],
+            ],
+            dtype=float,
+        )
+        geometry_cache[fault_name] = {
+            "center": geometry["center"],
+            "axes": geometry["axes"],
+            "lengths": geometry["scaled_lengths"],
+            "bounds": (mins, maxs),
+            "tips": tips,
+            "time": _safe_relative_time(fault_info.get("time")),
+        }
+
+    for source_fault in _sorted_fault_names_by_time(fault_data, older_first=False):
+        source_info = geometry_cache[source_fault]
+        source_time = source_info["time"]
+        if source_time != source_time:
+            continue
+
+        best_splay = None
+        best_abutting = None
+
+        for target_fault in _sorted_fault_names_by_time(fault_data, older_first=True):
+            if target_fault == source_fault:
+                continue
+
+            target_info = geometry_cache[target_fault]
+            target_time = target_info["time"]
+            if target_time != target_time or source_time >= target_time:
+                continue
+
+            acute_angle = float(
+                np_degrees(
+                    np_arccos(
+                        np_clip(
+                            np_abs(np_dot(source_info["axes"][0], target_info["axes"][0])),
+                            -1.0,
+                            1.0,
+                        )
+                    )
+                )
+            )
+            max_major = max(
+                source_info["lengths"][0], target_info["lengths"][0], 1e-3
+            )
+            overlap = _fault_bounds_overlap(
+                source_info["bounds"], target_info["bounds"], padding=max_major * 0.05
+            )
+            tip_distance = min(
+                _point_to_fault_box_distance(
+                    tip,
+                    target_info["center"],
+                    target_info["axes"],
+                    target_info["lengths"],
+                )
+                for tip in source_info["tips"]
+            )
+            near_threshold = max(
+                max_major * 0.2,
+                source_info["lengths"][2] + target_info["lengths"][2],
+                1.0,
+            )
+            if not (overlap or tip_distance <= near_threshold):
+                continue
+
+            if acute_angle <= 30.0 and tip_distance <= max_major * 0.35:
+                score = tip_distance + 0.1 * acute_angle
+                if best_splay is None or score < best_splay[0]:
+                    best_splay = (score, target_fault)
+            elif acute_angle <= 85.0:
+                score = tip_distance + 0.05 * acute_angle
+                if overlap:
+                    score *= 0.7
+                if best_abutting is None or score < best_abutting[0]:
+                    best_abutting = (score, target_fault)
+
+        if best_splay is not None:
+            suggestions[source_fault]["has_splay"] = True
+            suggestions[source_fault]["splay_fault"] = best_splay[1]
+        elif best_abutting is not None:
+            suggestions[source_fault]["has_abutting"] = True
+            suggestions[source_fault]["abutting_fault"] = best_abutting[1]
+
+    return suggestions
+
+
+class _FaultSupportBoxRegion:
+    """Region callable that limits a fault to an oriented support box."""
+
+    def __init__(self, center, axes, lengths, name="fault_support_box"):
+        from numpy import linalg as np_linalg
+
+        center = np_array(center, dtype=float)
+        axes = np_array(axes, dtype=float)
+        lengths = np_array(lengths, dtype=float)
+        axis_norms = np_linalg.norm(axes, axis=1)
+        axis_norms[axis_norms <= 1e-9] = 1.0
+
+        self.center = center
+        self.axes = axes / axis_norms[:, None]
+        self.half_lengths = 0.5 * np_array(lengths, dtype=float)
+        self.name = name
+
+    def __call__(self, xyz):
+        xyz = np_array(xyz, dtype=float)
+        if xyz.ndim == 1:
+            xyz = xyz.reshape(1, -1)
+        local = (xyz - self.center) @ self.axes.T
+        tol = 1e-9
+        mask = np_abs(local[:, 0]) <= (self.half_lengths[0] + tol)
+        mask = mask & (np_abs(local[:, 1]) <= (self.half_lengths[1] + tol))
+        mask = mask & (np_abs(local[:, 2]) <= (self.half_lengths[2] + tol))
+        return mask
+
+
+def _make_fault_support_box_region(fault_feature):
+    """Build a LoopStructural region mask from the created fault frame extents."""
+    center = np_array(fault_feature.fault_centre, dtype=float)
+    axes = np_array(
+        [
+            fault_feature.fault_strike_vector,
+            fault_feature.fault_slip_vector,
+            fault_feature.fault_normal_vector,
+        ],
+        dtype=float,
+    )
+    lengths = np_array(
+        [
+            float(fault_feature.fault_major_axis),
+            2.0 * float(fault_feature.fault_intermediate_axis),
+            2.0 * float(fault_feature.fault_minor_axis),
+        ],
+        dtype=float,
+    )
+    return _FaultSupportBoxRegion(
+        center=center,
+        axes=axes,
+        lengths=lengths,
+        name=f"{fault_feature.name}_support_box",
+    )
+
+
 def _fault_obb_settings_dialog(
     parent,
     fault_data,
     default_displacement,
     default_rake=-90.0,
     default_nelements=1000,
-    default_fault_buffer=0.5,
+    default_fault_buffer=0.2,
+    relation_suggestions=None,
 ):
     """
     Interactive per-fault settings dialog.
@@ -1563,12 +1976,14 @@ def _fault_obb_settings_dialog(
     if not fault_data:
         return {}
 
-    fault_names = list(fault_data.keys())
+    relation_suggestions = relation_suggestions or {}
+    fault_names = _sorted_fault_names_by_time(fault_data, older_first=True)
     current_fault = {"name": fault_names[0]}
     is_loading = {"active": False}
 
     defaults_by_fault = {}
     for fault_name in fault_names:
+        suggestion = relation_suggestions.get(fault_name, {})
         defaults_by_fault[fault_name] = {
             "displacement": float(default_displacement),
             "rake": float(default_rake),
@@ -1577,10 +1992,10 @@ def _fault_obb_settings_dialog(
             "major_scale_pct": 100.0,
             "intermediate_scale_pct": 100.0,
             "minor_scale_pct": 100.0,
-            "has_abutting": False,
-            "abutting_fault": None,
-            "has_splay": False,
-            "splay_fault": None,
+            "has_abutting": bool(suggestion.get("has_abutting", False)),
+            "abutting_fault": suggestion.get("abutting_fault"),
+            "has_splay": bool(suggestion.get("has_splay", False)),
+            "splay_fault": suggestion.get("splay_fault"),
         }
 
     dialog = QDialog(parent)
@@ -1590,8 +2005,8 @@ def _fault_obb_settings_dialog(
     root_layout = QVBoxLayout(dialog)
     info_label = QLabel(
         "Configure each fault independently.\n"
-        "Use OBB scale controls to enlarge/shrink the fault box before interpolation.\n"
-        "Optional: define abutting/splay relations with other faults."
+        "Scale controls act on LoopStructural's Trace/Slip/Normal support basis.\n"
+        "Heuristic abutting/splay suggestions are prefilled for confirmation and can be overridden."
     )
     root_layout.addWidget(info_label)
 
@@ -1643,7 +2058,7 @@ def _fault_obb_settings_dialog(
     major_scale_spin.setSingleStep(5.0)
     major_scale_spin.setSuffix(" %")
     major_scale_spin.setValue(100.0)
-    obb_form.addRow("Major scale", major_scale_spin)
+    obb_form.addRow("Trace (Major) scale", major_scale_spin)
 
     intermediate_scale_spin = QDoubleSpinBox(dialog)
     intermediate_scale_spin.setDecimals(1)
@@ -1651,7 +2066,7 @@ def _fault_obb_settings_dialog(
     intermediate_scale_spin.setSingleStep(5.0)
     intermediate_scale_spin.setSuffix(" %")
     intermediate_scale_spin.setValue(100.0)
-    obb_form.addRow("Intermediate scale", intermediate_scale_spin)
+    obb_form.addRow("Slip (Intermediate) scale", intermediate_scale_spin)
 
     minor_scale_spin = QDoubleSpinBox(dialog)
     minor_scale_spin.setDecimals(1)
@@ -1659,12 +2074,12 @@ def _fault_obb_settings_dialog(
     minor_scale_spin.setSingleStep(5.0)
     minor_scale_spin.setSuffix(" %")
     minor_scale_spin.setValue(100.0)
-    obb_form.addRow("Minor scale", minor_scale_spin)
+    obb_form.addRow("Normal (Minor) scale", minor_scale_spin)
 
     raw_lengths_label = QLabel("")
     scaled_lengths_label = QLabel("")
-    obb_form.addRow("Raw OBB lengths", raw_lengths_label)
-    obb_form.addRow("Scaled OBB lengths", scaled_lengths_label)
+    obb_form.addRow("Raw Trace/Slip/Normal", raw_lengths_label)
+    obb_form.addRow("Scaled Trace/Slip/Normal", scaled_lengths_label)
     controls_layout.addLayout(obb_form, 0, 1)
 
     relations_form = QFormLayout()
@@ -1775,7 +2190,7 @@ def _fault_obb_settings_dialog(
             painter.drawText(
                 draw_rect.adjusted(6, 4, -6, -4),
                 Qt.AlignTop | Qt.AlignLeft,
-                f"{self._fault_name}\nPlane: major/intermediate\nMinor length: {self._minor_len:.2f}",
+                f"{self._fault_name}\nPlane: trace/slip\nNormal length: {self._minor_len:.2f}",
             )
             painter.end()
 
@@ -1789,18 +2204,21 @@ def _fault_obb_settings_dialog(
     button_box.accepted.connect(dialog.accept)
     button_box.rejected.connect(dialog.reject)
 
-    def get_scaled_lengths(fault_name):
-        base_lengths = np_array(fault_data[fault_name]["lengths"], dtype=float)
+    def get_fault_geometry(fault_name):
         params = defaults_by_fault[fault_name]
-        scales = np_array(
-            [
-                params["major_scale_pct"] / 100.0,
-                params["intermediate_scale_pct"] / 100.0,
-                params["minor_scale_pct"] / 100.0,
-            ],
-            dtype=float,
+        scales = [
+            params["major_scale_pct"] / 100.0,
+            params["intermediate_scale_pct"] / 100.0,
+            params["minor_scale_pct"] / 100.0,
+        ]
+        return _compute_scaled_fault_geometry(
+            fault_data[fault_name],
+            rake_deg=float(params["rake"]),
+            scale_factors=scales,
         )
-        return base_lengths * scales
+
+    def get_scaled_lengths(fault_name):
+        return get_fault_geometry(fault_name)["scaled_lengths"]
 
     def update_relation_controls_enabled():
         has_other_faults = len(fault_names) > 1
@@ -1846,8 +2264,9 @@ def _fault_obb_settings_dialog(
         defaults_by_fault[fault_name]["splay_fault"] = splay_target_combo.currentData()
 
     def update_lengths_labels(fault_name):
-        base_lengths = np_array(fault_data[fault_name]["lengths"], dtype=float)
-        scaled_lengths = get_scaled_lengths(fault_name)
+        geometry = get_fault_geometry(fault_name)
+        base_lengths = geometry["lengths"]
+        scaled_lengths = geometry["scaled_lengths"]
         raw_lengths_label.setText(
             f"{base_lengths[0]:.2f}, {base_lengths[1]:.2f}, {base_lengths[2]:.2f}"
         )
@@ -1856,10 +2275,11 @@ def _fault_obb_settings_dialog(
         )
 
     def update_preview(fault_name):
+        geometry = get_fault_geometry(fault_name)
         fault_points = np_array(fault_data[fault_name]["points"], dtype=float)
-        center = np_array(fault_data[fault_name]["center"], dtype=float)
-        axes = np_array(fault_data[fault_name]["axes"], dtype=float)
-        scaled_lengths = get_scaled_lengths(fault_name)
+        center = np_array(geometry["center"], dtype=float)
+        axes = np_array(geometry["axes"], dtype=float)
+        scaled_lengths = np_array(geometry["scaled_lengths"], dtype=float)
 
         if fault_points is None or len(fault_points) == 0:
             preview_widget.set_fault_preview(
@@ -1956,14 +2376,15 @@ def _fault_obb_settings_dialog(
     per_fault_settings = {}
     for fault_name in fault_names:
         params = defaults_by_fault[fault_name]
+        geometry = get_fault_geometry(fault_name)
         per_fault_settings[fault_name] = {
             "displacement": float(params["displacement"]),
             "rake": float(params["rake"]),
             "nelements": int(params["nelements"]),
             "fault_buffer": float(params["fault_buffer"]),
-            "center": fault_data[fault_name]["center"],
-            "axes": fault_data[fault_name]["axes"],
-            "lengths": get_scaled_lengths(fault_name),
+            "center": geometry["center"],
+            "axes": geometry["axes"],
+            "lengths": geometry["scaled_lengths"],
             "has_abutting": bool(params.get("has_abutting", False)),
             "abutting_fault": params.get("abutting_fault"),
             "has_splay": bool(params.get("has_splay", False)),
@@ -1975,23 +2396,13 @@ def _fault_obb_settings_dialog(
 
 @freeze_gui_onoff
 def implicit_model_loop_structural_with_faults(self):
-    """
-    Enhanced LoopStructural implicit modelling with fault support.
-    
-    This function extends the standard implicit modelling to properly handle
-    faults by:
-    1. Separating fault entities from stratigraphy entities based on role
-    2. Computing fault geometry using OBB analysis (PCA fallback)
-    3. Creating faults using LoopStructural's create_and_add_fault()
-    4. Creating foliations that are properly affected by faults
-    
-    Input Data Organization (same as implicit_model_loop_structural):
-    X, Y, Z - cartesian coordinates
-    feature_name - unique name from legend sequence
-    val - scalar field value from legend time
-    nx, ny, nz - gradient norm components (if available)
-    """
-    #We need to make the fault boundary to be freely oriented within the main boundary
+    """LoopStructural implicit modelling with merged faults and age-aware sequences."""
+    from numpy import argmin as np_argmin
+    from numpy import concatenate as np_concatenate
+    from numpy import full as np_full
+    from numpy import isnan as np_isnan
+    from numpy import linalg as np_linalg
+
     self.print_terminal(
         "LoopStructural implicit geomodeller WITH FAULT SUPPORT\n"
         "github.com/Loop3D/LoopStructural"
@@ -1999,210 +2410,355 @@ def implicit_model_loop_structural_with_faults(self):
     if self.shown_table != "tabGeology":
         self.print_terminal(" -- Only geological objects can be interpolated -- ")
         return
-    
-    # Check if some vtkPolyData is selected
     if not self.selected_uids:
         self.print_terminal("No input data selected.")
         return
-    
+
     input_uids = deepcopy(self.selected_uids)
-    
-    # Separate fault entities from stratigraphy entities
     fault_uids = []
     strati_uids = []
     for uid in input_uids:
-        role = self.geol_coll.get_uid_role(uid)
-        if role == "fault":
+        if self.geol_coll.get_uid_role(uid) == "fault":
             fault_uids.append(uid)
         else:
             strati_uids.append(uid)
-    
-    self.print_terminal(f"Found {len(fault_uids)} fault entities and {len(strati_uids)} stratigraphy entities")
-    
+
+    self.print_terminal(
+        f"Found {len(fault_uids)} fault entities and {len(strati_uids)} stratigraphy entities"
+    )
     if not fault_uids:
-        self.print_terminal("No fault entities found. Use standard implicit_model_loop_structural for surfaces only.")
+        self.print_terminal(
+            "No fault entities found. Use standard implicit_model_loop_structural for surfaces only."
+        )
         return
-    
     if not strati_uids:
-        self.print_terminal("WARNING: No stratigraphy entities found. Model will only contain faults.")
-    
-    # Dictionary for Loop input data
+        self.print_terminal(
+            "WARNING: No stratigraphy entities found. Model will only contain faults."
+        )
+
     loop_input_dict = {
-        "X": None, "Y": None, "Z": None,
-        "feature_name": None, "val": None, "interface": None,
-        "nx": None, "ny": None, "nz": None,
-        "gx": None, "gy": None, "gz": None,
-        "tx": None, "ty": None, "tz": None,
+        "X": None,
+        "Y": None,
+        "Z": None,
+        "feature_name": None,
+        "val": None,
+        "interface": None,
+        "nx": None,
+        "ny": None,
+        "nz": None,
+        "gx": None,
+        "gy": None,
+        "gz": None,
+        "tx": None,
+        "ty": None,
+        "tz": None,
         "coord": None,
     }
-    
-    # Create dataframes to collect input data
+
     self.print_terminal("-> Creating input dataframes...")
     tic(parent=self)
-    
     all_input_data_df = pd_DataFrame(columns=list(loop_input_dict.keys()))
-    fault_data = {}  # Store fault-specific data and geometry
-    
-    # Process fault entities
-    prgs_bar = progress_dialog(
-        max_value=len(fault_uids),
-        title_txt="Processing Faults",
-        label_txt="Analyzing fault geometry...",
-        cancel_txt=None,
-        parent=self,
-    )
-    
-    for uid in fault_uids:
-        entity_df = pd_DataFrame(columns=list(loop_input_dict.keys()))
-        vtk_obj = self.geol_coll.get_uid_vtk_obj(uid)
-        points = vtk_obj.points
-        entity_df[["X", "Y", "Z"]] = points
-        points_arr = np_array(points, dtype=float)
-        
-        # Compute fault geometry from OBB (fallback to PCA when needed).
-        obb_center, obb_axes, _ = _compute_fault_geometric_features_obb(points_arr)
-        fault_normal_seed = obb_axes[2] if len(obb_axes) > 2 else np_array([0, 0, 1])
-        
-        has_entity_normals = "Normals" in self.geol_coll.get_uid_properties_names(uid)
+    fault_groups = {}
+    fault_data = {}
+    sequence_data = {}
 
-        # Check if entity already has normals, otherwise use OBB/PCA-computed normal.
-        if has_entity_normals:
-            normals_arr = np_array(
-                self.geol_coll.get_uid_property(
-                    uid=uid, property_name="Normals"
-                ),
-                dtype=float,
+    if fault_uids:
+        prgs_bar = progress_dialog(
+            max_value=len(fault_uids),
+            title_txt="Processing Faults",
+            label_txt="Grouping fault entities...",
+            cancel_txt=None,
+            parent=self,
+        )
+        for uid in fault_uids:
+            feature = self.geol_coll.get_uid_feature(uid)
+            scenario = self.geol_coll.get_uid_scenario(uid)
+            entity_name = self.geol_coll.get_uid_name(uid)
+            vtk_obj = self.geol_coll.get_uid_vtk_obj(uid)
+            points_arr = np_array(vtk_obj.points, dtype=float)
+
+            legend_match = self.geol_coll.legend_df.loc[
+                (self.geol_coll.legend_df["role"] == "fault")
+                & (self.geol_coll.legend_df["feature"] == feature)
+                & (self.geol_coll.legend_df["scenario"] == scenario)
+            ]
+            fault_time = (
+                _safe_relative_time(legend_match["time"].values[0])
+                if not legend_match.empty
+                else float("nan")
             )
-            entity_df[["nx", "ny", "nz"]] = normals_arr
-            self.print_terminal(f"    Using existing normals from entity data")
-        else:
-            normals_arr = np_array(
-                [[fault_normal_seed[0], fault_normal_seed[1], fault_normal_seed[2]]] * len(points_arr),
-                dtype=float,
+
+            group_key = (feature, scenario)
+            group = fault_groups.setdefault(
+                group_key,
+                {
+                    "feature": feature,
+                    "scenario": scenario,
+                    "entity_names": [],
+                    "uids": [],
+                    "point_segments": [],
+                    "normal_segments": [],
+                    "time": float("nan"),
+                },
             )
-            # Temporarily add normal; we will overwrite with oriented normal below.
-            entity_df["nx"] = fault_normal_seed[0]
-            entity_df["ny"] = fault_normal_seed[1]
-            entity_df["nz"] = fault_normal_seed[2]
+            group["entity_names"].append(entity_name)
+            group["uids"].append(uid)
+            group["point_segments"].append(points_arr)
 
-        # Get center normal from nearest fault point.
-        center_normal = None
-        if has_entity_normals and len(points_arr) > 0 and len(normals_arr) == len(points_arr):
-            from numpy import argmin as np_argmin
-            from numpy import linalg as np_linalg
-            dist2 = np_sum((points_arr - obb_center) ** 2, axis=1)
-            center_idx = int(np_argmin(dist2))
-            candidate_normal = np_array(normals_arr[center_idx], dtype=float)
-            n_norm = np_linalg.norm(candidate_normal)
-            if n_norm > 1e-9:
-                center_normal = candidate_normal / n_norm
+            normals_arr = None
+            if "Normals" in self.geol_coll.get_uid_properties_names(uid):
+                normals_arr = np_array(
+                    self.geol_coll.get_uid_property(uid=uid, property_name="Normals"),
+                    dtype=float,
+                )
+                if (
+                    normals_arr.ndim != 2
+                    or normals_arr.shape[0] != points_arr.shape[0]
+                    or normals_arr.shape[1] < 3
+                ):
+                    normals_arr = None
+                else:
+                    normals_arr = normals_arr[:, :3]
+            group["normal_segments"].append(normals_arr)
 
-        # Orient axes so rake sign is consistent with upper/lower fault face.
-        axes = _orient_fault_axes_for_rake(obb_axes, center_normal=center_normal)
-        center, axes, lengths = _compute_fault_box_in_axes(points_arr, axes)
-        fault_normal = axes[2] if len(axes) > 2 else np_array([0, 0, 1])
+            existing_time = _safe_relative_time(group.get("time"))
+            if existing_time != existing_time and fault_time == fault_time:
+                group["time"] = fault_time
+            elif (
+                fault_time == fault_time
+                and existing_time == existing_time
+                and abs(existing_time - fault_time) > 1e-9
+            ):
+                self.print_terminal(
+                    f"  WARNING: Fault group ({feature}, {scenario}) has inconsistent legend times "
+                    f"({existing_time} vs {fault_time}); keeping {existing_time}."
+                )
+            prgs_bar.add_one()
+        prgs_bar.close()
 
-        if not has_entity_normals:
-            # Update with oriented normal when original normals are missing.
-            entity_df["nx"] = fault_normal[0]
-            entity_df["ny"] = fault_normal[1]
-            entity_df["nz"] = fault_normal[2]
+    if fault_groups:
+        prgs_bar = progress_dialog(
+            max_value=len(fault_groups),
+            title_txt="Processing Faults",
+            label_txt="Merging grouped faults...",
+            cancel_txt=None,
+            parent=self,
+        )
+        for (feature, scenario), group in fault_groups.items():
+            valid_segments = [
+                np_array(seg, dtype=float)
+                for seg in group["point_segments"]
+                if seg is not None and len(seg) > 0
+            ]
+            if not valid_segments:
+                prgs_bar.add_one()
+                continue
+
+            points_arr = np_concatenate(valid_segments, axis=0)
+            display_name = str(feature).strip() if str(feature).strip() not in ["", "undef"] else ""
+            if not display_name:
+                display_name = str(group["entity_names"][0]).strip()
+            if len(group["entity_names"]) > 1:
+                display_name = f"{display_name} (+{len(group['entity_names']) - 1})"
+
+            fault_feature_name = _make_fault_group_name(
+                feature, scenario, fallback_name=display_name
+            )
+            fault_name_base = fault_feature_name
+            suffix_idx = 2
+            while fault_feature_name in fault_data:
+                fault_feature_name = f"{fault_name_base}_{suffix_idx}"
+                suffix_idx += 1
+
+            obb_center, obb_axes, _ = _compute_fault_geometric_features_obb(points_arr)
+            merged_normals = np_full((len(points_arr), 3), float("nan"), dtype=float)
+            valid_normal_points = []
+            valid_normal_vectors = []
+            offset = 0
+            for point_segment, normal_segment in zip(
+                group["point_segments"], group["normal_segments"]
+            ):
+                seg_len = len(point_segment) if point_segment is not None else 0
+                if seg_len == 0:
+                    continue
+                if normal_segment is not None and len(normal_segment) == seg_len:
+                    normals_arr = np_array(normal_segment, dtype=float)[:, :3]
+                    finite_mask = ~np_isnan(normals_arr).any(axis=1)
+                    if finite_mask.any():
+                        segment_normals = merged_normals[offset : offset + seg_len]
+                        segment_normals[finite_mask] = normals_arr[finite_mask]
+                        valid_normal_points.append(
+                            np_array(point_segment, dtype=float)[finite_mask]
+                        )
+                        valid_normal_vectors.append(normals_arr[finite_mask])
+                offset += seg_len
+
+            center_normal = None
+            if valid_normal_vectors:
+                normal_points = np_concatenate(valid_normal_points, axis=0)
+                normal_vectors = np_concatenate(valid_normal_vectors, axis=0)
+                center_idx = int(np_argmin(np_sum((normal_points - obb_center) ** 2, axis=1)))
+                candidate_normal = np_array(normal_vectors[center_idx], dtype=float)
+                candidate_norm = np_linalg.norm(candidate_normal)
+                if candidate_norm > 1e-9:
+                    center_normal = candidate_normal / candidate_norm
+
+            plane_axes = _orient_fault_axes_for_rake(
+                obb_axes, center_normal=center_normal
+            )
+            default_geometry = _compute_scaled_fault_geometry(
+                {
+                    "points": points_arr,
+                    "plane_axes": plane_axes,
+                    "center_normal": center_normal,
+                },
+                rake_deg=-90.0,
+                scale_factors=[1.0, 1.0, 1.0],
+            )
+            fault_normal = np_array(default_geometry["normal"], dtype=float)
+            if np_linalg.norm(fault_normal) <= 1e-9:
+                fault_normal = np_array([0.0, 0.0, 1.0], dtype=float)
+            missing_normals = np_isnan(merged_normals).any(axis=1)
+            merged_normals[missing_normals] = fault_normal
+
+            entity_df = pd_DataFrame(columns=list(loop_input_dict.keys()))
+            entity_df[["X", "Y", "Z"]] = points_arr
+            entity_df["feature_name"] = fault_feature_name
+            entity_df["val"] = 0.0
+            entity_df["coord"] = 0
+            entity_df[["nx", "ny", "nz"]] = merged_normals
+            all_input_data_df = pd_concat(
+                [all_input_data_df, entity_df], ignore_index=True
+            )
+
+            fault_data[fault_feature_name] = {
+                "uids": list(group["uids"]),
+                "time": group.get("time"),
+                "center": default_geometry["center"],
+                "axes": default_geometry["axes"],
+                "lengths": default_geometry["lengths"],
+                "plane_axes": default_geometry["plane_axes"],
+                "center_normal": center_normal,
+                "name": display_name,
+                "feature": feature,
+                "scenario": scenario,
+                "points": points_arr,
+                "entity_names": list(group["entity_names"]),
+            }
             self.print_terminal(
-                f"    Adding OBB/PCA oriented fault normal: [{fault_normal[0]:.4f}, {fault_normal[1]:.4f}, {fault_normal[2]:.4f}]"
+                f"  Fault group '{fault_feature_name}': {len(group['uids'])} entities, "
+                f"center={default_geometry['center']}, lengths={default_geometry['lengths']}"
             )
-        else:
-            if center_normal is not None:
-                self.print_terminal(
-                    f"    Center normal used for rake orientation: [{center_normal[0]:.4f}, {center_normal[1]:.4f}, {center_normal[2]:.4f}]"
-                )
-            else:
-                self.print_terminal(
-                    "    Center normal unavailable; using deterministic OBB orientation fallback."
-                )
-        
-        # IMPORTANT: Use a UNIQUE fault feature name (not the shared sequence!)
-        # Faults need their own unique name to be created separately from stratigraphy
-        fault_feature_name_base = self.geol_coll.get_uid_feature(uid)
-        # If feature name is too generic, use entity name instead.
-        entity_name = self.geol_coll.get_uid_name(uid)
-        if not fault_feature_name_base or fault_feature_name_base == "undef":
-            fault_feature_name_base = entity_name
-        # Prefix with "fault_" and append UID to avoid collisions among same-feature faults.
-        fault_feature_name = f"fault_{fault_feature_name_base}_{uid[:8]}"
-        
-        entity_df["feature_name"] = fault_feature_name
-        entity_df["val"] = 0  # Fault surface is at value 0
-        entity_df["coord"] = 0  # Keep fault points as coord-0 surface constraints.
-        
-        # Store fault data with the unique fault name
-        fault_data[fault_feature_name] = {
-            "uid": uid,
-            "center": center,
-            "axes": axes,
-            "lengths": lengths,
-            "center_normal": center_normal,
-            "name": entity_name,
-            "feature": self.geol_coll.get_uid_feature(uid),
-            "scenario": self.geol_coll.get_uid_scenario(uid),
-            "points": points_arr,
-        }
-        
-        self.print_terminal(f"  Fault '{fault_feature_name}': center={center}, lengths={lengths}")
-        
-        all_input_data_df = pd_concat([all_input_data_df, entity_df], ignore_index=True)
-        prgs_bar.add_one()
-    
-    prgs_bar.close()
-    
-    # Process stratigraphy entities
+            prgs_bar.add_one()
+        prgs_bar.close()
+
+    if not fault_data:
+        toc(parent=self)
+        self.print_terminal("No valid fault geometry found in the selected data.")
+        return
+
     if strati_uids:
         prgs_bar = progress_dialog(
             max_value=len(strati_uids),
             title_txt="Processing Stratigraphy",
-            label_txt="Adding stratigraphy to dataframe...",
+            label_txt="Grouping geological sequences...",
             cancel_txt=None,
             parent=self,
         )
-        
-        # Use a single consistent name for all stratigraphy data
-        strati_feature_name = "stratigraphy"
-        
+        sequence_order = 0
         for uid in strati_uids:
+            role = self.geol_coll.get_uid_role(uid)
+            feature = self.geol_coll.get_uid_feature(uid)
+            scenario = self.geol_coll.get_uid_scenario(uid)
+            entity_name = self.geol_coll.get_uid_name(uid)
+
             entity_df = pd_DataFrame(columns=list(loop_input_dict.keys()))
-            entity_df[["X", "Y", "Z"]] = self.geol_coll.get_uid_vtk_obj(uid).points
-            
+            points_arr = np_array(self.geol_coll.get_uid_vtk_obj(uid).points, dtype=float)
+            entity_df[["X", "Y", "Z"]] = points_arr
+
             if "Normals" in self.geol_coll.get_uid_properties_names(uid):
-                entity_df[["nx", "ny", "nz"]] = self.geol_coll.get_uid_property(
-                    uid=uid, property_name="Normals"
+                normals_arr = np_array(
+                    self.geol_coll.get_uid_property(uid=uid, property_name="Normals"),
+                    dtype=float,
                 )
-            
-            # Use consistent stratigraphy feature name for all non-fault entities
-            entity_df["feature_name"] = strati_feature_name
-            
-            val_single = self.geol_coll.legend_df.loc[
-                (self.geol_coll.legend_df["role"] == self.geol_coll.get_uid_role(uid))
-                & (self.geol_coll.legend_df["feature"] == self.geol_coll.get_uid_feature(uid))
-                & (self.geol_coll.legend_df["scenario"] == self.geol_coll.get_uid_scenario(uid)),
-                "time",
-            ].values[0]
-            if val_single == -999999.0:
-                val_single = float("nan")
-            entity_df["val"] = val_single
-            
-            all_input_data_df = pd_concat([all_input_data_df, entity_df], ignore_index=True)
+                if (
+                    normals_arr.ndim == 2
+                    and normals_arr.shape[0] == points_arr.shape[0]
+                    and normals_arr.shape[1] >= 3
+                ):
+                    entity_df[["nx", "ny", "nz"]] = normals_arr[:, :3]
+
+            legend_match = self.geol_coll.legend_df.loc[
+                (self.geol_coll.legend_df["role"] == role)
+                & (self.geol_coll.legend_df["feature"] == feature)
+                & (self.geol_coll.legend_df["scenario"] == scenario)
+            ]
+            if legend_match.empty:
+                sequence_name = (
+                    str(feature).strip()
+                    if str(feature).strip() not in ["", "undef"]
+                    else entity_name
+                )
+                time_value = float("nan")
+                self.print_terminal(
+                    f"  WARNING: Missing legend entry for '{entity_name}'. "
+                    f"Using sequence '{sequence_name}' with NaN time."
+                )
+            else:
+                sequence_name = legend_match["sequence"].values[0]
+                if not isinstance(sequence_name, str) or not sequence_name.strip():
+                    sequence_name = (
+                        str(feature).strip()
+                        if str(feature).strip() not in ["", "undef"]
+                        else entity_name
+                    )
+                time_value = _safe_relative_time(legend_match["time"].values[0])
+
+            entity_df["feature_name"] = sequence_name
+            entity_df["val"] = time_value
+            all_input_data_df = pd_concat(
+                [all_input_data_df, entity_df], ignore_index=True
+            )
+
+            if sequence_name not in sequence_data:
+                sequence_data[sequence_name] = {
+                    "order": sequence_order,
+                    "youngest_time": time_value,
+                    "metadata_by_time": {},
+                }
+                sequence_order += 1
+
+            seq_info = sequence_data[sequence_name]
+            youngest_time = _safe_relative_time(seq_info.get("youngest_time"))
+            if time_value == time_value and (
+                youngest_time != youngest_time or time_value < youngest_time
+            ):
+                seq_info["youngest_time"] = time_value
+
+            if time_value == time_value:
+                existing_meta = seq_info["metadata_by_time"].get(time_value)
+                metadata = {
+                    "role": role,
+                    "feature": feature,
+                    "scenario": scenario,
+                }
+                if existing_meta is None:
+                    seq_info["metadata_by_time"][time_value] = metadata
+                elif existing_meta != metadata:
+                    self.print_terminal(
+                        f"  WARNING: Sequence '{sequence_name}' time {time_value} has conflicting metadata; "
+                        f"keeping the first entry."
+                    )
             prgs_bar.add_one()
-        
         prgs_bar.close()
-    
+
     toc(parent=self)
-    
-    # Drop empty columns
+
     self.print_terminal("-> Drop empty columns...")
     tic(parent=self)
     all_input_data_df.dropna(axis=1, how="all", inplace=True)
     toc(parent=self)
-    
-    # Ask for model parameters
+
     input_dict = {
         "boundary": ["Boundary: ", self.boundary_coll.get_names],
         "method": ["Interpolation method: ", ["PLI", "FDI", "surfe"]],
@@ -2213,10 +2769,9 @@ def implicit_model_loop_structural_with_faults(self):
     if options_dict is None:
         options_dict = {
             "boundary": self.boundary_coll.get_names[0],
-            "method": "PLI"
+            "method": "PLI",
         }
-    
-    # Get bounding box from boundary (with optional OBB alignment as in implicit_model_loop_structural)
+
     boundary_uid = self.boundary_coll.df.loc[
         self.boundary_coll.df["name"] == options_dict["boundary"], "uid"
     ].values[0]
@@ -2229,12 +2784,16 @@ def implicit_model_loop_structural_with_faults(self):
             f"-> OBB boundary detected. Rotation angle: {np_around(obb_info['angle'] * 180 / np_pi, 2)} degrees"
         )
         self.print_terminal("-> Transforming data to axis-aligned coordinate system...")
-        origin_x, origin_y, origin_z_temp, maximum_x, maximum_y, maximum_z_temp = get_aligned_bounds_from_obb(
-            self.boundary_coll, boundary_uid, obb_info
-        )
+        (
+            origin_x,
+            origin_y,
+            origin_z_temp,
+            maximum_x,
+            maximum_y,
+            maximum_z_temp,
+        ) = get_aligned_bounds_from_obb(self.boundary_coll, boundary_uid, obb_info)
         all_input_data_df = transform_points_to_aligned(all_input_data_df, obb_info)
 
-        # Keep fault geometry consistent with transformed model coordinates.
         angle = obb_info["angle"]
         obb_center = obb_info["center"]
         c, s = np_cos(angle), np_sin(angle)
@@ -2242,54 +2801,57 @@ def implicit_model_loop_structural_with_faults(self):
         for fault_name, fault_info in fault_data.items():
             fault_points = np_array(fault_info.get("points", []), dtype=float)
             if len(fault_points) > 0:
-                xy = fault_points[:, :2]
-                xy_centered = xy - obb_center
-                xy_rotated = (R_to_local @ xy_centered.T).T
+                xy_rotated = (R_to_local @ (fault_points[:, :2] - obb_center).T).T
                 points_aligned = fault_points.copy()
                 points_aligned[:, 0] = xy_rotated[:, 0]
                 points_aligned[:, 1] = xy_rotated[:, 1]
             else:
                 points_aligned = fault_points
 
-            _, axes_aligned_raw, _ = _compute_fault_geometric_features_obb(
-                points_aligned
-            )
             center_normal_aligned = fault_info.get("center_normal")
             if center_normal_aligned is not None:
                 center_normal_aligned = np_array(center_normal_aligned, dtype=float)
-                nxy = center_normal_aligned[:2]
-                nxy_rotated = (R_to_local @ nxy.reshape(2, 1)).ravel()
+                nxy_rotated = (R_to_local @ center_normal_aligned[:2].reshape(2, 1)).ravel()
                 center_normal_aligned = np_array(
                     [nxy_rotated[0], nxy_rotated[1], center_normal_aligned[2]],
                     dtype=float,
                 )
 
-            axes_aligned = _orient_fault_axes_for_rake(
-                axes_aligned_raw, center_normal=center_normal_aligned
+            _, obb_axes_raw, _ = _compute_fault_geometric_features_obb(points_aligned)
+            plane_axes_aligned = _orient_fault_axes_for_rake(
+                obb_axes_raw, center_normal=center_normal_aligned
             )
-            center_aligned, axes_aligned, lengths_aligned = _compute_fault_box_in_axes(
-                points_aligned, axes_aligned
+            default_geometry = _compute_scaled_fault_geometry(
+                {
+                    "points": points_aligned,
+                    "plane_axes": plane_axes_aligned,
+                    "center_normal": center_normal_aligned,
+                },
+                rake_deg=-90.0,
+                scale_factors=[1.0, 1.0, 1.0],
             )
-
             fault_info["points"] = points_aligned
-            fault_info["center"] = center_aligned
-            fault_info["axes"] = axes_aligned
-            fault_info["lengths"] = lengths_aligned
+            fault_info["plane_axes"] = plane_axes_aligned
+            fault_info["center"] = default_geometry["center"]
+            fault_info["axes"] = default_geometry["axes"]
+            fault_info["lengths"] = default_geometry["lengths"]
             fault_info["center_normal"] = center_normal_aligned
 
         self.print_terminal(
-            f"-> Data transformed. New aligned bounds: X[{origin_x:.2f}, {maximum_x:.2f}], Y[{origin_y:.2f}, {maximum_y:.2f}]"
+            f"-> Data transformed. New aligned bounds: X[{origin_x:.2f}, {maximum_x:.2f}], "
+            f"Y[{origin_y:.2f}, {maximum_y:.2f}]"
         )
     else:
         origin_x, maximum_x = bounds[0], bounds[1]
         origin_y, maximum_y = bounds[2], bounds[3]
-    
+
     if bounds[4] == bounds[5]:
-        # 2D boundary - ask for vertical extension
         vertical_extension_in = {
-            "message": ["Model vertical extension", 
-                       "Define MAX and MIN vertical extension of the 3D implicit model.",
-                       "QLabel"],
+            "message": [
+                "Model vertical extension",
+                "Define MAX and MIN vertical extension of the 3D implicit model.",
+                "QLabel",
+            ],
             "top": ["Insert top", 1000.0, "QLineEdit"],
             "bottom": ["Insert bottom", -1000.0, "QLineEdit"],
         }
@@ -2297,30 +2859,40 @@ def implicit_model_loop_structural_with_faults(self):
             title="Implicit Modelling with Faults",
             input_dict=vertical_extension_in,
         )
-        origin_z = float(vertical_extension_updt.get("bottom", -1000.0))
-        maximum_z = float(vertical_extension_updt.get("top", 1000.0))
+        origin_z = float(
+            (vertical_extension_updt or {}).get("bottom", -1000.0)
+        )
+        maximum_z = float(
+            (vertical_extension_updt or {}).get("top", 1000.0)
+        )
         if origin_z > maximum_z:
             origin_z, maximum_z = maximum_z, origin_z
+        elif origin_z == maximum_z:
+            origin_z -= 25.0
+            maximum_z += 25.0
     else:
         origin_z, maximum_z = bounds[4], bounds[5]
-    
+
     edge_x = maximum_x - origin_x
     edge_y = maximum_y - origin_y
     edge_z = maximum_z - origin_z
     origin = [origin_x, origin_y, origin_z]
     maximum = [maximum_x, maximum_y, maximum_z]
-    
+
     self.print_terminal(f"Model origin: {origin}")
     self.print_terminal(f"Model maximum: {maximum}")
-    
-    # Check overlap
-    if (all_input_data_df["X"].min() > maximum_x or all_input_data_df["X"].max() < origin_x
-        or all_input_data_df["Y"].min() > maximum_y or all_input_data_df["Y"].max() < origin_y
-        or all_input_data_df["Z"].min() > maximum_z or all_input_data_df["Z"].max() < origin_z):
+
+    if (
+        all_input_data_df["X"].min() > maximum_x
+        or all_input_data_df["X"].max() < origin_x
+        or all_input_data_df["Y"].min() > maximum_y
+        or all_input_data_df["Y"].max() < origin_y
+        or all_input_data_df["Z"].min() > maximum_z
+        or all_input_data_df["Z"].max() < origin_z
+    ):
         self.print_terminal("ERROR: Bounding Box does not intersect input data")
         return
-    
-    # Ask for grid spacing
+
     default_spacing = np_cbrt(edge_x * edge_y * edge_z / (50 * 50 * 25))
     target_spacing = input_one_value_dialog(
         title="Implicit Modelling with Faults",
@@ -2329,27 +2901,29 @@ def implicit_model_loop_structural_with_faults(self):
     )
     if target_spacing is None or target_spacing <= 0:
         target_spacing = default_spacing
-    
+
     dimension_x = max(1, int(np_around(edge_x / target_spacing)))
     dimension_y = max(1, int(np_around(edge_y / target_spacing)))
     dimension_z = max(1, int(np_around(edge_z / target_spacing)))
     dimensions = [dimension_x, dimension_y, dimension_z]
     spacing = [edge_x / dimension_x, edge_y / dimension_y, edge_z / dimension_z]
-    
+
     self.print_terminal(f"Grid dimensions: {dimensions}")
     self.print_terminal(f"Grid spacing: {spacing}")
-    
-    # Calculate a sensible default displacement based on model size
+
     model_diagonal = np_sqrt(edge_x**2 + edge_y**2 + edge_z**2)
-    default_displacement = model_diagonal * 0.05  # 5% of model diagonal as default
-    # Ask per-fault parameters and OBB scaling.
+    default_displacement = model_diagonal * 0.05
+    relation_suggestions = _compute_fault_relation_suggestions(
+        fault_data, default_rake=-90.0
+    )
     fault_params_by_name = _fault_obb_settings_dialog(
         parent=self,
         fault_data=fault_data,
         default_displacement=default_displacement,
         default_rake=-90.0,
         default_nelements=1000,
-        default_fault_buffer=0.5,
+        default_fault_buffer=0.2,
+        relation_suggestions=relation_suggestions,
     )
     if fault_params_by_name is None:
         self.print_terminal(
@@ -2357,206 +2931,189 @@ def implicit_model_loop_structural_with_faults(self):
         )
         fault_params_by_name = {}
         for fault_name, fault_info in fault_data.items():
+            geometry = _compute_scaled_fault_geometry(
+                fault_info, rake_deg=-90.0, scale_factors=[1.0, 1.0, 1.0]
+            )
+            suggestion = relation_suggestions.get(fault_name, {})
             fault_params_by_name[fault_name] = {
                 "displacement": float(default_displacement),
                 "rake": -90.0,
                 "nelements": 1000,
-                "fault_buffer": 0.5,
-                "center": fault_info["center"],
-                "axes": fault_info["axes"],
-                "lengths": fault_info["lengths"],
-                "has_abutting": False,
-                "abutting_fault": None,
-                "has_splay": False,
-                "splay_fault": None,
+                "fault_buffer": 0.2,
+                "center": geometry["center"],
+                "axes": geometry["axes"],
+                "lengths": geometry["scaled_lengths"],
+                "has_abutting": bool(suggestion.get("has_abutting", False)),
+                "abutting_fault": suggestion.get("abutting_fault"),
+                "has_splay": bool(suggestion.get("has_splay", False)),
+                "splay_fault": suggestion.get("splay_fault"),
             }
     else:
         self.print_terminal("Per-fault parameters configured:")
-        for fault_name, params in fault_params_by_name.items():
+        for fault_name in _sorted_fault_names_by_time(fault_data, older_first=True):
+            params = fault_params_by_name.get(fault_name, {})
             self.print_terminal(
-                f"  {fault_name}: displacement={params['displacement']:.2f}, "
-                f"rake={params['rake']:.1f} deg, nelements={params['nelements']}, "
-                f"buffer={params['fault_buffer']:.2f}, "
-                f"lengths={params['lengths']}, "
+                f"  {fault_name}: displacement={float(params.get('displacement', 0.0)):.2f}, "
+                f"rake={float(params.get('rake', -90.0)):.1f} deg, "
+                f"nelements={int(params.get('nelements', 1000))}, "
+                f"buffer={float(params.get('fault_buffer', 0.2)):.2f}, "
+                f"lengths={params.get('lengths')}, "
                 f"abutting={params.get('abutting_fault') if params.get('has_abutting') else 'None'}, "
                 f"splay={params.get('splay_fault') if params.get('has_splay') else 'None'}"
-            )    
-    # Create LoopStructural model
+            )
+
     self.print_terminal("-> Creating LoopStructural model...")
     tic(parent=self)
     model = GeologicalModel(origin, maximum)
-    # Use set_model_data() method - this is the correct way to assign data
     model.set_model_data(all_input_data_df)
     toc(parent=self)
-    
-    self.print_terminal(f"all_input_data_df:\n{all_input_data_df}")
-    
-    # Create faults FIRST (they must exist before foliation that references them)
+    self.print_terminal(
+        f"Input dataframe rows: {len(all_input_data_df)}, features: "
+        f"{sorted(all_input_data_df['feature_name'].dropna().unique().tolist())}"
+    )
+
     self.print_terminal("-> Creating faults...")
     tic(parent=self)
     created_fault_features = []
     created_fault_features_by_name = {}
-    
-    for fault_name, fault_info in fault_data.items():
-        self.print_terminal(f"  Creating fault: {fault_name}")
+    fault_creation_order = _sorted_fault_names_by_time(fault_data, older_first=True)
 
+    for fault_name in fault_creation_order:
+        fault_info = fault_data[fault_name]
         fault_params_single = fault_params_by_name.get(fault_name, {})
-        center = fault_params_single.get("center", fault_info["center"])
-        axes = fault_params_single.get("axes", fault_info["axes"])
-        axes = _orient_fault_axes_for_rake(
-            axes, center_normal=fault_info.get("center_normal")
-        )
-        lengths = fault_params_single.get("lengths", fault_info["lengths"])
         displacement = float(
             fault_params_single.get("displacement", default_displacement)
         )
         fault_rake = float(fault_params_single.get("rake", -90.0))
-        # Constrain rake to [-180, 180] for consistent interpretation.
         fault_rake = ((fault_rake + 180.0) % 360.0) - 180.0
         nelements = int(fault_params_single.get("nelements", 1000))
-        fault_buffer = float(fault_params_single.get("fault_buffer", 0.5))
-        
-        # Fault extents must be driven by each fault OBB, not by model boundary size.
-        lengths = np_array(lengths, dtype=float)
-        base_obb_lengths = np_array(fault_info.get("lengths", lengths), dtype=float)
-        fault_points = np_array(fault_info.get("points", []), dtype=float)
+        fault_buffer = float(fault_params_single.get("fault_buffer", 0.2))
 
-        # Per-fault fallback scale from that fault point cloud only.
-        point_diag = 0.0
-        if fault_points is not None and len(fault_points) > 1:
-            point_span = fault_points.max(axis=0) - fault_points.min(axis=0)
-            point_diag = float(np_sqrt(np_sum(point_span**2)))
-
-        major_ref = (
-            float(base_obb_lengths[0])
-            if len(base_obb_lengths) > 0 and base_obb_lengths[0] > 1e-6
-            else point_diag
+        base_geometry = _compute_scaled_fault_geometry(
+            fault_info, rake_deg=fault_rake, scale_factors=[1.0, 1.0, 1.0]
         )
-        intermediate_ref = (
-            float(base_obb_lengths[1])
-            if len(base_obb_lengths) > 1 and base_obb_lengths[1] > 1e-6
-            else point_diag * 0.5
+        center = np_array(
+            fault_params_single.get("center", base_geometry["center"]), dtype=float
         )
-        minor_ref = (
-            float(base_obb_lengths[2])
-            if len(base_obb_lengths) > 2 and base_obb_lengths[2] > 1e-6
-            else point_diag * 0.2
+        axes = np_array(
+            fault_params_single.get("axes", base_geometry["axes"]), dtype=float
         )
-
-        # Last-resort tiny defaults for degenerate inputs.
-        major_ref = max(major_ref, 1e-3)
-        intermediate_ref = max(intermediate_ref, 1e-3)
-        minor_ref = max(minor_ref, 1e-3)
-
-        major_len = float(lengths[0]) if len(lengths) > 0 and lengths[0] > 1e-6 else major_ref
-        intermediate_len = (
-            float(lengths[1]) if len(lengths) > 1 and lengths[1] > 1e-6 else intermediate_ref
+        lengths = np_array(
+            fault_params_single.get("lengths", base_geometry["scaled_lengths"]),
+            dtype=float,
         )
-        minor_len = float(lengths[2]) if len(lengths) > 2 and lengths[2] > 1e-6 else minor_ref
+        lengths = _normalise_fault_obb_lengths(lengths)
+        if len(lengths) < 3:
+            lengths = np_array(base_geometry["scaled_lengths"], dtype=float)
 
-        # Keep a minimum extent tied to each fault's own OBB scale.
-        major_len = max(major_len, major_ref * 0.1, 1e-3)
-        intermediate_len = max(intermediate_len, intermediate_ref * 0.1, 1e-3)
-        minor_len = max(minor_len, minor_ref * 0.1, 1e-3)
-
-        # LoopStructural uses mixed extent semantics:
-        # - major_axis is total strike length
-        # - intermediate_axis is a radius from the centre along slip/dip
-        # - minor_axis is a radius from the centre along the fault normal
+        major_len = max(float(lengths[0]), 1e-3)
+        intermediate_len = max(float(lengths[1]), 1e-3)
+        minor_len = max(float(lengths[2]), 1e-3)
         ls_major_axis = major_len
         ls_intermediate_axis = max(0.5 * intermediate_len, 1e-3)
         ls_minor_axis = max(0.5 * minor_len, 1e-3)
-        
+
+        plane_geometry = _compute_fault_geometry_for_rake(
+            fault_info.get("points", []),
+            fault_info.get("plane_axes", fault_info.get("axes")),
+            fault_info.get("center_normal"),
+            fault_rake,
+        )
+        slip_vector = np_array(plane_geometry["slip_vector"], dtype=float)
+        fault_normal = np_array(plane_geometry["normal"], dtype=float)
+
+        self.print_terminal(f"  Creating fault: {fault_name}")
         self.print_terminal(f"    Fault geometry: center={center}")
-        self.print_terminal(f"    major={major_len:.2f}, intermediate={intermediate_len:.2f}, minor={minor_len:.2f}")
         self.print_terminal(
-            f"    LoopStructural extents: major={ls_major_axis:.2f}, "
-            f"intermediate_radius={ls_intermediate_axis:.2f}, minor_radius={ls_minor_axis:.2f}"
+            f"    trace={major_len:.2f}, slip={intermediate_len:.2f}, normal={minor_len:.2f}"
         )
-        
-        # IMPORTANT: Convert numpy array to list for LoopStructural compatibility
-        # LoopStructural's parameter comparison fails with numpy arrays
-        center_list = center.tolist() if hasattr(center, 'tolist') else list(center)
-        
-        # Get the fault axes from OBB (fallback PCA for degenerate geometries).
-        slip_vector_3d, major_axis, intermediate_axis, fault_normal, rake_components = (
-            _compute_fault_slip_vector_from_rake(axes, fault_rake)
-        )
-
-        # Convert to lists for LoopStructural
-        fault_normal_list = (
-            fault_normal.tolist() if hasattr(fault_normal, "tolist") else list(fault_normal)
-        )
-        slip_vector_list = (
-            slip_vector_3d.tolist()
-            if hasattr(slip_vector_3d, "tolist")
-            else list(slip_vector_3d)
-        )
-
-        # Log the basis and rake decomposition used for the slip vector.
-        self.print_terminal("    Fault axes (OBB/PCA, oriented for rake):")
-        self.print_terminal(f"      major (strike): {major_axis}")
-        self.print_terminal(f"      intermediate (dip): {intermediate_axis}")
-        self.print_terminal(f"      minor (normal): {fault_normal}")
         self.print_terminal(
-            f"      rake components (major, intermediate): [{rake_components[0]:.4f}, {rake_components[1]:.4f}]"
+            f"    LoopStructural extents: trace={ls_major_axis:.2f}, "
+            f"slip_radius={ls_intermediate_axis:.2f}, normal_radius={ls_minor_axis:.2f}"
         )
-        # Rake conventions:
-        # - 0 deg = along major axis (strike-slip)
-        # - +90 deg = along intermediate axis (reverse)
-        # - -90 deg = opposite intermediate axis (normal)
-        # - +/-180 deg = opposite major axis (strike-slip)
+        self.print_terminal("    Fault axes (Loop basis):")
+        self.print_terminal(f"      trace: {axes[0]}")
+        self.print_terminal(f"      slip: {axes[1]}")
+        self.print_terminal(f"      normal: {axes[2]}")
+        self.print_terminal(
+            f"    rake components (strike, dip): "
+            f"[{plane_geometry['rake_components'][0]:.4f}, {plane_geometry['rake_components'][1]:.4f}]"
+        )
+        self.print_terminal(
+            f"    fault_slip_vector (3D): {slip_vector.tolist()}"
+        )
+        self.print_terminal(
+            f"    rake={fault_rake}° (0=sinistral, 90=reverse, -90=normal, ±180=dextral)"
+        )
+        self.print_terminal(
+            f"    fault_normal_vector: {fault_normal.tolist()}"
+        )
+        self.print_terminal(
+            "    faultfunction=BaseFault3D (displacement tapered in slip and trace directions)"
+        )
+        self.print_terminal("    Using points=True for fault frame construction")
 
-        # Build fault parameters using LoopStructural's expected argument names.
-        # Rake-driven slip vector is always provided from the local fault basis.
         fault_params_ls = {
             "nelements": nelements,
             "interpolatortype": options_dict["method"],
+            "faultfunction": "BaseFault3D",
             "fault_buffer": fault_buffer,
-            "fault_center": center_list,
-            "fault_normal_vector": fault_normal_list,
+            "fault_center": center.tolist(),
+            "fault_normal_vector": fault_normal.tolist(),
             "major_axis": ls_major_axis,
             "minor_axis": ls_minor_axis,
             "intermediate_axis": ls_intermediate_axis,
-            "fault_slip_vector": slip_vector_list,
+            "fault_slip_vector": slip_vector.tolist(),
             "points": True,
         }
-        self.print_terminal(f"    fault_slip_vector (3D): {slip_vector_list}")
-        
-        self.print_terminal(f"    rake={fault_rake}° (0=sinistral, 90=reverse, -90=normal, ±180=dextral)")
-        self.print_terminal(f"    fault_normal_vector: {fault_normal_list}")
-        self.print_terminal(f"    Using points=True for fault frame construction")
-        
+
         try:
-            # Create the fault with displacement
             model.create_and_add_fault(
                 fault_name,
                 displacement,
-                **fault_params_ls
+                **fault_params_ls,
             )
-            
-            # Get the created fault feature
             fault_feature = model.get_feature_by_name(fault_name)
             if fault_feature is not None:
+                support_region = _make_fault_support_box_region(fault_feature)
+                fault_feature.add_region(support_region)
                 created_fault_features.append(fault_feature)
                 created_fault_features_by_name[fault_name] = fault_feature
-                self.print_terminal(f"    Fault '{fault_name}' created successfully (type: {fault_feature.type})")
+                support_lengths = np_array(
+                    [
+                        fault_feature.fault_major_axis,
+                        2.0 * fault_feature.fault_intermediate_axis,
+                        2.0 * fault_feature.fault_minor_axis,
+                    ],
+                    dtype=float,
+                )
+                support_lengths = support_lengths * model.scale_factor
+                self.print_terminal(
+                    "    Displacement support limited to fault box "
+                    f"(trace/slip/normal = {support_lengths[0]:.2f}, "
+                    f"{support_lengths[1]:.2f}, {support_lengths[2]:.2f})"
+                )
+                self.print_terminal(
+                    f"    Fault '{fault_name}' created successfully (type: {fault_feature.type})"
+                )
             else:
-                self.print_terminal(f"    WARNING: Could not retrieve fault feature '{fault_name}'")
+                self.print_terminal(
+                    f"    WARNING: Could not retrieve fault feature '{fault_name}'"
+                )
         except Exception as e:
-            self.print_terminal(f"    ERROR creating fault '{fault_name}': {e}")
             import traceback
+
+            self.print_terminal(f"    ERROR creating fault '{fault_name}': {e}")
             self.print_terminal(traceback.format_exc())
 
-    # Apply optional fault-fault interactions after all faults are available.
     if created_fault_features_by_name:
         self.print_terminal("-> Applying fault interactions (abutting/splay)...")
-        for source_fault_name, params in fault_params_by_name.items():
+        for source_fault_name in fault_creation_order:
+            params = fault_params_by_name.get(source_fault_name, {})
             source_fault = created_fault_features_by_name.get(source_fault_name)
             if source_fault is None:
                 continue
 
-            # Splay relation
             if params.get("has_splay", False):
                 target_fault_name = params.get("splay_fault")
                 if target_fault_name is None:
@@ -2575,7 +3132,9 @@ def implicit_model_loop_structural_with_faults(self):
                         )
                     else:
                         try:
-                            if hasattr(source_fault, "builder") and hasattr(source_fault.builder, "add_splay"):
+                            if hasattr(source_fault, "builder") and hasattr(
+                                source_fault.builder, "add_splay"
+                            ):
                                 region = source_fault.builder.add_splay(target_fault)
                                 if hasattr(source_fault, "splay"):
                                     source_fault.splay[target_fault.name] = region
@@ -2591,7 +3150,6 @@ def implicit_model_loop_structural_with_faults(self):
                                 f"  ERROR applying splay '{source_fault_name}' -> '{target_fault_name}': {e}"
                             )
 
-            # Abutting relation
             if params.get("has_abutting", False):
                 target_fault_name = params.get("abutting_fault")
                 if target_fault_name is None:
@@ -2618,46 +3176,61 @@ def implicit_model_loop_structural_with_faults(self):
                             self.print_terminal(
                                 f"  ERROR applying abutting '{source_fault_name}' -> '{target_fault_name}': {e}"
                             )
-    
+
     toc(parent=self)
-    
-    # Create foliations AFTER faults (so they can be affected by faults)
-    strati_feature_name = "stratigraphy"  # Must match name used in dataframe
-    
-    if strati_uids:
+
+    sequence_names = sorted(
+        sequence_data.keys(), key=lambda name: sequence_data[name]["order"]
+    )
+    if sequence_names:
         self.print_terminal("-> Creating foliations (affected by faults)...")
         tic(parent=self)
-        
-        try:
-            # Pass the fault features list so foliation is displaced by faults
-            foliation_faults = created_fault_features if created_fault_features else None
-            self.print_terminal(f"  Faults affecting foliation: {[f.name for f in created_fault_features] if created_fault_features else 'None'}")
-            
-            model.create_and_add_foliation(
-                strati_feature_name,  # Use consistent name
-                interpolator_type=options_dict["method"],  # NOTE: underscore
-                nelements=(dimensions[0] * dimensions[1] * dimensions[2]),
-                faults=foliation_faults,
-            )
-            self.print_terminal(f"  Foliation '{strati_feature_name}' created (affected by faults)")
-        except Exception as e:
-            self.print_terminal(f"  ERROR creating foliation: {e}")
-            import traceback
-            self.print_terminal(traceback.format_exc())
-        
+        for sequence_name in sequence_names:
+            eligible_fault_names = [
+                fault_name
+                for fault_name in fault_creation_order
+                if _fault_affects_sequence(
+                    fault_data[fault_name].get("time"),
+                    sequence_data[sequence_name].get("youngest_time"),
+                )
+            ]
+            foliation_faults = [
+                created_fault_features_by_name[fault_name]
+                for fault_name in eligible_fault_names
+                if fault_name in created_fault_features_by_name
+            ]
+            try:
+                self.print_terminal(
+                    f"  Sequence '{sequence_name}' affected by faults: "
+                    f"{eligible_fault_names if eligible_fault_names else 'None'}"
+                )
+                model.create_and_add_foliation(
+                    sequence_name,
+                    interpolatortype=options_dict["method"],
+                    nelements=(dimensions[0] * dimensions[1] * dimensions[2]),
+                    faults=foliation_faults if foliation_faults else None,
+                )
+                self.print_terminal(f"  Foliation '{sequence_name}' created")
+            except Exception as e:
+                import traceback
+
+                self.print_terminal(
+                    f"  ERROR creating foliation '{sequence_name}': {e}"
+                )
+                self.print_terminal(traceback.format_exc())
         toc(parent=self)
-    
-    # Evaluate and visualize
+
     self.print_terminal("-> Evaluating model on regular grid...")
     tic(parent=self)
-    regular_grid = model.regular_grid(nsteps=dimensions, shuffle=False, rescale=False)
+    regular_grid = model.regular_grid(
+        nsteps=dimensions, shuffle=False, rescale=False
+    )
     toc(parent=self)
-    
-    # Create output Voxet
+
     self.print_terminal("-> Creating output Voxet...")
     tic(parent=self)
     model_name = "Loop_model_faults"
-    
+
     voxet_dict = deepcopy(self.mesh3d_coll.entity_dict)
     voxet_dict["name"] = model_name
     voxet_dict["topology"] = "Voxet"
@@ -2676,7 +3249,6 @@ def implicit_model_loop_structural_with_faults(self):
         angle = obb_info["angle"]
         obb_center = obb_info["center"]
         c, s = np_cos(angle), np_sin(angle)
-
         origin_xy = np_array([aligned_origin[0], aligned_origin[1]])
         R_to_world_2d = np_array([[c, -s], [s, c]])
         origin_world_xy = (R_to_world_2d @ origin_xy) + obb_center
@@ -2703,31 +3275,34 @@ def implicit_model_loop_structural_with_faults(self):
 
     voxet_dict["vtk_obj"].dimensions = dimensions
     voxet_dict["vtk_obj"].spacing = spacing
-    
-    # Log all model features
     self.print_terminal(f"  Model features: {[f.name for f in model.features]}")
-    
-    # Evaluate each feature and store in voxet
+
     for feature in model.features:
-        self.print_terminal(f"  Evaluating feature: {feature.name} (type: {feature.type})")
+        self.print_terminal(
+            f"  Evaluating feature: {feature.name} (type: {feature.type})"
+        )
         try:
-            scalar_field = model.evaluate_feature_value(feature.name, regular_grid, scale=False)
+            scalar_field = model.evaluate_feature_value(
+                feature.name, regular_grid, scale=False
+            )
             scalar_field = scalar_field.reshape((dimension_x, dimension_y, dimension_z))
             scalar_field = scalar_field.transpose(2, 1, 0)
             scalar_field = scalar_field.ravel()
-            
+
             voxet_dict["vtk_obj"].set_point_data(
                 data_key=feature.name, attribute_matrix=scalar_field
             )
             voxet_dict["properties_names"].append(feature.name)
             voxet_dict["properties_components"].append(1)
-            self.print_terminal(f"    Feature '{feature.name}' evaluated successfully")
+            self.print_terminal(
+                f"    Feature '{feature.name}' evaluated successfully"
+            )
         except Exception as e:
-            self.print_terminal(f"    ERROR evaluating {feature.name}: {e}")
             import traceback
+
+            self.print_terminal(f"    ERROR evaluating {feature.name}: {e}")
             self.print_terminal(traceback.format_exc())
 
-    # Ask output name at the end of interpolation/evaluation, before writing outputs.
     model_name_input = input_text_dialog(
         title="Implicit Modelling with Faults",
         label="Name of the output Voxet",
@@ -2736,26 +3311,26 @@ def implicit_model_loop_structural_with_faults(self):
     if model_name_input:
         model_name = model_name_input
     voxet_dict["name"] = model_name
-    
+
     if voxet_dict["vtk_obj"].points_number > 0:
         self.mesh3d_coll.add_entity_from_dict(voxet_dict)
-        self.print_terminal(f"  Voxet '{model_name}' created with properties: {voxet_dict['properties_names']}")
-    
+        self.print_terminal(
+            f"  Voxet '{model_name}' created with properties: {voxet_dict['properties_names']}"
+        )
+
     toc(parent=self)
-    
-    # Extract FAULT isosurfaces (at value 0 for the fault feature)
+
     self.print_terminal("-> Extracting fault surfaces...")
     tic(parent=self)
-    
-    for fault_name, fault_info in fault_data.items():
+    for fault_name in fault_creation_order:
+        fault_info = fault_data[fault_name]
         try:
             fault_params_single = fault_params_by_name.get(fault_name, {})
             fault_center = np_array(
                 fault_params_single.get("center", fault_info["center"]), dtype=float
             )
-            fault_axes = _orient_fault_axes_for_rake(
-                np_array(fault_params_single.get("axes", fault_info["axes"]), dtype=float),
-                center_normal=fault_info.get("center_normal"),
+            fault_axes = np_array(
+                fault_params_single.get("axes", fault_info["axes"]), dtype=float
             )
             fault_lengths = np_array(
                 fault_params_single.get("lengths", fault_info["lengths"]), dtype=float
@@ -2769,12 +3344,11 @@ def implicit_model_loop_structural_with_faults(self):
                 lengths=fault_lengths,
                 target_spacing=target_spacing,
             )
-
             n_points = int(contour_surface.n_points) if contour_surface is not None else 0
             self.print_terminal(
                 f"  Fault '{fault_name}' local-grid isosurface: {n_points} points"
             )
-            
+
             if n_points > 0:
                 surf_dict = deepcopy(self.geol_coll.entity_dict)
                 surf_dict["name"] = f"{fault_name}_surface_from_{model_name}"
@@ -2789,58 +3363,60 @@ def implicit_model_loop_structural_with_faults(self):
                         surf_dict["vtk_obj"], obb_info
                     )
                 surf_dict["vtk_obj"].Modified()
-                
-                if isinstance(surf_dict["vtk_obj"].points, np_ndarray) and len(surf_dict["vtk_obj"].points) > 0:
+
+                if (
+                    isinstance(surf_dict["vtk_obj"].points, np_ndarray)
+                    and len(surf_dict["vtk_obj"].points) > 0
+                ):
                     self.geol_coll.add_entity_from_dict(surf_dict)
-                    self.print_terminal(f"    Fault surface '{fault_name}' extracted ({n_points} points)")
+                    self.print_terminal(
+                        f"    Fault surface '{fault_name}' extracted ({n_points} points)"
+                    )
                 else:
-                    self.print_terminal(f"    WARNING: Fault surface '{fault_name}' is empty after copy")
+                    self.print_terminal(
+                        f"    WARNING: Fault surface '{fault_name}' is empty after copy"
+                    )
             else:
-                self.print_terminal(f"    WARNING: Fault surface '{fault_name}' has no points")
+                self.print_terminal(
+                    f"    WARNING: Fault surface '{fault_name}' has no points"
+                )
         except Exception as e:
-            self.print_terminal(f"  ERROR extracting fault surface '{fault_name}': {e}")
             import traceback
+
+            self.print_terminal(
+                f"  ERROR extracting fault surface '{fault_name}': {e}"
+            )
             self.print_terminal(traceback.format_exc())
-    
     toc(parent=self)
-    
-    # Extract STRATIGRAPHY isosurfaces
-    strati_feature_name = "stratigraphy"  # Must match name used above
-    
-    if strati_uids:
+
+    if sequence_names:
         self.print_terminal("-> Extracting stratigraphy isosurfaces...")
         tic(parent=self)
-        
-        try:
-            # Check if stratigraphy feature exists
-            if strati_feature_name not in voxet_dict["properties_names"]:
-                self.print_terminal(f"  WARNING: '{strati_feature_name}' not found in voxet properties")
-                self.print_terminal(f"  Available properties: {voxet_dict['properties_names']}")
-            else:
-                voxet_dict["vtk_obj"].GetPointData().SetActiveScalars(strati_feature_name)
-                
-                # Get unique stratigraphic values (excluding fault data)
-                # Filter by feature_name == strati_feature_name to get only stratigraphy values
-                strati_values = all_input_data_df.loc[
-                    all_input_data_df["feature_name"] == strati_feature_name, "val"
-                ].dropna().unique()
-                
-                self.print_terminal(f"  Stratigraphic values to extract: {strati_values}")
-                
-                for value in strati_values:
-                    value = float(value)
-                    self.print_terminal(f"  Extracting iso-surface at value = {value}")
-                    
-                    # Get metadata from legend
-                    legend_match = self.geol_coll.legend_df[self.geol_coll.legend_df["time"] == value]
-                    if legend_match.empty:
-                        self.print_terminal(f"    WARNING: No legend entry for time={value}")
-                        continue
-                    
-                    role = legend_match["role"].values[0]
-                    feature = legend_match["feature"].values[0]
-                    scenario = legend_match["scenario"].values[0]
-                    
+        for sequence_name in sequence_names:
+            try:
+                if sequence_name not in voxet_dict["properties_names"]:
+                    self.print_terminal(
+                        f"  WARNING: Sequence property '{sequence_name}' not found in voxet properties"
+                    )
+                    continue
+
+                metadata_by_time = sequence_data[sequence_name]["metadata_by_time"]
+                sequence_values = sorted(metadata_by_time.keys(), reverse=True)
+                if not sequence_values:
+                    self.print_terminal(
+                        f"  WARNING: Sequence '{sequence_name}' has no valid interface times to extract."
+                    )
+                    continue
+
+                voxet_dict["vtk_obj"].GetPointData().SetActiveScalars(sequence_name)
+                self.print_terminal(
+                    f"  Sequence '{sequence_name}' values to extract: {sequence_values}"
+                )
+                for value in sequence_values:
+                    metadata = metadata_by_time.get(value, {})
+                    self.print_terminal(
+                        f"  Extracting iso-surface for '{sequence_name}' at value = {float(value)}"
+                    )
                     iso_surface = vtkContourFilter()
                     iso_surface.SetInputData(voxet_dict["vtk_obj"])
                     iso_surface.ComputeScalarsOn()
@@ -2848,42 +3424,56 @@ def implicit_model_loop_structural_with_faults(self):
                     iso_surface.SetArrayComponent(0)
                     iso_surface.GenerateTrianglesOn()
                     iso_surface.UseScalarTreeOn()
-                    iso_surface.SetValue(0, value)
+                    iso_surface.SetValue(0, float(value))
                     iso_surface.Update()
-                    
+
                     n_points = iso_surface.GetOutput().GetNumberOfPoints()
-                    self.print_terminal(f"    Isosurface at {value}: {n_points} points")
-                    
-                    if n_points > 0:
-                        surf_dict = deepcopy(self.geol_coll.entity_dict)
-                        surf_dict["name"] = f"{feature}_from_{model_name}"
-                        surf_dict["topology"] = "TriSurf"
-                        surf_dict["role"] = role
-                        surf_dict["feature"] = feature
-                        surf_dict["scenario"] = scenario
-                        surf_dict["vtk_obj"] = TriSurf()
-                        surf_dict["vtk_obj"].ShallowCopy(iso_surface.GetOutput())
-                        if use_obb_alignment:
-                            surf_dict["vtk_obj"] = transform_vtk_to_obb(
-                                surf_dict["vtk_obj"], obb_info, voxet_world_origin
-                            )
-                        surf_dict["vtk_obj"].Modified()
-                        
-                        if isinstance(surf_dict["vtk_obj"].points, np_ndarray) and len(surf_dict["vtk_obj"].points) > 0:
-                            self.geol_coll.add_entity_from_dict(surf_dict)
-                            self.print_terminal(f"      Iso-surface at value = {value} created ({n_points} points)")
-                        else:
-                            self.print_terminal(f"      WARNING: Isosurface at {value} is empty after copy")
+                    self.print_terminal(
+                        f"    Isosurface at {float(value)}: {n_points} points"
+                    )
+                    if n_points <= 0:
+                        self.print_terminal(
+                            f"      WARNING: Isosurface at {float(value)} has no points"
+                        )
+                        continue
+
+                    surf_dict = deepcopy(self.geol_coll.entity_dict)
+                    surf_dict["name"] = (
+                        f"{metadata.get('feature', sequence_name)}_from_{model_name}"
+                    )
+                    surf_dict["topology"] = "TriSurf"
+                    surf_dict["role"] = metadata.get("role", "undef")
+                    surf_dict["feature"] = metadata.get("feature", sequence_name)
+                    surf_dict["scenario"] = metadata.get("scenario", "undef")
+                    surf_dict["vtk_obj"] = TriSurf()
+                    surf_dict["vtk_obj"].ShallowCopy(iso_surface.GetOutput())
+                    if use_obb_alignment:
+                        surf_dict["vtk_obj"] = transform_vtk_to_obb(
+                            surf_dict["vtk_obj"], obb_info, voxet_world_origin
+                        )
+                    surf_dict["vtk_obj"].Modified()
+
+                    if (
+                        isinstance(surf_dict["vtk_obj"].points, np_ndarray)
+                        and len(surf_dict["vtk_obj"].points) > 0
+                    ):
+                        self.geol_coll.add_entity_from_dict(surf_dict)
+                        self.print_terminal(
+                            f"      Iso-surface at value = {float(value)} created ({n_points} points)"
+                        )
                     else:
-                        self.print_terminal(f"      WARNING: Isosurface at {value} has no points")
-                        
-        except Exception as e:
-            self.print_terminal(f"  ERROR extracting stratigraphy surfaces: {e}")
-            import traceback
-            self.print_terminal(traceback.format_exc())
-        
+                        self.print_terminal(
+                            f"      WARNING: Isosurface at {float(value)} is empty after copy"
+                        )
+            except Exception as e:
+                import traceback
+
+                self.print_terminal(
+                    f"  ERROR extracting stratigraphy surfaces for '{sequence_name}': {e}"
+                )
+                self.print_terminal(traceback.format_exc())
         toc(parent=self)
-    
+
     voxet_dict["vtk_obj"].Modified()
     self.print_terminal("Loop interpolation with faults completed.")
 
@@ -4289,3 +4879,4 @@ def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
             else:
                 self.print_terminal(" -- Error input type: only TriSurf type -- ")
                 return
+
