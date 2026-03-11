@@ -259,6 +259,37 @@ def transform_vtk_to_obb(vtk_obj, obb_info, voxet_world_origin=None):
     return vtk_obj
 
 
+def transform_vtk_from_aligned_to_world(vtk_obj, obb_info):
+    """
+    Transform a VTK object from boundary-aligned model coordinates back to world space.
+
+    Unlike `transform_vtk_to_obb`, this is for geometry sampled directly in the
+    aligned model space where the boundary centre is the XY origin.
+    """
+    from numpy import cos as np_cos
+    from numpy import sin as np_sin
+    from numpy import array as np_array
+
+    if not obb_info["has_obb"]:
+        return vtk_obj
+
+    points = vtk_obj.points
+    if points is None or len(points) == 0:
+        return vtk_obj
+
+    angle = obb_info["angle"]
+    center = obb_info["center"]
+    c, s = np_cos(angle), np_sin(angle)
+    R_to_world = np_array([[c, -s], [s, c]])
+
+    xy_world = (R_to_world @ points[:, :2].T).T + center
+    points[:, 0] = xy_world[:, 0]
+    points[:, 1] = xy_world[:, 1]
+    vtk_obj.points = points
+
+    return vtk_obj
+
+
 def transform_voxet_to_obb(voxet, obb_info, original_origin, original_spacing, original_dimensions):
     """
     Transform a Voxet from axis-aligned space back to OBB-oriented space.
@@ -1196,6 +1227,46 @@ def _compute_fault_geometric_features_obb(points):
     return center, axes, lengths
 
 
+def _compute_fault_box_in_axes(points, axes):
+    """
+    Compute box centre and lengths for points in a supplied orthonormal basis.
+
+    This keeps the extents consistent after the in-plane fault basis is rotated
+    to the strike/dip convention used for LoopStructural fault parameters.
+    """
+    from numpy import array as np_array
+    from numpy import identity as np_identity
+    from numpy import cross as np_cross
+    from numpy import dot as np_dot
+    from numpy import linalg as np_linalg
+
+    if points is None or len(points) == 0:
+        return np_array([0.0, 0.0, 0.0]), np_identity(3), np_array([0.0, 0.0, 0.0])
+
+    points = np_array(points, dtype=float)
+    axes = np_array(axes, dtype=float)
+    if axes.shape != (3, 3):
+        axes = np_identity(3)
+
+    normed_axes = np_identity(3)
+    for i in range(3):
+        axis_norm = np_linalg.norm(axes[i])
+        if axis_norm > 1e-9:
+            normed_axes[i] = axes[i] / axis_norm
+
+    if np_dot(np_cross(normed_axes[0], normed_axes[1]), normed_axes[2]) < 0.0:
+        normed_axes[2] = -normed_axes[2]
+
+    projected_coords = points @ normed_axes.T
+    min_coords = projected_coords.min(axis=0)
+    max_coords = projected_coords.max(axis=0)
+    lengths = max_coords - min_coords
+    center_local = 0.5 * (min_coords + max_coords)
+    center = center_local @ normed_axes
+
+    return center, normed_axes, lengths
+
+
 def _orient_fault_axes_for_rake(axes, center_normal=None):
     """
     Orient fault axes so rake conventions are stable:
@@ -1365,6 +1436,95 @@ def _build_obb_wireframe_polydata(center, axes, lengths):
         lines.extend([2, start_idx, end_idx])
 
     return pv_PolyData(corners, lines=np_array(lines))
+
+
+def _extract_fault_surface_local_grid(model, fault_name, center, axes, lengths, target_spacing):
+    """
+    Extract a fault surface on an oriented local grid tied to the fault OBB.
+
+    Sampling the fault on its own OBB avoids exporting the unbounded fault
+    surface across the whole model box, which was making output fault OBBs
+    inherit the main model boundary orientation.
+    """
+    from pyvista import StructuredGrid as pv_StructuredGrid
+    from numpy import array as np_array
+    from numpy import linspace as np_linspace
+    from numpy import meshgrid as np_meshgrid
+    from numpy import maximum as np_maximum
+    from numpy import isnan as np_isnan
+
+    center = np_array(center, dtype=float)
+    axes = np_array(axes, dtype=float)
+    lengths = np_array(lengths, dtype=float)
+
+    if axes.shape != (3, 3):
+        return None
+
+    spacing = float(target_spacing) if target_spacing is not None and target_spacing > 0 else 1.0
+
+    fault_feature = model.get_feature_by_name(fault_name)
+    surface_feature = fault_feature[0] if hasattr(fault_feature, "__getitem__") else fault_feature
+
+    # Evaluate on an oriented world/aligned grid, but query LoopStructural in
+    # model-local coordinates. The model internally subtracts `model.origin`
+    # from all data, so sampling directly in absolute coordinates misses the
+    # fault entirely.
+    expansion_candidates = [
+        np_array([1.05, 1.05, 1.50], dtype=float),
+        np_array([1.15, 1.15, 2.50], dtype=float),
+        np_array([1.30, 1.30, 4.00], dtype=float),
+    ]
+    min_lengths = np_array([spacing * 2.0, spacing * 2.0, spacing * 4.0], dtype=float)
+
+    for padding in expansion_candidates:
+        safe_lengths = np_maximum(lengths * padding, min_lengths)
+
+        nx = max(25, int(np_around(safe_lengths[0] / spacing)) + 1)
+        ny = max(17, int(np_around(safe_lengths[1] / spacing)) + 1)
+        nz = max(9, int(np_around(safe_lengths[2] / spacing)) + 1)
+
+        u = np_linspace(-0.5 * safe_lengths[0], 0.5 * safe_lengths[0], nx)
+        v = np_linspace(-0.5 * safe_lengths[1], 0.5 * safe_lengths[1], ny)
+        w = np_linspace(-0.5 * safe_lengths[2], 0.5 * safe_lengths[2], nz)
+        uu, vv, ww = np_meshgrid(u, v, w, indexing="ij")
+
+        points_world = (
+            center[None, None, None, :]
+            + uu[..., None] * axes[0]
+            + vv[..., None] * axes[1]
+            + ww[..., None] * axes[2]
+        )
+        grid = pv_StructuredGrid(
+            points_world[..., 0], points_world[..., 1], points_world[..., 2]
+        )
+
+        eval_points = (
+            model.scale(grid.points, inplace=False)
+            if hasattr(model, "scale")
+            else grid.points
+        )
+        scalar_field = np_array(
+            surface_feature.evaluate_value(eval_points),
+            dtype=float,
+        )
+        valid_values = scalar_field[~np_isnan(scalar_field)]
+        if valid_values.size == 0:
+            scalar_field = np_array(
+                surface_feature.evaluate_value(eval_points, ignore_regions=True),
+                dtype=float,
+            )
+            valid_values = scalar_field[~np_isnan(scalar_field)]
+        if valid_values.size == 0:
+            continue
+        if valid_values.min() > 0.0 or valid_values.max() < 0.0:
+            continue
+
+        grid.point_data["fault_scalar"] = scalar_field
+        contour = grid.contour(isosurfaces=[0.0], scalars="fault_scalar")
+        if contour is not None and contour.n_points > 0:
+            return contour
+
+    return None
 
 
 def _fault_obb_settings_dialog(
@@ -1900,8 +2060,8 @@ def implicit_model_loop_structural_with_faults(self):
         points_arr = np_array(points, dtype=float)
         
         # Compute fault geometry from OBB (fallback to PCA when needed).
-        center, axes, lengths = _compute_fault_geometric_features_obb(points_arr)
-        fault_normal_seed = axes[2] if len(axes) > 2 else np_array([0, 0, 1])
+        obb_center, obb_axes, _ = _compute_fault_geometric_features_obb(points_arr)
+        fault_normal_seed = obb_axes[2] if len(obb_axes) > 2 else np_array([0, 0, 1])
         
         has_entity_normals = "Normals" in self.geol_coll.get_uid_properties_names(uid)
 
@@ -1930,7 +2090,7 @@ def implicit_model_loop_structural_with_faults(self):
         if has_entity_normals and len(points_arr) > 0 and len(normals_arr) == len(points_arr):
             from numpy import argmin as np_argmin
             from numpy import linalg as np_linalg
-            dist2 = np_sum((points_arr - center) ** 2, axis=1)
+            dist2 = np_sum((points_arr - obb_center) ** 2, axis=1)
             center_idx = int(np_argmin(dist2))
             candidate_normal = np_array(normals_arr[center_idx], dtype=float)
             n_norm = np_linalg.norm(candidate_normal)
@@ -1938,7 +2098,8 @@ def implicit_model_loop_structural_with_faults(self):
                 center_normal = candidate_normal / n_norm
 
         # Orient axes so rake sign is consistent with upper/lower fault face.
-        axes = _orient_fault_axes_for_rake(axes, center_normal=center_normal)
+        axes = _orient_fault_axes_for_rake(obb_axes, center_normal=center_normal)
+        center, axes, lengths = _compute_fault_box_in_axes(points_arr, axes)
         fault_normal = axes[2] if len(axes) > 2 else np_array([0, 0, 1])
 
         if not has_entity_normals:
@@ -1971,6 +2132,7 @@ def implicit_model_loop_structural_with_faults(self):
         
         entity_df["feature_name"] = fault_feature_name
         entity_df["val"] = 0  # Fault surface is at value 0
+        entity_df["coord"] = 0  # Keep fault points as coord-0 surface constraints.
         
         # Store fault data with the unique fault name
         fault_data[fault_feature_name] = {
@@ -2089,7 +2251,7 @@ def implicit_model_loop_structural_with_faults(self):
             else:
                 points_aligned = fault_points
 
-            center_aligned, axes_aligned, lengths_aligned = _compute_fault_geometric_features_obb(
+            _, axes_aligned_raw, _ = _compute_fault_geometric_features_obb(
                 points_aligned
             )
             center_normal_aligned = fault_info.get("center_normal")
@@ -2101,6 +2263,13 @@ def implicit_model_loop_structural_with_faults(self):
                     [nxy_rotated[0], nxy_rotated[1], center_normal_aligned[2]],
                     dtype=float,
                 )
+
+            axes_aligned = _orient_fault_axes_for_rake(
+                axes_aligned_raw, center_normal=center_normal_aligned
+            )
+            center_aligned, axes_aligned, lengths_aligned = _compute_fault_box_in_axes(
+                points_aligned, axes_aligned
+            )
 
             fault_info["points"] = points_aligned
             fault_info["center"] = center_aligned
@@ -2289,9 +2458,21 @@ def implicit_model_loop_structural_with_faults(self):
         major_len = max(major_len, major_ref * 0.1, 1e-3)
         intermediate_len = max(intermediate_len, intermediate_ref * 0.1, 1e-3)
         minor_len = max(minor_len, minor_ref * 0.1, 1e-3)
+
+        # LoopStructural uses mixed extent semantics:
+        # - major_axis is total strike length
+        # - intermediate_axis is a radius from the centre along slip/dip
+        # - minor_axis is a radius from the centre along the fault normal
+        ls_major_axis = major_len
+        ls_intermediate_axis = max(0.5 * intermediate_len, 1e-3)
+        ls_minor_axis = max(0.5 * minor_len, 1e-3)
         
         self.print_terminal(f"    Fault geometry: center={center}")
         self.print_terminal(f"    major={major_len:.2f}, intermediate={intermediate_len:.2f}, minor={minor_len:.2f}")
+        self.print_terminal(
+            f"    LoopStructural extents: major={ls_major_axis:.2f}, "
+            f"intermediate_radius={ls_intermediate_axis:.2f}, minor_radius={ls_minor_axis:.2f}"
+        )
         
         # IMPORTANT: Convert numpy array to list for LoopStructural compatibility
         # LoopStructural's parameter comparison fails with numpy arrays
@@ -2334,9 +2515,9 @@ def implicit_model_loop_structural_with_faults(self):
             "fault_buffer": fault_buffer,
             "fault_center": center_list,
             "fault_normal_vector": fault_normal_list,
-            "major_axis": major_len,
-            "minor_axis": minor_len,
-            "intermediate_axis": intermediate_len,
+            "major_axis": ls_major_axis,
+            "minor_axis": ls_minor_axis,
+            "intermediate_axis": ls_intermediate_axis,
             "fault_slip_vector": slip_vector_list,
             "points": True,
         }
@@ -2568,25 +2749,31 @@ def implicit_model_loop_structural_with_faults(self):
     
     for fault_name, fault_info in fault_data.items():
         try:
-            # Check if the fault feature exists in the voxet
-            if fault_name not in voxet_dict["properties_names"]:
-                self.print_terminal(f"  WARNING: Fault '{fault_name}' not found in voxet properties")
-                continue
-            
-            voxet_dict["vtk_obj"].GetPointData().SetActiveScalars(fault_name)
-            
-            iso_surface = vtkContourFilter()
-            iso_surface.SetInputData(voxet_dict["vtk_obj"])
-            iso_surface.ComputeScalarsOn()
-            iso_surface.ComputeGradientsOn()
-            iso_surface.SetArrayComponent(0)
-            iso_surface.GenerateTrianglesOn()
-            iso_surface.UseScalarTreeOn()
-            iso_surface.SetValue(0, 0.0)  # Fault surface is at scalar value 0
-            iso_surface.Update()
-            
-            n_points = iso_surface.GetOutput().GetNumberOfPoints()
-            self.print_terminal(f"  Fault '{fault_name}' isosurface: {n_points} points")
+            fault_params_single = fault_params_by_name.get(fault_name, {})
+            fault_center = np_array(
+                fault_params_single.get("center", fault_info["center"]), dtype=float
+            )
+            fault_axes = _orient_fault_axes_for_rake(
+                np_array(fault_params_single.get("axes", fault_info["axes"]), dtype=float),
+                center_normal=fault_info.get("center_normal"),
+            )
+            fault_lengths = np_array(
+                fault_params_single.get("lengths", fault_info["lengths"]), dtype=float
+            )
+
+            contour_surface = _extract_fault_surface_local_grid(
+                model=model,
+                fault_name=fault_name,
+                center=fault_center,
+                axes=fault_axes,
+                lengths=fault_lengths,
+                target_spacing=target_spacing,
+            )
+
+            n_points = int(contour_surface.n_points) if contour_surface is not None else 0
+            self.print_terminal(
+                f"  Fault '{fault_name}' local-grid isosurface: {n_points} points"
+            )
             
             if n_points > 0:
                 surf_dict = deepcopy(self.geol_coll.entity_dict)
@@ -2596,10 +2783,10 @@ def implicit_model_loop_structural_with_faults(self):
                 surf_dict["feature"] = fault_info["feature"]
                 surf_dict["scenario"] = fault_info["scenario"]
                 surf_dict["vtk_obj"] = TriSurf()
-                surf_dict["vtk_obj"].ShallowCopy(iso_surface.GetOutput())
+                surf_dict["vtk_obj"].ShallowCopy(contour_surface)
                 if use_obb_alignment:
-                    surf_dict["vtk_obj"] = transform_vtk_to_obb(
-                        surf_dict["vtk_obj"], obb_info, voxet_world_origin
+                    surf_dict["vtk_obj"] = transform_vtk_from_aligned_to_world(
+                        surf_dict["vtk_obj"], obb_info
                     )
                 surf_dict["vtk_obj"].Modified()
                 
