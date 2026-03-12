@@ -1376,6 +1376,54 @@ class ViewInterpretation(ViewMap):
             return base_name
         return f"{base_name} ({clean[0]}-{clean[-1]})"
 
+    def _build_multipart_entity_dict_from_source(
+        self, source_uid=None, vtk_obj=None, slice_indices=None, fallback_name="multipart"
+    ):
+        """Clone multipart entity metadata from an existing geology uid."""
+        if not source_uid or vtk_obj is None:
+            return None
+
+        entity_dict = deepcopy(self.parent.geol_coll.entity_dict)
+        entity_dict["name"] = self._build_propagated_entity_name(
+            seed_uid=source_uid,
+            slice_indices=slice_indices,
+            fallback_name=fallback_name,
+        )
+        entity_dict["topology"] = "PolyLine"
+        entity_dict["vtk_obj"] = vtk_obj
+
+        for key, getter_name, default in (
+            ("role", "get_uid_role", "undef"),
+            ("feature", "get_uid_feature", fallback_name),
+            ("scenario", "get_uid_scenario", "undef"),
+            ("parent_uid", "get_uid_x_section", ""),
+        ):
+            try:
+                entity_dict[key] = getattr(self.parent.geol_coll, getter_name)(source_uid)
+            except Exception:
+                entity_dict[key] = default
+
+        try:
+            entity_dict["properties_names"] = list(
+                self.parent.geol_coll.get_uid_properties_names(source_uid) or []
+            )
+        except Exception:
+            entity_dict["properties_names"] = []
+
+        try:
+            entity_dict["properties_components"] = list(
+                self.parent.geol_coll.get_uid_properties_components(source_uid) or []
+            )
+        except Exception:
+            entity_dict["properties_components"] = []
+
+        self._ensure_slice_index_property_metadata(
+            entity_dict=entity_dict,
+            vtk_obj=vtk_obj,
+            slice_indices=slice_indices,
+        )
+        return entity_dict
+
     def _copy_selected_numeric_arrays(
         self, source_data, target_data, selected_ids, skip_names=None, skip_prefixes=None
     ):
@@ -1515,8 +1563,8 @@ class ViewInterpretation(ViewMap):
         subset_line.Modified()
         return subset_line, remaining_slices, slice_to_cell_index
 
-    def delete_multipart_slices(self):
-        """Delete a slice interval from the selected propagated multipart horizon/fault."""
+    def _get_selected_multipart_entity_for_edit(self, action_title="Edit Multipart Slices"):
+        """Resolve the selected propagated multipart entity and validate its slice metadata."""
         selected_uids = [
             uid
             for uid in list(getattr(self.parent, "selected_uids", []) or [])
@@ -1524,10 +1572,10 @@ class ViewInterpretation(ViewMap):
         ]
         if len(selected_uids) != 1:
             message_dialog(
-                title="Delete Multipart Slices",
+                title=action_title,
                 message="Select exactly one propagated horizon or fault in the geology tree.",
             )
-            return
+            return None
 
         uid = selected_uids[0]
         self.scan_and_index_single_horizon(uid)
@@ -1543,26 +1591,26 @@ class ViewInterpretation(ViewMap):
 
         if entity_info is None:
             message_dialog(
-                title="Delete Multipart Slices",
+                title=action_title,
                 message="The selected entity is not a propagated multipart horizon or fault.",
             )
-            return
+            return None
 
         vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
         if vtk_obj is None or vtk_obj.GetNumberOfCells() == 0:
             message_dialog(
-                title="Delete Multipart Slices",
+                title=action_title,
                 message="The selected entity has no geometry to edit.",
             )
-            return
+            return None
 
         cell_data = vtk_obj.GetCellData()
         if cell_data is None or not cell_data.HasArray("slice_index"):
             message_dialog(
-                title="Delete Multipart Slices",
+                title=action_title,
                 message="The selected multipart entity has no slice_index cell data.",
             )
-            return
+            return None
 
         available_slices = sorted(
             {int(idx) for idx in entity_info.get("slice_indices", [])}
@@ -1570,10 +1618,35 @@ class ViewInterpretation(ViewMap):
         )
         if not available_slices:
             message_dialog(
-                title="Delete Multipart Slices",
+                title=action_title,
                 message="No slice indices were found on the selected entity.",
             )
+            return None
+
+        return {
+            "uid": uid,
+            "entity_kind": entity_kind,
+            "entity_info": entity_info,
+            "vtk_obj": vtk_obj,
+            "cell_data": cell_data,
+            "slice_array": cell_data.GetArray("slice_index"),
+            "available_slices": available_slices,
+        }
+
+    def delete_multipart_slices(self):
+        """Delete a slice interval from the selected propagated multipart horizon/fault."""
+        selection = self._get_selected_multipart_entity_for_edit(
+            action_title="Delete Multipart Slices"
+        )
+        if selection is None:
             return
+
+        uid = selection["uid"]
+        entity_kind = selection["entity_kind"]
+        entity_info = selection["entity_info"]
+        vtk_obj = selection["vtk_obj"]
+        cell_data = selection["cell_data"]
+        available_slices = selection["available_slices"]
 
         range_in = multiple_input_dialog(
             title=f"Delete Multipart Slices ({available_slices[0]}-{available_slices[-1]})",
@@ -1647,6 +1720,153 @@ class ViewInterpretation(ViewMap):
         self.print_terminal(
             f"Deleted slices {slice_from}-{slice_to} from multipart {entity_kind} {uid[:8]}.... "
             f"Remaining slices: {remaining_slices[0]}-{remaining_slices[-1]}"
+        )
+
+    def split_multipart_slices(self):
+        """Split a slice interval from the selected multipart horizon/fault into a new entity."""
+        selection = self._get_selected_multipart_entity_for_edit(
+            action_title="Split Multipart Slices"
+        )
+        if selection is None:
+            return
+
+        uid = selection["uid"]
+        entity_kind = selection["entity_kind"]
+        entity_info = selection["entity_info"]
+        vtk_obj = selection["vtk_obj"]
+        slice_array = selection["slice_array"]
+        available_slices = selection["available_slices"]
+
+        range_in = multiple_input_dialog(
+            title=f"Split Multipart Slices ({available_slices[0]}-{available_slices[-1]})",
+            input_dict={
+                "slice_from": ["Split out from slice:", available_slices[0]],
+                "slice_to": ["Split out to slice:", available_slices[-1]],
+            },
+        )
+        if range_in is None:
+            return
+
+        slice_from = int(range_in["slice_from"])
+        slice_to = int(range_in["slice_to"])
+        if slice_from > slice_to:
+            slice_from, slice_to = slice_to, slice_from
+
+        slices_to_extract = {
+            slice_idx
+            for slice_idx in available_slices
+            if slice_from <= slice_idx <= slice_to
+        }
+        if not slices_to_extract:
+            message_dialog(
+                title="Split Multipart Slices",
+                message="The requested interval does not match any slices in the selected entity.",
+            )
+            return
+        if len(slices_to_extract) == len(available_slices):
+            message_dialog(
+                title="Split Multipart Slices",
+                message="The requested interval covers the whole multipart entity. Leave at least one slice in the original entity.",
+            )
+            return
+
+        extracted_cell_ids = []
+        remaining_cell_ids = []
+        for cell_idx in range(vtk_obj.GetNumberOfCells()):
+            slice_idx = int(slice_array.GetValue(cell_idx))
+            if slice_idx in slices_to_extract:
+                extracted_cell_ids.append(cell_idx)
+            else:
+                remaining_cell_ids.append(cell_idx)
+
+        if not extracted_cell_ids or not remaining_cell_ids:
+            message_dialog(
+                title="Split Multipart Slices",
+                message="The split must produce both an extracted part and a remaining part.",
+            )
+            return
+
+        extracted_vtk, extracted_slices, extracted_map = self._build_multipart_subset_vtk(
+            vtk_obj=vtk_obj,
+            kept_cell_ids=extracted_cell_ids,
+        )
+        remaining_vtk, remaining_slices, remaining_map = self._build_multipart_subset_vtk(
+            vtk_obj=vtk_obj,
+            kept_cell_ids=remaining_cell_ids,
+        )
+        if (
+            extracted_vtk is None
+            or remaining_vtk is None
+            or not extracted_slices
+            or not remaining_slices
+        ):
+            message_dialog(
+                title="Split Multipart Slices",
+                message="The multipart entity could not be split with the requested interval.",
+            )
+            return
+
+        axis = entity_info.get("axis", self.current_axis)
+        original_name = self._build_propagated_entity_name(
+            seed_uid=uid,
+            slice_indices=remaining_slices,
+            fallback_name="multipart",
+        )
+        new_entity_dict = self._build_multipart_entity_dict_from_source(
+            source_uid=uid,
+            vtk_obj=extracted_vtk,
+            slice_indices=extracted_slices,
+            fallback_name="multipart",
+        )
+        if new_entity_dict is None:
+            message_dialog(
+                title="Split Multipart Slices",
+                message="Could not build the new multipart entity.",
+            )
+            return
+
+        self._remove_filtered_actor(f"multipart_slice_{uid}")
+        self._remove_filtered_actor(f"multipart_fault_slice_{uid}")
+        self._remove_raw_actor_for_uid(uid)
+
+        self._register_multipart_interpretation_entity(
+            uid=uid,
+            axis=axis,
+            slice_indices=remaining_slices,
+            slice_to_cell_index=remaining_map,
+        )
+        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=remaining_vtk)
+        self.parent.geol_coll.set_uid_name(uid=uid, name=original_name)
+        try:
+            self.parent.geol_coll.modelReset.emit()
+        except Exception:
+            pass
+
+        new_uid = self.parent.geol_coll.add_entity_from_dict(new_entity_dict)
+        self._register_multipart_interpretation_entity(
+            uid=new_uid,
+            axis=axis,
+            slice_indices=extracted_slices,
+            slice_to_cell_index=extracted_map,
+        )
+
+        try:
+            self.parent.signals.metadata_modified.emit([uid], self.parent.geol_coll)
+        except Exception:
+            pass
+
+        self._mark_slice_visibility_dirty()
+        if uid in getattr(self, "multipart_horizons", {}):
+            self.update_multipart_horizon_visibility(uid)
+            self.update_multipart_horizon_visibility(new_uid)
+        if uid in getattr(self, "multipart_faults", {}):
+            self.update_multipart_fault_visibility(uid)
+            self.update_multipart_fault_visibility(new_uid)
+        self.plotter.render()
+        self.print_terminal(
+            f"Split multipart {entity_kind} {uid[:8]}... into "
+            f"{remaining_slices[0]}-{remaining_slices[-1]} and "
+            f"{extracted_slices[0]}-{extracted_slices[-1]}."
         )
 
     def update_slice_colormap(self):
@@ -5406,6 +5626,10 @@ class ViewInterpretation(ViewMap):
         self.propagateFaultButton = QAction("Propagate Fault (Auto-Track 3D)", self)
         self.propagateFaultButton.triggered.connect(self.propagate_fault)
         self.menuCreate.addAction(self.propagateFaultButton)
+
+        self.splitMultipartSlicesButton = QAction("Split Multipart Slices...", self)
+        self.splitMultipartSlicesButton.triggered.connect(self.split_multipart_slices)
+        self.menuModify.addAction(self.splitMultipartSlicesButton)
 
         self.deleteMultipartSlicesButton = QAction("Delete Multipart Slices...", self)
         self.deleteMultipartSlicesButton.triggered.connect(self.delete_multipart_slices)
