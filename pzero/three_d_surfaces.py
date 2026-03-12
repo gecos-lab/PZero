@@ -632,7 +632,22 @@ def implicit_model_loop_structural(self):
         "ty": None,
         "tz": None,
         "coord": None,
+        "w": None,
     }
+    # -----------------------------------------------------------------------
+    # Constraint type classification based on role.
+    # Volume roles (bedding, foliation): measurements WITHIN the rock unit.
+    #   -> gx,gy,gz (gradient direction only)
+    #   -> if a base or top exists in the legend for the same feature
+    #      (any scenario), an inequality constraint is added automatically:
+    #      base present -> above base (val >= base_time, w = 1.0)
+    #      top present  -> below top  (val <= top_time, w = -1.0)
+    #   -> if no base/top exists: gradient only (no val, no inequality)
+    # All other roles (top, base, tectonic, fault, etc.): equality
+    #   constraints — points lie ON the isosurface.
+    #   -> val (from legend time) + nx,ny,nz if normals are present
+    # -----------------------------------------------------------------------
+    volume_roles = {"bedding", "foliation"}
     # Create empty dataframe to collect all input data.
     self.print_terminal("-> creating input dataframe...")
     tic(parent=self)
@@ -653,42 +668,107 @@ def implicit_model_loop_structural(self):
         entity_input_data_df[["X", "Y", "Z"]] = self.geol_coll.get_uid_vtk_obj(
             uid
         ).points
-        if "Normals" in self.geol_coll.get_uid_properties_names(uid):
-            entity_input_data_df[["nx", "ny", "nz"]] = self.geol_coll.get_uid_property(
-                uid=uid, property_name="Normals"
-            )
-        # feature_name value
+        # Get entity metadata
+        entity_role = self.geol_coll.get_uid_role(uid)
+        entity_feature = self.geol_coll.get_uid_feature(uid)
+        entity_scenario = self.geol_coll.get_uid_scenario(uid)
+        has_normals = "Normals" in self.geol_coll.get_uid_properties_names(uid)
+        # -------------------------------------------------------------------
+        # feature_name value (always assigned, from legend sequence)
+        # -------------------------------------------------------------------
         featname_single = self.geol_coll.legend_df.loc[
-            (self.geol_coll.legend_df["role"] == self.geol_coll.get_uid_role(uid))
-            & (
-                self.geol_coll.legend_df["feature"]
-                == self.geol_coll.get_uid_feature(uid)
-            )
-            & (
-                self.geol_coll.legend_df["scenario"]
-                == self.geol_coll.get_uid_scenario(uid)
-            ),
+            (self.geol_coll.legend_df["role"] == entity_role)
+            & (self.geol_coll.legend_df["feature"] == entity_feature)
+            & (self.geol_coll.legend_df["scenario"] == entity_scenario),
             "sequence",
         ].values[0]
         entity_input_data_df["feature_name"] = featname_single
-        # val value
-        val_single = self.geol_coll.legend_df.loc[
-            (self.geol_coll.legend_df["role"] == self.geol_coll.get_uid_role(uid))
-            & (
-                self.geol_coll.legend_df["feature"]
-                == self.geol_coll.get_uid_feature(uid)
+        # -------------------------------------------------------------------
+        # Constraint type assignment based on role
+        # -------------------------------------------------------------------
+        if entity_role in volume_roles:
+            # ----- VOLUME MEASUREMENT: point lies WITHIN the rock unit -----
+            # Normals as gradient-only constraints (gx, gy, gz).
+            # These orient the foliation without constraining the scalar
+            # field value at these points.
+            if has_normals:
+                entity_input_data_df[["gx", "gy", "gz"]] = (
+                    self.geol_coll.get_uid_property(uid=uid, property_name="Normals")
+                )
+            # Implicit inequality translation: look in the legend_df for
+            # base/top roles of the same feature to determine whether an
+            # inequality constraint can be added. We do NOT filter by
+            # scenario here: field measurements (bedding/foliation) are
+            # objective data that should constrain any scenario, even if
+            # the reference surface (base/top) belongs to a different one.
+            legend_mask = (
+                self.geol_coll.legend_df["feature"] == entity_feature
             )
-            & (
-                self.geol_coll.legend_df["scenario"]
-                == self.geol_coll.get_uid_scenario(uid)
-            ),
-            "time",
-        ].values[0]
-        if val_single == -999999.0:
-            val_single = float("nan")
-        entity_input_data_df["val"] = val_single
-        # nx, ny and nz: TO BE IMPLEMENTED
-        # gx, gy and gz: TO BE IMPLEMENTED
+            legend_roles = set(
+                self.geol_coll.legend_df.loc[legend_mask, "role"].values
+            )
+            if "base" in legend_roles:
+                base_time = self.geol_coll.legend_df.loc[
+                    legend_mask
+                    & (self.geol_coll.legend_df["role"] == "base"),
+                    "time",
+                ].values[0]
+                if base_time == -999999.0:
+                    base_time = float("nan")
+                entity_input_data_df["val"] = base_time
+                entity_input_data_df["w"] = 1.0  # above: scalar field >= val
+                self.print_terminal(
+                    f"   {self.geol_coll.get_uid_name(uid)}: "
+                    f"role='{entity_role}' -> GRADIENT"
+                    + (" + normals" if has_normals else "")
+                    + f" + INEQUALITY ABOVE base (val >= {base_time})"
+                )
+            elif "top" in legend_roles:
+                top_time = self.geol_coll.legend_df.loc[
+                    legend_mask
+                    & (self.geol_coll.legend_df["role"] == "top"),
+                    "time",
+                ].values[0]
+                if top_time == -999999.0:
+                    top_time = float("nan")
+                entity_input_data_df["val"] = top_time
+                entity_input_data_df["w"] = -1.0  # below: scalar field <= val
+                self.print_terminal(
+                    f"   {self.geol_coll.get_uid_name(uid)}: "
+                    f"role='{entity_role}' -> GRADIENT"
+                    + (" + normals" if has_normals else "")
+                    + f" + INEQUALITY BELOW top (val <= {top_time})"
+                )
+            else:
+                # No base or top in legend for this feature: gradient only
+                self.print_terminal(
+                    f"   {self.geol_coll.get_uid_name(uid)}: "
+                    f"role='{entity_role}' -> GRADIENT ONLY"
+                    + (" + normals" if has_normals else "")
+                )
+        else:
+            # ----- EQUALITY CONSTRAINT: point lies ON a surface -----
+            # This applies to ALL roles except volume_roles (bedding,
+            # foliation). Includes top, base, tectonic, fault, intrusive,
+            # unconformity, formation, and any other current or future role.
+            val_single = self.geol_coll.legend_df.loc[
+                (self.geol_coll.legend_df["role"] == entity_role)
+                & (self.geol_coll.legend_df["feature"] == entity_feature)
+                & (self.geol_coll.legend_df["scenario"] == entity_scenario),
+                "time",
+            ].values[0]
+            if val_single == -999999.0:
+                val_single = float("nan")
+            entity_input_data_df["val"] = val_single
+            if has_normals:
+                entity_input_data_df[["nx", "ny", "nz"]] = (
+                    self.geol_coll.get_uid_property(uid=uid, property_name="Normals")
+                )
+            self.print_terminal(
+                f"   {self.geol_coll.get_uid_name(uid)}: "
+                f"role='{entity_role}' -> EQUALITY (val={val_single})"
+                + (" + normals" if has_normals else "")
+            )
         # Append dataframe for this input entity to the general input dataframe.
         # Old Pandas <= 1.5.3
         # all_input_data_df = all_input_data_df.append(
@@ -706,6 +786,16 @@ def implicit_model_loop_structural(self):
     tic(parent=self)
     all_input_data_df.dropna(axis=1, how="all", inplace=True)
     toc(parent=self)
+    # Print constraint summary
+    n_with_val = all_input_data_df["val"].notna().sum() if "val" in all_input_data_df.columns else 0
+    n_with_nx = all_input_data_df["nx"].notna().sum() if "nx" in all_input_data_df.columns else 0
+    n_with_gx = all_input_data_df["gx"].notna().sum() if "gx" in all_input_data_df.columns else 0
+    n_with_w = all_input_data_df["w"].notna().sum() if "w" in all_input_data_df.columns else 0
+    self.print_terminal("-> Constraint summary:")
+    self.print_terminal(f"   Points with val (equality + inequality): {n_with_val}")
+    self.print_terminal(f"   Points with surface normals (nx,ny,nz): {n_with_nx}")
+    self.print_terminal(f"   Points with volume gradients (gx,gy,gz): {n_with_gx}")
+    self.print_terminal(f"   Points with inequality flag (w): {n_with_w}")
     self.print_terminal(f"all_input_data_df:\n{all_input_data_df}")
     # Ask for bounding box for the model
     input_dict = {
