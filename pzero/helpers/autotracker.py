@@ -113,6 +113,41 @@ class Autotracker:
         """Update tracking parameters."""
         self.tracking_params.update(params)
 
+    @staticmethod
+    def _regularize_horizon_positions(
+        positions: List[Tuple[int, int]]
+    ) -> List[Tuple[int, int]]:
+        """
+        Collapse a horizon to at most one depth sample per lateral row.
+
+        Fault-aware tracking can transiently produce multiple candidate depths for the
+        same row when the picked horizon crosses faults. Rendering those duplicates as
+        one polyline creates self-overlap that looks like a second parallel horizon.
+        Keep a single, continuity-preserving pick per row before storing/propagating.
+        """
+        if not positions:
+            return []
+
+        row_to_cols: Dict[int, List[int]] = {}
+        for row, col in positions:
+            row_i = int(row)
+            col_i = int(col)
+            row_to_cols.setdefault(row_i, []).append(col_i)
+
+        regularized: List[Tuple[int, int]] = []
+        prev_col: Optional[float] = None
+
+        for row in sorted(row_to_cols.keys()):
+            cols = np.array(sorted(row_to_cols[row]), dtype=np.float64)
+            if cols.size == 1 or prev_col is None:
+                chosen_col = float(np.median(cols))
+            else:
+                chosen_col = float(cols[int(np.argmin(np.abs(cols - prev_col)))])
+            regularized.append((int(row), int(round(chosen_col))))
+            prev_col = chosen_col
+
+        return regularized
+
     def track_horizon(
         self,
         data_3d: np.ndarray,
@@ -179,9 +214,9 @@ class Autotracker:
         update_progress(f"Starting tracking with: {', '.join(attr_names)}...", 0)
 
         horizons = {}
-        horizons[seed_slice_idx] = list(seed_positions)
+        current_positions = self._regularize_horizon_positions(list(seed_positions))
+        horizons[seed_slice_idx] = list(current_positions)
 
-        current_positions = list(seed_positions)
         total_slices = len(slices_to_track)
 
         if total_slices == 0:
@@ -218,6 +253,7 @@ class Autotracker:
 
                 # Apply smoothing
                 new_positions = self._smooth_positions(new_positions, faults_on_slice)
+                new_positions = self._regularize_horizon_positions(new_positions)
 
                 horizons[slice_idx] = new_positions
                 current_positions = new_positions

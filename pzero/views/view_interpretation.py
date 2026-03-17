@@ -2333,6 +2333,8 @@ class ViewInterpretation(ViewMap):
                 self._remove_filtered_actor(actor_name)
             except Exception:
                 pass
+            # Multipart horizons must never leak their full actor into the slice view.
+            self._remove_raw_actor_for_uid(horizon_uid)
 
             if not self._is_uid_enabled_in_tree(horizon_uid):
                 self.set_actor_visibility(horizon_uid, False)
@@ -2356,7 +2358,7 @@ class ViewInterpretation(ViewMap):
                 vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(horizon_uid)
                 if vtk_obj is None:
                     continue
-            except Exception as e:
+            except Exception:
                 continue
             
             # Extract only cells matching current slice using direct cell iteration
@@ -2381,39 +2383,15 @@ class ViewInterpretation(ViewMap):
                 if len(matching_cell_ids) == 0:
                     self.set_actor_visibility(horizon_uid, False)
                     continue
-                
-                # Extract the matching cells manually
-                from vtk import vtkPoints, vtkCellArray, vtkPolyData
-                
-                new_points = vtkPoints()
-                new_lines = vtkCellArray()
-                point_map = {}  # old_id -> new_id
-                
-                for cell_id in matching_cell_ids:
-                    cell = vtk_obj.GetCell(cell_id)
-                    n_pts = cell.GetNumberOfPoints()
-                    
-                    new_line_pts = []
-                    for j in range(n_pts):
-                        old_pt_id = cell.GetPointId(j)
-                        
-                        if old_pt_id not in point_map:
-                            pt = vtk_obj.GetPoint(old_pt_id)
-                            new_pt_id = new_points.InsertNextPoint(pt)
-                            point_map[old_pt_id] = new_pt_id
-                        
-                        new_line_pts.append(point_map[old_pt_id])
-                    
-                    # Add the line cell
-                    new_lines.InsertNextCell(len(new_line_pts))
-                    for pt_id in new_line_pts:
-                        new_lines.InsertCellPoint(pt_id)
-                
-                # Create filtered polydata
-                filtered_polydata = vtkPolyData()
-                filtered_polydata.SetPoints(new_points)
-                filtered_polydata.SetLines(new_lines)
-                
+
+                filtered_polydata, _, _ = self._build_multipart_subset_vtk(
+                    vtk_obj=vtk_obj,
+                    kept_cell_ids=matching_cell_ids,
+                )
+                if filtered_polydata is None:
+                    self.set_actor_visibility(horizon_uid, False)
+                    continue
+
                 n_filtered_cells = filtered_polydata.GetNumberOfCells()
                 n_filtered_points = filtered_polydata.GetNumberOfPoints()
                 
@@ -5042,6 +5020,8 @@ class ViewInterpretation(ViewMap):
                 except Exception as e:
                     self.print_terminal(f"Could not set line width: {e}")
                 
+                self._mark_slice_visibility_dirty()
+                self.update_interpretation_line_visibility()
                 self.update_multipart_horizon_visibility(new_uid)
             else:
                 self.print_terminal("No valid line segments were created during propagation!")
