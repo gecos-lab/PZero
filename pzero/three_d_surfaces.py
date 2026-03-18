@@ -3311,11 +3311,41 @@ def implicit_model_loop_structural_with_faults(self):
                 f"splay={params.get('splay_fault') if params.get('has_splay') else 'None'}"
             )
 
+    model_name = "Loop_model_faults"
+    fault_creation_order = _sorted_fault_names_by_time(fault_data, older_first=True)
+    sequence_names = sorted(
+        sequence_data.keys(), key=lambda name: sequence_data[name]["order"]
+    )
+    interpolation_progress = progress_dialog(
+        max_value=max(
+            1,
+            1
+            + len(fault_creation_order)
+            + 1
+            + len(sequence_names)
+            + 1
+            + max(len(fault_creation_order) + len(sequence_names), 1)
+            + 1
+            + len(fault_creation_order)
+            + len(sequence_names),
+        ),
+        title_txt="Implicit Modelling with Faults",
+        label_txt="Creating LoopStructural model...",
+        cancel_txt=None,
+        parent=self,
+    )
+
+    def _advance_interpolation_progress(label_txt=None):
+        if label_txt is not None:
+            interpolation_progress.setLabelText(label_txt)
+        interpolation_progress.add_one()
+
     self.print_terminal("-> Creating LoopStructural model...")
     tic(parent=self)
     model = GeologicalModel(origin, maximum)
     model.set_model_data(all_input_data_df)
     toc(parent=self)
+    _advance_interpolation_progress("Creating faults...")
     self.print_terminal(
         f"Input dataframe rows: {len(all_input_data_df)}, features: "
         f"{sorted(all_input_data_df['feature_name'].dropna().unique().tolist())}"
@@ -3325,7 +3355,6 @@ def implicit_model_loop_structural_with_faults(self):
     tic(parent=self)
     created_fault_features = []
     created_fault_features_by_name = {}
-    fault_creation_order = _sorted_fault_names_by_time(fault_data, older_first=True)
 
     for fault_name in fault_creation_order:
         fault_info = fault_data[fault_name]
@@ -3491,6 +3520,7 @@ def implicit_model_loop_structural_with_faults(self):
 
             self.print_terminal(f"    ERROR creating fault '{fault_name}': {e}")
             self.print_terminal(traceback.format_exc())
+        _advance_interpolation_progress()
 
     if created_fault_features_by_name:
         self.print_terminal("-> Applying fault interactions (abutting/splay)...")
@@ -3564,10 +3594,8 @@ def implicit_model_loop_structural_with_faults(self):
                             )
 
     toc(parent=self)
+    _advance_interpolation_progress("Creating foliations...")
 
-    sequence_names = sorted(
-        sequence_data.keys(), key=lambda name: sequence_data[name]["order"]
-    )
     if sequence_names:
         self.print_terminal("-> Creating foliations (affected by faults)...")
         tic(parent=self)
@@ -3604,6 +3632,7 @@ def implicit_model_loop_structural_with_faults(self):
                     f"  ERROR creating foliation '{sequence_name}': {e}"
                 )
                 self.print_terminal(traceback.format_exc())
+            _advance_interpolation_progress()
         toc(parent=self)
 
     self.print_terminal("-> Evaluating model on regular grid(s)...")
@@ -3618,10 +3647,10 @@ def implicit_model_loop_structural_with_faults(self):
             nsteps=dimensions_strati, shuffle=False, rescale=False
         )
     toc(parent=self)
+    _advance_interpolation_progress("Evaluating model features...")
 
     self.print_terminal("-> Creating output Voxet(s)...")
     tic(parent=self)
-    model_name = "Loop_model_faults"
 
     voxet_dict = deepcopy(self.mesh3d_coll.entity_dict)
     voxet_dict["name"] = model_name
@@ -3724,6 +3753,9 @@ def implicit_model_loop_structural_with_faults(self):
     fault_names = set(fault_data.keys())
 
     for feature in model.features:
+        interpolation_progress.setLabelText(
+            f"Evaluating feature: {feature.name}..."
+        )
         self.print_terminal(
             f"  Evaluating feature: {feature.name} (type: {feature.type})"
         )
@@ -3757,39 +3789,22 @@ def implicit_model_loop_structural_with_faults(self):
 
             self.print_terminal(f"    ERROR evaluating {feature.name}: {e}")
             self.print_terminal(traceback.format_exc())
+        _advance_interpolation_progress()
 
-    model_name_input = input_text_dialog(
-        title="Implicit Modelling with Faults",
-        label="Name of the output Voxet",
-        default_text=model_name,
-    )
-    if model_name_input:
-        model_name = model_name_input
     voxet_dict["name"] = model_name
     if fault_voxet_dict is not None:
         fault_voxet_dict["name"] = f"{model_name}_faults"
 
-    if voxet_dict["vtk_obj"].points_number > 0:
-        self.mesh3d_coll.add_entity_from_dict(voxet_dict)
-        self.print_terminal(
-            f"  Voxet '{model_name}' created with properties: {voxet_dict['properties_names']}"
-        )
-    if (
-        fault_voxet_dict is not None
-        and fault_voxet_dict["vtk_obj"].points_number > 0
-        and fault_voxet_dict["properties_names"]
-    ):
-        self.mesh3d_coll.add_entity_from_dict(fault_voxet_dict)
-        self.print_terminal(
-            f"  Voxet '{fault_voxet_dict['name']}' created with properties: "
-            f"{fault_voxet_dict['properties_names']}"
-        )
-
     toc(parent=self)
+    _advance_interpolation_progress("Extracting fault surfaces...")
 
     self.print_terminal("-> Extracting fault surfaces...")
     tic(parent=self)
+    pending_fault_surfaces = []
     for fault_name in fault_creation_order:
+        interpolation_progress.setLabelText(
+            f"Extracting fault surface: {fault_name}..."
+        )
         fault_info = fault_data[fault_name]
         try:
             fault_params_single = fault_params_by_name.get(fault_name, {})
@@ -3818,7 +3833,7 @@ def implicit_model_loop_structural_with_faults(self):
 
             if n_points > 0:
                 surf_dict = deepcopy(self.geol_coll.entity_dict)
-                surf_dict["name"] = f"{fault_name}_surface_from_{model_name}"
+                surf_dict["name"] = fault_name
                 surf_dict["topology"] = "TriSurf"
                 surf_dict["role"] = "fault"
                 surf_dict["feature"] = fault_info["feature"]
@@ -3835,7 +3850,7 @@ def implicit_model_loop_structural_with_faults(self):
                     isinstance(surf_dict["vtk_obj"].points, np_ndarray)
                     and len(surf_dict["vtk_obj"].points) > 0
                 ):
-                    self.geol_coll.add_entity_from_dict(surf_dict)
+                    pending_fault_surfaces.append((fault_name, surf_dict))
                     self.print_terminal(
                         f"    Fault surface '{fault_name}' extracted ({n_points} points)"
                     )
@@ -3854,12 +3869,18 @@ def implicit_model_loop_structural_with_faults(self):
                 f"  ERROR extracting fault surface '{fault_name}': {e}"
             )
             self.print_terminal(traceback.format_exc())
+        _advance_interpolation_progress()
     toc(parent=self)
 
     if sequence_names:
+        interpolation_progress.setLabelText("Extracting stratigraphy isosurfaces...")
         self.print_terminal("-> Extracting stratigraphy isosurfaces...")
         tic(parent=self)
+        pending_stratigraphy_surfaces = []
         for sequence_name in sequence_names:
+            interpolation_progress.setLabelText(
+                f"Extracting stratigraphy: {sequence_name}..."
+            )
             try:
                 if sequence_name not in voxet_dict["properties_names"]:
                     self.print_terminal(
@@ -3905,9 +3926,7 @@ def implicit_model_loop_structural_with_faults(self):
                         continue
 
                     surf_dict = deepcopy(self.geol_coll.entity_dict)
-                    surf_dict["name"] = (
-                        f"{metadata.get('feature', sequence_name)}_from_{model_name}"
-                    )
+                    surf_dict["name"] = metadata.get("feature", sequence_name)
                     surf_dict["topology"] = "TriSurf"
                     surf_dict["role"] = metadata.get("role", "undef")
                     surf_dict["feature"] = metadata.get("feature", sequence_name)
@@ -3924,7 +3943,9 @@ def implicit_model_loop_structural_with_faults(self):
                         isinstance(surf_dict["vtk_obj"].points, np_ndarray)
                         and len(surf_dict["vtk_obj"].points) > 0
                     ):
-                        self.geol_coll.add_entity_from_dict(surf_dict)
+                        pending_stratigraphy_surfaces.append(
+                            (metadata.get("feature", sequence_name), surf_dict)
+                        )
                         self.print_terminal(
                             f"      Iso-surface at value = {float(value)} created ({n_points} points)"
                         )
@@ -3939,9 +3960,50 @@ def implicit_model_loop_structural_with_faults(self):
                     f"  ERROR extracting stratigraphy surfaces for '{sequence_name}': {e}"
                 )
                 self.print_terminal(traceback.format_exc())
+            _advance_interpolation_progress()
         toc(parent=self)
+    else:
+        pending_stratigraphy_surfaces = []
 
     voxet_dict["vtk_obj"].Modified()
+    interpolation_progress.close()
+
+    model_name_input = input_text_dialog(
+        title="Implicit Modelling with Faults",
+        label="Name of the output Voxet",
+        default_text=model_name,
+    )
+    if model_name_input:
+        model_name = model_name_input
+
+    voxet_dict["name"] = model_name
+    if fault_voxet_dict is not None:
+        fault_voxet_dict["name"] = f"{model_name}_faults"
+
+    if voxet_dict["vtk_obj"].points_number > 0:
+        self.mesh3d_coll.add_entity_from_dict(voxet_dict)
+        self.print_terminal(
+            f"  Voxet '{model_name}' created with properties: {voxet_dict['properties_names']}"
+        )
+    if (
+        fault_voxet_dict is not None
+        and fault_voxet_dict["vtk_obj"].points_number > 0
+        and fault_voxet_dict["properties_names"]
+    ):
+        self.mesh3d_coll.add_entity_from_dict(fault_voxet_dict)
+        self.print_terminal(
+            f"  Voxet '{fault_voxet_dict['name']}' created with properties: "
+            f"{fault_voxet_dict['properties_names']}"
+        )
+
+    for fault_name, surf_dict in pending_fault_surfaces:
+        surf_dict["name"] = f"{fault_name}_surface_from_{model_name}"
+        self.geol_coll.add_entity_from_dict(surf_dict)
+
+    for surface_feature_name, surf_dict in pending_stratigraphy_surfaces:
+        surf_dict["name"] = f"{surface_feature_name}_from_{model_name}"
+        self.geol_coll.add_entity_from_dict(surf_dict)
+
     self.print_terminal("Loop interpolation with faults completed.")
 
 
