@@ -1301,16 +1301,176 @@ def _compute_fault_box_in_axes(points, axes):
     return center, normed_axes, lengths
 
 
-def _orient_fault_axes_for_rake(axes, center_normal=None):
-    """
-    Orient fault axes so rake conventions are stable:
-    - intermediate axis points to the "upper" direction on the fault plane
-    - normal axis is aligned with center_normal when available
-    - deterministic fallback for vertical/degenerate cases
-    """
+def _project_vector_to_plane(vector, normal, fallback=None):
+    """Project a vector onto a plane and normalize the result."""
     from numpy import array as np_array
     from numpy import dot as np_dot
+    from numpy import linalg as np_linalg
+
+    vector = np_array(vector, dtype=float)
+    normal = np_array(normal, dtype=float)
+    projected = vector - np_dot(vector, normal) * normal
+    projected_norm = np_linalg.norm(projected)
+    if projected_norm > 1e-9:
+        return projected / projected_norm
+    if fallback is not None:
+        fallback_vec = np_array(fallback, dtype=float)
+        fallback_projected = fallback_vec - np_dot(fallback_vec, normal) * normal
+        fallback_norm = np_linalg.norm(fallback_projected)
+        if fallback_norm > 1e-9:
+            return fallback_projected / fallback_norm
+    return None
+
+
+def _principal_direction_from_points(points, fallback=None):
+    """Return the dominant PCA direction for a 3D point cloud."""
+    from numpy import array as np_array
+    from numpy import argsort as np_argsort
+    from numpy import cov as np_cov
+    from numpy import linalg as np_linalg
+    from numpy import mean as np_mean
+
+    points = np_array(points, dtype=float)
+    if points.ndim != 2 or points.shape[1] < 3 or points.shape[0] < 2:
+        points = np_array([])
+    if points.size == 0:
+        if fallback is None:
+            return None
+        fallback = np_array(fallback, dtype=float)
+        fallback_norm = np_linalg.norm(fallback)
+        return fallback / fallback_norm if fallback_norm > 1e-9 else None
+
+    if points.shape[0] == 2:
+        direction = points[1] - points[0]
+    else:
+        centered = points - np_mean(points, axis=0)
+        cov_matrix = np_cov(centered.T)
+        eigenvalues, eigenvectors_cols = np_linalg.eigh(cov_matrix)
+        direction = eigenvectors_cols[:, np_argsort(eigenvalues)[::-1][0]]
+
+    direction_norm = np_linalg.norm(direction)
+    if direction_norm > 1e-9:
+        return direction / direction_norm
+    if fallback is None:
+        return None
+    fallback = np_array(fallback, dtype=float)
+    fallback_norm = np_linalg.norm(fallback)
+    return fallback / fallback_norm if fallback_norm > 1e-9 else None
+
+
+def _infer_fault_normal(points, explicit_normal=None, trace_points=None, fallback_axes=None):
+    """
+    Infer a stable fault normal from explicit normals first, then 3D geometry.
+
+    `PolyLine` trace points are only used as a last-resort vertical-fault
+    assumption when the merged geometry is effectively line-like.
+    """
+    from numpy import array as np_array
+    from numpy import argsort as np_argsort
+    from numpy import cov as np_cov
     from numpy import cross as np_cross
+    from numpy import dot as np_dot
+    from numpy import linalg as np_linalg
+    from numpy import mean as np_mean
+
+    def _normed(vec, fallback=None):
+        if vec is None:
+            vec = np_array([])
+        vec = np_array(vec, dtype=float)
+        vec_norm = np_linalg.norm(vec)
+        if vec_norm > 1e-9:
+            return vec / vec_norm
+        if fallback is not None:
+            fallback_vec = np_array(fallback, dtype=float)
+            fallback_norm = np_linalg.norm(fallback_vec)
+            if fallback_norm > 1e-9:
+                return fallback_vec / fallback_norm
+        return np_array([0.0, 0.0, 1.0], dtype=float)
+
+    fallback_normal = None
+    if fallback_axes is not None:
+        fallback_axes = np_array(fallback_axes, dtype=float)
+        if fallback_axes.shape == (3, 3):
+            fallback_normal = _normed(fallback_axes[2], fallback=[0.0, 0.0, 1.0])
+
+    if explicit_normal is not None:
+        normal = _normed(explicit_normal, fallback=fallback_normal)
+        if fallback_normal is not None and np_dot(normal, fallback_normal) < 0.0:
+            normal = -normal
+        return {
+            "normal": normal,
+            "source": "input_normals",
+            "line_ratio": float("nan"),
+            "plane_ratio": float("nan"),
+            "line_like": False,
+        }
+
+    points = np_array(points, dtype=float)
+    if points.ndim == 2 and points.shape[0] >= 3 and points.shape[1] >= 3:
+        centered = points - np_mean(points, axis=0)
+        cov_matrix = np_cov(centered.T)
+        eigenvalues, eigenvectors_cols = np_linalg.eigh(cov_matrix)
+        sort_idx = np_argsort(eigenvalues)[::-1]
+        eigenvalues = np_array(eigenvalues[sort_idx], dtype=float)
+        axes = eigenvectors_cols[:, sort_idx].T
+        if np_dot(np_cross(axes[0], axes[1]), axes[2]) < 0.0:
+            axes[2] = -axes[2]
+
+        line_ratio = (
+            float(eigenvalues[1] / eigenvalues[0]) if eigenvalues[0] > 1e-12 else 0.0
+        )
+        plane_ratio = (
+            float(eigenvalues[2] / eigenvalues[1]) if eigenvalues[1] > 1e-12 else float("inf")
+        )
+        line_like = line_ratio < 0.02
+        if not line_like:
+            normal = _normed(axes[2], fallback=fallback_normal)
+            if fallback_normal is not None and np_dot(normal, fallback_normal) < 0.0:
+                normal = -normal
+            return {
+                "normal": normal,
+                "source": "best_fit_plane",
+                "line_ratio": line_ratio,
+                "plane_ratio": plane_ratio,
+                "line_like": False,
+            }
+
+    trace_direction = _principal_direction_from_points(trace_points)
+    if trace_direction is not None:
+        vertical_normal = np_cross(trace_direction, np_array([0.0, 0.0, 1.0], dtype=float))
+        vertical_normal = _normed(vertical_normal, fallback=fallback_normal)
+        if fallback_normal is not None and np_dot(vertical_normal, fallback_normal) < 0.0:
+            vertical_normal = -vertical_normal
+        return {
+            "normal": vertical_normal,
+            "source": "trace_vertical_assumption",
+            "line_ratio": float("nan"),
+            "plane_ratio": float("nan"),
+            "line_like": True,
+        }
+
+    normal = _normed(fallback_normal, fallback=[0.0, 0.0, 1.0])
+    return {
+        "normal": normal,
+        "source": "obb_minor_axis_fallback",
+        "line_ratio": float("nan"),
+        "plane_ratio": float("nan"),
+        "line_like": True,
+    }
+
+
+def _orient_fault_axes_for_rake(axes, center_normal=None, trace_points=None):
+    """
+    Build a stable support frame for a fault from the OBB and inferred normal.
+
+    The returned basis is fixed to the input geometry:
+    - axis 0: trace-like direction inside the fault plane
+    - axis 1: dip-like direction inside the fault plane
+    - axis 2: fault normal
+    """
+    from numpy import array as np_array
+    from numpy import cross as np_cross
+    from numpy import dot as np_dot
     from numpy import linalg as np_linalg
     from numpy import identity as np_identity
 
@@ -1330,42 +1490,33 @@ def _orient_fault_axes_for_rake(axes, center_normal=None):
         return np_array([1.0, 0.0, 0.0], dtype=float)
 
     major = _normed(axes[0], fallback=[1.0, 0.0, 0.0])
-    normal = _normed(axes[2], fallback=[0.0, 0.0, 1.0])
+    intermediate = _normed(axes[1], fallback=[0.0, 1.0, 0.0])
+    normal = _normed(center_normal, fallback=axes[2])
 
-    north = np_array([0.0, 1.0, 0.0], dtype=float)
+    preferred_trace = _project_vector_to_plane(major, normal, fallback=intermediate)
+    trace_from_polyline = _project_vector_to_plane(
+        _principal_direction_from_points(trace_points, fallback=preferred_trace),
+        normal,
+        fallback=preferred_trace,
+    )
+    trace_axis = trace_from_polyline if trace_from_polyline is not None else preferred_trace
+    if trace_axis is None:
+        trace_axis = _project_vector_to_plane(intermediate, normal, fallback=[1.0, 0.0, 0.0])
+    trace_axis = _normed(trace_axis, fallback=[1.0, 0.0, 0.0])
 
-    if center_normal is not None:
-        cn = _normed(np_array(center_normal, dtype=float), fallback=[0.0, 0.0, 1.0])
-        if np_dot(normal, cn) < 0.0:
-            normal = -normal
-    elif abs(normal[2]) <= 1e-6:
-        # Rare vertical-fault fallback requested by user: point normal to north.
-        if np_dot(normal, north) < 0.0:
-            normal = -normal
+    if preferred_trace is not None and np_dot(trace_axis, preferred_trace) < 0.0:
+        trace_axis = -trace_axis
 
-    up = np_array([0.0, 0.0, 1.0], dtype=float)
+    dip_axis = _normed(np_cross(normal, trace_axis), fallback=[0.0, 0.0, 1.0])
+    up_proj = _project_vector_to_plane([0.0, 0.0, 1.0], normal, fallback=[0.0, 1.0, 0.0])
+    if up_proj is not None and np_dot(dip_axis, up_proj) < 0.0:
+        trace_axis = -trace_axis
+        dip_axis = -dip_axis
 
-    # Up direction projected on fault plane: gives deterministic up-dip direction.
-    up_proj = up - np_dot(up, normal) * normal
-    if np_linalg.norm(up_proj) <= 1e-9:
-        # Rare fallback: if projection is degenerate, use north projected on plane.
-        up_proj = north - np_dot(north, normal) * normal
+    if np_dot(np_cross(trace_axis, dip_axis), normal) < 0.0:
+        dip_axis = -dip_axis
 
-    if np_linalg.norm(up_proj) > 1e-9:
-        intermediate = _normed(up_proj, fallback=[0.0, 1.0, 0.0])
-        major_candidate = np_cross(intermediate, normal)
-        major = _normed(major_candidate, fallback=major)
-    else:
-        # Last-resort orthonormalization from current major.
-        major = major - np_dot(major, normal) * normal
-        major = _normed(major, fallback=[1.0, 0.0, 0.0])
-        intermediate = _normed(np_cross(normal, major), fallback=[0.0, 1.0, 0.0])
-
-    # Keep right-handed frame.
-    if np_dot(np_cross(major, intermediate), normal) < 0.0:
-        major = -major
-
-    return np_array([major, intermediate, normal], dtype=float)
+    return np_array([trace_axis, dip_axis, normal], dtype=float)
 
 
 def _compute_fault_slip_vector_from_rake(axes, rake_deg):
@@ -1476,9 +1627,8 @@ def _extract_fault_surface_local_grid(model, fault_name, center, axes, lengths, 
     """
     Extract a fault surface on an oriented local grid tied to the fault OBB.
 
-    Sampling the fault on its own OBB avoids exporting the unbounded fault
-    surface across the whole model box, which was making output fault OBBs
-    inherit the main model boundary orientation.
+    Sampling inside the fault support box keeps the exported fault surface
+    bounded to the same OBB used for the fault displacement support.
     """
     from pyvista import StructuredGrid as pv_StructuredGrid
     from numpy import array as np_array
@@ -1542,12 +1692,6 @@ def _extract_fault_surface_local_grid(model, fault_name, center, axes, lengths, 
             dtype=float,
         )
         valid_values = scalar_field[~np_isnan(scalar_field)]
-        if valid_values.size == 0:
-            scalar_field = np_array(
-                surface_feature.evaluate_value(eval_points, ignore_regions=True),
-                dtype=float,
-            )
-            valid_values = scalar_field[~np_isnan(scalar_field)]
         if valid_values.size == 0:
             continue
         if valid_values.min() > 0.0 or valid_values.max() < 0.0:
@@ -1623,68 +1767,101 @@ def _make_fault_group_name(feature, scenario, fallback_name="fault"):
     return "_".join(tokens)
 
 
-def _compute_fault_geometry_for_rake(points, plane_axes, center_normal, rake_deg):
-    """
-    Build LoopStructural fault geometry from an OBB-derived fault plane and rake.
-
-    The returned basis matches LoopStructural's actual semantics:
-    axis 0 = trace direction = cross(normal, slip)
-    axis 1 = slip direction
-    axis 2 = fault normal
-    """
+def _compute_fault_loop_geometry(center, axes, lengths, rake_deg):
+    """Return LoopStructural's rotating trace/slip/normal basis for a support box."""
     from numpy import array as np_array
     from numpy import cross as np_cross
     from numpy import dot as np_dot
-    from numpy import identity as np_identity
     from numpy import linalg as np_linalg
 
-    points = np_array(points, dtype=float)
-    oriented_plane_axes = _orient_fault_axes_for_rake(
-        plane_axes, center_normal=center_normal
-    )
+    center = np_array(center, dtype=float)
+    axes = np_array(axes, dtype=float)
+    lengths = _normalise_fault_obb_lengths(np_array(lengths, dtype=float))
+
     (
         slip_vector,
         strike_axis,
         dip_axis,
         fault_normal,
         rake_components,
-    ) = _compute_fault_slip_vector_from_rake(oriented_plane_axes, rake_deg)
+    ) = _compute_fault_slip_vector_from_rake(axes, rake_deg)
 
-    trace_axis = np_cross(fault_normal, slip_vector)
-    trace_norm = np_linalg.norm(trace_axis)
-    if trace_norm <= 1e-9:
-        trace_axis = strike_axis
+    loop_trace_axis = np_cross(fault_normal, slip_vector)
+    loop_trace_norm = np_linalg.norm(loop_trace_axis)
+    if loop_trace_norm <= 1e-9:
+        loop_trace_axis = strike_axis
     else:
-        trace_axis = trace_axis / trace_norm
+        loop_trace_axis = loop_trace_axis / loop_trace_norm
 
-    loop_axes = np_array([trace_axis, slip_vector, fault_normal], dtype=float)
+    loop_axes = np_array([loop_trace_axis, slip_vector, fault_normal], dtype=float)
     if np_dot(np_cross(loop_axes[0], loop_axes[1]), loop_axes[2]) < 0.0:
         loop_axes[0] = -loop_axes[0]
 
-    if points.size == 0:
-        center = np_array([0.0, 0.0, 0.0], dtype=float)
-        lengths = np_array([0.0, 0.0, 0.0], dtype=float)
-        loop_axes = np_identity(3)
-    else:
-        center, loop_axes, lengths = _compute_fault_box_in_axes(points, loop_axes)
+    corners = _build_fault_box_corners(center, axes, lengths)
+    _, _, loop_lengths = _compute_fault_box_in_axes(corners, loop_axes)
 
     return {
-        "center": center,
-        "axes": loop_axes,
-        "lengths": _normalise_fault_obb_lengths(lengths),
-        "plane_axes": oriented_plane_axes,
-        "trace_axis": loop_axes[0],
-        "slip_axis": loop_axes[1],
-        "normal": loop_axes[2],
+        "loop_axes": loop_axes,
+        "loop_lengths": _normalise_fault_obb_lengths(loop_lengths),
+        "loop_trace_axis": loop_axes[0],
+        "slip_vector": slip_vector,
         "strike_axis": strike_axis,
         "dip_axis": dip_axis,
-        "slip_vector": slip_vector,
+        "fault_normal": fault_normal,
         "rake_components": rake_components,
     }
 
 
-def _compute_scaled_fault_geometry(fault_info, rake_deg, scale_factors=None):
-    """Return raw and scaled Loop-basis fault geometry for the requested rake."""
+def _compute_fault_geometry_for_rake(
+    points, plane_axes, center_normal, rake_deg, trace_points=None
+):
+    """
+    Build fault geometry while keeping the support box tied to the input OBB.
+
+    The support frame stays fixed to the inferred trace-like / dip-like axes.
+    LoopStructural's rotating trace axis is derived separately from rake.
+    """
+    from numpy import array as np_array
+    from numpy import identity as np_identity
+
+    points = np_array(points, dtype=float)
+    oriented_plane_axes = _orient_fault_axes_for_rake(
+        plane_axes, center_normal=center_normal, trace_points=trace_points
+    )
+
+    if points.size == 0:
+        center = np_array([0.0, 0.0, 0.0], dtype=float)
+        lengths = np_array([0.0, 0.0, 0.0], dtype=float)
+        oriented_plane_axes = np_identity(3)
+    else:
+        center, oriented_plane_axes, lengths = _compute_fault_box_in_axes(
+            points, oriented_plane_axes
+        )
+
+    loop_geometry = _compute_fault_loop_geometry(center, oriented_plane_axes, lengths, rake_deg)
+
+    return {
+        "center": center,
+        "axes": oriented_plane_axes,
+        "lengths": _normalise_fault_obb_lengths(lengths),
+        "plane_axes": oriented_plane_axes,
+        "trace_axis": oriented_plane_axes[0],
+        "normal": oriented_plane_axes[2],
+        "strike_axis": loop_geometry["strike_axis"],
+        "dip_axis": loop_geometry["dip_axis"],
+        "slip_axis": loop_geometry["slip_vector"],
+        "slip_vector": loop_geometry["slip_vector"],
+        "rake_components": loop_geometry["rake_components"],
+        "loop_axes": loop_geometry["loop_axes"],
+        "loop_lengths": loop_geometry["loop_lengths"],
+        "loop_trace_axis": loop_geometry["loop_trace_axis"],
+    }
+
+
+def _compute_scaled_fault_geometry(
+    fault_info, rake_deg, scale_factors=None, normal_override=None
+):
+    """Return support-box geometry and LoopStructural lengths for the requested rake."""
     from numpy import array as np_array
 
     if scale_factors is None:
@@ -1692,14 +1869,31 @@ def _compute_scaled_fault_geometry(fault_info, rake_deg, scale_factors=None):
 
     geometry = _compute_fault_geometry_for_rake(
         fault_info.get("points", []),
-        fault_info.get("plane_axes", fault_info.get("axes")),
-        fault_info.get("center_normal"),
+        fault_info.get("obb_axes", fault_info.get("plane_axes", fault_info.get("axes"))),
+        normal_override if normal_override is not None else fault_info.get("center_normal"),
         rake_deg,
+        trace_points=fault_info.get("trace_points"),
     )
     scales = np_array(scale_factors, dtype=float)
     geometry["scaled_lengths"] = _normalise_fault_obb_lengths(
         geometry["lengths"] * scales
     )
+    scaled_loop_geometry = _compute_fault_loop_geometry(
+        geometry["center"],
+        geometry["axes"],
+        geometry["scaled_lengths"],
+        rake_deg,
+    )
+    geometry["scaled_loop_lengths"] = scaled_loop_geometry["loop_lengths"]
+    geometry["loop_axes"] = scaled_loop_geometry["loop_axes"]
+    geometry["loop_lengths"] = scaled_loop_geometry["loop_lengths"]
+    geometry["loop_trace_axis"] = scaled_loop_geometry["loop_trace_axis"]
+    geometry["slip_vector"] = scaled_loop_geometry["slip_vector"]
+    geometry["slip_axis"] = scaled_loop_geometry["slip_vector"]
+    geometry["strike_axis"] = scaled_loop_geometry["strike_axis"]
+    geometry["dip_axis"] = scaled_loop_geometry["dip_axis"]
+    geometry["normal"] = scaled_loop_geometry["fault_normal"]
+    geometry["rake_components"] = scaled_loop_geometry["rake_components"]
     return geometry
 
 
@@ -1912,25 +2106,37 @@ class _FaultSupportBoxRegion:
         return mask
 
 
-def _make_fault_support_box_region(fault_feature):
-    """Build a LoopStructural region mask from the created fault frame extents."""
-    center = np_array(fault_feature.fault_centre, dtype=float)
-    axes = np_array(
-        [
-            fault_feature.fault_strike_vector,
-            fault_feature.fault_slip_vector,
-            fault_feature.fault_normal_vector,
-        ],
-        dtype=float,
-    )
-    lengths = np_array(
-        [
-            float(fault_feature.fault_major_axis),
-            2.0 * float(fault_feature.fault_intermediate_axis),
-            2.0 * float(fault_feature.fault_minor_axis),
-        ],
-        dtype=float,
-    )
+def _make_fault_support_box_region(fault_feature, center=None, axes=None, lengths=None):
+    """Build a region mask from an explicit support box or the Loop fault frame."""
+    if center is None:
+        center = np_array(fault_feature.fault_centre, dtype=float)
+    else:
+        center = np_array(center, dtype=float)
+
+    if axes is None:
+        axes = np_array(
+            [
+                fault_feature.fault_strike_vector,
+                fault_feature.fault_slip_vector,
+                fault_feature.fault_normal_vector,
+            ],
+            dtype=float,
+        )
+    else:
+        axes = np_array(axes, dtype=float)
+
+    if lengths is None:
+        lengths = np_array(
+            [
+                float(fault_feature.fault_major_axis),
+                2.0 * float(fault_feature.fault_intermediate_axis),
+                2.0 * float(fault_feature.fault_minor_axis),
+            ],
+            dtype=float,
+        )
+    else:
+        lengths = np_array(lengths, dtype=float)
+
     return _FaultSupportBoxRegion(
         center=center,
         axes=axes,
@@ -1966,6 +2172,8 @@ def _fault_obb_settings_dialog(
         QGroupBox,
         QHBoxLayout,
         QLabel,
+        QLineEdit,
+        QMessageBox,
         QSpinBox,
         QVBoxLayout,
         QWidget,
@@ -1981,9 +2189,20 @@ def _fault_obb_settings_dialog(
     current_fault = {"name": fault_names[0]}
     is_loading = {"active": False}
 
+    def _vec_to_text(vec):
+        try:
+            return f"{float(vec[0]):.6f}, {float(vec[1]):.6f}, {float(vec[2]):.6f}"
+        except Exception:
+            return ""
+
     defaults_by_fault = {}
     for fault_name in fault_names:
         suggestion = relation_suggestions.get(fault_name, {})
+        geometry = _compute_scaled_fault_geometry(
+            fault_data[fault_name],
+            rake_deg=default_rake,
+            scale_factors=[1.0, 1.0, 1.0],
+        )
         defaults_by_fault[fault_name] = {
             "displacement": float(default_displacement),
             "rake": float(default_rake),
@@ -1992,6 +2211,8 @@ def _fault_obb_settings_dialog(
             "major_scale_pct": 100.0,
             "intermediate_scale_pct": 100.0,
             "minor_scale_pct": 100.0,
+            "manual_frame": False,
+            "manual_normal_text": _vec_to_text(geometry.get("normal", [0.0, 0.0, 1.0])),
             "has_abutting": bool(suggestion.get("has_abutting", False)),
             "abutting_fault": suggestion.get("abutting_fault"),
             "has_splay": bool(suggestion.get("has_splay", False)),
@@ -2005,7 +2226,7 @@ def _fault_obb_settings_dialog(
     root_layout = QVBoxLayout(dialog)
     info_label = QLabel(
         "Configure each fault independently.\n"
-        "Scale controls act on LoopStructural's Trace/Slip/Normal support basis.\n"
+        "Scale controls act on the fixed Trace-like / Dip-like / Normal support box inferred from the input geometry.\n"
         "Heuristic abutting/splay suggestions are prefilled for confirmation and can be overridden."
     )
     root_layout.addWidget(info_label)
@@ -2049,6 +2270,14 @@ def _fault_obb_settings_dialog(
     fault_buffer_spin.setValue(default_fault_buffer)
     parameters_form.addRow("Fault buffer", fault_buffer_spin)
 
+    manual_frame_check = QCheckBox("Override inferred normal", dialog)
+    manual_frame_check.setChecked(False)
+    parameters_form.addRow("Manual normal", manual_frame_check)
+
+    normal_vector_edit = QLineEdit(dialog)
+    normal_vector_edit.setPlaceholderText("nx, ny, nz")
+    parameters_form.addRow("Normal vector", normal_vector_edit)
+
     controls_layout.addLayout(parameters_form, 0, 0)
 
     obb_form = QFormLayout()
@@ -2066,7 +2295,7 @@ def _fault_obb_settings_dialog(
     intermediate_scale_spin.setSingleStep(5.0)
     intermediate_scale_spin.setSuffix(" %")
     intermediate_scale_spin.setValue(100.0)
-    obb_form.addRow("Slip (Intermediate) scale", intermediate_scale_spin)
+    obb_form.addRow("Dip-like (Intermediate) scale", intermediate_scale_spin)
 
     minor_scale_spin = QDoubleSpinBox(dialog)
     minor_scale_spin.setDecimals(1)
@@ -2078,8 +2307,8 @@ def _fault_obb_settings_dialog(
 
     raw_lengths_label = QLabel("")
     scaled_lengths_label = QLabel("")
-    obb_form.addRow("Raw Trace/Slip/Normal", raw_lengths_label)
-    obb_form.addRow("Scaled Trace/Slip/Normal", scaled_lengths_label)
+    obb_form.addRow("Raw Trace/Dip/Normal", raw_lengths_label)
+    obb_form.addRow("Scaled Trace/Dip/Normal", scaled_lengths_label)
     controls_layout.addLayout(obb_form, 0, 1)
 
     relations_form = QFormLayout()
@@ -2190,7 +2419,7 @@ def _fault_obb_settings_dialog(
             painter.drawText(
                 draw_rect.adjusted(6, 4, -6, -4),
                 Qt.AlignTop | Qt.AlignLeft,
-                f"{self._fault_name}\nPlane: trace/slip\nNormal length: {self._minor_len:.2f}",
+                f"{self._fault_name}\nPlane: trace/dip\nNormal length: {self._minor_len:.2f}",
             )
             painter.end()
 
@@ -2201,11 +2430,41 @@ def _fault_obb_settings_dialog(
         QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=dialog
     )
     root_layout.addWidget(button_box)
-    button_box.accepted.connect(dialog.accept)
+    def _parse_vector(text):
+        parts = [p for p in text.replace(";", ",").split(",") if p.strip()]
+        if len(parts) != 3:
+            parts = [p for p in text.split() if p.strip()]
+        if len(parts) != 3:
+            return None
+        try:
+            return [float(parts[0]), float(parts[1]), float(parts[2])]
+        except (TypeError, ValueError):
+            return None
+
+    def on_accept():
+        save_current_fault_settings()
+        for fault_name, params in defaults_by_fault.items():
+            if not params.get("manual_frame", False):
+                continue
+            normal_vec = _parse_vector(params.get("manual_normal_text", ""))
+            if normal_vec is None:
+                QMessageBox.warning(
+                    dialog,
+                    "Manual frame required",
+                    f"Fault '{fault_name}' has an invalid manual normal.\n"
+                    "Provide 3 numbers for the normal vector (e.g. 0, 0, 1).",
+                )
+                return
+        dialog.accept()
+
+    button_box.accepted.connect(on_accept)
     button_box.rejected.connect(dialog.reject)
 
     def get_fault_geometry(fault_name):
         params = defaults_by_fault[fault_name]
+        normal_override = None
+        if params.get("manual_frame", False):
+            normal_override = _parse_vector(params.get("manual_normal_text", ""))
         scales = [
             params["major_scale_pct"] / 100.0,
             params["intermediate_scale_pct"] / 100.0,
@@ -2215,6 +2474,7 @@ def _fault_obb_settings_dialog(
             fault_data[fault_name],
             rake_deg=float(params["rake"]),
             scale_factors=scales,
+            normal_override=normal_override,
         )
 
     def get_scaled_lengths(fault_name):
@@ -2258,6 +2518,10 @@ def _fault_obb_settings_dialog(
             intermediate_scale_spin.value()
         )
         defaults_by_fault[fault_name]["minor_scale_pct"] = float(minor_scale_spin.value())
+        defaults_by_fault[fault_name]["manual_frame"] = bool(
+            manual_frame_check.isChecked()
+        )
+        defaults_by_fault[fault_name]["manual_normal_text"] = normal_vector_edit.text()
         defaults_by_fault[fault_name]["has_abutting"] = bool(abutting_check.isChecked())
         defaults_by_fault[fault_name]["abutting_fault"] = abutting_target_combo.currentData()
         defaults_by_fault[fault_name]["has_splay"] = bool(splay_check.isChecked())
@@ -2325,6 +2589,8 @@ def _fault_obb_settings_dialog(
             major_scale_spin.setValue(params["major_scale_pct"])
             intermediate_scale_spin.setValue(params["intermediate_scale_pct"])
             minor_scale_spin.setValue(params["minor_scale_pct"])
+            manual_frame_check.setChecked(bool(params.get("manual_frame", False)))
+            normal_vector_edit.setText(params.get("manual_normal_text", ""))
             abutting_check.setChecked(bool(params.get("has_abutting", False)))
             splay_check.setChecked(bool(params.get("has_splay", False)))
             populate_relation_targets(
@@ -2334,6 +2600,7 @@ def _fault_obb_settings_dialog(
             )
         finally:
             is_loading["active"] = False
+        normal_vector_edit.setEnabled(bool(params.get("manual_frame", False)))
         update_relation_controls_enabled()
         update_lengths_labels(fault_name)
         update_preview(fault_name)
@@ -2347,6 +2614,8 @@ def _fault_obb_settings_dialog(
     def on_controls_changed(*_):
         if is_loading["active"]:
             return
+        manual_enabled = manual_frame_check.isChecked()
+        normal_vector_edit.setEnabled(manual_enabled)
         update_relation_controls_enabled()
         save_current_fault_settings()
         selected_fault = current_fault["name"]
@@ -2358,6 +2627,8 @@ def _fault_obb_settings_dialog(
     rake_spin.valueChanged.connect(on_controls_changed)
     nelements_spin.valueChanged.connect(on_controls_changed)
     fault_buffer_spin.valueChanged.connect(on_controls_changed)
+    manual_frame_check.toggled.connect(on_controls_changed)
+    normal_vector_edit.textChanged.connect(on_controls_changed)
     major_scale_spin.valueChanged.connect(on_controls_changed)
     intermediate_scale_spin.valueChanged.connect(on_controls_changed)
     minor_scale_spin.valueChanged.connect(on_controls_changed)
@@ -2385,11 +2656,16 @@ def _fault_obb_settings_dialog(
             "center": geometry["center"],
             "axes": geometry["axes"],
             "lengths": geometry["scaled_lengths"],
+            "manual_frame": bool(params.get("manual_frame", False)),
             "has_abutting": bool(params.get("has_abutting", False)),
             "abutting_fault": params.get("abutting_fault"),
             "has_splay": bool(params.get("has_splay", False)),
             "splay_fault": params.get("splay_fault"),
         }
+        if params.get("manual_frame", False):
+            manual_normal = _parse_vector(params.get("manual_normal_text", ""))
+            if manual_normal is not None:
+                per_fault_settings[fault_name]["fault_normal_vector"] = manual_normal
 
     return per_fault_settings
 
@@ -2399,6 +2675,7 @@ def implicit_model_loop_structural_with_faults(self):
     """LoopStructural implicit modelling with merged faults and age-aware sequences."""
     from numpy import argmin as np_argmin
     from numpy import concatenate as np_concatenate
+    from numpy import dot as np_dot
     from numpy import full as np_full
     from numpy import isnan as np_isnan
     from numpy import linalg as np_linalg
@@ -2496,14 +2773,19 @@ def implicit_model_loop_structural_with_faults(self):
                     "scenario": scenario,
                     "entity_names": [],
                     "uids": [],
+                    "topologies": [],
                     "point_segments": [],
+                    "trace_segments": [],
                     "normal_segments": [],
                     "time": float("nan"),
                 },
             )
             group["entity_names"].append(entity_name)
             group["uids"].append(uid)
+            group["topologies"].append(self.geol_coll.get_uid_topology(uid))
             group["point_segments"].append(points_arr)
+            if self.geol_coll.get_uid_topology(uid) == "PolyLine":
+                group["trace_segments"].append(points_arr)
 
             normals_arr = None
             if "Normals" in self.geol_coll.get_uid_properties_names(uid):
@@ -2555,6 +2837,16 @@ def implicit_model_loop_structural_with_faults(self):
                 continue
 
             points_arr = np_concatenate(valid_segments, axis=0)
+            trace_segments = [
+                np_array(seg, dtype=float)
+                for seg in group.get("trace_segments", [])
+                if seg is not None and len(seg) > 0
+            ]
+            trace_points = (
+                np_concatenate(trace_segments, axis=0)
+                if trace_segments
+                else np_array([], dtype=float).reshape(0, 3)
+            )
             display_name = str(feature).strip() if str(feature).strip() not in ["", "undef"] else ""
             if not display_name:
                 display_name = str(group["entity_names"][0]).strip()
@@ -2593,7 +2885,7 @@ def implicit_model_loop_structural_with_faults(self):
                         valid_normal_vectors.append(normals_arr[finite_mask])
                 offset += seg_len
 
-            center_normal = None
+            explicit_center_normal = None
             if valid_normal_vectors:
                 normal_points = np_concatenate(valid_normal_points, axis=0)
                 normal_vectors = np_concatenate(valid_normal_vectors, axis=0)
@@ -2601,16 +2893,26 @@ def implicit_model_loop_structural_with_faults(self):
                 candidate_normal = np_array(normal_vectors[center_idx], dtype=float)
                 candidate_norm = np_linalg.norm(candidate_normal)
                 if candidate_norm > 1e-9:
-                    center_normal = candidate_normal / candidate_norm
+                    explicit_center_normal = candidate_normal / candidate_norm
+
+            normal_info = _infer_fault_normal(
+                points_arr,
+                explicit_normal=explicit_center_normal,
+                trace_points=trace_points,
+                fallback_axes=obb_axes,
+            )
+            center_normal = np_array(normal_info["normal"], dtype=float)
 
             plane_axes = _orient_fault_axes_for_rake(
-                obb_axes, center_normal=center_normal
+                obb_axes, center_normal=center_normal, trace_points=trace_points
             )
             default_geometry = _compute_scaled_fault_geometry(
                 {
                     "points": points_arr,
+                    "obb_axes": obb_axes,
                     "plane_axes": plane_axes,
                     "center_normal": center_normal,
+                    "trace_points": trace_points,
                 },
                 rake_deg=-90.0,
                 scale_factors=[1.0, 1.0, 1.0],
@@ -2637,17 +2939,22 @@ def implicit_model_loop_structural_with_faults(self):
                 "center": default_geometry["center"],
                 "axes": default_geometry["axes"],
                 "lengths": default_geometry["lengths"],
+                "obb_axes": obb_axes,
                 "plane_axes": default_geometry["plane_axes"],
                 "center_normal": center_normal,
+                "normal_source": normal_info["source"],
+                "trace_points": trace_points,
                 "name": display_name,
                 "feature": feature,
                 "scenario": scenario,
                 "points": points_arr,
                 "entity_names": list(group["entity_names"]),
+                "topologies": list(group.get("topologies", [])),
             }
             self.print_terminal(
                 f"  Fault group '{fault_feature_name}': {len(group['uids'])} entities, "
-                f"center={default_geometry['center']}, lengths={default_geometry['lengths']}"
+                f"center={default_geometry['center']}, lengths={default_geometry['lengths']}, "
+                f"normal_source={normal_info['source']}"
             )
             prgs_bar.add_one()
         prgs_bar.close()
@@ -2808,6 +3115,17 @@ def implicit_model_loop_structural_with_faults(self):
             else:
                 points_aligned = fault_points
 
+            trace_points_world = np_array(fault_info.get("trace_points", []), dtype=float)
+            if len(trace_points_world) > 0:
+                trace_xy_rotated = (
+                    R_to_local @ (trace_points_world[:, :2] - obb_center).T
+                ).T
+                trace_points_aligned = trace_points_world.copy()
+                trace_points_aligned[:, 0] = trace_xy_rotated[:, 0]
+                trace_points_aligned[:, 1] = trace_xy_rotated[:, 1]
+            else:
+                trace_points_aligned = trace_points_world
+
             center_normal_aligned = fault_info.get("center_normal")
             if center_normal_aligned is not None:
                 center_normal_aligned = np_array(center_normal_aligned, dtype=float)
@@ -2819,18 +3137,24 @@ def implicit_model_loop_structural_with_faults(self):
 
             _, obb_axes_raw, _ = _compute_fault_geometric_features_obb(points_aligned)
             plane_axes_aligned = _orient_fault_axes_for_rake(
-                obb_axes_raw, center_normal=center_normal_aligned
+                obb_axes_raw,
+                center_normal=center_normal_aligned,
+                trace_points=trace_points_aligned,
             )
             default_geometry = _compute_scaled_fault_geometry(
                 {
                     "points": points_aligned,
+                    "obb_axes": obb_axes_raw,
                     "plane_axes": plane_axes_aligned,
                     "center_normal": center_normal_aligned,
+                    "trace_points": trace_points_aligned,
                 },
                 rake_deg=-90.0,
                 scale_factors=[1.0, 1.0, 1.0],
             )
             fault_info["points"] = points_aligned
+            fault_info["trace_points"] = trace_points_aligned
+            fault_info["obb_axes"] = obb_axes_raw
             fault_info["plane_axes"] = plane_axes_aligned
             fault_info["center"] = default_geometry["center"]
             fault_info["axes"] = default_geometry["axes"]
@@ -2908,8 +3232,33 @@ def implicit_model_loop_structural_with_faults(self):
     dimensions = [dimension_x, dimension_y, dimension_z]
     spacing = [edge_x / dimension_x, edge_y / dimension_y, edge_z / dimension_z]
 
-    self.print_terminal(f"Grid dimensions: {dimensions}")
-    self.print_terminal(f"Grid spacing: {spacing}")
+    target_spacing_strati = input_one_value_dialog(
+        title="Implicit Modelling with Faults",
+        label="Grid target spacing for stratigraphy (leave blank for same)",
+        default_value=target_spacing,
+    )
+    if target_spacing_strati is None or target_spacing_strati <= 0:
+        target_spacing_strati = target_spacing
+
+    dimension_strati_x = max(1, int(np_around(edge_x / target_spacing_strati)))
+    dimension_strati_y = max(1, int(np_around(edge_y / target_spacing_strati)))
+    dimension_strati_z = max(1, int(np_around(edge_z / target_spacing_strati)))
+    dimensions_strati = [dimension_strati_x, dimension_strati_y, dimension_strati_z]
+    spacing_strati = [
+        edge_x / dimension_strati_x,
+        edge_y / dimension_strati_y,
+        edge_z / dimension_strati_z,
+    ]
+
+    self.print_terminal(f"Grid dimensions (faults): {dimensions}")
+    self.print_terminal(f"Grid spacing (faults): {spacing}")
+    if dimensions_strati != dimensions:
+        self.print_terminal(
+            f"Grid dimensions (stratigraphy): {dimensions_strati}"
+        )
+        self.print_terminal(
+            f"Grid spacing (stratigraphy): {spacing_strati}"
+        )
 
     model_diagonal = np_sqrt(edge_x**2 + edge_y**2 + edge_z**2)
     default_displacement = model_diagonal * 0.05
@@ -2989,8 +3338,20 @@ def implicit_model_loop_structural_with_faults(self):
         nelements = int(fault_params_single.get("nelements", 1000))
         fault_buffer = float(fault_params_single.get("fault_buffer", 0.2))
 
+        manual_frame = bool(fault_params_single.get("manual_frame", False))
+        manual_normal = None
+        if manual_frame:
+            manual_normal = fault_params_single.get("fault_normal_vector")
+            if manual_normal is None:
+                manual_normal = fault_params_single.get("normal_vector")
+            if manual_normal is None:
+                manual_normal = fault_params_single.get("normal")
+
         base_geometry = _compute_scaled_fault_geometry(
-            fault_info, rake_deg=fault_rake, scale_factors=[1.0, 1.0, 1.0]
+            fault_info,
+            rake_deg=fault_rake,
+            scale_factors=[1.0, 1.0, 1.0],
+            normal_override=manual_normal,
         )
         center = np_array(
             fault_params_single.get("center", base_geometry["center"]), dtype=float
@@ -3006,38 +3367,43 @@ def implicit_model_loop_structural_with_faults(self):
         if len(lengths) < 3:
             lengths = np_array(base_geometry["scaled_lengths"], dtype=float)
 
-        major_len = max(float(lengths[0]), 1e-3)
-        intermediate_len = max(float(lengths[1]), 1e-3)
-        minor_len = max(float(lengths[2]), 1e-3)
-        ls_major_axis = major_len
-        ls_intermediate_axis = max(0.5 * intermediate_len, 1e-3)
-        ls_minor_axis = max(0.5 * minor_len, 1e-3)
+        support_trace_len = max(float(lengths[0]), 1e-3)
+        support_dip_len = max(float(lengths[1]), 1e-3)
+        support_normal_len = max(float(lengths[2]), 1e-3)
 
-        plane_geometry = _compute_fault_geometry_for_rake(
-            fault_info.get("points", []),
-            fault_info.get("plane_axes", fault_info.get("axes")),
-            fault_info.get("center_normal"),
-            fault_rake,
-        )
-        slip_vector = np_array(plane_geometry["slip_vector"], dtype=float)
-        fault_normal = np_array(plane_geometry["normal"], dtype=float)
+        loop_geometry = _compute_fault_loop_geometry(center, axes, lengths, fault_rake)
+        loop_axes = np_array(loop_geometry["loop_axes"], dtype=float)
+        loop_lengths = np_array(loop_geometry["loop_lengths"], dtype=float)
+        slip_vector = np_array(loop_geometry["slip_vector"], dtype=float)
+        strike_axis = np_array(loop_geometry["strike_axis"], dtype=float)
+        dip_axis = np_array(loop_geometry["dip_axis"], dtype=float)
+        fault_normal = np_array(loop_geometry["fault_normal"], dtype=float)
+        rake_components = np_array(loop_geometry["rake_components"], dtype=float)
+
+        ls_major_axis = max(float(loop_lengths[0]), 1e-3)
+        ls_intermediate_axis = max(0.5 * float(loop_lengths[1]), 1e-3)
+        ls_minor_axis = max(0.5 * float(loop_lengths[2]), 1e-3)
 
         self.print_terminal(f"  Creating fault: {fault_name}")
         self.print_terminal(f"    Fault geometry: center={center}")
         self.print_terminal(
-            f"    trace={major_len:.2f}, slip={intermediate_len:.2f}, normal={minor_len:.2f}"
+            f"    support lengths: trace={support_trace_len:.2f}, dip={support_dip_len:.2f}, normal={support_normal_len:.2f}"
         )
         self.print_terminal(
-            f"    LoopStructural extents: trace={ls_major_axis:.2f}, "
-            f"slip_radius={ls_intermediate_axis:.2f}, normal_radius={ls_minor_axis:.2f}"
+            f"    LoopStructural extents: trace={loop_lengths[0]:.2f}, "
+            f"slip={loop_lengths[1]:.2f}, normal={loop_lengths[2]:.2f}"
         )
-        self.print_terminal("    Fault axes (Loop basis):")
-        self.print_terminal(f"      trace: {axes[0]}")
-        self.print_terminal(f"      slip: {axes[1]}")
+        self.print_terminal("    Support box axes (fixed):")
+        self.print_terminal(f"      trace-like: {axes[0]}")
+        self.print_terminal(f"      dip-like: {axes[1]}")
         self.print_terminal(f"      normal: {axes[2]}")
+        self.print_terminal("    LoopStructural basis (rake-dependent):")
+        self.print_terminal(f"      trace: {loop_axes[0]}")
+        self.print_terminal(f"      slip: {loop_axes[1]}")
+        self.print_terminal(f"      normal: {loop_axes[2]}")
         self.print_terminal(
             f"    rake components (strike, dip): "
-            f"[{plane_geometry['rake_components'][0]:.4f}, {plane_geometry['rake_components'][1]:.4f}]"
+            f"[{rake_components[0]:.4f}, {rake_components[1]:.4f}]"
         )
         self.print_terminal(
             f"    fault_slip_vector (3D): {slip_vector.tolist()}"
@@ -3051,7 +3417,10 @@ def implicit_model_loop_structural_with_faults(self):
         self.print_terminal(
             "    faultfunction=BaseFault3D (displacement tapered in slip and trace directions)"
         )
-        self.print_terminal("    Using points=True for fault frame construction")
+        use_points = not manual_frame
+        self.print_terminal(
+            f"    Using points={use_points} for fault frame construction"
+        )
 
         fault_params_ls = {
             "nelements": nelements,
@@ -3064,7 +3433,7 @@ def implicit_model_loop_structural_with_faults(self):
             "minor_axis": ls_minor_axis,
             "intermediate_axis": ls_intermediate_axis,
             "fault_slip_vector": slip_vector.tolist(),
-            "points": True,
+            "points": use_points,
         }
 
         try:
@@ -3075,7 +3444,20 @@ def implicit_model_loop_structural_with_faults(self):
             )
             fault_feature = model.get_feature_by_name(fault_name)
             if fault_feature is not None:
-                support_region = _make_fault_support_box_region(fault_feature)
+                support_center_local = (
+                    model.scale(center, inplace=False)
+                    if hasattr(model, "scale")
+                    else np_array(center, dtype=float)
+                )
+                support_lengths_local = (
+                    np_array(lengths, dtype=float) / float(getattr(model, "scale_factor", 1.0))
+                )
+                support_region = _make_fault_support_box_region(
+                    fault_feature,
+                    center=support_center_local,
+                    axes=axes,
+                    lengths=support_lengths_local,
+                )
                 fault_feature.add_region(support_region)
                 created_fault_features.append(fault_feature)
                 created_fault_features_by_name[fault_name] = fault_feature
@@ -3089,7 +3471,11 @@ def implicit_model_loop_structural_with_faults(self):
                 )
                 support_lengths = support_lengths * model.scale_factor
                 self.print_terminal(
-                    "    Displacement support limited to fault box "
+                    "    Fixed support mask lengths "
+                    f"(trace/dip/normal = {lengths[0]:.2f}, {lengths[1]:.2f}, {lengths[2]:.2f})"
+                )
+                self.print_terminal(
+                    "    LoopStructural frame lengths "
                     f"(trace/slip/normal = {support_lengths[0]:.2f}, "
                     f"{support_lengths[1]:.2f}, {support_lengths[2]:.2f})"
                 )
@@ -3220,14 +3606,20 @@ def implicit_model_loop_structural_with_faults(self):
                 self.print_terminal(traceback.format_exc())
         toc(parent=self)
 
-    self.print_terminal("-> Evaluating model on regular grid...")
+    self.print_terminal("-> Evaluating model on regular grid(s)...")
     tic(parent=self)
-    regular_grid = model.regular_grid(
+    regular_grid_faults = model.regular_grid(
         nsteps=dimensions, shuffle=False, rescale=False
     )
+    if dimensions_strati == dimensions:
+        regular_grid_strati = regular_grid_faults
+    else:
+        regular_grid_strati = model.regular_grid(
+            nsteps=dimensions_strati, shuffle=False, rescale=False
+        )
     toc(parent=self)
 
-    self.print_terminal("-> Creating output Voxet...")
+    self.print_terminal("-> Creating output Voxet(s)...")
     tic(parent=self)
     model_name = "Loop_model_faults"
 
@@ -3238,10 +3630,10 @@ def implicit_model_loop_structural_with_faults(self):
     voxet_dict["properties_components"] = []
     voxet_dict["vtk_obj"] = Voxet()
 
-    aligned_origin = [
-        origin_x + spacing[0] / 2,
-        origin_y + spacing[1] / 2,
-        origin_z + spacing[2] / 2,
+    aligned_origin_strati = [
+        origin_x + spacing_strati[0] / 2,
+        origin_y + spacing_strati[1] / 2,
+        origin_z + spacing_strati[2] / 2,
     ]
     if use_obb_alignment:
         from vtk import vtkMatrix3x3
@@ -3249,10 +3641,14 @@ def implicit_model_loop_structural_with_faults(self):
         angle = obb_info["angle"]
         obb_center = obb_info["center"]
         c, s = np_cos(angle), np_sin(angle)
-        origin_xy = np_array([aligned_origin[0], aligned_origin[1]])
+        origin_xy = np_array([aligned_origin_strati[0], aligned_origin_strati[1]])
         R_to_world_2d = np_array([[c, -s], [s, c]])
         origin_world_xy = (R_to_world_2d @ origin_xy) + obb_center
-        world_origin = [origin_world_xy[0], origin_world_xy[1], aligned_origin[2]]
+        world_origin_strati = [
+            origin_world_xy[0],
+            origin_world_xy[1],
+            aligned_origin_strati[2],
+        ]
 
         direction_matrix = vtkMatrix3x3()
         direction_matrix.SetElement(0, 0, c)
@@ -3265,35 +3661,94 @@ def implicit_model_loop_structural_with_faults(self):
         direction_matrix.SetElement(2, 1, 0)
         direction_matrix.SetElement(2, 2, 1)
 
-        voxet_dict["vtk_obj"].origin = world_origin
+        voxet_dict["vtk_obj"].origin = world_origin_strati
         voxet_dict["vtk_obj"].direction_matrix = direction_matrix
-        voxet_world_origin = world_origin
-        self.print_terminal("-> Voxet transformed to OBB orientation")
+        voxet_world_origin = world_origin_strati
+        self.print_terminal("-> Voxet transformed to OBB orientation (stratigraphy)")
     else:
-        voxet_dict["vtk_obj"].origin = aligned_origin
+        voxet_dict["vtk_obj"].origin = aligned_origin_strati
         voxet_world_origin = None
 
-    voxet_dict["vtk_obj"].dimensions = dimensions
-    voxet_dict["vtk_obj"].spacing = spacing
+    voxet_dict["vtk_obj"].dimensions = dimensions_strati
+    voxet_dict["vtk_obj"].spacing = spacing_strati
+
+    fault_voxet_dict = None
+    if fault_creation_order:
+        fault_voxet_dict = deepcopy(self.mesh3d_coll.entity_dict)
+        fault_voxet_dict["name"] = f"{model_name}_faults"
+        fault_voxet_dict["topology"] = "Voxet"
+        fault_voxet_dict["properties_names"] = []
+        fault_voxet_dict["properties_components"] = []
+        fault_voxet_dict["vtk_obj"] = Voxet()
+
+        aligned_origin_fault = [
+            origin_x + spacing[0] / 2,
+            origin_y + spacing[1] / 2,
+            origin_z + spacing[2] / 2,
+        ]
+        if use_obb_alignment:
+            from vtk import vtkMatrix3x3
+
+            angle = obb_info["angle"]
+            obb_center = obb_info["center"]
+            c, s = np_cos(angle), np_sin(angle)
+            origin_xy = np_array([aligned_origin_fault[0], aligned_origin_fault[1]])
+            R_to_world_2d = np_array([[c, -s], [s, c]])
+            origin_world_xy = (R_to_world_2d @ origin_xy) + obb_center
+            world_origin_fault = [
+                origin_world_xy[0],
+                origin_world_xy[1],
+                aligned_origin_fault[2],
+            ]
+
+            direction_matrix_fault = vtkMatrix3x3()
+            direction_matrix_fault.SetElement(0, 0, c)
+            direction_matrix_fault.SetElement(0, 1, -s)
+            direction_matrix_fault.SetElement(0, 2, 0)
+            direction_matrix_fault.SetElement(1, 0, s)
+            direction_matrix_fault.SetElement(1, 1, c)
+            direction_matrix_fault.SetElement(1, 2, 0)
+            direction_matrix_fault.SetElement(2, 0, 0)
+            direction_matrix_fault.SetElement(2, 1, 0)
+            direction_matrix_fault.SetElement(2, 2, 1)
+
+            fault_voxet_dict["vtk_obj"].origin = world_origin_fault
+            fault_voxet_dict["vtk_obj"].direction_matrix = direction_matrix_fault
+        else:
+            fault_voxet_dict["vtk_obj"].origin = aligned_origin_fault
+
+        fault_voxet_dict["vtk_obj"].dimensions = dimensions
+        fault_voxet_dict["vtk_obj"].spacing = spacing
+
     self.print_terminal(f"  Model features: {[f.name for f in model.features]}")
+    fault_names = set(fault_data.keys())
 
     for feature in model.features:
         self.print_terminal(
             f"  Evaluating feature: {feature.name} (type: {feature.type})"
         )
         try:
+            if feature.name in fault_names and fault_voxet_dict is not None:
+                grid = regular_grid_faults
+                dims = dimensions
+                target_voxet = fault_voxet_dict
+            else:
+                grid = regular_grid_strati
+                dims = dimensions_strati
+                target_voxet = voxet_dict
+
             scalar_field = model.evaluate_feature_value(
-                feature.name, regular_grid, scale=False
+                feature.name, grid, scale=False
             )
-            scalar_field = scalar_field.reshape((dimension_x, dimension_y, dimension_z))
+            scalar_field = scalar_field.reshape((dims[0], dims[1], dims[2]))
             scalar_field = scalar_field.transpose(2, 1, 0)
             scalar_field = scalar_field.ravel()
 
-            voxet_dict["vtk_obj"].set_point_data(
+            target_voxet["vtk_obj"].set_point_data(
                 data_key=feature.name, attribute_matrix=scalar_field
             )
-            voxet_dict["properties_names"].append(feature.name)
-            voxet_dict["properties_components"].append(1)
+            target_voxet["properties_names"].append(feature.name)
+            target_voxet["properties_components"].append(1)
             self.print_terminal(
                 f"    Feature '{feature.name}' evaluated successfully"
             )
@@ -3311,11 +3766,23 @@ def implicit_model_loop_structural_with_faults(self):
     if model_name_input:
         model_name = model_name_input
     voxet_dict["name"] = model_name
+    if fault_voxet_dict is not None:
+        fault_voxet_dict["name"] = f"{model_name}_faults"
 
     if voxet_dict["vtk_obj"].points_number > 0:
         self.mesh3d_coll.add_entity_from_dict(voxet_dict)
         self.print_terminal(
             f"  Voxet '{model_name}' created with properties: {voxet_dict['properties_names']}"
+        )
+    if (
+        fault_voxet_dict is not None
+        and fault_voxet_dict["vtk_obj"].points_number > 0
+        and fault_voxet_dict["properties_names"]
+    ):
+        self.mesh3d_coll.add_entity_from_dict(fault_voxet_dict)
+        self.print_terminal(
+            f"  Voxet '{fault_voxet_dict['name']}' created with properties: "
+            f"{fault_voxet_dict['properties_names']}"
         )
 
     toc(parent=self)
