@@ -494,8 +494,10 @@ class BaseTableModel(QAbstractTableModel):
         if column_name == "role" and getattr(self.collection, "valid_roles", []):
             return Qt.ItemIsEnabled | Qt.ItemIsSelectable
         if index.column() in self.collection.editable_columns:
-            return Qt.ItemFlags(base_flags | Qt.ItemIsEditable)
-        return base_flags
+            return Qt.ItemFlags(
+                QAbstractTableModel.flags(self, index) | Qt.ItemIsEditable
+            )
+        return Qt.ItemIsEnabled | Qt.ItemIsSelectable
     
     def supportedDragActions(self):
         """Enable copy action for dragging."""
