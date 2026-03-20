@@ -17959,6 +17959,24 @@ segmentation, triangulation, and visualization.
                     if "undef" in valid_roles:
                         return "undef"
                 return role
+
+            def _build_trisurf_from_arrays(vertices, triangles):
+                """Create a TriSurf from Nx3 vertices and Mx3 triangle indices."""
+                trisurf = TriSurf()
+                vtk_points = vtkPoints()
+                for pt in vertices:
+                    vtk_points.InsertNextPoint(float(pt[0]), float(pt[1]), float(pt[2]))
+                trisurf.SetPoints(vtk_points)
+
+                vtk_triangles = vtkCellArray()
+                for tri in triangles:
+                    triangle = vtkTriangle()
+                    triangle.GetPointIds().SetId(0, int(tri[0]))
+                    triangle.GetPointIds().SetId(1, int(tri[1]))
+                    triangle.GetPointIds().SetId(2, int(tri[2]))
+                    vtk_triangles.InsertNextCell(triangle)
+                trisurf.SetPolys(vtk_triangles)
+                return trisurf
             
             # Import required modules
             from pzero.entities_factory import TetraSolid, TriSurf, PolyLine
@@ -17974,6 +17992,76 @@ segmentation, triangulation, and visualization.
             export_details = []
             
             timestamp = time.strftime('%Y%m%d_%H%M%S')
+            extracted_fault_exports = []
+            selected_fault_surface_indices = set()
+            if hasattr(self, "_get_fault_surface_indices"):
+                try:
+                    selected_fault_surface_indices = set(self._get_fault_surface_indices())
+                except Exception as fault_idx_err:
+                    logger.warning(f"Failed to read selected fault surface indices: {fault_idx_err}")
+            tetra_gen = getattr(self, "tetra_mesh_generator", None)
+            if tetra_gen is not None and hasattr(self, "tetra_materials"):
+                tetra_gen.tetra_materials = self.tetra_materials
+            if tetra_gen is not None and hasattr(tetra_gen, "_extract_fault_surface_for_export"):
+                seen_fault_ids = set()
+                fault_materials = []
+                for material_source_name in ("materials", "tetra_materials"):
+                    for material in (getattr(tetra_gen, material_source_name, None) or []):
+                        if material.get("type") != "FAULT":
+                            continue
+                        mat_id = material.get("attribute")
+                        if mat_id is None or mat_id in seen_fault_ids:
+                            continue
+                        seen_fault_ids.add(mat_id)
+                        fault_materials.append(material)
+
+                for fault_material in fault_materials:
+                    mat_id = fault_material.get("attribute")
+                    try:
+                        fault_surface = tetra_gen._extract_fault_surface_for_export(mat_id)
+                    except Exception as fault_extract_err:
+                        logger.warning(
+                            f"Failed to extract TetGen fault surface for material {mat_id}: {fault_extract_err}"
+                        )
+                        continue
+
+                    if fault_surface is None or getattr(fault_surface, "n_cells", 0) == 0:
+                        continue
+
+                    fault_points = np.asarray(fault_surface.points)
+                    fault_faces_raw = np.asarray(fault_surface.faces, dtype=np.int64)
+                    if fault_points.ndim != 2 or fault_points.shape[1] != 3:
+                        logger.warning(f"Skipping extracted fault {mat_id}: invalid point array")
+                        continue
+
+                    fault_triangles = []
+                    idx = 0
+                    while idx < len(fault_faces_raw):
+                        n_pts = int(fault_faces_raw[idx])
+                        if n_pts == 3 and idx + 3 < len(fault_faces_raw):
+                            fault_triangles.append(fault_faces_raw[idx + 1:idx + 4])
+                        idx += n_pts + 1
+
+                    if not fault_triangles:
+                        logger.warning(
+                            f"Skipping extracted fault {mat_id}: no triangles found in TetGen surface"
+                        )
+                        continue
+
+                    fault_name = str(fault_material.get("name") or f"Fault_{mat_id}")
+                    extracted_fault_exports.append(
+                        {
+                            "name": fault_name,
+                            "feature": fault_name,
+                            "vertices": fault_points,
+                            "triangles": np.asarray(fault_triangles, dtype=np.int32),
+                        }
+                    )
+
+                if extracted_fault_exports:
+                    logger.info(
+                        f"Prepared {len(extracted_fault_exports)} TetGen-extracted fault surface(s) for PZero export"
+                    )
             
             # ================================================================
             # STEP 1: Export all triangulated surfaces to geol_coll
@@ -17986,6 +18074,11 @@ segmentation, triangulation, and visualization.
                 
                 # Skip wells - they go to well_coll
                 if dataset_type in ('WELL', 'POLYLINE'):
+                    continue
+                if dataset_idx in selected_fault_surface_indices and extracted_fault_exports:
+                    logger.info(
+                        f"Skipping PLC fault surface '{dataset_name}' in favor of TetGen-extracted fault export"
+                    )
                     continue
                 
                 # Check for conforming mesh first (from Refine tab), then triangulation_result
@@ -18011,24 +18104,7 @@ segmentation, triangulation, and visualization.
                     continue
                 
                 try:
-                    # Create TriSurf VTK object
-                    trisurf = TriSurf()
-                    
-                    # Add points
-                    vtk_points = vtkPoints()
-                    for pt in vertices:
-                        vtk_points.InsertNextPoint(float(pt[0]), float(pt[1]), float(pt[2]))
-                    trisurf.SetPoints(vtk_points)
-                    
-                    # Add triangles
-                    vtk_triangles = vtkCellArray()
-                    for tri in triangles:
-                        triangle = vtkTriangle()
-                        triangle.GetPointIds().SetId(0, int(tri[0]))
-                        triangle.GetPointIds().SetId(1, int(tri[1]))
-                        triangle.GetPointIds().SetId(2, int(tri[2]))
-                        vtk_triangles.InsertNextCell(triangle)
-                    trisurf.SetPolys(vtk_triangles)
+                    trisurf = _build_trisurf_from_arrays(vertices, triangles)
                     
                     # Determine role based on dataset type
                     role = _normalize_geology_role(dataset_type)
@@ -18058,6 +18134,37 @@ segmentation, triangulation, and visualization.
                     logger.error(f"Failed to export surface '{dataset_name}': {surf_err}")
                     export_details.append(f"✗ Surface '{dataset_name}' failed: {str(surf_err)}")
             
+            for fault_export in extracted_fault_exports:
+                fault_name = fault_export["name"]
+                try:
+                    trisurf = _build_trisurf_from_arrays(
+                        fault_export["vertices"],
+                        fault_export["triangles"],
+                    )
+                    entity_dict = _build_entity_dict(
+                        project_window.geol_coll,
+                        uid=str(uuid4()),
+                        name=fault_name,
+                        scenario="PyMeshIt",
+                        parent_uid="",
+                        topology="TriSurf",
+                        vtk_obj=trisurf,
+                        role=_normalize_geology_role("FAULT"),
+                        feature=fault_export["feature"],
+                        properties_names=[],
+                        properties_components=[],
+                    )
+                    project_window.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
+                    exported_surfaces += 1
+                    export_details.append(f"âœ“ Fault '{fault_name}' â†’ geol_coll (TetGen-extracted)")
+                    logger.info(
+                        f"Exported TetGen-extracted fault '{fault_name}' to geol_coll: "
+                        f"{len(fault_export['vertices'])} vertices, {len(fault_export['triangles'])} triangles"
+                    )
+                except Exception as fault_err:
+                    logger.error(f"Failed to export TetGen-extracted fault '{fault_name}': {fault_err}")
+                    export_details.append(f"âœ— Fault '{fault_name}' failed: {str(fault_err)}")
+
             # ================================================================
             # STEP 2: Export all wells/polylines to well_coll
             # ================================================================
