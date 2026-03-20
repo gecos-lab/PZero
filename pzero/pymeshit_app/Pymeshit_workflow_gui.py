@@ -2669,6 +2669,22 @@ class MeshItWorkflowGUI(QWidget):
         # --- File Menu ---
         file_menu = menu_bar.addMenu("&File")
 
+        new_project_action = QAction("&New Project", self)
+        new_project_action.setStatusTip("Create a new project (clears all data)")
+        new_project_action.triggered.connect(self.new_project)
+        file_menu.addAction(new_project_action)
+
+        save_project_action = QAction("&Save Project...", self)
+        save_project_action.setStatusTip("Save current project state to file")
+        save_project_action.triggered.connect(self.save_project)
+        file_menu.addAction(save_project_action)
+
+        load_project_action = QAction("&Load Project...", self)
+        load_project_action.setStatusTip("Load project from file")
+        load_project_action.triggered.connect(self.load_project)
+        file_menu.addAction(load_project_action)
+
+        file_menu.addSeparator()
 
         # Add Well loaders
         load_well_action = QAction("Load &Well File...", self)
@@ -12114,7 +12130,294 @@ segmentation, triangulation, and visualization.
         """Remove the active dataset"""
         if 0 <= self.current_dataset_index < len(self.datasets):
             self._remove_dataset(self.current_dataset_index)
-    
+
+    def new_project(self):
+        """
+        Create a new project by resetting everything to initial state.
+        Properly handles plotter cleanup to prevent crashes.
+        """
+        if self.datasets or (hasattr(self, 'datasets_intersections') and self.datasets_intersections):
+            confirm = QMessageBox.question(
+                self,
+                "New Project",
+                "Creating a new project will clear all current data and processing results.\n\n"
+                "Are you sure you want to continue?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if confirm != QMessageBox.Yes:
+                return
+
+        try:
+            logger.info("Creating new project - clearing all data")
+
+            self._clear_visualizations()
+
+            if hasattr(self, 'plotters'):
+                self.plotters.clear()
+
+            QApplication.processEvents()
+            time.sleep(0.1)
+
+            self.datasets = []
+            self.current_dataset_index = -1
+            self.datasets_intersections = {}
+            self.seg_length_by_surface = {}
+            self.mesh_size_by_surface = {}
+            self.tetra_mesh_data = None
+            self.tetra_materials = []
+            self.tetrahedral_mesh = None
+
+            self._update_dataset_list()
+            self._update_statistics()
+
+            if hasattr(self, '_refresh_material_list'):
+                self._refresh_material_list()
+            if hasattr(self, '_refresh_seg_refine_table'):
+                self._refresh_seg_refine_table()
+            if hasattr(self, '_refresh_mesh_refine_table'):
+                self._refresh_mesh_refine_table()
+            if hasattr(self, '_refresh_well_refine_table'):
+                self._refresh_well_refine_table()
+            if hasattr(self, '_refresh_mesh_well_refine_table'):
+                self._refresh_mesh_well_refine_table()
+
+            if hasattr(self, '_update_export_to_pzero_button_state'):
+                self._update_export_to_pzero_button_state()
+
+            self.notebook.setCurrentIndex(0)
+
+            gc.collect()
+
+            self.statusBar().showMessage("New project created - all data cleared")
+            logger.info("New project created successfully")
+
+        except Exception as e:
+            logger.error(f"Error creating new project: {str(e)}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"An error occurred while creating new project:\n{str(e)}"
+            )
+
+    def save_project(self):
+        """
+        Save the current project state to a file.
+        Saves datasets, processing results, and current tab state.
+        """
+        if not self.datasets:
+            QMessageBox.information(
+                self,
+                "Nothing to Save",
+                "There are no datasets to save. Load some data first."
+            )
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Project",
+            "",
+            "PyMeshIt Project Files (*.pmit);;All Files (*.*)"
+        )
+
+        if not file_path:
+            self.statusBar().showMessage("Project save canceled")
+            return
+
+        if not file_path.endswith('.pmit'):
+            file_path += '.pmit'
+
+        try:
+            import pickle
+
+            logger.info(f"Saving project to: {file_path}")
+
+            project_data = {
+                'version': '1.1',
+                'datasets': self.datasets,
+                'current_dataset_index': self.current_dataset_index,
+                'current_tab_index': self.notebook.currentIndex(),
+                'datasets_intersections': getattr(self, 'datasets_intersections', {}),
+                'seg_length_by_surface': getattr(self, 'seg_length_by_surface', {}),
+                'mesh_size_by_surface': getattr(self, 'mesh_size_by_surface', {}),
+                'tetra_mesh_data': getattr(self, 'tetra_mesh_data', None),
+                'tetra_materials': getattr(self, 'tetra_materials', []),
+            }
+
+            with open(file_path, 'wb') as f:
+                pickle.dump(project_data, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+            self.statusBar().showMessage(
+                f"Project saved successfully to {os.path.basename(file_path)}"
+            )
+            logger.info(f"Project saved successfully: {file_path}")
+
+            QMessageBox.information(
+                self,
+                "Project Saved",
+                f"Project saved successfully to:\n{file_path}\n\n"
+                f"Datasets: {len(self.datasets)}\n"
+                f"Current tab: {self.notebook.tabText(self.notebook.currentIndex())}"
+            )
+
+        except Exception as e:
+            logger.error(f"Error saving project: {str(e)}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "Save Error",
+                f"An error occurred while saving the project:\n{str(e)}"
+            )
+            self.statusBar().showMessage(f"Error saving project: {str(e)}")
+
+    def load_project(self):
+        """
+        Load a project from a file.
+        Properly handles plotter cleanup before loading to prevent crashes.
+        """
+        if self.datasets or (hasattr(self, 'datasets_intersections') and self.datasets_intersections):
+            confirm = QMessageBox.question(
+                self,
+                "Load Project",
+                "Loading a project will replace all current data and processing results.\n\n"
+                "Are you sure you want to continue?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if confirm != QMessageBox.Yes:
+                return
+
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Load Project",
+            "",
+            "PyMeshIt Project Files (*.pmit);;All Files (*.*)"
+        )
+
+        if not file_path:
+            self.statusBar().showMessage("Project load canceled")
+            return
+
+        if not os.path.exists(file_path):
+            QMessageBox.critical(
+                self,
+                "File Not Found",
+                f"The project file does not exist:\n{file_path}"
+            )
+            return
+
+        try:
+            import pickle
+
+            logger.info(f"Loading project from: {file_path}")
+
+            self._clear_visualizations()
+
+            if hasattr(self, 'plotters'):
+                self.plotters.clear()
+
+            QApplication.processEvents()
+            time.sleep(0.1)
+
+            with open(file_path, 'rb') as f:
+                project_data = pickle.load(f)
+
+            version = project_data.get('version', '1.0')
+            logger.info(f"Loading project version: {version}")
+
+            self.datasets = project_data.get('datasets', [])
+            self.current_dataset_index = project_data.get('current_dataset_index', -1)
+            saved_tab_index = project_data.get('current_tab_index', 0)
+            self.datasets_intersections = project_data.get('datasets_intersections', {})
+            self.seg_length_by_surface = project_data.get('seg_length_by_surface', {})
+            self.mesh_size_by_surface = project_data.get('mesh_size_by_surface', {})
+            self.tetra_mesh_data = project_data.get('tetra_mesh_data', None)
+            self.tetra_materials = project_data.get('tetra_materials', [])
+
+            logger.info(
+                f"Loaded {len(self.tetra_materials)} material definitions with seed locations"
+            )
+
+            self._update_dataset_list()
+            self._update_statistics()
+
+            if hasattr(self, '_refresh_material_list'):
+                self._refresh_material_list()
+            if hasattr(self, '_refresh_seg_refine_table'):
+                self._refresh_seg_refine_table()
+            if hasattr(self, '_refresh_mesh_refine_table'):
+                self._refresh_mesh_refine_table()
+            if hasattr(self, '_refresh_well_refine_table'):
+                self._refresh_well_refine_table()
+            if hasattr(self, '_refresh_mesh_well_refine_table'):
+                self._refresh_mesh_well_refine_table()
+
+            self.notebook.blockSignals(True)
+            if 0 <= saved_tab_index < self.notebook.count():
+                self.notebook.setCurrentIndex(saved_tab_index)
+            else:
+                saved_tab_index = 0
+                self.notebook.setCurrentIndex(saved_tab_index)
+            self.notebook.blockSignals(False)
+
+            current_tab_widget = self.notebook.widget(saved_tab_index)
+
+            if current_tab_widget == self.file_tab:
+                self._visualize_all_points()
+            elif current_tab_widget == self.hull_tab:
+                if any(d.get('visible', True) and d.get('hull_points') is not None for d in self.datasets):
+                    self._visualize_all_hulls()
+            elif current_tab_widget == self.segment_tab:
+                if any(d.get('visible', True) and d.get('segments') is not None for d in self.datasets):
+                    self._clear_segmentation_visualization_flag()
+                    self._visualize_all_segments()
+            elif current_tab_widget == self.triangulation_tab:
+                if any(d.get('visible', True) and d.get('triangulation_result') is not None for d in self.datasets):
+                    self._visualize_all_triangulations()
+            elif current_tab_widget == self.intersection_tab:
+                if bool(self.datasets_intersections):
+                    self._visualize_intersections()
+            elif current_tab_widget == self.refine_mesh_tab:
+                if bool(self.datasets_intersections):
+                    self._visualize_refined_intersections()
+            elif hasattr(self, 'tetra_mesh_tab') and current_tab_widget == self.tetra_mesh_tab:
+                if hasattr(self, 'tetrahedral_mesh') and self.tetrahedral_mesh:
+                    self._visualize_tetrahedral_mesh_in_tetra_tab()
+
+            if hasattr(self, '_update_export_to_pzero_button_state'):
+                self._update_export_to_pzero_button_state()
+
+            gc.collect()
+
+            num_datasets = len(self.datasets)
+            tab_name = self.notebook.tabText(saved_tab_index)
+
+            self.statusBar().showMessage(
+                f"Project loaded successfully from {os.path.basename(file_path)}"
+            )
+            logger.info(f"Project loaded successfully: {file_path}")
+
+            QMessageBox.information(
+                self,
+                "Project Loaded",
+                f"Project loaded successfully from:\n{os.path.basename(file_path)}\n\n"
+                f"Datasets loaded: {num_datasets}\n"
+                f"Current tab: {tab_name}"
+            )
+
+        except Exception as e:
+            logger.error(f"Error loading project: {str(e)}", exc_info=True)
+            QMessageBox.critical(
+                self,
+                "Load Error",
+                f"An error occurred while loading the project:\n{str(e)}\n\n"
+                f"The project file may be corrupted or incompatible."
+            )
+            self.statusBar().showMessage(f"Error loading project: {str(e)}")
+
+            try:
+                logger.info("Attempting to recover by creating new project")
+                self.new_project()
+            except Exception as recovery_error:
+                logger.error(f"Error during recovery: {recovery_error}", exc_info=True)
+
     def delete_selected_surface(self):
         """Delete the selected surface from the dataset table."""
         # Use unified table if available
