@@ -2038,8 +2038,11 @@ def align_intersections_to_convex_hull(surface_idx: int, model):
     # Adaptive tolerances from hull scale to support large-coordinate projects.
     hull_np = np.array([[p.x, p.y, p.z] for p in hull], dtype=float)
     diag = float(np.linalg.norm(np.max(hull_np, axis=0) - np.min(hull_np, axis=0)))
-    snap_tol = max(1e-8, diag * 1e-9)
-    proj_tol = max(5.0 * snap_tol, diag * 1e-7)
+    edge_lengths = [float((hull[(i + 1) % len(hull)] - hull[i]).length()) for i in range(len(hull))]
+    edge_lengths = [d for d in edge_lengths if d > 0.0]
+    median_edge = float(np.median(edge_lengths)) if edge_lengths else max(diag, 1.0)
+    snap_tol = max(1e-8, diag * 1e-9, median_edge * 1e-6)
+    proj_tol = max(5.0 * snap_tol, diag * 1e-7, median_edge * 1e-2)
 
     # Convert surface list index -> combined temp id if mapping is available.
     surface_combined_idx = surface_idx
@@ -2121,16 +2124,18 @@ def align_intersections_to_convex_hull(surface_idx: int, model):
             if best_p is not None and best_i >= 0 and best_d <= proj_tol:
                 existing = None
                 for v in hull:
-                    if _dist(best_p, v) <= snap_tol:
+                    if _dist(ep, v) <= snap_tol or _dist(best_p, v) <= snap_tol:
                         existing = v
                         break
                 if existing is not None:
+                    _set_common_type(existing)
                     inter.points[endpoint_slot] = existing
                 else:
-                    nv = Vector3D(best_p.x, best_p.y, best_p.z, point_type="COMMON_INTERSECTION_CONVEXHULL_POINT")
-                    _set_common_type(nv)
-                    hull.insert(best_i + 1, nv)
-                    inter.points[endpoint_slot] = nv
+                    # Preserve the exact intersection endpoint for watertightness.
+                    # The projection is used only to identify the host hull edge.
+                    _set_common_type(ep)
+                    hull.insert(best_i + 1, ep)
+                    inter.points[endpoint_slot] = ep
             else:
                 logger.debug(
                     f"Surface {surface_idx}: endpoint not snapped "
@@ -3119,8 +3124,17 @@ def run_constrained_triangulation_py(
     # map back to world
     final_vertices_3d = centroid + np.outer(vertices_uv[:,0], ex) + np.outer(vertices_uv[:,1], ey) + np.outer(w_out, ez)
 
-    # PLC snap (keeps TetGen happy)
-    tol_uv = 1e-10
+    # PLC snap (keeps TetGen happy and preserves exact hull/intersection vertices)
+    plc_bb_min = np.min(plc_points_2d, axis=0)
+    plc_bb_max = np.max(plc_points_2d, axis=0)
+    plc_diag = float(np.linalg.norm(plc_bb_max - plc_bb_min))
+    seg_lengths = np.linalg.norm(
+        plc_points_2d[plc_segments_indices[:, 1]] - plc_points_2d[plc_segments_indices[:, 0]],
+        axis=1,
+    ) if len(plc_segments_indices) > 0 else np.empty((0,), dtype=float)
+    seg_lengths = seg_lengths[np.isfinite(seg_lengths) & (seg_lengths > 0.0)]
+    median_seg_len = float(np.median(seg_lengths)) if len(seg_lengths) > 0 else max(plc_diag, 1.0)
+    tol_uv = max(1e-10, plc_diag * 1e-10, median_seg_len * 1e-6)
     plc_kd = cKDTree(plc_points_2d)
     dists, nn = plc_kd.query(vertices_uv, k=1)
     snap_mask = dists <= tol_uv
