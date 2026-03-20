@@ -17936,6 +17936,29 @@ segmentation, triangulation, and visualization.
         try:
             # Get the project window from the bridge
             project_window = self.pzero_bridge._project
+
+            def _build_entity_dict(collection, **updates):
+                """Return a row that strictly matches the target PZero collection schema."""
+                entity_dict = deepcopy(collection.entity_dict)
+                entity_dict.update(
+                    {
+                        key: value
+                        for key, value in updates.items()
+                        if key in entity_dict
+                    }
+                )
+                return entity_dict
+
+            def _normalize_geology_role(dataset_type: str) -> str:
+                """Keep exported geology roles inside the current PZero valid role set."""
+                role = "fault" if dataset_type == "FAULT" else "formation"
+                valid_roles = set(getattr(project_window.geol_coll, "valid_roles", []) or [])
+                if valid_roles and role not in valid_roles:
+                    if "formation" in valid_roles:
+                        return "formation"
+                    if "undef" in valid_roles:
+                        return "undef"
+                return role
             
             # Import required modules
             from pzero.entities_factory import TetraSolid, TriSurf, PolyLine
@@ -18008,20 +18031,22 @@ segmentation, triangulation, and visualization.
                     trisurf.SetPolys(vtk_triangles)
                     
                     # Determine role based on dataset type
-                    role = 'fault' if dataset_type == 'FAULT' else 'formation'
+                    role = _normalize_geology_role(dataset_type)
                     
                     # Create entity dictionary for geol_coll
-                    entity_dict = deepcopy(project_window.geol_coll.entity_dict)
-                    entity_dict["uid"] = str(uuid4())
-                    entity_dict["name"] = f"{dataset_name}"
-                    entity_dict["scenario"] = "PyMeshIt"
-                    entity_dict["x_section"] = ""
-                    entity_dict["topology"] = "TriSurf"
-                    entity_dict["vtk_obj"] = trisurf
-                    entity_dict["role"] = role
-                    entity_dict["feature"] = dataset.get('feature', 'undef')
-                    entity_dict["properties_names"] = []
-                    entity_dict["properties_components"] = []
+                    entity_dict = _build_entity_dict(
+                        project_window.geol_coll,
+                        uid=str(uuid4()),
+                        name=f"{dataset_name}",
+                        scenario="PyMeshIt",
+                        parent_uid="",
+                        topology="TriSurf",
+                        vtk_obj=trisurf,
+                        role=role,
+                        feature=dataset.get('feature', 'undef'),
+                        properties_names=[],
+                        properties_components=[],
+                    )
                     
                     # Add to geology collection
                     project_window.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
@@ -18086,17 +18111,19 @@ segmentation, triangulation, and visualization.
                     polyline.SetLines(vtk_lines)
                     
                     # Create entity dictionary for well_coll
-                    entity_dict = deepcopy(project_window.well_coll.entity_dict)
-                    entity_dict["uid"] = str(uuid4())
-                    entity_dict["name"] = f"{dataset_name}"
-                    entity_dict["scenario"] = "PyMeshIt"
-                    entity_dict["x_section"] = []
-                    entity_dict["topology"] = "PolyLine"
-                    entity_dict["vtk_obj"] = polyline
-                    entity_dict["properties_names"] = []
-                    entity_dict["properties_components"] = []
-                    entity_dict["properties_types"] = []
-                    entity_dict["markers"] = []
+                    entity_dict = _build_entity_dict(
+                        project_window.well_coll,
+                        uid=str(uuid4()),
+                        name=f"{dataset_name}",
+                        scenario="PyMeshIt",
+                        parent_uid="",
+                        topology="PolyLine",
+                        vtk_obj=polyline,
+                        properties_names=[],
+                        properties_components=[],
+                        properties_types=[],
+                        markers=[],
+                    )
                     
                     # Add to well collection
                     project_window.well_coll.add_entity_from_dict(entity_dict=entity_dict)
@@ -18139,6 +18166,18 @@ segmentation, triangulation, and visualization.
                         vtk_mesh.DeepCopy(combined_mesh)
                         
                         if vtk_mesh.GetNumberOfCells() > 0:
+                            existing_tetra_uids = project_window.mesh3d_coll.df.loc[
+                                (project_window.mesh3d_coll.df["topology"] == "TetraSolid")
+                                & (project_window.mesh3d_coll.df["scenario"] == "PyMeshIt"),
+                                "uid",
+                            ].to_list()
+                            for existing_uid in existing_tetra_uids:
+                                project_window.mesh3d_coll.remove_entity(uid=existing_uid)
+                            if existing_tetra_uids:
+                                logger.info(
+                                    f"Removed {len(existing_tetra_uids)} existing PyMeshIt tetra mesh(es) before export"
+                                )
+
                             # Extract properties from the mesh
                             properties_names = []
                             properties_components = []
@@ -18169,16 +18208,18 @@ segmentation, triangulation, and visualization.
                                             properties_types.append(array.GetDataTypeAsString())
                             
                             # Create entity dictionary matching mesh3d collection format
-                            entity_dict = deepcopy(project_window.mesh3d_coll.entity_dict)
-                            entity_dict["uid"] = str(uuid4())
-                            entity_dict["name"] = f"TetraMesh_{timestamp}"
-                            entity_dict["scenario"] = "PyMeshIt"
-                            entity_dict["x_section"] = ""
-                            entity_dict["topology"] = "TetraSolid"
-                            entity_dict["vtk_obj"] = vtk_mesh
-                            entity_dict["properties_names"] = properties_names
-                            entity_dict["properties_components"] = properties_components
-                            entity_dict["properties_types"] = properties_types
+                            entity_dict = _build_entity_dict(
+                                project_window.mesh3d_coll,
+                                uid=str(uuid4()),
+                                name="TetraMesh_PyMeshIt",
+                                scenario="PyMeshIt",
+                                parent_uid="",
+                                topology="TetraSolid",
+                                vtk_obj=vtk_mesh,
+                                properties_names=properties_names,
+                                properties_components=properties_components,
+                                properties_types=properties_types,
+                            )
                             
                             # Add to mesh3d collection
                             project_window.mesh3d_coll.add_entity_from_dict(entity_dict=entity_dict)

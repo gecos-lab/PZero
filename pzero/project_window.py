@@ -27,12 +27,15 @@ from vtk import (
     vtkPolyData,
     vtkAppendPolyData,
     vtkOctreePointLocator,
+    vtkUnstructuredGrid,
     vtkXMLPolyDataWriter,
     vtkXMLStructuredGridWriter,
     vtkXMLImageDataWriter,
+    vtkXMLUnstructuredGridWriter,
     vtkXMLStructuredGridReader,
     vtkXMLPolyDataReader,
     vtkXMLImageDataReader,
+    vtkXMLUnstructuredGridReader,
 )
 
 from pzero.collections.background_collection import BackgroundCollection
@@ -84,6 +87,7 @@ from .entities_factory import (
     VertexSet,
     PolyLine,
     TriSurf,
+    TetraSolid,
     XsVertexSet,
     XsPolyLine,
     DEM,
@@ -1689,13 +1693,26 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             parent=self,
         )
         for uid in self.mesh3d_coll.df["uid"].to_list():
-            if self.mesh3d_coll.df.loc[
+            topology = self.mesh3d_coll.df.loc[
                 self.mesh3d_coll.df["uid"] == uid, "topology"
-            ].values[0] in ["Voxet", "XsVoxet"]:
+            ].values[0]
+            if topology in ["Voxet", "XsVoxet"]:
                 im_writer = vtkXMLImageDataWriter()
                 im_writer.SetFileName(out_dir_name + "/" + uid + ".vti")
                 im_writer.SetInputData(self.mesh3d_coll.get_uid_vtk_obj(uid))
                 im_writer.Write()
+            elif topology in ["TetraSolid"]:
+                out_mesh_file = out_dir_name + "/" + uid + ".vtu"
+                vtk_mesh = vtkUnstructuredGrid()
+                vtk_mesh.DeepCopy(self.mesh3d_coll.get_uid_vtk_obj(uid))
+                ug_writer = vtkXMLUnstructuredGridWriter()
+                ug_writer.SetFileName(out_mesh_file)
+                ug_writer.SetInputData(vtk_mesh)
+                write_ok = ug_writer.Write()
+                if write_ok != 1 or not os_path.isfile(out_mesh_file):
+                    self.print_terminal(
+                        f"failed to save TetraSolid mesh file for uid {uid}"
+                    )
             prgs_bar.add_one()
 
         # Save boundaries collection table to CSV and JSON files.
@@ -2518,25 +2535,34 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     cancel_txt=None,
                     parent=self,
                 )
+                missing_mesh3d_uids = []
                 for uid in self.mesh3d_coll.df["uid"].to_list():
-                    if self.mesh3d_coll.df.loc[
+                    vtk_object = None
+                    topology = self.mesh3d_coll.df.loc[
                         self.mesh3d_coll.df["uid"] == uid, "topology"
-                    ].values[0] in ["Voxet"]:
+                    ].values[0]
+                    if topology in ["Voxet"]:
                         if not os_path.isfile((in_dir_name + "/" + uid + ".vti")):
-                            print("error: missing .mesh3d file")
-                            return
+                            self.print_terminal(
+                                f"missing mesh3d file for uid {uid} ({topology})"
+                            )
+                            missing_mesh3d_uids.append(uid)
+                            prgs_bar.add_one()
+                            continue
                         vtk_object = Voxet()
                         im_reader = vtkXMLImageDataReader()
                         im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
                         im_reader.Update()
                         vtk_object.ShallowCopy(im_reader.GetOutput())
                         vtk_object.Modified()
-                    elif self.mesh3d_coll.df.loc[
-                        self.mesh3d_coll.df["uid"] == uid, "topology"
-                    ].values[0] in ["XsVoxet"]:
+                    elif topology in ["XsVoxet"]:
                         if not os_path.isfile((in_dir_name + "/" + uid + ".vti")):
-                            print("error: missing .mesh3d file")
-                            return
+                            self.print_terminal(
+                                f"missing mesh3d file for uid {uid} ({topology})"
+                            )
+                            missing_mesh3d_uids.append(uid)
+                            prgs_bar.add_one()
+                            continue
                         vtk_object = XsVoxet(
                             x_section_uid=self.mesh3d_coll.df.loc[
                                 self.mesh3d_coll.df["uid"] == uid, "parent_uid"
@@ -2548,8 +2574,36 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         im_reader.Update()
                         vtk_object.ShallowCopy(im_reader.GetOutput())
                         vtk_object.Modified()
+                    elif topology in ["TetraSolid"]:
+                        if not os_path.isfile((in_dir_name + "/" + uid + ".vtu")):
+                            self.print_terminal(
+                                f"missing mesh3d file for uid {uid} ({topology})"
+                            )
+                            missing_mesh3d_uids.append(uid)
+                            prgs_bar.add_one()
+                            continue
+                        vtk_object = TetraSolid()
+                        ug_reader = vtkXMLUnstructuredGridReader()
+                        ug_reader.SetFileName(in_dir_name + "/" + uid + ".vtu")
+                        ug_reader.Update()
+                        vtk_object.ShallowCopy(ug_reader.GetOutput())
+                        vtk_object.Modified()
+                    else:
+                        self.print_terminal(
+                            f"unsupported mesh3d topology skipped on open: {topology}"
+                        )
+                        prgs_bar.add_one()
+                        continue
                     self.mesh3d_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                     prgs_bar.add_one()
+                if missing_mesh3d_uids:
+                    self.mesh3d_coll.df.drop(
+                        self.mesh3d_coll.df[
+                            self.mesh3d_coll.df["uid"].isin(missing_mesh3d_uids)
+                        ].index,
+                        inplace=True,
+                    )
+                    self.mesh3d_coll.df.reset_index(drop=True, inplace=True)
                 self.mesh3d_coll.table_model.endResetModel()
 
             # Read boundaries collection and files.
