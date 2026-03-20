@@ -1501,10 +1501,9 @@ class MeshItWorkflowGUI(QWidget):
             tri_combo = QComboBox()
             tri_combo.addItem("Auto", "auto")
             tri_combo.addItem("Standard CDT", "standard")
-            tri_combo.addItem("Multi-Patch", "multipatch")
             tri_combo.addItem("Isomap Unfolding", "isomap")
             # Get current tri method for this surface
-            current_tri = self.tri_method_by_surface.get(idx, "auto")
+            current_tri = self._normalize_tri_method(self.tri_method_by_surface.get(idx, "auto"))
             tri_index = tri_combo.findData(current_tri)
             if tri_index >= 0:
                 tri_combo.setCurrentIndex(tri_index)
@@ -3119,18 +3118,12 @@ class MeshItWorkflowGUI(QWidget):
         method = self.hull_method_combo.currentData()
         # Enable alpha spin box for alpha shape methods (both 2D and 3D)
         self.hull_alpha_spin.setEnabled(method in ("alpha_shape_2d", "angular_gap"))
-    
-    def _on_tri_method_changed(self, index):
-        """Handle triangulation method dropdown change - enable/disable fold angle threshold."""
-        method = self.tri_method_combo.currentData()
-        # Enable fold angle threshold only for multi-patch method
-        self.fold_angle_threshold_spin.setEnabled(method == "multipatch")
-    
-    def _on_mesh_tri_method_changed(self, index):
-        """Handle mesh triangulation method dropdown change - enable/disable fold angle threshold."""
-        method = self.mesh_tri_method_combo.currentData()
-        # Enable fold angle threshold only for multi-patch method
-        self.mesh_fold_angle_threshold_spin.setEnabled(method == "multipatch")
+
+    def _normalize_tri_method(self, method):
+        """Map removed triangulation modes to a supported fallback."""
+        if method not in (None, "", "auto", "global", "standard", "isomap"):
+            return "standard"
+        return method
 
     # =========================================================================
     # PER-SURFACE HULL METHOD TABLE (Compute Hull Tab)
@@ -3284,10 +3277,9 @@ class MeshItWorkflowGUI(QWidget):
             tri_combo = QComboBox()
             tri_combo.addItem("Auto (Use Global)", "auto")
             tri_combo.addItem("Standard CDT", "standard")
-            tri_combo.addItem("Multi-Patch", "multipatch")
             tri_combo.addItem("Isomap Unfolding", "isomap")
 
-            current_tri = self.tri_method_by_surface.get(idx, "auto")
+            current_tri = self._normalize_tri_method(self.tri_method_by_surface.get(idx, "auto"))
             tri_index = tri_combo.findData(current_tri)
             if tri_index >= 0:
                 tri_combo.setCurrentIndex(tri_index)
@@ -3469,31 +3461,13 @@ class MeshItWorkflowGUI(QWidget):
         # Triangulation Method Selection (NEW - for folded surfaces)
         self.tri_method_combo = QComboBox()
         self.tri_method_combo.addItem("Standard CDT (Default)", "standard")
-        self.tri_method_combo.addItem("Multi-Patch (Folded Surfaces)", "multipatch")
         self.tri_method_combo.addItem("Isomap Unfolding (Complex Folds)", "isomap")
         self.tri_method_combo.setToolTip(
             "Standard CDT: Constrained Delaunay Triangulation - best for quasi-planar surfaces\n"
-            "Multi-Patch: Detects fold hinges and triangulates each patch separately - use for recumbent/overturned folds\n"
             "Isomap Unfolding: Geodesic parameterization that unfolds complex folds to 2D - best constraint preservation"
         )
         self.tri_method_combo.setCurrentIndex(0)
         quality_layout.addRow("Tri Method:", self.tri_method_combo)
-
-        # Fold detection threshold (only for multi-patch)
-        self.fold_angle_threshold_spin = QDoubleSpinBox()
-        self.fold_angle_threshold_spin.setRange(90.0, 170.0)
-        self.fold_angle_threshold_spin.setValue(120.0)
-        self.fold_angle_threshold_spin.setSingleStep(5.0)
-        self.fold_angle_threshold_spin.setToolTip(
-            "Normal angle threshold for fold hinge detection (degrees).\n"
-            "Angles > threshold between adjacent normals indicate a fold hinge.\n"
-            "Lower = more sensitive (detects subtle folds), Higher = less sensitive"
-        )
-        self.fold_angle_threshold_spin.setEnabled(False)
-        quality_layout.addRow("Fold Angle:", self.fold_angle_threshold_spin)
-        
-        # Connect method change to enable/disable fold angle
-        self.tri_method_combo.currentIndexChanged.connect(self._on_tri_method_changed)
 
         # Gradient
         self.gradient_input = QDoubleSpinBox()
@@ -3803,31 +3777,13 @@ class MeshItWorkflowGUI(QWidget):
         # Triangulation Method Selection for Refine & Mesh (NEW - for folded surfaces)
         self.mesh_tri_method_combo = QComboBox()
         self.mesh_tri_method_combo.addItem("Standard CDT (Default)", "standard")
-        self.mesh_tri_method_combo.addItem("Multi-Patch (Folded Surfaces)", "multipatch")
         self.mesh_tri_method_combo.addItem("Isomap Unfolding (Complex Folds)", "isomap")
         self.mesh_tri_method_combo.setToolTip(
             "Standard CDT: Constrained Delaunay Triangulation - best for quasi-planar surfaces\n"
-            "Multi-Patch: Detects fold hinges and triangulates each patch separately - use for recumbent/overturned folds\n"
             "Isomap Unfolding: Geodesic parameterization that unfolds complex folds to 2D - best constraint preservation"
         )
         self.mesh_tri_method_combo.setCurrentIndex(0)
         mg.addRow("Tri Method", self.mesh_tri_method_combo)
-        
-        # Fold detection threshold for refine mesh (only for multi-patch)
-        self.mesh_fold_angle_threshold_spin = QDoubleSpinBox()
-        self.mesh_fold_angle_threshold_spin.setRange(90.0, 170.0)
-        self.mesh_fold_angle_threshold_spin.setValue(120.0)
-        self.mesh_fold_angle_threshold_spin.setSingleStep(5.0)
-        self.mesh_fold_angle_threshold_spin.setToolTip(
-            "Normal angle threshold for fold hinge detection (degrees).\n"
-            "Angles > threshold between adjacent normals indicate a fold hinge.\n"
-            "Lower = more sensitive (detects subtle folds), Higher = less sensitive"
-        )
-        self.mesh_fold_angle_threshold_spin.setEnabled(False)
-        mg.addRow("Fold Angle", self.mesh_fold_angle_threshold_spin)
-        
-        # Connect method change to enable/disable fold angle
-        self.mesh_tri_method_combo.currentIndexChanged.connect(self._on_mesh_tri_method_changed)
 
         self.mesh_interp_combo = QComboBox()
         self.mesh_interp_combo.addItems([
@@ -7728,9 +7684,9 @@ class MeshItWorkflowGUI(QWidget):
                 surface_tri_method = self.tri_method_by_surface.get(original_idx, "auto") if hasattr(self, 'tri_method_by_surface') else "auto"
                 if surface_tri_method in ("auto", "global"):
                     surface_tri_method = mesh_tri_method
-                preserve_angular_gap_hull_for_surface = (surface_tri_method == "multipatch")
+                surface_tri_method = self._normalize_tri_method(surface_tri_method)
 
-                if use_angular_gap or preserve_angular_gap_hull_for_surface:
+                if use_angular_gap:
                     # Use 3D hull refinement to preserve angular-gap hull shape
                     logger.info(f"Using 3D hull refinement for surface {original_idx} to preserve angular-gap hull shape.")
                     try:
@@ -7971,18 +7927,15 @@ class MeshItWorkflowGUI(QWidget):
     def _generate_conforming_meshes_action(self):
         """Generate conforming surface meshes from currently checked segments."""
         import numpy as np
-        from Pymeshit.triangle_direct import DirectTriangleWrapper
         
         # Keep status/log but compute per-surface target size below
         self.statusBar().showMessage("Generating conforming surface meshes…")
         
         # Get triangulation method from dropdown (NEW - for folded surfaces)
         mesh_tri_method = "standard"
-        mesh_fold_angle_threshold = 120.0
         if hasattr(self, 'mesh_tri_method_combo'):
             mesh_tri_method = self.mesh_tri_method_combo.currentData() or "standard"
-        if hasattr(self, 'mesh_fold_angle_threshold_spin'):
-            mesh_fold_angle_threshold = self.mesh_fold_angle_threshold_spin.value()
+        mesh_tri_method = self._normalize_tri_method(mesh_tri_method)
 
         ok, total, fails = 0, 0, []
         for s_idx, ds in enumerate(self.datasets):
@@ -8008,6 +7961,7 @@ class MeshItWorkflowGUI(QWidget):
                 surface_tri_method = self.tri_method_by_surface.get(s_idx, "auto") if hasattr(self, 'tri_method_by_surface') else "auto"
                 if surface_tri_method == "auto":
                     surface_tri_method = mesh_tri_method  # Use global setting
+                surface_tri_method = self._normalize_tri_method(surface_tri_method)
 
                 cfg = {
                     "target_size": per_surface_target,
@@ -8016,7 +7970,6 @@ class MeshItWorkflowGUI(QWidget):
                     "interp":     self.mesh_interp_combo.currentText(),
                     "smoothing":  float(self.mesh_smoothing_input.value()),
                     "tri_method": surface_tri_method,  # Per-surface tri method
-                    "fold_angle_threshold": mesh_fold_angle_threshold,
                 }
                 
                 # Prepare data including segments (explicit boundary constraints)
@@ -8044,57 +7997,6 @@ class MeshItWorkflowGUI(QWidget):
                             s_idx,
                             added,
                         )
-                # Check if multi-patch triangulation is requested for this surface
-                if surface_tri_method == "multipatch":
-                    logger.info(f"Using Multi-Patch triangulation for conforming mesh '{name}' (fold_angle={mesh_fold_angle_threshold}°)")
-                    
-                    # Use retrieved points and segments (ensure float64 points)
-                    if len(pts3d) > 0 and hasattr(pts3d[0], "x"):
-                        all_pts = np.array([[p.x, p.y, p.z] for p in pts3d], dtype=float)
-                    else:
-                        all_pts = np.asarray(pts3d, dtype=float)
-                    
-                    # Get original mesh vertices from first triangulation for fold detection
-                    # This provides dense reference points when constraint points are sparse
-                    reference_pts = None
-                    reference_tris = None
-                    tri_result = ds.get('triangulation_result', {})
-                    if 'vertices' in tri_result and len(tri_result['vertices']) > 0:
-                        reference_pts = np.asarray(tri_result['vertices'], dtype=float)
-                        logger.info(f"Using {len(reference_pts)} reference points from original triangulation for fold detection")
-                    if 'triangles' in tri_result and len(tri_result['triangles']) > 0:
-                        reference_tris = np.asarray(tri_result['triangles'], dtype=int)
-                        logger.info(f"Using {len(reference_tris)} reference triangles for topology guidance")
-
-                    if len(all_pts) >= 4:
-                        triangulator = DirectTriangleWrapper(
-                            gradient=float(self.mesh_gradient_input.value()),
-                            min_angle=cfg["min_angle"],
-                            base_size=per_surface_target
-                        )
-                        tri_res = triangulator.triangulate_folded_surface(
-                            points_3d=all_pts,
-                            segments=seg_arr, # Pass explicit segments
-                            fold_angle_threshold=mesh_fold_angle_threshold,
-                            uniform=self.mesh_uniform_checkbox.isChecked(),
-                            reference_points_3d=reference_pts,  # Use original mesh for fold detection
-                            reference_triangles=reference_tris,  # Use original mesh topology
-                            auto_select_method=True  # Enable hybrid: auto-select CDT vs multi-patch based on surface geometry
-                        )
-                        
-                        if tri_res and 'vertices' in tri_res and 'triangles' in tri_res:
-                            ds.setdefault("conforming_mesh", {})
-                            ds["conforming_mesh"]["vertices"] = tri_res['vertices']
-                            ds["conforming_mesh"]["triangles"] = tri_res['triangles']
-                            ds["conforming_mesh"]["holes"] = []
-                            
-                            ok += 1
-                            logger.info(f"✓ Multi-Patch conforming mesh generated for '{name}': {len(tri_res['vertices'])} vertices, {len(tri_res['triangles'])} triangles")
-                            continue  # Skip standard triangulation
-                        else:
-                            logger.warning(f"Multi-Patch failed for '{name}', falling back to standard")
-                            # Fall through to standard triangulation
-
                 # Check if Isomap Unfolding triangulation is requested for this surface
                 if surface_tri_method == "isomap":
                     logger.info(f"Using Isomap Unfolding triangulation for conforming mesh '{name}'")
@@ -10814,11 +10716,10 @@ segmentation, triangulation, and visualization.
 
         # Get triangulation method - check per-surface setting first, then global
         tri_method = None
-        fold_angle_threshold = 120.0
 
         # Check per-surface setting first (from tri_per_surface_table in Triangulation tab)
         if hasattr(self, 'tri_method_by_surface') and dataset_index in self.tri_method_by_surface:
-            surface_tri_method = self.tri_method_by_surface[dataset_index]
+            surface_tri_method = self._normalize_tri_method(self.tri_method_by_surface[dataset_index])
             # "global" means use global combo; others are direct method names
             if surface_tri_method not in ("global", "auto"):
                 tri_method = surface_tri_method
@@ -10829,9 +10730,7 @@ segmentation, triangulation, and visualization.
                 tri_method = self.tri_method_combo.currentData() or "standard"
             else:
                 tri_method = "standard"
-
-        if hasattr(self, 'fold_angle_threshold_spin'):
-            fold_angle_threshold = self.fold_angle_threshold_spin.value()
+        tri_method = self._normalize_tri_method(tri_method)
 
         logger.info(f"Triangulating '{dataset_name}' with method='{tri_method}'")
 
@@ -10843,131 +10742,6 @@ segmentation, triangulation, and visualization.
 
             # Get all points for this dataset
             all_pts = np.asarray(dataset['points'], dtype=float)
-            
-            # Check if multi-patch triangulation is requested
-            explicit_segments = None
-            if tri_method == "multipatch":
-                # DEBUG: Collect global constraints from MAIN surfaces to pass to BOUNDARY surfaces
-                # This ensures the boundaries match the refined edges of the main surfaces.
-                # Initialize constraint cache if first run (defensive)
-                if not hasattr(self, '_global_constraint_cache'):
-                    self._global_constraint_cache = {'points': [], 'segments': []}
-
-                # Build explicit segments from this dataset's segments_data so multipatch gets real constraints
-                seg_round = 6
-                new_points = [p for p in all_pts] # Start with original points
-                pmap = {tuple(np.round(p, seg_round)): i for i, p in enumerate(new_points)}
-                explicit_segments_list = []
-
-                if segments_data is not None and len(segments_data) > 0:
-                    for s in segments_data:
-                        p1 = np.array(s[0], dtype=float)
-                        p2 = np.array(s[1], dtype=float)
-                        k1 = tuple(np.round(p1, seg_round))
-                        k2 = tuple(np.round(p2, seg_round))
-                        if k1 not in pmap:
-                            pmap[k1] = len(new_points)
-                            new_points.append(p1)
-                        if k2 not in pmap:
-                            pmap[k2] = len(new_points)
-                            new_points.append(p2)
-                        explicit_segments_list.append([pmap[k1], pmap[k2]])
-                
-                # If this is a MAIN surface (has segments), add to cache
-                if segments_data is not None and len(segments_data) > 0 and "new_boundary" not in dataset_name:
-                     # Add points and segments (offset indices)
-                     lines = []
-                     for s in segments_data:
-                         p1 = np.array(s[0], dtype=float)
-                         p2 = np.array(s[1], dtype=float)
-                         lines.append((p1, p2))
-                     self._global_constraint_cache['segments'].extend(lines)
-                
-                # If this is a BOUNDARY surface ("new_boundary"), INJECT global constraints
-                if "new_boundary" in dataset_name:
-                    logger.info(f"Injecting global constraints into boundary '{dataset_name}'")
-                    
-                    if hasattr(self, '_global_constraint_cache') and self._global_constraint_cache['segments']:
-                        # Convert cached lines back to points + segments array
-                        extra_lines = self._global_constraint_cache['segments']
-                        
-                        # We need to merge 'all_pts' (boundary corners) with 'extra_lines' vertices
-                        # new_points already initialized above
-                        
-                        # Use a map to deduplicate points (essential for connectivity)
-                        pmap = {}
-                        for i, p in enumerate(new_points):
-                            key = tuple(np.round(p, seg_round))
-                            pmap[key] = i
-                            
-                        # Keep existing explicit_segments_list so dataset constraints are preserved
-                            
-                        for p1, p2 in extra_lines:
-                            k1 = tuple(np.round(p1, seg_round))
-                            k2 = tuple(np.round(p2, seg_round))
-                            
-                            # Only add segments that are close to this surface (simple bbox check or similar?)
-                            # For now, simplistic approach: check if points are somewhat coplanar or just assume 
-                            # the triangulation will ignore distant points?
-                            # DirectTriangleWrapper usually projects to 2D. 
-                            # Adding distant points is bad for projection.
-                            # Better: distance check.
-                            
-                            # Check distance to simple centroid of boundary
-                            cent = np.mean(all_pts, axis=0)
-                            if np.linalg.norm(p1 - cent) > 10000 and np.linalg.norm(p2 - cent) > 10000:
-                                 # Skip very far points (safety)
-                                 continue
-
-                            if k1 not in pmap:
-                                pmap[k1] = len(new_points)
-                                new_points.append(p1)
-                            if k2 not in pmap:
-                                pmap[k2] = len(new_points)
-                                new_points.append(p2)
-                                
-                            explicit_segments_list.append([pmap[k1], pmap[k2]])
-                            
-                        all_pts = np.array(new_points)
-                        if explicit_segments_list:
-                            explicit_segments = np.array(explicit_segments_list, dtype=int)
-                        
-                        logger.info(f"Boundary '{dataset_name}' now has {len(new_points)} points and {len(explicit_segments_list)} injected constraints")
-
-                all_pts = np.array(new_points)
-                if explicit_segments_list:
-                    explicit_segments = np.array(explicit_segments_list, dtype=int)
-
-                logger.info(f"Using Multi-Patch triangulation for '{dataset_name}' (fold_angle={fold_angle_threshold}°)")
-                
-                try:
-                    base_size = float(self._get_seg_target_length_for_dataset(dataset_index))
-                    if base_size <= 1e-6: base_size = 1.0
-                except Exception:
-                    base_size = 1.0
-                
-                # Use multi-patch triangulation for folded surfaces
-                triangulator = DirectTriangleWrapper(gradient=gradient, min_angle=min_angle, base_size=base_size)
-                tri_res = triangulator.triangulate_folded_surface(
-                    points_3d=all_pts,
-                    segments=explicit_segments,  # Pass explicitly injected segments
-                    fold_angle_threshold=fold_angle_threshold,
-                    uniform=uniform,
-                    interpolator=interp_label,
-                    smoothing=smoothing,
-                    auto_select_method=True  # Enable hybrid: auto-select CDT vs multi-patch
-                )
-                
-                if tri_res and 'vertices' in tri_res and 'triangles' in tri_res:
-                    dataset['triangulation_result'] = {
-                        'vertices': tri_res['vertices'],
-                        'triangles': tri_res['triangles']
-                    }
-                    logger.info(f"Multi-Patch triangulation for {dataset_name} completed. V={len(tri_res['vertices'])}, T={len(tri_res['triangles'])}")
-                    return True
-                else:
-                    logger.warning(f"Multi-Patch triangulation failed for {dataset_name}, falling back to standard method")
-                    # Fall through to standard triangulation
             
             # Isomap Unfolding triangulation for complex folded surfaces
             if tri_method == "isomap":
@@ -11276,9 +11050,6 @@ segmentation, triangulation, and visualization.
             self.statusBar().showMessage(f"Completed triangulation for {self.datasets[self.current_dataset_index]['name']}") # Add success message here
 
     def run_all_triangulations(self):
-        # Initialize global constraint cache for boundary injection
-        self._global_constraint_cache = {'points': [], 'segments': []}
-
         # Ensure VTU datasets have true boundary rings as segments
         self._rebuild_segments_from_vtu_boundaries()
         self._attach_vtu_constraints_to_all_datasets()
