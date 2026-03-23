@@ -2155,49 +2155,43 @@ def _fault_obb_settings_dialog(
     relation_suggestions=None,
 ):
     """
-    Interactive per-fault settings dialog.
+    Interactive per-fault settings dialog with a reduced stable control set.
 
-    Allows selecting each fault, adjusting OBB dimensions and fault parameters,
-    and previewing fault points + OBB fit.
+    The active workflow keeps only the controls that are currently robust:
+    displacement, rake, support-box scaling, inferred-normal polarity flip,
+    and manually configured abutting relationships.
     """
     from numpy import array as np_array
+    from numpy import dot as np_dot
+    from pyvista import Arrow as pv_Arrow
+    from pyvistaqt import QtInteractor as pvQtInteractor
     from PySide6.QtWidgets import (
         QCheckBox,
         QComboBox,
         QDialog,
         QDialogButtonBox,
         QDoubleSpinBox,
+        QFrame,
         QFormLayout,
         QGridLayout,
         QGroupBox,
         QHBoxLayout,
         QLabel,
-        QLineEdit,
-        QMessageBox,
-        QSpinBox,
         QVBoxLayout,
         QWidget,
     )
     from PySide6.QtCore import Qt, QPointF
-    from PySide6.QtGui import QColor, QPainter, QPen
+    from PySide6.QtGui import QColor, QPainter, QPen, QBrush, QPolygonF
 
     if not fault_data:
         return {}
 
-    relation_suggestions = relation_suggestions or {}
     fault_names = _sorted_fault_names_by_time(fault_data, older_first=True)
     current_fault = {"name": fault_names[0]}
     is_loading = {"active": False}
 
-    def _vec_to_text(vec):
-        try:
-            return f"{float(vec[0]):.6f}, {float(vec[1]):.6f}, {float(vec[2]):.6f}"
-        except Exception:
-            return ""
-
     defaults_by_fault = {}
     for fault_name in fault_names:
-        suggestion = relation_suggestions.get(fault_name, {})
         geometry = _compute_scaled_fault_geometry(
             fault_data[fault_name],
             rake_deg=default_rake,
@@ -2206,17 +2200,13 @@ def _fault_obb_settings_dialog(
         defaults_by_fault[fault_name] = {
             "displacement": float(default_displacement),
             "rake": float(default_rake),
-            "nelements": int(default_nelements),
-            "fault_buffer": float(default_fault_buffer),
             "major_scale_pct": 100.0,
             "intermediate_scale_pct": 100.0,
             "minor_scale_pct": 100.0,
-            "manual_frame": False,
-            "manual_normal_text": _vec_to_text(geometry.get("normal", [0.0, 0.0, 1.0])),
-            "has_abutting": bool(suggestion.get("has_abutting", False)),
-            "abutting_fault": suggestion.get("abutting_fault"),
-            "has_splay": bool(suggestion.get("has_splay", False)),
-            "splay_fault": suggestion.get("splay_fault"),
+            "flip_polarity": False,
+            "has_abutting": False,
+            "abutting_fault": None,
+            "abutting_positive": True,
         }
 
     dialog = QDialog(parent)
@@ -2227,7 +2217,9 @@ def _fault_obb_settings_dialog(
     info_label = QLabel(
         "Configure each fault independently.\n"
         "Scale controls act on the fixed Trace-like / Dip-like / Normal support box inferred from the input geometry.\n"
-        "Heuristic abutting/splay suggestions are prefilled for confirmation and can be overridden."
+        "A polarity flip reverses the inferred normal without exposing manual normal editing.\n"
+        "Abutting is fully manual and previewed in the current fault local frame.\n"
+        "Advanced controls such as manual normals, per-fault mesh tuning, and splay remain disabled for now."
     )
     root_layout.addWidget(info_label)
 
@@ -2258,25 +2250,9 @@ def _fault_obb_settings_dialog(
     rake_spin.setValue(default_rake)
     parameters_form.addRow("Rake (deg)", rake_spin)
 
-    nelements_spin = QSpinBox(dialog)
-    nelements_spin.setRange(10, 5000000)
-    nelements_spin.setValue(default_nelements)
-    parameters_form.addRow("N elements", nelements_spin)
-
-    fault_buffer_spin = QDoubleSpinBox(dialog)
-    fault_buffer_spin.setDecimals(3)
-    fault_buffer_spin.setRange(0.0, 100.0)
-    fault_buffer_spin.setSingleStep(0.1)
-    fault_buffer_spin.setValue(default_fault_buffer)
-    parameters_form.addRow("Fault buffer", fault_buffer_spin)
-
-    manual_frame_check = QCheckBox("Override inferred normal", dialog)
-    manual_frame_check.setChecked(False)
-    parameters_form.addRow("Manual normal", manual_frame_check)
-
-    normal_vector_edit = QLineEdit(dialog)
-    normal_vector_edit.setPlaceholderText("nx, ny, nz")
-    parameters_form.addRow("Normal vector", normal_vector_edit)
+    flip_polarity_check = QCheckBox("Reverse inferred normal", dialog)
+    flip_polarity_check.setChecked(False)
+    parameters_form.addRow("Flip polarity", flip_polarity_check)
 
     controls_layout.addLayout(parameters_form, 0, 0)
 
@@ -2314,17 +2290,17 @@ def _fault_obb_settings_dialog(
     relations_form = QFormLayout()
     abutting_check = QCheckBox("Present")
     abutting_target_combo = QComboBox(dialog)
-    splay_check = QCheckBox("Present")
-    splay_target_combo = QComboBox(dialog)
+    abutting_side_combo = QComboBox(dialog)
+    abutting_side_combo.addItem("Positive side", True)
+    abutting_side_combo.addItem("Negative side", False)
 
     relations_form.addRow("Abutting", abutting_check)
     relations_form.addRow("Abutting with", abutting_target_combo)
-    relations_form.addRow("Splay", splay_check)
-    relations_form.addRow("Splay with", splay_target_combo)
+    relations_form.addRow("Abut side", abutting_side_combo)
     controls_layout.addLayout(relations_form, 0, 2)
 
     preview_group = QGroupBox("OBB Preview", dialog)
-    preview_layout = QVBoxLayout(preview_group)
+    preview_layout = QHBoxLayout(preview_group)
     root_layout.addWidget(preview_group, stretch=1)
 
     class FaultObbPreviewWidget(QWidget):
@@ -2336,13 +2312,31 @@ def _fault_obb_settings_dialog(
             self._points_uv = None
             self._rect_uv = None
             self._minor_len = 0.0
+            self._target_points_uv = None
+            self._abut_line_uv = None
+            self._abut_fill_uv = None
+            self._abut_side_label = ""
             self.setMinimumHeight(260)
 
-        def set_fault_preview(self, fault_name, points_uv, rect_uv, minor_len):
+        def set_fault_preview(
+            self,
+            fault_name,
+            points_uv,
+            rect_uv,
+            minor_len,
+            target_points_uv=None,
+            abut_line_uv=None,
+            abut_fill_uv=None,
+            abut_side_label="",
+        ):
             self._fault_name = fault_name
             self._points_uv = points_uv
             self._rect_uv = rect_uv
             self._minor_len = minor_len
+            self._target_points_uv = target_points_uv
+            self._abut_line_uv = abut_line_uv
+            self._abut_fill_uv = abut_fill_uv
+            self._abut_side_label = abut_side_label
             self.update()
 
         def _map_to_widget(self, uv, bounds, draw_rect):
@@ -2387,7 +2381,21 @@ def _fault_obb_settings_dialog(
             max_u = max(float(points_uv[:, 0].max()), float(rect_uv[:, 0].max()))
             min_v = min(float(points_uv[:, 1].min()), float(rect_uv[:, 1].min()))
             max_v = max(float(points_uv[:, 1].max()), float(rect_uv[:, 1].max()))
+            if self._target_points_uv is not None and len(self._target_points_uv) > 0:
+                min_u = min(min_u, float(self._target_points_uv[:, 0].min()))
+                max_u = max(max_u, float(self._target_points_uv[:, 0].max()))
+                min_v = min(min_v, float(self._target_points_uv[:, 1].min()))
+                max_v = max(max_v, float(self._target_points_uv[:, 1].max()))
             bounds = (min_u, max_u, min_v, max_v)
+
+            if self._abut_fill_uv is not None and len(self._abut_fill_uv) >= 3:
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(QBrush(QColor(40, 180, 99, 70)))
+                fill_points = QPolygonF(
+                    [self._map_to_widget(uv, bounds, draw_rect) for uv in self._abut_fill_uv]
+                )
+                painter.drawPolygon(fill_points)
+                painter.setBrush(Qt.NoBrush)
 
             # Draw OBB rectangle.
             painter.setPen(QPen(QColor(220, 70, 70), 2))
@@ -2397,11 +2405,30 @@ def _fault_obb_settings_dialog(
                 p2 = rect_points[(i + 1) % 4]
                 painter.drawLine(p1, p2)
 
+            if self._abut_line_uv is not None and len(self._abut_line_uv) == 2:
+                painter.setPen(QPen(QColor(255, 208, 0), 2))
+                p1 = self._map_to_widget(self._abut_line_uv[0], bounds, draw_rect)
+                p2 = self._map_to_widget(self._abut_line_uv[1], bounds, draw_rect)
+                painter.drawLine(p1, p2)
+
             # Draw fault points.
             painter.setPen(QPen(QColor(230, 230, 230), 1))
             for uv in points_uv:
                 p = self._map_to_widget(uv, bounds, draw_rect)
                 painter.drawEllipse(p, 2.0, 2.0)
+
+            if self._target_points_uv is not None and len(self._target_points_uv) > 0:
+                painter.setPen(QPen(QColor(255, 181, 71), 1))
+                for uv in self._target_points_uv:
+                    p = self._map_to_widget(uv, bounds, draw_rect)
+                    painter.drawLine(
+                        QPointF(p.x() - 2.5, p.y() - 2.5),
+                        QPointF(p.x() + 2.5, p.y() + 2.5),
+                    )
+                    painter.drawLine(
+                        QPointF(p.x() - 2.5, p.y() + 2.5),
+                        QPointF(p.x() + 2.5, p.y() - 2.5),
+                    )
 
             # Center marker.
             center_p = self._map_to_widget((0.0, 0.0), bounds, draw_rect)
@@ -2419,52 +2446,45 @@ def _fault_obb_settings_dialog(
             painter.drawText(
                 draw_rect.adjusted(6, 4, -6, -4),
                 Qt.AlignTop | Qt.AlignLeft,
-                f"{self._fault_name}\nPlane: trace/dip\nNormal length: {self._minor_len:.2f}",
+                (
+                    f"{self._fault_name}\n"
+                    f"Plane: trace/dip\n"
+                    f"Normal length: {self._minor_len:.2f}\n"
+                    f"{self._abut_side_label}"
+                ).strip(),
             )
             painter.end()
 
     preview_widget = FaultObbPreviewWidget(preview_group)
-    preview_layout.addWidget(preview_widget)
+    preview_layout.addWidget(preview_widget, stretch=1)
+
+    preview_3d_frame = QFrame(preview_group)
+    preview_3d_frame.setMinimumHeight(260)
+    preview_3d_layout = QVBoxLayout(preview_3d_frame)
+    preview_3d_layout.setContentsMargins(0, 0, 0, 0)
+    preview_plotter = pvQtInteractor(preview_3d_frame)
+    preview_plotter.set_background("black")
+    preview_3d_layout.addWidget(preview_plotter.interactor)
+    preview_layout.addWidget(preview_3d_frame, stretch=1)
 
     button_box = QDialogButtonBox(
         QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=dialog
     )
     root_layout.addWidget(button_box)
-    def _parse_vector(text):
-        parts = [p for p in text.replace(";", ",").split(",") if p.strip()]
-        if len(parts) != 3:
-            parts = [p for p in text.split() if p.strip()]
-        if len(parts) != 3:
-            return None
-        try:
-            return [float(parts[0]), float(parts[1]), float(parts[2])]
-        except (TypeError, ValueError):
-            return None
 
     def on_accept():
         save_current_fault_settings()
-        for fault_name, params in defaults_by_fault.items():
-            if not params.get("manual_frame", False):
-                continue
-            normal_vec = _parse_vector(params.get("manual_normal_text", ""))
-            if normal_vec is None:
-                QMessageBox.warning(
-                    dialog,
-                    "Manual frame required",
-                    f"Fault '{fault_name}' has an invalid manual normal.\n"
-                    "Provide 3 numbers for the normal vector (e.g. 0, 0, 1).",
-                )
-                return
         dialog.accept()
 
     button_box.accepted.connect(on_accept)
     button_box.rejected.connect(dialog.reject)
+    dialog.finished.connect(lambda _result: preview_plotter.close())
 
     def get_fault_geometry(fault_name):
         params = defaults_by_fault[fault_name]
-        normal_override = None
-        if params.get("manual_frame", False):
-            normal_override = _parse_vector(params.get("manual_normal_text", ""))
+        normal_override = fault_data[fault_name].get("center_normal")
+        if normal_override is not None and params.get("flip_polarity", False):
+            normal_override = -np_array(normal_override, dtype=float)
         scales = [
             params["major_scale_pct"] / 100.0,
             params["intermediate_scale_pct"] / 100.0,
@@ -2480,52 +2500,242 @@ def _fault_obb_settings_dialog(
     def get_scaled_lengths(fault_name):
         return get_fault_geometry(fault_name)["scaled_lengths"]
 
+    def _clip_polygon_with_half_plane(polygon_uv, normal_uv, threshold, keep_positive):
+        if polygon_uv is None or len(polygon_uv) == 0:
+            return None
+        polygon_uv = [np_array(vertex, dtype=float) for vertex in polygon_uv]
+        if abs(float(normal_uv[0])) <= 1e-12 and abs(float(normal_uv[1])) <= 1e-12:
+            reference_inside = threshold >= 0.0 if keep_positive else threshold <= 0.0
+            return np_array(polygon_uv, dtype=float) if reference_inside else None
+
+        def _signed_value(vertex_uv):
+            return float(np_dot(normal_uv, vertex_uv) + threshold)
+
+        def _is_inside(vertex_uv):
+            signed_value = _signed_value(vertex_uv)
+            return signed_value >= -1e-9 if keep_positive else signed_value <= 1e-9
+
+        clipped = polygon_uv
+        output = []
+        for idx in range(len(clipped)):
+            current = clipped[idx]
+            previous = clipped[idx - 1]
+            current_inside = _is_inside(current)
+            previous_inside = _is_inside(previous)
+            current_value = _signed_value(current)
+            previous_value = _signed_value(previous)
+
+            if current_inside != previous_inside:
+                delta = current - previous
+                denom = current_value - previous_value
+                if abs(denom) > 1e-12:
+                    t = -previous_value / denom
+                    intersection = previous + t * delta
+                    output.append(intersection)
+            if current_inside:
+                output.append(current)
+
+        if len(output) < 3:
+            return None
+        return np_array(output, dtype=float)
+
+    def _fault_plane_intersections_with_rect(rect_uv, normal_uv, threshold):
+        intersections = []
+        if rect_uv is None or len(rect_uv) < 4:
+            return None
+
+        def _signed_value(vertex_uv):
+            return float(np_dot(normal_uv, vertex_uv) + threshold)
+
+        for idx in range(len(rect_uv)):
+            start = np_array(rect_uv[idx], dtype=float)
+            end = np_array(rect_uv[(idx + 1) % len(rect_uv)], dtype=float)
+            start_value = _signed_value(start)
+            end_value = _signed_value(end)
+
+            if abs(start_value) <= 1e-9:
+                intersections.append(start)
+            if start_value * end_value < 0.0:
+                denom = start_value - end_value
+                if abs(denom) > 1e-12:
+                    t = start_value / denom
+                    intersections.append(start + t * (end - start))
+            elif abs(end_value) <= 1e-9:
+                intersections.append(end)
+
+        unique_points = []
+        for point_uv in intersections:
+            if not any(np_dot(point_uv - existing, point_uv - existing) <= 1e-12 for existing in unique_points):
+                unique_points.append(point_uv)
+        if len(unique_points) < 2:
+            return None
+        return np_array(unique_points[:2], dtype=float)
+
+    def _get_abutting_preview_overlay(fault_name, source_center, source_axes, rect_uv):
+        params = defaults_by_fault[fault_name]
+        if not params.get("has_abutting", False):
+            return None
+
+        target_fault_name = params.get("abutting_fault")
+        if target_fault_name is None or target_fault_name == fault_name:
+            return None
+
+        target_points = np_array(fault_data[target_fault_name].get("points", []), dtype=float)
+        if target_points.ndim != 2 or target_points.shape[0] == 0:
+            target_points_uv = None
+        else:
+            target_centered = target_points - source_center
+            target_points_uv = np_array(
+                [target_centered @ source_axes[0], target_centered @ source_axes[1]],
+                dtype=float,
+            ).T
+
+        target_geometry = get_fault_geometry(target_fault_name)
+        target_center = np_array(target_geometry["center"], dtype=float)
+        target_normal = np_array(target_geometry["normal"], dtype=float)
+        plane_normal_uv = np_array(
+            [np_dot(target_normal, source_axes[0]), np_dot(target_normal, source_axes[1])],
+            dtype=float,
+        )
+        plane_threshold = float(np_dot(target_normal, source_center - target_center))
+        # Match LoopStructural PositiveRegion/NegativeRegion sign convention.
+        region_normal_uv = -plane_normal_uv
+        region_threshold = -plane_threshold
+        keep_positive = bool(params.get("abutting_positive", True))
+
+        return {
+            "target_points_uv": target_points_uv,
+            "abut_line_uv": _fault_plane_intersections_with_rect(
+                rect_uv, plane_normal_uv, plane_threshold
+            ),
+            "abut_fill_uv": _clip_polygon_with_half_plane(
+                rect_uv, region_normal_uv, region_threshold, keep_positive
+            ),
+            "abut_side_label": (
+                f"Abut side: {'Positive' if keep_positive else 'Negative'}"
+            ),
+        }
+
+    def update_preview_3d(fault_name):
+        preview_plotter.clear()
+        preview_plotter.add_text("3D fault preview", position="upper_left", font_size=10)
+
+        source_geometry = get_fault_geometry(fault_name)
+        source_points = np_array(fault_data[fault_name].get("points", []), dtype=float)
+        source_center = np_array(source_geometry["center"], dtype=float)
+        source_axes = np_array(source_geometry["axes"], dtype=float)
+        source_lengths = np_array(source_geometry["scaled_lengths"], dtype=float)
+        source_normal = np_array(source_geometry["normal"], dtype=float)
+
+        if source_points.ndim == 2 and source_points.shape[0] > 0:
+            preview_plotter.add_mesh(
+                pv_PolyData(source_points),
+                color="white",
+                point_size=8,
+                render_points_as_spheres=True,
+            )
+
+        source_box = _build_obb_wireframe_polydata(
+            source_center, source_axes, source_lengths
+        )
+        preview_plotter.add_mesh(source_box, color="tomato", line_width=2)
+
+        source_arrow_length = max(
+            float(source_lengths[2]),
+            0.2 * float(max(source_lengths)),
+            1.0,
+        )
+        source_arrow = pv_Arrow(
+            start=source_center,
+            direction=source_normal,
+            scale=source_arrow_length,
+        )
+        preview_plotter.add_mesh(source_arrow, color="deepskyblue")
+
+        params = defaults_by_fault[fault_name]
+        target_fault_name = params.get("abutting_fault")
+        if params.get("has_abutting", False) and target_fault_name not in [None, fault_name]:
+            target_geometry = get_fault_geometry(target_fault_name)
+            target_points = np_array(
+                fault_data[target_fault_name].get("points", []), dtype=float
+            )
+            target_center = np_array(target_geometry["center"], dtype=float)
+            target_axes = np_array(target_geometry["axes"], dtype=float)
+            target_lengths = np_array(target_geometry["scaled_lengths"], dtype=float)
+            target_normal = np_array(target_geometry["normal"], dtype=float)
+
+            if target_points.ndim == 2 and target_points.shape[0] > 0:
+                preview_plotter.add_mesh(
+                    pv_PolyData(target_points),
+                    color="orange",
+                    point_size=8,
+                    render_points_as_spheres=True,
+                )
+
+            target_box = _build_obb_wireframe_polydata(
+                target_center, target_axes, target_lengths
+            )
+            preview_plotter.add_mesh(target_box, color="gold", line_width=2)
+
+            target_arrow_length = max(
+                float(target_lengths[2]),
+                0.2 * float(max(target_lengths)),
+                1.0,
+            )
+            target_arrow = pv_Arrow(
+                start=target_center,
+                direction=target_normal,
+                scale=target_arrow_length,
+            )
+            preview_plotter.add_mesh(target_arrow, color="yellow")
+
+        preview_plotter.show_axes()
+        preview_plotter.view_isometric()
+        preview_plotter.reset_camera()
+
     def update_relation_controls_enabled():
         has_other_faults = len(fault_names) > 1
-        abutting_target_combo.setEnabled(has_other_faults and abutting_check.isChecked())
-        splay_target_combo.setEnabled(has_other_faults and splay_check.isChecked())
+        abutting_enabled = has_other_faults and abutting_check.isChecked()
+        abutting_target_combo.setEnabled(abutting_enabled)
+        abutting_side_combo.setEnabled(
+            abutting_enabled and abutting_target_combo.currentData() is not None
+        )
 
-    def populate_relation_targets(fault_name, preferred_abutting=None, preferred_splay=None):
+    def populate_relation_targets(fault_name, preferred_abutting=None):
         target_faults = [name for name in fault_names if name != fault_name]
 
-        def _populate_combo(combo, preferred_target):
-            combo.blockSignals(True)
-            combo.clear()
-            combo.addItem("None", None)
-            for target_name in target_faults:
-                target_label = f"{fault_data[target_name]['name']} ({target_name})"
-                combo.addItem(target_label, target_name)
-            idx = 0
-            if preferred_target is not None:
-                found_idx = combo.findData(preferred_target)
-                if found_idx >= 0:
-                    idx = found_idx
-            combo.setCurrentIndex(idx)
-            combo.blockSignals(False)
-
-        _populate_combo(abutting_target_combo, preferred_abutting)
-        _populate_combo(splay_target_combo, preferred_splay)
+        abutting_target_combo.blockSignals(True)
+        abutting_target_combo.clear()
+        abutting_target_combo.addItem("None", None)
+        for target_name in target_faults:
+            target_label = f"{fault_data[target_name]['name']} ({target_name})"
+            abutting_target_combo.addItem(target_label, target_name)
+        idx = 0
+        if preferred_abutting is not None:
+            found_idx = abutting_target_combo.findData(preferred_abutting)
+            if found_idx >= 0:
+                idx = found_idx
+        abutting_target_combo.setCurrentIndex(idx)
+        abutting_target_combo.blockSignals(False)
         update_relation_controls_enabled()
 
     def save_current_fault_settings():
         fault_name = current_fault["name"]
         defaults_by_fault[fault_name]["displacement"] = float(displacement_spin.value())
         defaults_by_fault[fault_name]["rake"] = float(rake_spin.value())
-        defaults_by_fault[fault_name]["nelements"] = int(nelements_spin.value())
-        defaults_by_fault[fault_name]["fault_buffer"] = float(fault_buffer_spin.value())
         defaults_by_fault[fault_name]["major_scale_pct"] = float(major_scale_spin.value())
         defaults_by_fault[fault_name]["intermediate_scale_pct"] = float(
             intermediate_scale_spin.value()
         )
         defaults_by_fault[fault_name]["minor_scale_pct"] = float(minor_scale_spin.value())
-        defaults_by_fault[fault_name]["manual_frame"] = bool(
-            manual_frame_check.isChecked()
+        defaults_by_fault[fault_name]["flip_polarity"] = bool(
+            flip_polarity_check.isChecked()
         )
-        defaults_by_fault[fault_name]["manual_normal_text"] = normal_vector_edit.text()
         defaults_by_fault[fault_name]["has_abutting"] = bool(abutting_check.isChecked())
         defaults_by_fault[fault_name]["abutting_fault"] = abutting_target_combo.currentData()
-        defaults_by_fault[fault_name]["has_splay"] = bool(splay_check.isChecked())
-        defaults_by_fault[fault_name]["splay_fault"] = splay_target_combo.currentData()
+        defaults_by_fault[fault_name]["abutting_positive"] = bool(
+            abutting_side_combo.currentData()
+        )
 
     def update_lengths_labels(fault_name):
         geometry = get_fault_geometry(fault_name)
@@ -2552,6 +2762,7 @@ def _fault_obb_settings_dialog(
                 rect_uv=np_array([[-1, -1], [1, -1], [1, 1], [-1, 1]], dtype=float),
                 minor_len=float(scaled_lengths[2]),
             )
+            update_preview_3d(fault_name)
             return
 
         centered_points = fault_points - center
@@ -2570,13 +2781,19 @@ def _fault_obb_settings_dialog(
             ],
             dtype=float,
         )
+        overlay = _get_abutting_preview_overlay(fault_name, center, axes, rect_uv)
 
         preview_widget.set_fault_preview(
             fault_name=fault_name,
             points_uv=points_uv,
             rect_uv=rect_uv,
             minor_len=float(scaled_lengths[2]),
+            target_points_uv=None if overlay is None else overlay["target_points_uv"],
+            abut_line_uv=None if overlay is None else overlay["abut_line_uv"],
+            abut_fill_uv=None if overlay is None else overlay["abut_fill_uv"],
+            abut_side_label="" if overlay is None else overlay["abut_side_label"],
         )
+        update_preview_3d(fault_name)
 
     def load_fault_settings(fault_name):
         is_loading["active"] = True
@@ -2584,23 +2801,20 @@ def _fault_obb_settings_dialog(
             params = defaults_by_fault[fault_name]
             displacement_spin.setValue(params["displacement"])
             rake_spin.setValue(params["rake"])
-            nelements_spin.setValue(params["nelements"])
-            fault_buffer_spin.setValue(params["fault_buffer"])
             major_scale_spin.setValue(params["major_scale_pct"])
             intermediate_scale_spin.setValue(params["intermediate_scale_pct"])
             minor_scale_spin.setValue(params["minor_scale_pct"])
-            manual_frame_check.setChecked(bool(params.get("manual_frame", False)))
-            normal_vector_edit.setText(params.get("manual_normal_text", ""))
+            flip_polarity_check.setChecked(bool(params.get("flip_polarity", False)))
             abutting_check.setChecked(bool(params.get("has_abutting", False)))
-            splay_check.setChecked(bool(params.get("has_splay", False)))
+            abutting_side_combo.setCurrentIndex(
+                0 if bool(params.get("abutting_positive", True)) else 1
+            )
             populate_relation_targets(
                 fault_name,
                 preferred_abutting=params.get("abutting_fault"),
-                preferred_splay=params.get("splay_fault"),
             )
         finally:
             is_loading["active"] = False
-        normal_vector_edit.setEnabled(bool(params.get("manual_frame", False)))
         update_relation_controls_enabled()
         update_lengths_labels(fault_name)
         update_preview(fault_name)
@@ -2614,8 +2828,6 @@ def _fault_obb_settings_dialog(
     def on_controls_changed(*_):
         if is_loading["active"]:
             return
-        manual_enabled = manual_frame_check.isChecked()
-        normal_vector_edit.setEnabled(manual_enabled)
         update_relation_controls_enabled()
         save_current_fault_settings()
         selected_fault = current_fault["name"]
@@ -2625,17 +2837,13 @@ def _fault_obb_settings_dialog(
     fault_combo.currentIndexChanged.connect(on_fault_changed)
     displacement_spin.valueChanged.connect(on_controls_changed)
     rake_spin.valueChanged.connect(on_controls_changed)
-    nelements_spin.valueChanged.connect(on_controls_changed)
-    fault_buffer_spin.valueChanged.connect(on_controls_changed)
-    manual_frame_check.toggled.connect(on_controls_changed)
-    normal_vector_edit.textChanged.connect(on_controls_changed)
+    flip_polarity_check.toggled.connect(on_controls_changed)
     major_scale_spin.valueChanged.connect(on_controls_changed)
     intermediate_scale_spin.valueChanged.connect(on_controls_changed)
     minor_scale_spin.valueChanged.connect(on_controls_changed)
     abutting_check.toggled.connect(on_controls_changed)
-    splay_check.toggled.connect(on_controls_changed)
     abutting_target_combo.currentIndexChanged.connect(on_controls_changed)
-    splay_target_combo.currentIndexChanged.connect(on_controls_changed)
+    abutting_side_combo.currentIndexChanged.connect(on_controls_changed)
 
     load_fault_settings(current_fault["name"])
 
@@ -2651,21 +2859,14 @@ def _fault_obb_settings_dialog(
         per_fault_settings[fault_name] = {
             "displacement": float(params["displacement"]),
             "rake": float(params["rake"]),
-            "nelements": int(params["nelements"]),
-            "fault_buffer": float(params["fault_buffer"]),
             "center": geometry["center"],
             "axes": geometry["axes"],
             "lengths": geometry["scaled_lengths"],
-            "manual_frame": bool(params.get("manual_frame", False)),
+            "flip_polarity": bool(params.get("flip_polarity", False)),
             "has_abutting": bool(params.get("has_abutting", False)),
             "abutting_fault": params.get("abutting_fault"),
-            "has_splay": bool(params.get("has_splay", False)),
-            "splay_fault": params.get("splay_fault"),
+            "abutting_positive": bool(params.get("abutting_positive", True)),
         }
-        if params.get("manual_frame", False):
-            manual_normal = _parse_vector(params.get("manual_normal_text", ""))
-            if manual_normal is not None:
-                per_fault_settings[fault_name]["fault_normal_vector"] = manual_normal
 
     return per_fault_settings
 
@@ -3262,16 +3463,18 @@ def implicit_model_loop_structural_with_faults(self):
 
     model_diagonal = np_sqrt(edge_x**2 + edge_y**2 + edge_z**2)
     default_displacement = model_diagonal * 0.05
-    relation_suggestions = _compute_fault_relation_suggestions(
-        fault_data, default_rake=-90.0
-    )
+    # Keep advanced per-fault controls fixed until the manual workflow is stabilized.
+    default_fault_nelements = 1000
+    default_fault_buffer = 0.2
+    # Keep abutting fully manual to avoid hidden time-based behaviour.
+    relation_suggestions = {}
     fault_params_by_name = _fault_obb_settings_dialog(
         parent=self,
         fault_data=fault_data,
         default_displacement=default_displacement,
         default_rake=-90.0,
-        default_nelements=1000,
-        default_fault_buffer=0.2,
+        default_nelements=default_fault_nelements,
+        default_fault_buffer=default_fault_buffer,
         relation_suggestions=relation_suggestions,
     )
     if fault_params_by_name is None:
@@ -3283,19 +3486,16 @@ def implicit_model_loop_structural_with_faults(self):
             geometry = _compute_scaled_fault_geometry(
                 fault_info, rake_deg=-90.0, scale_factors=[1.0, 1.0, 1.0]
             )
-            suggestion = relation_suggestions.get(fault_name, {})
             fault_params_by_name[fault_name] = {
                 "displacement": float(default_displacement),
                 "rake": -90.0,
-                "nelements": 1000,
-                "fault_buffer": 0.2,
                 "center": geometry["center"],
                 "axes": geometry["axes"],
                 "lengths": geometry["scaled_lengths"],
-                "has_abutting": bool(suggestion.get("has_abutting", False)),
-                "abutting_fault": suggestion.get("abutting_fault"),
-                "has_splay": bool(suggestion.get("has_splay", False)),
-                "splay_fault": suggestion.get("splay_fault"),
+                "flip_polarity": False,
+                "has_abutting": False,
+                "abutting_fault": None,
+                "abutting_positive": True,
             }
     else:
         self.print_terminal("Per-fault parameters configured:")
@@ -3304,11 +3504,10 @@ def implicit_model_loop_structural_with_faults(self):
             self.print_terminal(
                 f"  {fault_name}: displacement={float(params.get('displacement', 0.0)):.2f}, "
                 f"rake={float(params.get('rake', -90.0)):.1f} deg, "
-                f"nelements={int(params.get('nelements', 1000))}, "
-                f"buffer={float(params.get('fault_buffer', 0.2)):.2f}, "
+                f"flip_polarity={'ON' if params.get('flip_polarity', False) else 'OFF'}, "
                 f"lengths={params.get('lengths')}, "
                 f"abutting={params.get('abutting_fault') if params.get('has_abutting') else 'None'}, "
-                f"splay={params.get('splay_fault') if params.get('has_splay') else 'None'}"
+                f"abut_side={'positive' if params.get('abutting_positive', True) else 'negative'}"
             )
 
     model_name = "Loop_model_faults"
@@ -3364,23 +3563,16 @@ def implicit_model_loop_structural_with_faults(self):
         )
         fault_rake = float(fault_params_single.get("rake", -90.0))
         fault_rake = ((fault_rake + 180.0) % 360.0) - 180.0
-        nelements = int(fault_params_single.get("nelements", 1000))
-        fault_buffer = float(fault_params_single.get("fault_buffer", 0.2))
-
-        manual_frame = bool(fault_params_single.get("manual_frame", False))
-        manual_normal = None
-        if manual_frame:
-            manual_normal = fault_params_single.get("fault_normal_vector")
-            if manual_normal is None:
-                manual_normal = fault_params_single.get("normal_vector")
-            if manual_normal is None:
-                manual_normal = fault_params_single.get("normal")
+        flip_polarity = bool(fault_params_single.get("flip_polarity", False))
+        normal_override = fault_info.get("center_normal")
+        if normal_override is not None and flip_polarity:
+            normal_override = -np_array(normal_override, dtype=float)
 
         base_geometry = _compute_scaled_fault_geometry(
             fault_info,
             rake_deg=fault_rake,
             scale_factors=[1.0, 1.0, 1.0],
-            normal_override=manual_normal,
+            normal_override=normal_override,
         )
         center = np_array(
             fault_params_single.get("center", base_geometry["center"]), dtype=float
@@ -3444,18 +3636,21 @@ def implicit_model_loop_structural_with_faults(self):
             f"    fault_normal_vector: {fault_normal.tolist()}"
         )
         self.print_terminal(
+            f"    flip_polarity={'ON' if flip_polarity else 'OFF'}"
+        )
+        self.print_terminal(
             "    faultfunction=BaseFault3D (displacement tapered in slip and trace directions)"
         )
-        use_points = not manual_frame
+        use_points = True
         self.print_terminal(
             f"    Using points={use_points} for fault frame construction"
         )
 
         fault_params_ls = {
-            "nelements": nelements,
+            "nelements": default_fault_nelements,
             "interpolatortype": options_dict["method"],
             "faultfunction": "BaseFault3D",
-            "fault_buffer": fault_buffer,
+            "fault_buffer": default_fault_buffer,
             "fault_center": center.tolist(),
             "fault_normal_vector": fault_normal.tolist(),
             "major_axis": ls_major_axis,
@@ -3523,48 +3718,12 @@ def implicit_model_loop_structural_with_faults(self):
         _advance_interpolation_progress()
 
     if created_fault_features_by_name:
-        self.print_terminal("-> Applying fault interactions (abutting/splay)...")
+        self.print_terminal("-> Applying fault interactions (abutting)...")
         for source_fault_name in fault_creation_order:
             params = fault_params_by_name.get(source_fault_name, {})
             source_fault = created_fault_features_by_name.get(source_fault_name)
             if source_fault is None:
                 continue
-
-            if params.get("has_splay", False):
-                target_fault_name = params.get("splay_fault")
-                if target_fault_name is None:
-                    self.print_terminal(
-                        f"  WARNING: Splay enabled for '{source_fault_name}' but no target fault selected."
-                    )
-                elif target_fault_name == source_fault_name:
-                    self.print_terminal(
-                        f"  WARNING: Fault '{source_fault_name}' cannot splay with itself."
-                    )
-                else:
-                    target_fault = created_fault_features_by_name.get(target_fault_name)
-                    if target_fault is None:
-                        self.print_terminal(
-                            f"  WARNING: Splay target '{target_fault_name}' not found for '{source_fault_name}'."
-                        )
-                    else:
-                        try:
-                            if hasattr(source_fault, "builder") and hasattr(
-                                source_fault.builder, "add_splay"
-                            ):
-                                region = source_fault.builder.add_splay(target_fault)
-                                if hasattr(source_fault, "splay"):
-                                    source_fault.splay[target_fault.name] = region
-                                self.print_terminal(
-                                    f"  Splay relation applied: '{source_fault_name}' with '{target_fault_name}'."
-                                )
-                            else:
-                                self.print_terminal(
-                                    f"  WARNING: Fault '{source_fault_name}' does not expose builder.add_splay()."
-                                )
-                        except Exception as e:
-                            self.print_terminal(
-                                f"  ERROR applying splay '{source_fault_name}' -> '{target_fault_name}': {e}"
-                            )
 
             if params.get("has_abutting", False):
                 target_fault_name = params.get("abutting_fault")
@@ -3584,9 +3743,15 @@ def implicit_model_loop_structural_with_faults(self):
                         )
                     else:
                         try:
-                            source_fault.add_abutting_fault(target_fault, positive=None)
+                            abutting_positive = bool(
+                                params.get("abutting_positive", True)
+                            )
+                            source_fault.add_abutting_fault(
+                                target_fault, positive=abutting_positive
+                            )
                             self.print_terminal(
-                                f"  Abutting relation applied: '{source_fault_name}' with '{target_fault_name}'."
+                                f"  Abutting relation applied: '{source_fault_name}' with '{target_fault_name}' "
+                                f"(side={'positive' if abutting_positive else 'negative'})."
                             )
                         except Exception as e:
                             self.print_terminal(
