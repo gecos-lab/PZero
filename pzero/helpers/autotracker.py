@@ -97,13 +97,21 @@ class Autotracker:
             # Keep points on the same side of the fault (preserve throw)
             'fault_side_weight': 10.0,   # Penalty for switching fault side
             # Near-fault behavior: allow larger vertical search to follow drag/rollover
-            'fault_influence_width': 2,   # Pixels (row) from fault considered "near fault"
-            'fault_search_multiplier': 1, # Multiply search_window near faults (1 = disabled)
+            'fault_influence_width': 4,   # Pixels (row) from fault considered "near fault"
+            'fault_search_multiplier': 2, # Multiply search_window near faults
             # If a horizon point is close to a fault, attract it to the fault plane (stick to fault edge)
             # This helps handle drag/rollover and large throw near the fault.
-            'fault_snap_row_width': 1,    # Only apply snap if within this row-distance from fault
-            'fault_snap_col_range': 30,   # Search range (col) to find fault intersection depth for this row
-            'fault_snap_weight': 0.1,     # Penalty scale pulling horizon onto fault plane
+            'fault_snap_row_width': 3,    # Only apply snap if within this row-distance from fault
+            'fault_snap_col_range': 40,   # Search range (col) to find fault intersection depth for this row
+            'fault_snap_activation_col_tolerance': 3,  # Require previous horizon depth to be near the fault depth
+            'fault_snap_weight': 2.0,     # Penalty scale pulling horizon onto fault plane
+            # Explicit fault-crossing attachment: if a horizon crosses a fault on one slice,
+            # keep that contact point attached as the fault moves laterally on later slices.
+            'fault_attach_capture_width': 4,  # Max distance from fault to recognize a crossing anchor
+            'fault_attach_blend_rows': 3,     # Blend neighboring rows toward the attachment point
+            'fault_attach_depth_tolerance': 2,  # Max top/bottom shift allowed when following the same fault
+            'fault_attach_apply_row_tolerance': 8,  # Current horizon must already be near the predicted contact
+            'fault_attach_apply_col_tolerance': 4,  # Avoid forcing attachment far above/below the reflector
         }
 
         # Store previous dip for consistency tracking
@@ -165,6 +173,11 @@ class Autotracker:
         phase_weight: float = 0.2,
         similarity_weight: float = 0.15,
         dip_weight: float = 0.15,
+        fault_snap_weight: float = 2.0,
+        fault_attach_depth_tolerance: int = 2,
+        fault_attach_apply_row_tolerance: int = 8,
+        fault_attach_apply_col_tolerance: int = 4,
+        fault_attach_blend_rows: int = 3,
         progress_callback: Optional[Callable] = None,
         fault_traces_by_slice: Optional[Dict[int, List[List[Tuple[int, int]]]]] = None
     ) -> Tuple[bool, Dict[int, List[Tuple[int, int]]], str]:
@@ -204,6 +217,11 @@ class Autotracker:
             'phase_weight': phase_weight,
             'similarity_weight': similarity_weight,
             'dip_weight': dip_weight,
+            'fault_snap_weight': fault_snap_weight,
+            'fault_attach_depth_tolerance': fault_attach_depth_tolerance,
+            'fault_attach_apply_row_tolerance': fault_attach_apply_row_tolerance,
+            'fault_attach_apply_col_tolerance': fault_attach_apply_col_tolerance,
+            'fault_attach_blend_rows': fault_attach_blend_rows,
         })
 
         def update_progress(msg, pct=None):
@@ -251,8 +269,21 @@ class Autotracker:
                     prev_fault_traces=prev_faults_on_slice,
                 )
 
+                new_positions = self._enforce_fault_crossing_attachments(
+                    positions=new_positions,
+                    prev_positions=current_positions,
+                    fault_traces=faults_on_slice,
+                    prev_fault_traces=prev_faults_on_slice,
+                )
+
                 # Apply smoothing
                 new_positions = self._smooth_positions(new_positions, faults_on_slice)
+                new_positions = self._enforce_fault_crossing_attachments(
+                    positions=new_positions,
+                    prev_positions=current_positions,
+                    fault_traces=faults_on_slice,
+                    prev_fault_traces=prev_faults_on_slice,
+                )
                 new_positions = self._regularize_horizon_positions(new_positions)
 
                 horizons[slice_idx] = new_positions
@@ -353,6 +384,7 @@ class Autotracker:
             if fault_models:
                 snap_row_w = int(self.tracking_params.get('fault_snap_row_width', 4))
                 col_range = int(self.tracking_params.get('fault_snap_col_range', 50))
+                snap_col_tol = int(self.tracking_params.get('fault_snap_activation_col_tolerance', 3))
 
                 # Robust "near fault" test: first find where the fault intersects this row
                 # on the PREVIOUS slice, then test distance there (not at expected_col).
@@ -366,8 +398,13 @@ class Autotracker:
                     )
 
                 if prev_intersect_col is not None:
+                    prev_col_gap = abs(int(prev_intersect_col) - int(expected_col))
                     d_prev = self._fault_distance_abs(row=row, col=prev_intersect_col, fault_models=prev_fault_models)
-                    if np.isfinite(d_prev) and d_prev <= snap_row_w:
+                    if (
+                        prev_col_gap <= snap_col_tol and
+                        np.isfinite(d_prev) and
+                        d_prev <= snap_row_w
+                    ):
                         # Use previous intersection as anchor to follow moving fault
                         fault_snap_target_col = self._fault_intersection_col_for_row(
                             row=row,
@@ -789,6 +826,294 @@ class Autotracker:
         x = min(d / snap_row_w, 1.0)
         return w * (x ** 2)
 
+    @staticmethod
+    def _fault_row_on_model_at_col(
+        fault_model: Tuple[int, int, np.ndarray],
+        col: int,
+    ) -> Optional[float]:
+        """Return the fault row for a given depth sample on one interpolated fault model."""
+        col_min, col_max, rows_interp = fault_model
+        if col < col_min or col > col_max:
+            return None
+        return float(rows_interp[col - col_min])
+
+    @staticmethod
+    def _fault_row_on_model_at_col_float(
+        fault_model: Tuple[int, int, np.ndarray],
+        col: float,
+    ) -> Optional[float]:
+        """Return the interpolated fault row for a floating-point depth sample."""
+        col_min, col_max, rows_interp = fault_model
+        if col < float(col_min) or col > float(col_max):
+            return None
+        grid = np.arange(col_min, col_max + 1, dtype=np.float64)
+        return float(np.interp(float(col), grid, rows_interp.astype(np.float64)))
+
+    def _fault_signed_offset_on_model(
+        self,
+        row: float,
+        col: float,
+        fault_model: Tuple[int, int, np.ndarray],
+    ) -> Optional[float]:
+        """Signed row-offset of a point relative to one fault model."""
+        fault_row = self._fault_row_on_model_at_col_float(fault_model, col)
+        if fault_row is None:
+            return None
+        return float(row) - float(fault_row)
+
+    def _find_fault_crossing_on_segment(
+        self,
+        p0: Tuple[int, int],
+        p1: Tuple[int, int],
+        fault_model: Tuple[int, int, np.ndarray],
+    ) -> Optional[Tuple[int, int]]:
+        """
+        Find a true horizon/fault crossing on one horizon segment.
+
+        The segment is sampled in row-col space. A crossing is accepted only if the
+        signed side relative to the fault changes, or if the segment directly touches
+        the fault within a very small tolerance.
+        """
+        row0 = float(p0[0])
+        col0 = float(p0[1])
+        row1 = float(p1[0])
+        col1 = float(p1[1])
+
+        n_samples = max(int(np.ceil(max(abs(row1 - row0), abs(col1 - col0)))), 2)
+        best_abs = np.inf
+        best_point = None
+        prev_sample = None
+
+        touch_tol = float(max(int(self.tracking_params.get('fault_break_width', 1)), 1))
+
+        for k in range(n_samples + 1):
+            t = float(k) / float(n_samples)
+            row = row0 + t * (row1 - row0)
+            col = col0 + t * (col1 - col0)
+            offset = self._fault_signed_offset_on_model(row=row, col=col, fault_model=fault_model)
+            if offset is None:
+                continue
+
+            abs_offset = abs(float(offset))
+            if abs_offset < best_abs:
+                best_abs = abs_offset
+                best_point = (row, col)
+
+            if prev_sample is not None:
+                prev_row, prev_col, prev_offset = prev_sample
+                if (
+                    prev_offset == 0.0 or offset == 0.0 or
+                    (prev_offset < 0.0 < offset) or (prev_offset > 0.0 > offset)
+                ):
+                    denom = abs(prev_offset) + abs(offset)
+                    frac = 0.5 if denom == 0.0 else abs(prev_offset) / denom
+                    cross_row = prev_row + frac * (row - prev_row)
+                    cross_col = prev_col + frac * (col - prev_col)
+                    return (int(round(cross_row)), int(round(cross_col)))
+
+            prev_sample = (row, col, float(offset))
+
+        if best_point is not None and best_abs <= touch_tol:
+            return (int(round(best_point[0])), int(round(best_point[1])))
+
+        return None
+
+    def _detect_fault_crossing_anchors(
+        self,
+        positions: List[Tuple[int, int]],
+        fault_models: List[Tuple[int, int, np.ndarray]],
+    ) -> List[Tuple[int, int, int]]:
+        """
+        Detect horizon/fault crossings on the previous slice.
+
+        Returns tuples of ``(fault_model_index, anchor_row, anchor_col)``.
+        """
+        if not positions or not fault_models:
+            return []
+
+        anchors: List[Tuple[int, int, int]] = []
+
+        for model_idx, fault_model in enumerate(fault_models):
+            crossing = None
+            for i in range(len(positions) - 1):
+                crossing = self._find_fault_crossing_on_segment(
+                    positions[i],
+                    positions[i + 1],
+                    fault_model,
+                )
+                if crossing is not None:
+                    break
+            if crossing is None:
+                continue
+            anchors.append((model_idx, int(crossing[0]), int(crossing[1])))
+
+        return anchors
+
+    def _resolve_fault_attachment_target(
+        self,
+        anchor_row: int,
+        anchor_col: int,
+        fault_models: List[Tuple[int, int, np.ndarray]],
+        preferred_model_index: Optional[int] = None,
+    ) -> Optional[Tuple[int, int]]:
+        """
+        Follow a previous crossing anchor onto the current slice's fault geometry.
+
+        We try to stay at the same depth (col) first so the horizon reaches the
+        moved fault straight in the lateral/X direction. If that depth is missing
+        on the current fault trace, fall back to the nearest current intersection.
+        """
+        if not fault_models:
+            return None
+
+        best_target = None
+        best_score = np.inf
+        depth_tol = int(self.tracking_params.get('fault_attach_depth_tolerance', 2))
+
+        candidate_indices = list(range(len(fault_models)))
+        if preferred_model_index is not None and 0 <= preferred_model_index < len(fault_models):
+            candidate_indices = [preferred_model_index] + [
+                idx for idx in candidate_indices if idx != preferred_model_index
+            ]
+
+        for model_idx in candidate_indices:
+            fault_model = fault_models[model_idx]
+            col_min, col_max, _rows_interp = fault_model
+            row_at_anchor_col = self._fault_row_on_model_at_col(fault_model, anchor_col)
+            if row_at_anchor_col is not None:
+                score = abs(row_at_anchor_col - float(anchor_row))
+                if score < best_score:
+                    best_score = score
+                    best_target = (int(round(row_at_anchor_col)), int(anchor_col))
+                continue
+
+            nearest_col = int(np.clip(anchor_col, col_min, col_max))
+            if abs(int(nearest_col) - int(anchor_col)) > depth_tol:
+                continue
+            # If the current fault does not exist at nearly the same depth, do not
+            # snap to the fault top/bottom just because it is nearby.
+
+        return best_target
+
+    def _is_attachment_locally_consistent(
+        self,
+        positions: List[Tuple[int, int]],
+        target_row: int,
+        target_col: int,
+    ) -> bool:
+        """
+        Only apply the hard attachment if the newly tracked horizon is already close
+        to the predicted contact point. This prevents minor fault tips from pulling
+        a reflector down/up when the reflector is actually passing above/below.
+        """
+        if not positions:
+            return False
+
+        row_tol = int(self.tracking_params.get('fault_attach_apply_row_tolerance', 8))
+        col_tol = int(self.tracking_params.get('fault_attach_apply_col_tolerance', 4))
+
+        best_score = np.inf
+        best_row_delta = np.inf
+        best_col_delta = np.inf
+
+        for row, col in positions:
+            row_delta = abs(int(row) - int(target_row))
+            col_delta = abs(int(col) - int(target_col))
+            score = row_delta + 0.5 * col_delta
+            if score < best_score:
+                best_score = score
+                best_row_delta = row_delta
+                best_col_delta = col_delta
+
+        return bool(best_row_delta <= row_tol and best_col_delta <= col_tol)
+
+    def _apply_fault_attachment_target(
+        self,
+        positions: List[Tuple[int, int]],
+        target_row: int,
+        target_col: int,
+    ) -> List[Tuple[int, int]]:
+        """Snap the nearest horizon sample onto the fault and gently blend neighbors."""
+        if not positions:
+            return positions
+
+        rows = np.array([int(r) for r, _ in positions], dtype=np.int32)
+        cols = np.array([int(c) for _, c in positions], dtype=np.int32)
+
+        row_delta = np.abs(rows.astype(np.float64) - float(target_row))
+        col_delta = np.abs(cols.astype(np.float64) - float(target_col))
+        idx = int(np.argmin(row_delta + 0.25 * col_delta))
+
+        updated = list((int(r), int(c)) for r, c in positions)
+        updated[idx] = (int(target_row), int(target_col))
+
+        blend_rows = int(self.tracking_params.get('fault_attach_blend_rows', 3))
+        if blend_rows > 0:
+            for j, (row, col) in enumerate(updated):
+                if j == idx:
+                    continue
+                dist = abs(int(row) - int(target_row))
+                if dist == 0 or dist > blend_rows:
+                    continue
+                alpha = 1.0 - (dist / float(blend_rows + 1))
+                blended_col = int(round((1.0 - alpha) * float(col) + alpha * float(target_col)))
+                updated[j] = (int(row), blended_col)
+
+        updated.sort(key=lambda p: (int(p[0]), int(p[1])))
+        return updated
+
+    def _enforce_fault_crossing_attachments(
+        self,
+        positions: List[Tuple[int, int]],
+        prev_positions: List[Tuple[int, int]],
+        fault_traces: Optional[List[List[Tuple[int, int]]]] = None,
+        prev_fault_traces: Optional[List[List[Tuple[int, int]]]] = None,
+    ) -> List[Tuple[int, int]]:
+        """
+        Keep horizon/fault crossing points attached as the propagated fault moves.
+        """
+        if not positions or not prev_positions or not fault_traces or not prev_fault_traces:
+            return positions
+
+        cols_all = [int(c) for _, c in positions]
+        if not cols_all:
+            return positions
+
+        w = int(max(cols_all)) + 1
+        fault_models = self._prepare_fault_models(fault_traces, w=w)
+        prev_fault_models = self._prepare_fault_models(prev_fault_traces, w=w)
+        if not fault_models or not prev_fault_models:
+            return positions
+
+        anchors = self._detect_fault_crossing_anchors(prev_positions, prev_fault_models)
+        if not anchors:
+            return positions
+
+        updated = list(positions)
+        for model_idx, anchor_row, anchor_col in anchors:
+            target = self._resolve_fault_attachment_target(
+                anchor_row=anchor_row,
+                anchor_col=anchor_col,
+                fault_models=fault_models,
+                preferred_model_index=model_idx,
+            )
+            if target is None:
+                continue
+            target_row, target_col = target
+            if not self._is_attachment_locally_consistent(
+                positions=updated,
+                target_row=target_row,
+                target_col=target_col,
+            ):
+                continue
+            updated = self._apply_fault_attachment_target(
+                positions=updated,
+                target_row=target_row,
+                target_col=target_col,
+            )
+
+        return updated
+
     def compute_tracking_quality(self, horizons: Dict[int, List[Tuple[int, int]]]) -> Dict[str, float]:
         """Compute quality metrics for tracking results."""
         metrics = {
@@ -834,6 +1159,11 @@ def propagate_horizon(
     phase_weight: float = 0.2,
     similarity_weight: float = 0.15,
     dip_weight: float = 0.15,
+    fault_snap_weight: float = 2.0,
+    fault_attach_depth_tolerance: int = 2,
+    fault_attach_apply_row_tolerance: int = 8,
+    fault_attach_apply_col_tolerance: int = 4,
+    fault_attach_blend_rows: int = 3,
     progress_callback: Optional[Callable] = None,
     fault_traces_by_slice: Optional[Dict[int, List[List[Tuple[int, int]]]]] = None
 ) -> Tuple[bool, Dict[int, List[Tuple[int, int]]], str]:
@@ -889,6 +1219,11 @@ def propagate_horizon(
         phase_weight=phase_weight,
         similarity_weight=similarity_weight,
         dip_weight=dip_weight,
+        fault_snap_weight=fault_snap_weight,
+        fault_attach_depth_tolerance=fault_attach_depth_tolerance,
+        fault_attach_apply_row_tolerance=fault_attach_apply_row_tolerance,
+        fault_attach_apply_col_tolerance=fault_attach_apply_col_tolerance,
+        fault_attach_blend_rows=fault_attach_blend_rows,
         progress_callback=progress_callback,
         fault_traces_by_slice=fault_traces_by_slice
     )

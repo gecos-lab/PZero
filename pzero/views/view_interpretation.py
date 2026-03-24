@@ -4444,6 +4444,38 @@ class ViewInterpretation(ViewMap):
         params_form.addRow("Max jump:", spin_max_jump)
         
         right_widget.addWidget(params_group)
+
+        fault_group = QGroupBox("Fault Attachment")
+        fault_form = QFormLayout(fault_group)
+        fault_form.setSpacing(4)
+
+        spin_fault_snap_weight = QDoubleSpinBox()
+        spin_fault_snap_weight.setRange(0.0, 10.0)
+        spin_fault_snap_weight.setValue(2.0)
+        spin_fault_snap_weight.setSingleStep(0.1)
+        fault_form.addRow("Snap weight:", spin_fault_snap_weight)
+
+        spin_fault_attach_depth_tol = QSpinBox()
+        spin_fault_attach_depth_tol.setRange(0, 20)
+        spin_fault_attach_depth_tol.setValue(2)
+        fault_form.addRow("Depth tol:", spin_fault_attach_depth_tol)
+
+        spin_fault_attach_row_tol = QSpinBox()
+        spin_fault_attach_row_tol.setRange(0, 30)
+        spin_fault_attach_row_tol.setValue(8)
+        fault_form.addRow("Row tol:", spin_fault_attach_row_tol)
+
+        spin_fault_attach_col_tol = QSpinBox()
+        spin_fault_attach_col_tol.setRange(0, 20)
+        spin_fault_attach_col_tol.setValue(4)
+        fault_form.addRow("Col tol:", spin_fault_attach_col_tol)
+
+        spin_fault_attach_blend = QSpinBox()
+        spin_fault_attach_blend.setRange(0, 10)
+        spin_fault_attach_blend.setValue(3)
+        fault_form.addRow("Blend rows:", spin_fault_attach_blend)
+
+        right_widget.addWidget(fault_group)
         
         # Advanced Weights (collapsible, compact grid)
         weights_group = QGroupBox("Advanced Weights")
@@ -4550,6 +4582,11 @@ class ViewInterpretation(ViewMap):
         search_window = spin_search.value()
         smooth_sigma = spin_smooth.value()
         max_jump = spin_max_jump.value()
+        fault_snap_weight = spin_fault_snap_weight.value()
+        fault_attach_depth_tolerance = spin_fault_attach_depth_tol.value()
+        fault_attach_apply_row_tolerance = spin_fault_attach_row_tol.value()
+        fault_attach_apply_col_tolerance = spin_fault_attach_col_tol.value()
+        fault_attach_blend_rows = spin_fault_attach_blend.value()
         
         # Get weights (use defaults if not expanded)
         if weights_group.isChecked():
@@ -4573,6 +4610,13 @@ class ViewInterpretation(ViewMap):
         self.print_terminal(f"Attributes: {', '.join(selected_attributes)}")
         self.print_terminal(f"Search: ±{search_window}, Smooth: {smooth_sigma}, MaxJump: {max_jump}")
         
+        self.print_terminal(
+            "Fault attach: "
+            f"snap={fault_snap_weight}, depth_tol={fault_attach_depth_tolerance}, "
+            f"row_tol={fault_attach_apply_row_tolerance}, col_tol={fault_attach_apply_col_tolerance}, "
+            f"blend={fault_attach_blend_rows}"
+        )
+        
         # Run propagation
         try:
             self._run_horizon_propagation(
@@ -4589,6 +4633,11 @@ class ViewInterpretation(ViewMap):
                 phase_weight=phase_weight,
                 similarity_weight=similarity_weight,
                 dip_weight=dip_weight,
+                fault_snap_weight=fault_snap_weight,
+                fault_attach_depth_tolerance=fault_attach_depth_tolerance,
+                fault_attach_apply_row_tolerance=fault_attach_apply_row_tolerance,
+                fault_attach_apply_col_tolerance=fault_attach_apply_col_tolerance,
+                fault_attach_blend_rows=fault_attach_blend_rows,
                 seed_slice_index=seed_slice_idx
             )
         except Exception as e:
@@ -4613,6 +4662,11 @@ class ViewInterpretation(ViewMap):
         phase_weight=0.2,
         similarity_weight=0.15,
         dip_weight=0.15,
+        fault_snap_weight=2.0,
+        fault_attach_depth_tolerance=2,
+        fault_attach_apply_row_tolerance=8,
+        fault_attach_apply_col_tolerance=4,
+        fault_attach_blend_rows=3,
         seed_slice_index=None
     ):
         """
@@ -4633,6 +4687,11 @@ class ViewInterpretation(ViewMap):
             phase_weight: Weight for phase continuity (0-1)
             similarity_weight: Weight for trace similarity (0-1)
             dip_weight: Weight for dip consistency (0-1)
+            fault_snap_weight: Strength of fault snapping when a real crossing is detected
+            fault_attach_depth_tolerance: Max allowed vertical shift when following a crossing
+            fault_attach_apply_row_tolerance: Max lateral mismatch before forcing attachment
+            fault_attach_apply_col_tolerance: Max vertical mismatch before forcing attachment
+            fault_attach_blend_rows: Neighbor rows softly blended into the attached point
             seed_slice_index: Index of the seed slice
         """
         if attributes is None:
@@ -4837,6 +4896,11 @@ class ViewInterpretation(ViewMap):
                 phase_weight=phase_weight,
                 similarity_weight=similarity_weight,
                 dip_weight=dip_weight,
+                fault_snap_weight=fault_snap_weight,
+                fault_attach_depth_tolerance=fault_attach_depth_tolerance,
+                fault_attach_apply_row_tolerance=fault_attach_apply_row_tolerance,
+                fault_attach_apply_col_tolerance=fault_attach_apply_col_tolerance,
+                fault_attach_blend_rows=fault_attach_blend_rows,
                 progress_callback=progress_callback,
                 fault_traces_by_slice=fault_traces_by_slice
             )
