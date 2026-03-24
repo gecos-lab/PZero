@@ -1797,8 +1797,10 @@ def _compute_fault_loop_geometry(center, axes, lengths, rake_deg):
     if np_dot(np_cross(loop_axes[0], loop_axes[1]), loop_axes[2]) < 0.0:
         loop_axes[0] = -loop_axes[0]
 
-    corners = _build_fault_box_corners(center, axes, lengths)
-    _, _, loop_lengths = _compute_fault_box_in_axes(corners, loop_axes)
+    # Keep LoopStructural support extents tied to the original support box
+    # lengths instead of reprojecting them into the rake-rotated frame.
+    # This decouples kinematics (rake/slip direction) from support size.
+    loop_lengths = lengths.copy()
 
     return {
         "loop_axes": loop_axes,
@@ -1810,6 +1812,74 @@ def _compute_fault_loop_geometry(center, axes, lengths, rake_deg):
         "fault_normal": fault_normal,
         "rake_components": rake_components,
     }
+
+
+class _TwoSidedPeakProfile:
+    """Piecewise cubic peak that can taper to zero at different positive/negative limits."""
+
+    def __init__(self, positive_limit, negative_limit):
+        from LoopStructural.modelling.features.fault._fault_function import CubicFunction
+
+        self.positive_limit = max(float(positive_limit), 1e-6)
+        self.negative_limit = max(float(negative_limit), 1e-6)
+
+        self.positive = CubicFunction()
+        self.positive.add_cstr(0.0, 1.0)
+        self.positive.add_grad(0.0, 0.0)
+        self.positive.add_cstr(self.positive_limit, 0.0)
+        self.positive.add_grad(self.positive_limit, 0.0)
+        self.positive.set_lim(0.0, self.positive_limit)
+        self.positive.add_min(0.0)
+
+        self.negative = CubicFunction()
+        self.negative.add_cstr(0.0, 1.0)
+        self.negative.add_grad(0.0, 0.0)
+        self.negative.add_cstr(-self.negative_limit, 0.0)
+        self.negative.add_grad(-self.negative_limit, 0.0)
+        self.negative.set_lim(-self.negative_limit, 0.0)
+        self.negative.add_min(0.0)
+
+    def __call__(self, values):
+        values = np_array(values, dtype=float)
+        result = np_zeros(values.shape, dtype=float)
+
+        positive_mask = values >= 0.0
+        if positive_mask.any():
+            result[positive_mask] = self.positive(values[positive_mask])
+
+        negative_mask = values < 0.0
+        if negative_mask.any():
+            result[negative_mask] = self.negative(values[negative_mask])
+
+        return result
+
+
+def _make_tipline_fault_function(
+    trace_positive_limit=0.5,
+    trace_negative_limit=0.5,
+    slip_positive_limit=1.0,
+    slip_negative_limit=1.0,
+    scale=0.5,
+):
+    """
+    Build a custom LoopStructural fault displacement function.
+
+    The trace/extent taper closes to zero at the actual fault tips (coord2 = +/-0.5),
+    instead of letting BaseFault3D keep significant displacement beyond the tipline.
+    """
+    from LoopStructural.modelling.features.fault._fault_function import BaseFault3D
+
+    gx_profile = BaseFault3D.gxf
+    gy_profile = _TwoSidedPeakProfile(slip_positive_limit, slip_negative_limit)
+    gz_profile = _TwoSidedPeakProfile(trace_positive_limit, trace_negative_limit)
+
+    def _fault_displacement(gx, gy, gz):
+        gx = np_array(gx, dtype=float)
+        gy = np_array(gy, dtype=float)
+        gz = np_array(gz, dtype=float)
+        return scale * gx_profile(gx) * gy_profile(gy) * gz_profile(gz)
+
+    return _fault_displacement
 
 
 def _compute_fault_geometry_for_rake(
@@ -2598,9 +2668,6 @@ def _fault_obb_settings_dialog(
             dtype=float,
         )
         plane_threshold = float(np_dot(target_normal, source_center - target_center))
-        # Match LoopStructural PositiveRegion/NegativeRegion sign convention.
-        region_normal_uv = -plane_normal_uv
-        region_threshold = -plane_threshold
         keep_positive = bool(params.get("abutting_positive", True))
 
         return {
@@ -2609,7 +2676,10 @@ def _fault_obb_settings_dialog(
                 rect_uv, plane_normal_uv, plane_threshold
             ),
             "abut_fill_uv": _clip_polygon_with_half_plane(
-                rect_uv, region_normal_uv, region_threshold, keep_positive
+                rect_uv,
+                plane_normal_uv,
+                plane_threshold,
+                keep_positive,
             ),
             "abut_side_label": (
                 f"Abut side: {'Positive' if keep_positive else 'Negative'}"
@@ -2626,6 +2696,7 @@ def _fault_obb_settings_dialog(
         source_axes = np_array(source_geometry["axes"], dtype=float)
         source_lengths = np_array(source_geometry["scaled_lengths"], dtype=float)
         source_normal = np_array(source_geometry["normal"], dtype=float)
+        source_slip = np_array(source_geometry["slip_vector"], dtype=float)
 
         if source_points.ndim == 2 and source_points.shape[0] > 0:
             preview_plotter.add_mesh(
@@ -2651,6 +2722,16 @@ def _fault_obb_settings_dialog(
             scale=source_arrow_length,
         )
         preview_plotter.add_mesh(source_arrow, color="deepskyblue")
+        source_slip_arrow = pv_Arrow(
+            start=source_center,
+            direction=source_slip,
+            scale=max(
+                0.35 * float(source_lengths[1]),
+                0.12 * float(max(source_lengths)),
+                1.0,
+            ),
+        )
+        preview_plotter.add_mesh(source_slip_arrow, color="limegreen")
 
         params = defaults_by_fault[fault_name]
         target_fault_name = params.get("abutting_fault")
@@ -2663,6 +2744,7 @@ def _fault_obb_settings_dialog(
             target_axes = np_array(target_geometry["axes"], dtype=float)
             target_lengths = np_array(target_geometry["scaled_lengths"], dtype=float)
             target_normal = np_array(target_geometry["normal"], dtype=float)
+            target_slip = np_array(target_geometry["slip_vector"], dtype=float)
 
             if target_points.ndim == 2 and target_points.shape[0] > 0:
                 preview_plotter.add_mesh(
@@ -2688,6 +2770,16 @@ def _fault_obb_settings_dialog(
                 scale=target_arrow_length,
             )
             preview_plotter.add_mesh(target_arrow, color="yellow")
+            target_slip_arrow = pv_Arrow(
+                start=target_center,
+                direction=target_slip,
+                scale=max(
+                    0.35 * float(target_lengths[1]),
+                    0.12 * float(max(target_lengths)),
+                    1.0,
+                ),
+            )
+            preview_plotter.add_mesh(target_slip_arrow, color="green")
 
         preview_plotter.show_axes()
         preview_plotter.view_isometric()
@@ -3450,6 +3542,11 @@ def implicit_model_loop_structural_with_faults(self):
         edge_y / dimension_strati_y,
         edge_z / dimension_strati_z,
     ]
+    # Keep stratigraphic interpolation density consistent with the grid that
+    # will later be used to evaluate and contour stratigraphic surfaces.
+    foliation_nelements = (
+        dimensions_strati[0] * dimensions_strati[1] * dimensions_strati[2]
+    )
 
     self.print_terminal(f"Grid dimensions (faults): {dimensions}")
     self.print_terminal(f"Grid spacing (faults): {spacing}")
@@ -3460,12 +3557,22 @@ def implicit_model_loop_structural_with_faults(self):
         self.print_terminal(
             f"Grid spacing (stratigraphy): {spacing_strati}"
         )
+    self.print_terminal(
+        f"Foliation interpolation elements: {foliation_nelements}"
+    )
 
     model_diagonal = np_sqrt(edge_x**2 + edge_y**2 + edge_z**2)
     default_displacement = model_diagonal * 0.05
     # Keep advanced per-fault controls fixed until the manual workflow is stabilized.
     default_fault_nelements = 1000
     default_fault_buffer = 0.2
+    self.print_terminal(
+        "Fault defaults: "
+        f"buffer={default_fault_buffer}, "
+        "trace_anisotropy=0.0, "
+        "dip_anisotropy=0.0, "
+        "steps=10 (LoopStructural default)"
+    )
     # Keep abutting fully manual to avoid hidden time-based behaviour.
     relation_suggestions = {}
     fault_params_by_name = _fault_obb_settings_dialog(
@@ -3600,6 +3707,13 @@ def implicit_model_loop_structural_with_faults(self):
         dip_axis = np_array(loop_geometry["dip_axis"], dtype=float)
         fault_normal = np_array(loop_geometry["fault_normal"], dtype=float)
         rake_components = np_array(loop_geometry["rake_components"], dtype=float)
+        fault_function = _make_tipline_fault_function(
+            trace_positive_limit=0.5,
+            trace_negative_limit=0.5,
+            slip_positive_limit=1.0,
+            slip_negative_limit=1.0,
+            scale=0.5,
+        )
 
         ls_major_axis = max(float(loop_lengths[0]), 1e-3)
         ls_intermediate_axis = max(0.5 * float(loop_lengths[1]), 1e-3)
@@ -3639,7 +3753,8 @@ def implicit_model_loop_structural_with_faults(self):
             f"    flip_polarity={'ON' if flip_polarity else 'OFF'}"
         )
         self.print_terminal(
-            "    faultfunction=BaseFault3D (displacement tapered in slip and trace directions)"
+            "    faultfunction=PZeroTiplineFault "
+            "(trace taper closes at coord2=+/-0.5, slip taper kept on coord1=+/-1.0)"
         )
         use_points = True
         self.print_terminal(
@@ -3649,6 +3764,10 @@ def implicit_model_loop_structural_with_faults(self):
         fault_params_ls = {
             "nelements": default_fault_nelements,
             "interpolatortype": options_dict["method"],
+            # LoopStructural's faultfunction setter currently rejects plain
+            # callables after initially accepting them, so create the fault
+            # with a built-in function first and override the runtime function
+            # after creation.
             "faultfunction": "BaseFault3D",
             "fault_buffer": default_fault_buffer,
             "fault_center": center.tolist(),
@@ -3668,21 +3787,7 @@ def implicit_model_loop_structural_with_faults(self):
             )
             fault_feature = model.get_feature_by_name(fault_name)
             if fault_feature is not None:
-                support_center_local = (
-                    model.scale(center, inplace=False)
-                    if hasattr(model, "scale")
-                    else np_array(center, dtype=float)
-                )
-                support_lengths_local = (
-                    np_array(lengths, dtype=float) / float(getattr(model, "scale_factor", 1.0))
-                )
-                support_region = _make_fault_support_box_region(
-                    fault_feature,
-                    center=support_center_local,
-                    axes=axes,
-                    lengths=support_lengths_local,
-                )
-                fault_feature.add_region(support_region)
+                fault_feature._faultfunction = fault_function
                 created_fault_features.append(fault_feature)
                 created_fault_features_by_name[fault_name] = fault_feature
                 support_lengths = np_array(
@@ -3702,6 +3807,13 @@ def implicit_model_loop_structural_with_faults(self):
                     "    LoopStructural frame lengths "
                     f"(trace/slip/normal = {support_lengths[0]:.2f}, "
                     f"{support_lengths[1]:.2f}, {support_lengths[2]:.2f})"
+                )
+                self.print_terminal(
+                    "    Fault support is controlled by LoopStructural axes/lengths; "
+                    "no additional hard support region is applied during modelling"
+                )
+                self.print_terminal(
+                    "    Runtime faultfunction override applied after creation"
                 )
                 self.print_terminal(
                     f"    Fault '{fault_name}' created successfully (type: {fault_feature.type})"
@@ -3786,7 +3898,7 @@ def implicit_model_loop_structural_with_faults(self):
                 model.create_and_add_foliation(
                     sequence_name,
                     interpolatortype=options_dict["method"],
-                    nelements=(dimensions[0] * dimensions[1] * dimensions[2]),
+                    nelements=foliation_nelements,
                     faults=foliation_faults if foliation_faults else None,
                 )
                 self.print_terminal(f"  Foliation '{sequence_name}' created")
@@ -3937,6 +4049,39 @@ def implicit_model_loop_structural_with_faults(self):
             scalar_field = model.evaluate_feature_value(
                 feature.name, grid, scale=False
             )
+            nan_mask = np_isnan(scalar_field)
+            nan_count = int(nan_mask.sum())
+            total_count = int(scalar_field.size)
+            valid_values = scalar_field[~nan_mask]
+
+            if nan_count > 0:
+                nan_fraction = 100.0 * nan_count / max(total_count, 1)
+                self.print_terminal(
+                    f"    Diagnostics: {nan_count}/{total_count} NaN samples "
+                    f"({nan_fraction:.2f}%) for feature '{feature.name}'"
+                )
+                nan_points = grid[nan_mask]
+                if nan_points.size > 0:
+                    self.print_terminal(
+                        "    NaN sample bounds: "
+                        f"X[{nan_points[:, 0].min():.2f}, {nan_points[:, 0].max():.2f}], "
+                        f"Y[{nan_points[:, 1].min():.2f}, {nan_points[:, 1].max():.2f}], "
+                        f"Z[{nan_points[:, 2].min():.2f}, {nan_points[:, 2].max():.2f}]"
+                    )
+            else:
+                self.print_terminal(
+                    f"    Diagnostics: no NaN samples for feature '{feature.name}'"
+                )
+
+            if valid_values.size > 0:
+                self.print_terminal(
+                    f"    Finite value range: [{valid_values.min():.4f}, {valid_values.max():.4f}]"
+                )
+            else:
+                self.print_terminal(
+                    f"    WARNING: Feature '{feature.name}' has no finite samples on the evaluation grid"
+                )
+
             scalar_field = scalar_field.reshape((dims[0], dims[1], dims[2]))
             scalar_field = scalar_field.transpose(2, 1, 0)
             scalar_field = scalar_field.ravel()
