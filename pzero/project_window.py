@@ -68,6 +68,7 @@ from pzero.imports.gocad2vtk import (
     gocad2vtk_boundary,
     vtk2gocad,
 )
+from pzero.imports.ifc2vtk import vtk2ifc
 from pzero.imports.image2vtk import geo_image2vtk, xs_image2vtk
 from pzero.imports.lxml2vtk import vtk2lxml
 from pzero.imports.obj2vtk import vtk2obj
@@ -3133,6 +3134,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             choice_list=[
                 "DXF",
                 "GOCAD",
+                "IFC",
                 "GLTF",
                 "CESIUM",
                 "OBJ",
@@ -3142,6 +3144,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 "LandXML",
             ],
         )
+        if cad_format == "IFC":
+            out_file_name = save_file_dialog(
+                parent=self,
+                caption="Export selected entities as IFC4X3",
+                filter="IFC Files (*.ifc)",
+            )
+            if not out_file_name:
+                return
+            self.print_terminal("Saving IFC file: " + out_file_name)
+            vtk2ifc(self=self, out_file_name=out_file_name)
+            return
+
         out_dir_name = save_file_dialog(
             parent=self, caption="Export geological entities as CAD meshes."
         )
