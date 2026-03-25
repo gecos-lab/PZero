@@ -28,10 +28,12 @@ from vtk import (
     vtkAppendPolyData,
     vtkOctreePointLocator,
     vtkXMLPolyDataWriter,
+    vtkXMLUnstructuredGridWriter,
     vtkXMLStructuredGridWriter,
     vtkXMLImageDataWriter,
     vtkXMLStructuredGridReader,
     vtkXMLPolyDataReader,
+    vtkXMLUnstructuredGridReader,
     vtkXMLImageDataReader,
 )
 
@@ -60,7 +62,7 @@ from pzero.helpers.helper_dialogs import (
 )
 from pzero.imports.cesium2vtk import vtk2cesium
 from pzero.imports.dem2vtk import dem2vtk
-from pzero.imports.dxf2vtk import vtk2dxf
+from pzero.imports.dxf2vtk import dxf2vtk, vtk2dxf
 from pzero.imports.gltf2vtk import vtk2gltf
 from pzero.imports.gocad2vtk import (
     gocad2vtk,
@@ -83,6 +85,7 @@ from .entities_factory import (
     VertexSet,
     PolyLine,
     TriSurf,
+    TetraSolid,
     XsVertexSet,
     XsPolyLine,
     DEM,
@@ -216,6 +219,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportGocadXsection.triggered.connect(self.import_gocad_sections)
         self.actionImportBoundary.triggered.connect(self.import_gocad_boundary)
         self.actionImportPyVista.triggered.connect(lambda: pyvista2vtk(self=self))
+        self.actionImportDXF.triggered.connect(self.import_DXF)
         self.actionImportPC.triggered.connect(self.import_PC)
         self.actionImportSHP.triggered.connect(self.import_SHP)
         self.actionImportDEM.triggered.connect(self.import_DEM)
@@ -1487,6 +1491,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 im_writer.SetFileName(out_dir_name + "/" + uid + ".vti")
                 im_writer.SetInputData(self.mesh3d_coll.get_uid_vtk_obj(uid))
                 im_writer.Write()
+            elif self.mesh3d_coll.df.loc[
+                self.mesh3d_coll.df["uid"] == uid, "topology"
+            ].values[0] in ["TetraSolid"]:
+                ug_writer = vtkXMLUnstructuredGridWriter()
+                ug_writer.SetFileName(out_dir_name + "/" + uid + ".vtu")
+                ug_writer.SetInputData(self.mesh3d_coll.get_uid_vtk_obj(uid))
+                ug_writer.Write()
             prgs_bar.add_one()
 
         # Save boundaries collection table to CSV and JSON files.
@@ -2339,6 +2350,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         im_reader.Update()
                         vtk_object.ShallowCopy(im_reader.GetOutput())
                         vtk_object.Modified()
+                    elif self.mesh3d_coll.df.loc[
+                        self.mesh3d_coll.df["uid"] == uid, "topology"
+                    ].values[0] in ["TetraSolid"]:
+                        if not os_path.isfile((in_dir_name + "/" + uid + ".vtu")):
+                            print("error: missing .mesh3d file")
+                            return
+                        vtk_object = TetraSolid()
+                        ug_reader = vtkXMLUnstructuredGridReader()
+                        ug_reader.SetFileName(in_dir_name + "/" + uid + ".vtu")
+                        ug_reader.Update()
+                        vtk_object.ShallowCopy(ug_reader.GetOutput())
+                        vtk_object.Modified()
                     self.mesh3d_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                     prgs_bar.add_one()
                 self.mesh3d_coll.table_model.endResetModel()
@@ -2800,12 +2823,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         vtk_object = VertexSet()
                     elif self.backgrnd_coll.get_uid_topology(uid) == "PolyLine":
                         vtk_object = PolyLine()
-                    # elif self.backgrnd_coll.get_uid_topology(uid) == 'TriSurf':
-                    #     vtk_object = TriSurf()
-                    # elif self.backgrnd_coll.get_uid_topology(uid) == 'XsVertexSet':
-                    #     vtk_object = XsVertexSet(self.backgrnd_coll.get_uid_x_section(uid), parent=self)
-                    # elif self.backgrnd_coll.get_uid_topology(uid) == 'XsPolyLine':
-                    #     vtk_object = XsPolyLine(self.backgrnd_coll.get_uid_x_section(uid), parent=self)
+                    elif self.backgrnd_coll.get_uid_topology(uid) == "TriSurf":
+                        vtk_object = TriSurf()
                     pd_reader = vtkXMLPolyDataReader()
                     pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
                     pd_reader.Update()
@@ -3018,6 +3037,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if in_file_name:
             self.print_terminal("in_file_name: " + in_file_name)
             shp2vtk(self=self, in_file_name=in_file_name, collection=coll)
+
+    def import_DXF(self):
+        """Import DXF entities and route them to the chosen collection."""
+        self.print_terminal("Importing DXF file")
+        in_file_name = open_file_dialog(
+            parent=self, caption="Import DXF file", filter="DXF files (*.dxf)"
+        )
+        if in_file_name:
+            self.print_terminal("in_file_name: " + in_file_name)
+            dxf2vtk(self=self, in_file_name=in_file_name)
 
     def import_DEM(self):
         """Import DEM file and update DEM collection."""

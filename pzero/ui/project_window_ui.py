@@ -83,6 +83,8 @@ class Ui_ProjectWindow(object):
         self.actionImportPC.setObjectName("actionImportPC")
         self.actionImportPyVista = QAction(ProjectWindow)
         self.actionImportPyVista.setObjectName("actionImportPyVista")
+        self.actionImportDXF = QAction(ProjectWindow)
+        self.actionImportDXF.setObjectName("actionImportDXF")
         self.actionImportSHP = QAction(ProjectWindow)
         self.actionImportSHP.setObjectName("actionImportSHP")
         self.actionImportDEM = QAction(ProjectWindow)
@@ -405,6 +407,7 @@ class Ui_ProjectWindow(object):
         self.menuFile.addAction(self.actionImportBoundary)
         self.menuFile.addAction(self.actionImportPC)
         self.menuFile.addAction(self.actionImportPyVista)
+        self.menuFile.addAction(self.actionImportDXF)
         self.menuFile.addAction(self.actionImportSHP)
         self.menuFile.addAction(self.actionImportDEM)
         self.menuFile.addAction(self.actionImportMapImage)
@@ -505,6 +508,9 @@ class Ui_ProjectWindow(object):
         )
         self.actionImportPyVista.setText(
             QCoreApplication.translate("ProjectWindow", "Import PyVista", None)
+        )
+        self.actionImportDXF.setText(
+            QCoreApplication.translate("ProjectWindow", "Import DXF", None)
         )
         self.actionImportSHP.setText(
             QCoreApplication.translate("ProjectWindow", "Import SHP-file", None)
