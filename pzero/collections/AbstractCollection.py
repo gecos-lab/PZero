@@ -13,6 +13,7 @@ from abc import abstractmethod, ABC
 from pandas import DataFrame as pd_DataFrame
 
 import numpy.typing as npt
+from numpy import array as np_array
 from numpy import ndarray as np_ndarray
 from numpy import intp as np_intp
 
@@ -174,6 +175,17 @@ class BaseCollection(ABC):
     @df.setter
     def df(self, df: pd_DataFrame):
         """Set the dataframe of the Collection."""
+        if df is None:
+            df = pd_DataFrame()
+        if not df.columns.is_unique:
+            duplicate_columns = df.columns[df.columns.duplicated()].unique().tolist()
+            df = df.loc[:, ~df.columns.duplicated()].copy()
+            if self.parent and hasattr(self.parent, "print_terminal"):
+                self.print_terminal(
+                    "WARNING - duplicate columns removed from "
+                    f"{self.collection_name or self.__class__.__name__}: "
+                    f"{', '.join(map(str, duplicate_columns))}"
+                )
         self._df = df
 
     @property
@@ -191,9 +203,20 @@ class BaseCollection(ABC):
 
     @property
     def editable_columns(self) -> npt.NDArray[np_intp]:
-        """Here we use .columns.get_indexer to get indexes of the columns
-        that we would like to be editable in the QTableView."""
-        return self.df.columns.get_indexer(self.editable_columns_names)
+        """Return positional indexes of the editable columns for the QTableView.
+
+        This must remain positional because pandas rejects ``get_indexer`` on
+        dataframes with duplicate column labels.
+        """
+        editable_names = set(self.editable_columns_names)
+        return np_array(
+            [
+                column_idx
+                for column_idx, column_name in enumerate(self.df.columns)
+                if column_name in editable_names
+            ],
+            dtype=np_intp,
+        )
 
     @property
     def get_number_of_entities(self) -> int:

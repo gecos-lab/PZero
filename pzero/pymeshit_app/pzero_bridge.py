@@ -25,6 +25,9 @@ class PZeroEntityRecord:
 class PZeroPymeshitBridge:
     """Expose PZero collections to the PyMeshIt workflow GUI."""
 
+    _POINT_IMPORT_TOPOLOGIES = frozenset({"TriSurf", "PolyLine", "XsPolyLine"})
+    _POLYLINE_TOPOLOGIES = frozenset({"PolyLine", "XsPolyLine"})
+
     _COLLECTION_LABELS: Dict[str, str] = {
         "geol_coll": "Geology",
         "mesh3d_coll": "3D Meshes",
@@ -38,6 +41,26 @@ class PZeroPymeshitBridge:
 
     def __init__(self, project_window) -> None:
         self._project = project_window
+
+    @classmethod
+    def supports_point_import_option(cls, topology: str) -> bool:
+        """Return True when PyMeshIt can import this topology as XYZ points."""
+        return str(topology or "") in cls._POINT_IMPORT_TOPOLOGIES
+
+    @classmethod
+    def is_polyline_topology(cls, topology: str) -> bool:
+        """Return True when the topology should behave as a 1D polyline in PyMeshIt."""
+        return str(topology or "") in cls._POLYLINE_TOPOLOGIES
+
+    @classmethod
+    def default_dataset_type(cls, topology: str, load_as_points: bool = False) -> str:
+        """Map a PZero topology to the internal PyMeshIt dataset type."""
+        topology = str(topology or "")
+        if topology == "TriSurf" and load_as_points:
+            return "SURFACE"
+        if cls.is_polyline_topology(topology):
+            return "SURFACE" if load_as_points else "WELL"
+        return topology or "PZERO"
 
     # --------------------------------------------------------------------- #
     # Public API

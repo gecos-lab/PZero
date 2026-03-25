@@ -714,6 +714,7 @@ class MeshItWorkflowGUI(QWidget):
         self.pzero_bridge = None
         self._pending_pzero_bridge = pzero_bridge
         self.border_extension_factor = 0.2  # Extension factor for boundary faces from PZero (20% default)
+        self.vertical_exaggeration = 1.0
         
         self.plotters = {}
         self._updating_coordinates = False  # Flag to prevent recursive updates during coordinate editing
@@ -844,6 +845,52 @@ class MeshItWorkflowGUI(QWidget):
         splitter.setHandleWidth(8)
         splitter.setSizes(sizes)
         return splitter
+
+    def _iter_unique_plotters(self):
+        """Yield each live PyVista plotter once."""
+        seen = set()
+
+        for plotter in getattr(self, "plotters", {}).values():
+            if plotter is None:
+                continue
+            plotter_id = id(plotter)
+            if plotter_id in seen:
+                continue
+            seen.add(plotter_id)
+            yield plotter
+
+        for attr_name, plotter in self.__dict__.items():
+            if not attr_name.endswith("_plotter"):
+                continue
+            if plotter is None:
+                continue
+            plotter_id = id(plotter)
+            if plotter_id in seen:
+                continue
+            seen.add(plotter_id)
+            yield plotter
+
+    def _apply_vertical_exaggeration_to_plotter(
+        self, plotter, render: bool = False
+    ) -> None:
+        """Apply the current global Z exaggeration to a single plotter."""
+        if plotter is None or not hasattr(plotter, "set_scale"):
+            return
+        try:
+            plotter.set_scale(xscale=1.0, yscale=1.0, zscale=self.vertical_exaggeration)
+            if render and hasattr(plotter, "render"):
+                plotter.render()
+        except RuntimeError:
+            return
+        except Exception as exc:
+            logger.debug("Failed to apply vertical exaggeration to plotter: %s", exc)
+
+    def _apply_vertical_exaggeration_to_all_plotters(
+        self, render: bool = False
+    ) -> None:
+        """Apply the current global Z exaggeration to every active plotter."""
+        for plotter in self._iter_unique_plotters():
+            self._apply_vertical_exaggeration_to_plotter(plotter, render=render)
 
     def _init_material_selection_ui(self) -> QGroupBox:
         """
@@ -2858,7 +2905,7 @@ class MeshItWorkflowGUI(QWidget):
         self.load_from_pzero_btn = QPushButton("Advanced Import...")
         self.load_from_pzero_btn.setToolTip(
             "Open dialog with advanced options:\n"
-            "- Load TriSurf as points\n"
+            "- Load TriSurf or PolyLine as XYZ points\n"
             "- Per-surface extension factor\n"
             "Use the embedded table below for quick loading."
         )
@@ -2882,9 +2929,29 @@ class MeshItWorkflowGUI(QWidget):
         border_ext_layout.addWidget(self.border_extension_input)
         border_ext_layout.addStretch()
         file_layout.addLayout(border_ext_layout)
-        
-        
-        
+
+        vertical_exag_layout = QHBoxLayout()
+        vertical_exag_label = QLabel("Vertical Exag:")
+        vertical_exag_label.setToolTip(
+            "Global display-only Z scale for all PyMeshIt 3D views.\n"
+            "This does not modify imported geometry or meshing results."
+        )
+        self.vertical_exaggeration_input = QDoubleSpinBox()
+        self.vertical_exaggeration_input.setRange(0.1, 100.0)
+        self.vertical_exaggeration_input.setSingleStep(0.1)
+        self.vertical_exaggeration_input.setDecimals(2)
+        self.vertical_exaggeration_input.setValue(self.vertical_exaggeration)
+        self.vertical_exaggeration_input.setToolTip(
+            "Global display-only Z scale for all PyMeshIt 3D views."
+        )
+        self.vertical_exaggeration_input.valueChanged.connect(
+            self._on_vertical_exaggeration_changed
+        )
+        vertical_exag_layout.addWidget(vertical_exag_label)
+        vertical_exag_layout.addWidget(self.vertical_exaggeration_input)
+        vertical_exag_layout.addStretch()
+        file_layout.addLayout(vertical_exag_layout)
+
         control_layout.addWidget(file_group)
         
         # -- Unified Dataset Table (accepts drag-drop from PZero) --
@@ -2896,6 +2963,7 @@ class MeshItWorkflowGUI(QWidget):
         self.dataset_table.setToolTip(
             "Drag entities from PZero collection tables here.\n"
             "Adjust Extension Factor and 'As Points' options per dataset.\n"
+            "TriSurf and PolyLine entities can be imported as XYZ points.\n"
             "Click 'Load' to import pending items."
         )
         self.dataset_table.dataset_selection_changed.connect(self._on_unified_dataset_selection_changed)
@@ -3700,6 +3768,7 @@ class MeshItWorkflowGUI(QWidget):
             self.intersection_plotter = QtInteractor(self.intersection_view_frame)
             self.intersection_plot_layout.addWidget(self.intersection_plotter.interactor)
             self.intersection_plotter.set_background('white')
+            self._apply_vertical_exaggeration_to_plotter(self.intersection_plotter)
             # Connect selection change now that plotter exists
             self.intersection_list.itemSelectionChanged.connect(self._on_intersection_selection_changed)
         else:
@@ -4010,6 +4079,7 @@ class MeshItWorkflowGUI(QWidget):
             self.intersections_plotter = QtInteractor(self.intersections_viz_frame)
             self.intersections_plot_layout.addWidget(self.intersections_plotter.interactor)
             self.intersections_plotter.set_background([0.318, 0.341, 0.431])
+            self._apply_vertical_exaggeration_to_plotter(self.intersections_plotter)
             self.intersections_plotter.add_text("Refine intersections to visualize refined intersection lines.", 
                                                position='upper_edge', color='white')
             self.plotters['intersections'] = self.intersections_plotter
@@ -4018,6 +4088,7 @@ class MeshItWorkflowGUI(QWidget):
             self.meshes_plotter = QtInteractor(self.meshes_viz_frame)
             self.meshes_plot_layout.addWidget(self.meshes_plotter.interactor)
             self.meshes_plotter.set_background([0.318, 0.341, 0.431])
+            self._apply_vertical_exaggeration_to_plotter(self.meshes_plotter)
             self.meshes_plotter.add_text("Generate conforming meshes to visualize surface meshes.", 
                                        position='upper_edge', color='white')
             self.plotters['meshes'] = self.meshes_plotter
@@ -4026,6 +4097,7 @@ class MeshItWorkflowGUI(QWidget):
             self.segments_plotter = QtInteractor(self.segments_viz_frame)
             self.segments_plot_layout.addWidget(self.segments_plotter.interactor)
             self.segments_plotter.set_background([0.318, 0.341, 0.431])
+            self._apply_vertical_exaggeration_to_plotter(self.segments_plotter)
             self.segments_plotter.add_text("Click on constraint segments to select/deselect them.", 
                                          position='upper_edge', color='white')
             self.plotters['segments'] = self.segments_plotter
@@ -4161,8 +4233,9 @@ class MeshItWorkflowGUI(QWidget):
             self.segments_plotter = QtInteractor(self.segments_viz_frame)
             self.segments_plot_layout.addWidget(self.segments_plotter.interactor)
             self.segments_plotter.set_background([0.318, 0.341, 0.431])
+            self._apply_vertical_exaggeration_to_plotter(self.segments_plotter)
             self.segments_plotter.add_text("Click on constraint segments to select/deselect them.",
-                                        position='upper_edge', color='white')
+                                         position='upper_edge', color='white')
             if not hasattr(self, 'plotters') or self.plotters is None:
                 self.plotters = {}
             self.plotters['segments'] = self.segments_plotter
@@ -6316,6 +6389,7 @@ class MeshItWorkflowGUI(QWidget):
                 plotter = QtInteractor(self.pre_tetramesh_viz_frame)
                 self.pre_tetramesh_plot_layout.addWidget(plotter.interactor)
                 plotter.set_background([0.2, 0.2, 0.25]) # Darker background
+                self._apply_vertical_exaggeration_to_plotter(plotter)
                 plotter.add_text("Load conforming meshes from Refine tab to visualize.\nC++ core.cpp workflow: surfaces → conforming meshes → selection → tetgen", position='upper_edge', color='white')
                 self.plotters['pre_tetramesh'] = plotter 
                 self.pre_tetramesh_plotter = plotter
@@ -12253,6 +12327,18 @@ segmentation, triangulation, and visualization.
         self.border_extension_factor = value
         logger.info(f"Border extension factor updated to: {value:.2f}")
 
+    def _on_vertical_exaggeration_changed(self, value: float):
+        """Apply a global display-only vertical exaggeration to all 3D views."""
+        self.vertical_exaggeration = max(float(value), 0.1)
+        self._apply_vertical_exaggeration_to_all_plotters(render=True)
+        logger.info(
+            "Global vertical exaggeration updated to: %.2f",
+            self.vertical_exaggeration,
+        )
+        self.statusBar().showMessage(
+            f"Vertical exaggeration set to {self.vertical_exaggeration:.2f}x"
+        )
+
     def _on_unified_dataset_selection_changed(self, index: int):
         """Handle selection change in the unified dataset table."""
         if index >= 0 and index < len(self.datasets):
@@ -12343,7 +12429,7 @@ segmentation, triangulation, and visualization.
             )
             return
 
-        dialog = PZeroEntitySelectionDialog(self, entity_records)
+        dialog = PZeroEntitySelectionDialog(self, entity_records, self.pzero_bridge)
         if dialog.exec() != QDialog.Accepted:
             self.statusBar().showMessage("Load From PZero canceled")
             return
@@ -12412,6 +12498,10 @@ segmentation, triangulation, and visualization.
             try:
                 # Check if this is a TriSurf entity (already triangulated)
                 is_trisurf = record.topology == "TriSurf"
+                is_polyline = self.pzero_bridge.is_polyline_topology(record.topology)
+                dataset_type = self.pzero_bridge.default_dataset_type(
+                    record.topology, load_as_points=bool(load_as_points)
+                )
                 
                 if is_trisurf and not load_as_points:
                     # For TriSurf: extract triangles and boundary edges directly
@@ -12446,6 +12536,8 @@ segmentation, triangulation, and visualization.
                         "collection": record.collection_label,
                         "collection_key": record.collection_key,
                         "uid": record.uid,
+                        "source_topology": record.topology,
+                        "loaded_as_points": False,
                         "triangulation_result": {
                             "vertices": vertices,
                             "triangles": triangles,
@@ -12515,7 +12607,7 @@ segmentation, triangulation, and visualization.
                     dataset_name = self._make_unique_dataset_name(record.name)
                     dataset = {
                         "name": dataset_name,
-                        "type": record.topology or "PZERO",
+                        "type": dataset_type,
                         "points": points,
                         "visible": True,
                         "color": self._get_next_color(),
@@ -12523,6 +12615,8 @@ segmentation, triangulation, and visualization.
                         "collection": record.collection_label,
                         "collection_key": record.collection_key,
                         "uid": record.uid,
+                        "source_topology": record.topology,
+                        "loaded_as_points": True,
                     }
                     if extension_factor > 0.0:
                         dataset["surface_extension_factor"] = extension_factor
@@ -12534,7 +12628,9 @@ segmentation, triangulation, and visualization.
                     )
                     
                 else:
-                    # For non-TriSurf entities: use standard point loading
+                    # For non-TriSurf entities: use standard point loading.
+                    # PolyLine/XsPolyLine can stay as 1D wells or be imported
+                    # as XYZ points when the checkbox is enabled.
                     face_id = getattr(record, 'face_id', None)
                     if face_id is not None:
                         points = self.pzero_bridge.load_points(
@@ -12554,7 +12650,7 @@ segmentation, triangulation, and visualization.
                     dataset_name = self._make_unique_dataset_name(record.name)
                     dataset = {
                         "name": dataset_name,
-                        "type": record.topology or "PZERO",
+                        "type": dataset_type,
                         "points": points,
                         "visible": True,
                         "color": self._get_next_color(),
@@ -12562,9 +12658,18 @@ segmentation, triangulation, and visualization.
                         "collection": record.collection_label,
                         "collection_key": record.collection_key,
                         "uid": record.uid,
+                        "source_topology": record.topology,
+                        "loaded_as_points": bool(load_as_points),
                     }
                     self.datasets.append(dataset)
                     loaded += 1
+                    if is_polyline:
+                        logger.info(
+                            "Loaded PolyLine %s as %s: %d points",
+                            record.name,
+                            "XYZ points" if load_as_points else "WELL",
+                            len(points),
+                        )
                     
             except Exception as exc:  # pragma: no cover - defensive
                 logger.error(
@@ -14316,6 +14421,7 @@ segmentation, triangulation, and visualization.
         parent_layout.addWidget(plotter.interactor)
         
         plotter.set_background("#383F51")
+        self._apply_vertical_exaggeration_to_plotter(plotter)
         plotter.disable() # Disable rendering for performance during setup
 
         plotter_has_geometry = False
@@ -14441,6 +14547,7 @@ segmentation, triangulation, and visualization.
         if plotter_has_geometry:
             plotter.add_axes()
             plotter.add_legend()
+            self._apply_vertical_exaggeration_to_plotter(plotter)
             plotter.reset_camera()
         else:
             plotter.add_text(f"No valid data to display for '{view_type}' view.", position='upper_edge', color='white')
@@ -16378,6 +16485,7 @@ segmentation, triangulation, and visualization.
             
             self.tetra_plotter = QtInteractor(viz_panel)
             self.tetra_plotter.set_background([0.15, 0.15, 0.2])
+            self._apply_vertical_exaggeration_to_plotter(self.tetra_plotter)
             viz_layout.addWidget(self.tetra_plotter.interactor)
             
             # Connect controls
@@ -23267,6 +23375,8 @@ segmentation, triangulation, and visualization.
                     plotter.set_background('white')  # fallback
             except Exception as e:
                 logger.warning(f"Error setting plotter background: {e}")
+
+            self._apply_vertical_exaggeration_to_plotter(plotter)
                 
             # Disable VTK warnings for cleaner output
             try:
@@ -25423,10 +25533,11 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         self.setItemWidget(item, self.COL_EXTEND, extend_spin)
         
         # Add "As Points" checkbox
+        supports_as_points = self._supports_as_points(record)
         as_points_cb = QCheckBox()
         as_points_cb.setChecked(False)
-        as_points_cb.setToolTip("Load as points instead of triangles")
-        as_points_cb.setEnabled(record.topology == "TriSurf")
+        as_points_cb.setToolTip(self._as_points_tooltip(record))
+        as_points_cb.setEnabled(supports_as_points)
         # Center the checkbox
         cb_widget = QWidget()
         cb_layout = QHBoxLayout(cb_widget)
@@ -25434,6 +25545,10 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         cb_layout.setAlignment(Qt.AlignCenter)
         cb_layout.setContentsMargins(0, 0, 0, 0)
         self.setItemWidget(item, self.COL_AS_POINTS, cb_widget)
+
+        extend_spin.setEnabled(record.topology == "TriSurf")
+        if record.topology != "TriSurf":
+            extend_spin.setToolTip("Surface extension applies only to TriSurf imports.")
         
         # Store reference to pending item
         self._pending_items.append({
@@ -25445,6 +25560,22 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         
         # Select the new item
         self.setCurrentItem(item)
+
+    def _supports_as_points(self, record) -> bool:
+        """Return True when this PZero topology can be imported as XYZ points."""
+        bridge = getattr(self._parent_gui, "pzero_bridge", None)
+        if bridge is not None:
+            return bridge.supports_point_import_option(record.topology)
+        return record.topology in {"TriSurf", "PolyLine", "XsPolyLine"}
+
+    @staticmethod
+    def _as_points_tooltip(record) -> str:
+        """Build a tooltip for the point-import checkbox."""
+        if record.topology == "TriSurf":
+            return "Load TriSurf as XYZ points instead of pre-triangulated triangles."
+        if record.topology in {"PolyLine", "XsPolyLine"}:
+            return "Load PolyLine as an XYZ point dataset instead of a 1D well/polyline."
+        return "Point import is available for TriSurf and PolyLine entities."
     
     def add_loaded_dataset(self, dataset: dict, index: int):
         """Add a loaded dataset to the table."""
@@ -25470,9 +25601,7 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         item.setText(self.COL_EXTEND, f"{ext_factor:.2f}")
         
         # Show if loaded as points
-        is_trisurf = dataset.get('type') == "TriSurf"
-        is_pre_tri = dataset.get('is_pre_triangulated', False)
-        if is_trisurf and not is_pre_tri:
+        if dataset.get("loaded_as_points", False):
             item.setText(self.COL_AS_POINTS, "Yes")
         else:
             item.setText(self.COL_AS_POINTS, "-")
@@ -25545,8 +25674,9 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
 class PZeroEntitySelectionDialog(QDialog):
     """Dialog that lets the user pick PZero entities to import."""
 
-    def __init__(self, parent, entity_records):
+    def __init__(self, parent, entity_records, bridge=None):
         super().__init__(parent)
+        self._pzero_bridge = bridge
         self.setWindowTitle("Load From PZero")
         self.resize(600, 480)
 
@@ -25575,6 +25705,7 @@ class PZeroEntitySelectionDialog(QDialog):
 
             for record in records:
                 is_trisurf = record.topology == "TriSurf"
+                supports_as_points = self._supports_as_points(record)
                 child = QTreeWidgetItem(
                     [
                         "",
@@ -25596,16 +25727,20 @@ class PZeroEntitySelectionDialog(QDialog):
                 # Add item to tree first
                 parent_item.addChild(child)
                 
-                # Add "Load as Points" checkbox widget for TriSurf entities after item is added
-                if is_trisurf:
+                # Add "Load as Points" checkbox widget where supported
+                if supports_as_points:
                     # Clear any text in column 4 to ensure checkbox is visible
                     child.setText(4, "")
                     checkbox = QCheckBox(self.tree)  # Parent to tree widget
                     checkbox.setChecked(False)
-                    checkbox.setToolTip("Load TriSurf as points instead of triangles")
+                    checkbox.setToolTip(self._as_points_tooltip(record))
                     # Ensure checkbox is visible
                     checkbox.show()
                     self.tree.setItemWidget(child, 4, checkbox)
+                else:
+                    child.setText(4, "-")
+
+                if is_trisurf:
                     spinbox = QDoubleSpinBox(self.tree)
                     spinbox.setDecimals(2)
                     spinbox.setRange(0.0, 1.0)
@@ -25618,7 +25753,6 @@ class PZeroEntitySelectionDialog(QDialog):
                     spinbox.show()
                     self.tree.setItemWidget(child, 5, spinbox)
                 else:
-                    child.setText(4, "-")  # Show dash for non-TriSurf entities
                     child.setText(5, "-")
 
             parent_item.setExpanded(True)
@@ -25639,6 +25773,21 @@ class PZeroEntitySelectionDialog(QDialog):
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
+
+    def _supports_as_points(self, record) -> bool:
+        """Return True when the record can be imported as XYZ points."""
+        if self._pzero_bridge is not None:
+            return self._pzero_bridge.supports_point_import_option(record.topology)
+        return record.topology in {"TriSurf", "PolyLine", "XsPolyLine"}
+
+    @staticmethod
+    def _as_points_tooltip(record) -> str:
+        """Tooltip text for the advanced import checkbox."""
+        if record.topology == "TriSurf":
+            return "Load TriSurf as XYZ points instead of triangles."
+        if record.topology in {"PolyLine", "XsPolyLine"}:
+            return "Load PolyLine as XYZ points instead of a 1D well/polyline."
+        return "Import this dataset as XYZ points."
 
     def selected_records(self):
         """
