@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QDockWidget
 from pyvista import PolyData as pv_PolyData
 
 from numpy import abs as np_abs
+from numpy import array as np_array
 from numpy import around as np_around
 from numpy import cbrt as np_cbrt
 from numpy import cos as np_cos
@@ -83,6 +84,112 @@ from .entities_factory import (
     Attitude,
 )
 from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
+
+
+def _build_extrusion_output_dict(self, input_uid, title, default_suffix):
+    """Create the output entity dictionary shared by extrusion tools."""
+    surf_dict = deepcopy(self.geol_coll.entity_dict)
+    input_dict = {
+        "name": [
+            "TriSurf name: ",
+            self.geol_coll.get_uid_name(input_uid) + default_suffix,
+        ],
+        "role": [
+            "Role: ",
+            self.geol_coll.valid_roles,
+        ],
+        "feature": [
+            "Feature: ",
+            self.geol_coll.get_uid_feature(input_uid),
+        ],
+        "scenario": ["Scenario: ", self.geol_coll.get_uid_scenario(input_uid)],
+    }
+    surf_dict_updt = multiple_input_dialog(title=title, input_dict=input_dict)
+    if surf_dict_updt is None:
+        return None
+    for key in surf_dict_updt:
+        surf_dict[key] = surf_dict_updt[key]
+    surf_dict["topology"] = "TriSurf"
+    surf_dict["vtk_obj"] = TriSurf()
+    return surf_dict
+
+
+def _ask_linear_extrusion_parameters(self, title):
+    """Ask for extrusion direction and vertical limits."""
+    trend = input_one_value_dialog(title=title, label="Trend Value", default_value=90.0)
+    if trend is None:
+        trend = 90.0
+    plunge = input_one_value_dialog(
+        title=title, label="Plunge Value", default_value=30.0
+    )
+    if plunge is None:
+        plunge = 30.0
+    extrusion_par = {"bottom": ["Lower limit:", -1000], "top": ["Higher limit", 1000]}
+    vertical_extrusion = multiple_input_dialog(
+        title="Vertical Extrusion", input_dict=extrusion_par
+    )
+    if vertical_extrusion is None:
+        self.print_terminal(
+            "Wrong extrusion parameters, please check the top and bottom values"
+        )
+        return None
+    if vertical_extrusion["top"] <= vertical_extrusion["bottom"]:
+        self.print_terminal(" -- Higher limit must be greater than lower limit -- ")
+        return None
+    return trend, plunge, vertical_extrusion
+
+
+def _get_linear_extrusion_vector(trend, plunge):
+    """Return extrusion direction cosines from trend/plunge."""
+    x_vector = -(np_cos((trend - 90) * np_pi / 180) * np_cos(plunge * np_pi / 180))
+    y_vector = np_sin((trend - 90) * np_pi / 180) * np_cos(plunge * np_pi / 180)
+    z_vector = np_sin(plunge * np_pi / 180)
+    return x_vector, y_vector, z_vector
+
+
+def _build_sampled_extrusion_surface(
+    source_line, extrusion_vector, bottom_limit, top_limit, sample_lines
+):
+    """Create a triangulated extrusion with intermediate profiles."""
+    ordered_line = source_line.deep_copy()
+    ordered_line.sort_nodes()
+    if ordered_line.points_number < 2:
+        return None
+
+    source_points = np_array(ordered_line.points)
+    points_per_row = source_points.shape[0]
+    row_count = int(sample_lines) + 2
+    if row_count < 2:
+        row_count = 2
+
+    extrusion_vector = np_array(extrusion_vector)
+    scale_step = (top_limit - bottom_limit) / (row_count - 1)
+
+    output_surface = TriSurf()
+    for row_id in range(row_count):
+        row_offset = bottom_limit + row_id * scale_step
+        translated_row = source_points + row_offset * extrusion_vector
+        for point in translated_row:
+            output_surface.append_point(point)
+
+    for row_id in range(row_count - 1):
+        row_start = row_id * points_per_row
+        next_row_start = (row_id + 1) * points_per_row
+        for point_id in range(points_per_row - 1):
+            point_00 = row_start + point_id
+            point_01 = row_start + point_id + 1
+            point_10 = next_row_start + point_id
+            point_11 = next_row_start + point_id + 1
+            output_surface.append_cell(
+                cell_array=np_array([point_00, point_10, point_01])
+            )
+            output_surface.append_cell(
+                cell_array=np_array([point_01, point_10, point_11])
+            )
+
+    output_surface.BuildLinks()
+    output_surface.Modified()
+    return output_surface
 
 
 def get_boundary_obb_transform(boundary_coll, boundary_uid):
@@ -1159,67 +1266,25 @@ def linear_extrusion(self):
                 " -- Error input type: only PolyLine and XsPolyLine type -- "
             )
             return
-    # Create deepcopy of the geological entity dictionary.
-    surf_dict = deepcopy(self.geol_coll.entity_dict)
-    input_dict = {
-        "name": [
-            "TriSurf name: ",
-            self.geol_coll.get_uid_name(input_uids[0]) + "_extruded",
-        ],
-        "role": [
-            "Role: ",
-            self.geol_coll.valid_roles,
-        ],
-        "feature": [
-            "Feature: ",
-            self.geol_coll.get_uid_feature(input_uids[0]),
-        ],
-        "scenario": ["Scenario: ", self.geol_coll.get_uid_scenario(input_uids[0])],
-    }
-    surf_dict_updt = multiple_input_dialog(
-        title="Linear Extrusion", input_dict=input_dict
+    surf_dict = _build_extrusion_output_dict(
+        self=self,
+        input_uid=input_uids[0],
+        title="Linear Extrusion",
+        default_suffix="_extruded",
     )
-    # Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits
-    if surf_dict_updt is None:
+    if surf_dict is None:
         return
-    # Getting the values that have been typed by the user through the multiple input widget
-    for key in surf_dict_updt:
-        surf_dict[key] = surf_dict_updt[key]
-    surf_dict["topology"] = "TriSurf"
-    surf_dict["vtk_obj"] = TriSurf()
-    # Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits
-    if surf_dict_updt is None:
+    extrusion_parameters = _ask_linear_extrusion_parameters(
+        self=self, title="Linear Extrusion"
+    )
+    if extrusion_parameters is None:
         return
-    # Ask for trend/plunge of the vector to use for the linear extrusion
-    trend = input_one_value_dialog(
-        title="Linear Extrusion", label="Trend Value", default_value=90.0
-    )
-    if trend is None:
-        trend = 90.00
-    plunge = input_one_value_dialog(
-        title="Linear Extrusion", label="Plunge Value", default_value=30.0
-    )
-    if plunge is None:
-        plunge = 30.0
-    # Ask for vertical extrusion: how extruded will the surface be?
-    extrusion_par = {"bottom": ["Lower limit:", -1000], "top": ["Higher limit", 1000]}
-    vertical_extrusion = multiple_input_dialog(
-        title="Vertical Extrusion", input_dict=extrusion_par
-    )
-    if vertical_extrusion is None:
-        self.print_terminal(
-            "Wrong extrusion parameters, please check the top and bottom values"
-        )
-        return
-
-    total_extrusion = vertical_extrusion["top"] + np_abs(vertical_extrusion["bottom"])
+    trend, plunge, vertical_extrusion = extrusion_parameters
+    total_extrusion = vertical_extrusion["top"] - vertical_extrusion["bottom"]
     linear_extrusion = vtkLinearExtrusionFilter()
     linear_extrusion.CappingOn()  # yes or no?
     linear_extrusion.SetExtrusionTypeToVectorExtrusion()
-    # Direction cosines
-    x_vector = -(np_cos((trend - 90) * np_pi / 180) * np_cos(plunge * np_pi / 180))
-    y_vector = np_sin((trend - 90) * np_pi / 180) * np_cos(plunge * np_pi / 180)
-    z_vector = np_sin(plunge * np_pi / 180)
+    x_vector, y_vector, z_vector = _get_linear_extrusion_vector(trend, plunge)
     linear_extrusion.SetVector(
         x_vector, y_vector, z_vector
     )  # double,double,double format
@@ -1254,6 +1319,71 @@ def linear_extrusion(self):
         self.geol_coll.add_entity_from_dict(surf_dict)
     else:
         self.print_terminal(" -- empty object -- ")
+
+
+@freeze_gui_onoff
+def enhanced_linear_extrusion(self):
+    """Create a sampled extrusion surface with intermediate profiles."""
+    self.print_terminal(
+        "Enhanced extrusion: create a surface from one polyline with internal sampled extrusion lines"
+    )
+    if self.shown_table != "tabGeology":
+        self.print_terminal(" -- Only geological objects can be projected -- ")
+        return
+    if not self.selected_uids:
+        self.print_terminal("No input data selected.")
+        return
+
+    input_uids = deepcopy(self.selected_uids)
+    if len(input_uids) != 1:
+        self.print_terminal(" -- Select a single PolyLine or XsPolyLine -- ")
+        return
+
+    input_obj = self.geol_coll.get_uid_vtk_obj(input_uids[0])
+    if not isinstance(input_obj, (PolyLine, XsPolyLine)):
+        self.print_terminal(" -- Error input type: only PolyLine and XsPolyLine type -- ")
+        return
+
+    surf_dict = _build_extrusion_output_dict(
+        self=self,
+        input_uid=input_uids[0],
+        title="Enhanced Extrusion",
+        default_suffix="_enhanced_extruded",
+    )
+    if surf_dict is None:
+        return
+
+    extrusion_parameters = _ask_linear_extrusion_parameters(
+        self=self, title="Enhanced Extrusion"
+    )
+    if extrusion_parameters is None:
+        return
+    trend, plunge, vertical_extrusion = extrusion_parameters
+
+    sample_lines = input_one_value_dialog(
+        title="Enhanced Extrusion",
+        label="Internal sample lines",
+        default_value=10,
+    )
+    if sample_lines is None:
+        sample_lines = 10
+    sample_lines = max(1, int(round(sample_lines)))
+
+    extrusion_vector = _get_linear_extrusion_vector(trend, plunge)
+    output_surface = _build_sampled_extrusion_surface(
+        source_line=input_obj,
+        extrusion_vector=extrusion_vector,
+        bottom_limit=vertical_extrusion["bottom"],
+        top_limit=vertical_extrusion["top"],
+        sample_lines=sample_lines,
+    )
+    if output_surface is None or output_surface.points_number == 0:
+        self.print_terminal(" -- empty object -- ")
+        return
+
+    surf_dict["vtk_obj"].ShallowCopy(output_surface)
+    surf_dict["vtk_obj"].Modified()
+    self.geol_coll.add_entity_from_dict(surf_dict)
 
 
 @freeze_gui_onoff

@@ -107,6 +107,7 @@ from .three_d_surfaces import (
     implicit_model_loop_structural,
     surface_smoothing,
     linear_extrusion,
+    enhanced_linear_extrusion,
     decimation_pro_resampling,
     decimation_quadric_resampling,
     subdivision_resampling,
@@ -260,6 +261,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             lambda: decimation_quadric_resampling(self)
         )
         self.actionExtrusion.triggered.connect(lambda: linear_extrusion(self))
+        self.actionEnhancedExtrusion = QAction("Enhanced Extrusion", self)
+        self.actionEnhancedExtrusion.setObjectName("actionEnhancedExtrusion")
+        self.actionEnhancedExtrusion.triggered.connect(
+            lambda: enhanced_linear_extrusion(self)
+        )
+        self.menuProjection.addAction(self.actionEnhancedExtrusion)
         self.actionProject2DEM.triggered.connect(lambda: project_2_dem(self))
         self.actionXSectionIntersection.triggered.connect(lambda: intersection_xs(self))
         self.actionProject2XSection.triggered.connect(lambda: project_2_xs(self))
