@@ -18211,7 +18211,7 @@ segmentation, triangulation, and visualization.
                 return vtk_mesh, properties_names
             
             # Import required modules
-            from pzero.entities_factory import TetraSolid, TriSurf, PolyLine
+            from pzero.entities_factory import TetraSolid, TriSurf, WellTrace
             from copy import deepcopy
             from uuid import uuid4
             import numpy as np
@@ -18337,21 +18337,23 @@ segmentation, triangulation, and visualization.
                 
                 try:
                     trisurf = _build_trisurf_from_arrays(vertices, triangles)
-                    
+
                     # Determine role based on dataset type
                     role = _normalize_geology_role(dataset_type)
+                    feature_name = str(dataset.get('feature') or dataset_name or 'undef')
+                    export_name = str(dataset_name or feature_name or 'Surface')
                     
                     # Create entity dictionary for geol_coll
                     entity_dict = _build_entity_dict(
                         project_window.geol_coll,
                         uid=str(uuid4()),
-                        name=f"{dataset_name}",
+                        name=export_name,
                         scenario="PyMeshIt",
                         parent_uid="",
                         topology="TriSurf",
                         vtk_obj=trisurf,
                         role=role,
-                        feature=dataset.get('feature', 'undef'),
+                        feature=feature_name,
                         properties_names=[],
                         properties_components=[],
                     )
@@ -18367,7 +18369,7 @@ segmentation, triangulation, and visualization.
                     export_details.append(f"✗ Surface '{dataset_name}' failed: {str(surf_err)}")
             
             for fault_export in extracted_fault_exports:
-                fault_name = fault_export["name"]
+                fault_name = str(fault_export["name"] or "Fault")
                 try:
                     trisurf = _build_trisurf_from_arrays(
                         fault_export["vertices"],
@@ -18382,7 +18384,7 @@ segmentation, triangulation, and visualization.
                         topology="TriSurf",
                         vtk_obj=trisurf,
                         role=_normalize_geology_role("FAULT"),
-                        feature=fault_export["feature"],
+                        feature=str(fault_export.get("feature") or fault_name or "undef"),
                         properties_names=[],
                         properties_components=[],
                     )
@@ -18431,8 +18433,8 @@ segmentation, triangulation, and visualization.
                     well_points = well_points[:, :3]
                 
                 try:
-                    # Create PolyLine VTK object
-                    polyline = PolyLine()
+                    # Create WellTrace VTK object so saved projects can be reopened by PZero.
+                    polyline = WellTrace()
                     
                     # Add points
                     vtk_points = vtkPoints()
@@ -18448,6 +18450,7 @@ segmentation, triangulation, and visualization.
                         line.GetPointIds().SetId(1, i + 1)
                         vtk_lines.InsertNextCell(line)
                     polyline.SetLines(vtk_lines)
+                    polyline.set_head(np.asarray(well_points[0:1], dtype=float))
                     
                     # Create entity dictionary for well_coll
                     entity_dict = _build_entity_dict(
