@@ -1563,6 +1563,511 @@ class ViewInterpretation(ViewMap):
         subset_line.Modified()
         return subset_line, remaining_slices, slice_to_cell_index
 
+    def _get_slice_plane_axes(self, axis=None):
+        """Return the normal and in-plane coordinate indices for a slice axis."""
+        axis = axis or self.current_axis
+        if axis == "Inline":
+            return 0, (1, 2)
+        if axis == "Crossline":
+            return 1, (0, 2)
+        return 2, (0, 1)
+
+    def _prepare_polyline_sampling(self, points):
+        """Remove duplicate vertices and build cumulative arclength coordinates."""
+        clean_points = np.asarray(points, dtype=float)
+        if clean_points.ndim != 2 or clean_points.shape[0] < 2:
+            return None, None, None
+
+        keep_mask = np.ones(clean_points.shape[0], dtype=bool)
+        if clean_points.shape[0] > 1:
+            seg_lengths = np.linalg.norm(np.diff(clean_points, axis=0), axis=1)
+            keep_mask[1:] = seg_lengths > 1.0e-9
+
+        clean_points = clean_points[keep_mask]
+        if clean_points.shape[0] < 2:
+            return None, None, keep_mask
+
+        seg_lengths = np.linalg.norm(np.diff(clean_points, axis=0), axis=1)
+        cum_length = np.concatenate(([0.0], np.cumsum(seg_lengths)))
+        if cum_length[-1] <= 0:
+            return None, None, keep_mask
+        return clean_points, cum_length, keep_mask
+
+    def _sample_polyline_values(self, values, source_s, target_s):
+        """Interpolate point coordinates or point-data tuples along arclength."""
+        values = np.asarray(values, dtype=float)
+        squeeze = values.ndim == 1
+        if squeeze:
+            values = values[:, None]
+
+        sampled = np.empty((len(target_s), values.shape[1]), dtype=float)
+        for comp_idx in range(values.shape[1]):
+            sampled[:, comp_idx] = np.interp(target_s, source_s, values[:, comp_idx])
+
+        if squeeze:
+            return sampled[:, 0]
+        return sampled
+
+    def _get_multipart_sampling_primary_axis(self, axis=None, entity_kind="horizon"):
+        """Return the preferred in-plane ordering axis for multipart regularization."""
+        axis = axis or self.current_axis
+        if entity_kind == "fault":
+            return 2
+        if axis == "Inline":
+            return 1
+        return 0
+
+    def _collapse_slice_regularization_groups(
+        self, slice_segments=None, axis=None, entity_kind="horizon"
+    ):
+        """Collapse one or more same-slice polyline parts into a single ordered trace."""
+        if not slice_segments:
+            return None
+
+        primary_axis = self._get_multipart_sampling_primary_axis(
+            axis=axis, entity_kind=entity_kind
+        )
+        _, in_plane_axes = self._get_slice_plane_axes(axis=axis)
+        secondary_axes = [coord_idx for coord_idx in in_plane_axes if coord_idx != primary_axis]
+        if not secondary_axes:
+            secondary_axes = [coord_idx for coord_idx in range(3) if coord_idx != primary_axis]
+        secondary_axis = secondary_axes[0]
+
+        merged_points = []
+        for segment in slice_segments:
+            pts = np.asarray(segment["points"], dtype=float)
+            if pts.ndim == 2 and pts.shape[0] >= 2:
+                merged_points.append(pts)
+        if not merged_points:
+            return None
+
+        merged_points = np.vstack(merged_points)
+        if merged_points.shape[0] < 2:
+            return None
+
+        order = np.argsort(merged_points[:, primary_axis], kind="mergesort")
+        sorted_points = merged_points[order]
+        primary_values = sorted_points[:, primary_axis]
+        secondary_values = sorted_points[:, secondary_axis]
+
+        diffs = np.diff(primary_values)
+        positive_diffs = np.abs(diffs[np.abs(diffs) > 1.0e-9])
+        merge_tolerance = float(np.median(positive_diffs) * 0.35) if positive_diffs.size else 0.0
+        merge_tolerance = max(merge_tolerance, 1.0e-6)
+
+        grouped_points = []
+        start_idx = 0
+        for point_idx in range(1, len(sorted_points) + 1):
+            at_end = point_idx == len(sorted_points)
+            if not at_end:
+                same_group = abs(primary_values[point_idx] - primary_values[point_idx - 1]) <= merge_tolerance
+            else:
+                same_group = False
+            if same_group:
+                continue
+            group = sorted_points[start_idx:point_idx]
+            grouped_points.append(group.mean(axis=0))
+            start_idx = point_idx
+
+        grouped_points = np.asarray(grouped_points, dtype=float)
+        clean_points, source_s, _ = self._prepare_polyline_sampling(grouped_points)
+        if clean_points is None:
+            return None
+
+        return {
+            "slice_idx": int(slice_segments[0]["slice_idx"]),
+            "points": clean_points,
+            "source_s": source_s,
+            "length": float(source_s[-1]),
+            "point_count": int(clean_points.shape[0]),
+            "source_cell_ids": [segment["cell_id"] for segment in slice_segments],
+            "parts_merged": len(slice_segments),
+        }
+
+    def _extract_multipart_regularization_cells(
+        self, vtk_obj=None, axis=None, entity_kind="horizon"
+    ):
+        """Collect one cleaned trace per slice for multipart regularization."""
+        if vtk_obj is None or vtk_obj.GetNumberOfCells() == 0:
+            return []
+
+        cell_data = vtk_obj.GetCellData()
+        if cell_data is None or not cell_data.HasArray("slice_index"):
+            return []
+
+        slice_array = cell_data.GetArray("slice_index")
+
+        _, in_plane_axes = self._get_slice_plane_axes(axis=axis)
+        ordered_cell_ids = sorted(
+            range(vtk_obj.GetNumberOfCells()),
+            key=lambda cell_idx: (int(slice_array.GetValue(cell_idx)), cell_idx),
+        )
+
+        extracted_segments = []
+        previous_points = None
+        for cell_idx in ordered_cell_ids:
+            cell = vtk_obj.GetCell(cell_idx)
+            if cell is None:
+                continue
+            n_pts = cell.GetNumberOfPoints()
+            if n_pts < 2:
+                continue
+
+            point_ids = [cell.GetPointId(i) for i in range(n_pts)]
+            raw_points = np.array(
+                [vtk_obj.GetPoint(point_id) for point_id in point_ids], dtype=float
+            )
+
+            if previous_points is not None:
+                prev_2d = previous_points[:, in_plane_axes]
+                curr_2d = raw_points[:, in_plane_axes]
+                forward_cost = np.linalg.norm(curr_2d[0] - prev_2d[0]) + np.linalg.norm(
+                    curr_2d[-1] - prev_2d[-1]
+                )
+                reverse_cost = np.linalg.norm(curr_2d[-1] - prev_2d[0]) + np.linalg.norm(
+                    curr_2d[0] - prev_2d[-1]
+                )
+                if reverse_cost + 1.0e-9 < forward_cost:
+                    raw_points = raw_points[::-1]
+                    point_ids = point_ids[::-1]
+
+            clean_points, source_s, keep_mask = self._prepare_polyline_sampling(raw_points)
+            if clean_points is None:
+                continue
+
+            extracted_segments.append(
+                {
+                    "cell_id": cell_idx,
+                    "slice_idx": int(slice_array.GetValue(cell_idx)),
+                    "points": clean_points,
+                    "source_s": source_s,
+                    "length": float(source_s[-1]),
+                    "point_count": int(clean_points.shape[0]),
+                }
+            )
+            previous_points = clean_points
+
+        if not extracted_segments:
+            return []
+
+        collapsed_cells = []
+        current_slice_idx = None
+        current_group = []
+        for segment in extracted_segments:
+            if current_slice_idx is None or segment["slice_idx"] == current_slice_idx:
+                current_group.append(segment)
+                current_slice_idx = segment["slice_idx"]
+                continue
+
+            collapsed = self._collapse_slice_regularization_groups(
+                slice_segments=current_group,
+                axis=axis,
+                entity_kind=entity_kind,
+            )
+            if collapsed is not None:
+                collapsed_cells.append(collapsed)
+            current_group = [segment]
+            current_slice_idx = segment["slice_idx"]
+
+        if current_group:
+            collapsed = self._collapse_slice_regularization_groups(
+                slice_segments=current_group,
+                axis=axis,
+                entity_kind=entity_kind,
+            )
+            if collapsed is not None:
+                collapsed_cells.append(collapsed)
+
+        return collapsed_cells
+
+    def _estimate_multipart_regularization_defaults(
+        self, vtk_obj=None, axis=None, entity_kind="horizon"
+    ):
+        """Suggest a stable point count and smoothing defaults for multipart resampling."""
+        cells = self._extract_multipart_regularization_cells(
+            vtk_obj=vtk_obj, axis=axis, entity_kind=entity_kind
+        )
+        if not cells:
+            return {
+                "slice_count": 0,
+                "suggested_point_count": 0,
+                "median_length": 0.0,
+                "median_spacing": 0.0,
+                "merged_part_count": 0,
+            }
+
+        lengths = [cell["length"] for cell in cells if cell["length"] > 0]
+        avg_spacings = [
+            cell["length"] / max(cell["point_count"] - 1, 1)
+            for cell in cells
+            if cell["length"] > 0 and cell["point_count"] > 1
+        ]
+        point_counts = [cell["point_count"] for cell in cells]
+
+        median_length = float(np.median(lengths)) if lengths else 0.0
+        median_spacing = float(np.median(avg_spacings)) if avg_spacings else 0.0
+        if median_length > 0 and median_spacing > 0:
+            suggested_point_count = int(np.ceil(median_length / median_spacing)) + 1
+        else:
+            suggested_point_count = int(np.median(point_counts)) if point_counts else 2
+        suggested_point_count = max(2, min(800, suggested_point_count))
+
+        return {
+            "slice_count": len(cells),
+            "suggested_point_count": suggested_point_count,
+            "median_length": median_length,
+            "median_spacing": median_spacing,
+            "merged_part_count": int(
+                sum(max(0, cell.get("parts_merged", 1) - 1) for cell in cells)
+            ),
+        }
+
+    def _build_regularized_multipart_vtk(
+        self,
+        vtk_obj=None,
+        axis=None,
+        entity_kind="horizon",
+        target_point_count=None,
+        smooth_sigma=1.0,
+        preserve_slice_indices=None,
+    ):
+        """Rebuild multipart geometry with uniform per-slice sampling."""
+        cells = self._extract_multipart_regularization_cells(
+            vtk_obj=vtk_obj, axis=axis, entity_kind=entity_kind
+        )
+        if not cells:
+            return None, [], {}, {}
+
+        if target_point_count is None:
+            defaults = self._estimate_multipart_regularization_defaults(
+                vtk_obj=vtk_obj, axis=axis, entity_kind=entity_kind
+            )
+            target_point_count = defaults.get("suggested_point_count", 2)
+        target_point_count = max(2, min(int(target_point_count), 8000))
+
+        resampled_stack = []
+        for cell in cells:
+            target_s = np.linspace(0.0, cell["length"], target_point_count)
+            sampled_points = self._sample_polyline_values(
+                cell["points"], cell["source_s"], target_s
+            )
+            resampled_stack.append(sampled_points)
+
+        resampled_stack = np.stack(resampled_stack, axis=0)
+        smoothed_stack = resampled_stack.copy()
+
+        normal_axis, in_plane_axes = self._get_slice_plane_axes(axis=axis)
+        smooth_sigma = float(smooth_sigma)
+        if smooth_sigma > 0.0 and len(cells) > 2:
+            for coord_idx in in_plane_axes:
+                smoothed_stack[:, :, coord_idx] = ndimage.gaussian_filter1d(
+                    resampled_stack[:, :, coord_idx],
+                    sigma=smooth_sigma,
+                    axis=0,
+                    mode="nearest",
+                )
+
+        smoothed_stack[:, :, normal_axis] = resampled_stack[:, :, normal_axis]
+        smoothed_stack[0, :, :] = resampled_stack[0, :, :]
+        smoothed_stack[-1, :, :] = resampled_stack[-1, :, :]
+
+        keep_original = {int(slice_idx) for slice_idx in (preserve_slice_indices or [])}
+        if keep_original:
+            for row_idx, cell in enumerate(cells):
+                if cell["slice_idx"] in keep_original:
+                    smoothed_stack[row_idx, :, :] = resampled_stack[row_idx, :, :]
+
+        from vtk import vtkCellArray, vtkIntArray, vtkPoints
+
+        new_points = vtkPoints()
+        new_lines = vtkCellArray()
+        point_slice_values = []
+        cell_slice_values = []
+
+        for row_idx, cell in enumerate(cells):
+            start_idx = new_points.GetNumberOfPoints()
+            sampled_points = smoothed_stack[row_idx]
+            for point_idx, point in enumerate(sampled_points):
+                new_points.InsertNextPoint(float(point[0]), float(point[1]), float(point[2]))
+                point_slice_values.append(cell["slice_idx"])
+
+            new_lines.InsertNextCell(target_point_count)
+            for point_id in range(start_idx, start_idx + target_point_count):
+                new_lines.InsertCellPoint(point_id)
+            cell_slice_values.append(cell["slice_idx"])
+
+        if new_points.GetNumberOfPoints() == 0 or new_lines.GetNumberOfCells() == 0:
+            return None, [], {}, {}
+
+        regularized_line = PolyLine()
+        regularized_line.SetPoints(new_points)
+        regularized_line.SetLines(new_lines)
+
+        self._copy_selected_numeric_arrays(
+            source_data=vtk_obj.GetCellData(),
+            target_data=regularized_line.GetCellData(),
+            selected_ids=[cell["source_cell_ids"][0] for cell in cells],
+            skip_names={"slice_index"},
+            skip_prefixes=("slices_",),
+        )
+        self._copy_field_data_arrays(
+            source_data=vtk_obj.GetFieldData(),
+            target_data=regularized_line.GetFieldData(),
+        )
+
+        point_slice_array = vtkIntArray()
+        point_slice_array.SetName("slice_index")
+        point_slice_array.SetNumberOfComponents(1)
+        for slice_idx in point_slice_values:
+            point_slice_array.InsertNextValue(int(slice_idx))
+        regularized_line.GetPointData().AddArray(point_slice_array)
+
+        cell_slice_array = vtkIntArray()
+        cell_slice_array.SetName("slice_index")
+        cell_slice_array.SetNumberOfComponents(1)
+        for slice_idx in cell_slice_values:
+            cell_slice_array.InsertNextValue(int(slice_idx))
+        regularized_line.GetCellData().AddArray(cell_slice_array)
+
+        regularized_slices = [cell["slice_idx"] for cell in cells]
+        slice_to_cell_index = {
+            int(slice_idx): cell_idx for cell_idx, slice_idx in enumerate(regularized_slices)
+        }
+        self._ensure_slice_index_property_metadata(
+            vtk_obj=regularized_line, slice_indices=regularized_slices
+        )
+        regularized_line.Modified()
+
+        old_point_counts = [cell["point_count"] for cell in cells]
+        old_spacings = [
+            cell["length"] / max(cell["point_count"] - 1, 1)
+            for cell in cells
+            if cell["point_count"] > 1 and cell["length"] > 0
+        ]
+        stats = {
+            "slice_count": len(cells),
+            "old_total_points": int(sum(old_point_counts)),
+            "new_total_points": int(len(cells) * target_point_count),
+            "old_median_points": float(np.median(old_point_counts)) if old_point_counts else 0.0,
+            "old_median_spacing": float(np.median(old_spacings)) if old_spacings else 0.0,
+            "new_points_per_slice": int(target_point_count),
+            "smooth_sigma": smooth_sigma,
+            "merged_part_count": int(
+                sum(max(0, cell.get("parts_merged", 1) - 1) for cell in cells)
+            ),
+        }
+        return regularized_line, regularized_slices, slice_to_cell_index, stats
+
+    def regularize_multipart_sampling(self):
+        """Uniformly resample a propagated multipart horizon/fault for downstream modelling."""
+        selection = self._get_selected_multipart_entity_for_edit(
+            action_title="Regularize Multipart Sampling"
+        )
+        if selection is None:
+            return
+
+        uid = selection["uid"]
+        entity_kind = selection["entity_kind"]
+        entity_info = selection["entity_info"]
+        vtk_obj = selection["vtk_obj"]
+        axis = entity_info.get("axis", self.current_axis)
+
+        defaults = self._estimate_multipart_regularization_defaults(
+            vtk_obj=vtk_obj, axis=axis, entity_kind=entity_kind
+        )
+        if defaults["slice_count"] == 0:
+            message_dialog(
+                title="Regularize Multipart Sampling",
+                message="The selected multipart entity does not contain valid line geometry.",
+            )
+            return
+
+        settings = multiple_input_dialog(
+            title="Regularize Multipart Sampling",
+            input_dict={
+                "points_per_slice": [
+                    "Points per slice:",
+                    defaults["suggested_point_count"],
+                ],
+                "smooth_sigma": [
+                    "Cross-slice smoothing sigma:",
+                    1.0 if defaults["slice_count"] > 2 else 0.0,
+                ],
+                "preserve_seed_slice": [
+                    "Keep the seed slice unchanged:",
+                    ["Yes", "No"],
+                    "Yes",
+                ],
+            },
+        )
+        if settings is None:
+            return
+
+        try:
+            points_per_slice = max(2, int(settings["points_per_slice"]))
+            smooth_sigma = max(0.0, float(settings["smooth_sigma"]))
+            preserve_seed_slice = str(settings["preserve_seed_slice"]).strip().lower() != "no"
+        except Exception:
+            message_dialog(
+                title="Regularize Multipart Sampling",
+                message="Invalid resampling parameters.",
+            )
+            return
+
+        preserve_slice_indices = []
+        seed_slice = entity_info.get("seed_slice")
+        if preserve_seed_slice and seed_slice in selection["available_slices"]:
+            preserve_slice_indices.append(int(seed_slice))
+
+        new_vtk, new_slices, slice_to_cell_index, stats = self._build_regularized_multipart_vtk(
+            vtk_obj=vtk_obj,
+            axis=axis,
+            entity_kind=entity_kind,
+            target_point_count=points_per_slice,
+            smooth_sigma=smooth_sigma,
+            preserve_slice_indices=preserve_slice_indices,
+        )
+        if new_vtk is None or not new_slices:
+            message_dialog(
+                title="Regularize Multipart Sampling",
+                message="Could not rebuild the selected multipart geometry.",
+            )
+            return
+
+        self._remove_filtered_actor(f"multipart_slice_{uid}")
+        self._remove_filtered_actor(f"multipart_fault_slice_{uid}")
+        self._remove_raw_actor_for_uid(uid)
+        self._register_multipart_interpretation_entity(
+            uid=uid,
+            axis=axis,
+            slice_indices=new_slices,
+            slice_to_cell_index=slice_to_cell_index,
+        )
+        if uid in getattr(self, "multipart_horizons", {}):
+            self.multipart_horizons[uid]["seed_slice"] = entity_info.get(
+                "seed_slice", new_slices[0]
+            )
+        if uid in getattr(self, "multipart_faults", {}):
+            self.multipart_faults[uid]["seed_slice"] = entity_info.get(
+                "seed_slice", new_slices[0]
+            )
+
+        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=new_vtk)
+        self._mark_slice_visibility_dirty()
+        if uid in getattr(self, "multipart_horizons", {}):
+            self.update_multipart_horizon_visibility(uid)
+        if uid in getattr(self, "multipart_faults", {}):
+            self.update_multipart_fault_visibility(uid)
+        self.plotter.render()
+
+        self.print_terminal(
+            f"Regularized multipart {entity_kind} {uid[:8]}... across {stats['slice_count']} slices: "
+            f"{int(round(stats['old_median_points']))} -> {stats['new_points_per_slice']} "
+            f"points/slice, merged {stats['merged_part_count']} duplicate slice parts, "
+            f"median spacing {stats['old_median_spacing']:.3f}, "
+            f"smoothing sigma {stats['smooth_sigma']:.2f}."
+        )
+
     def _get_selected_multipart_entity_for_edit(self, action_title="Edit Multipart Slices"):
         """Resolve the selected propagated multipart entity and validate its slice metadata."""
         selected_uids = [
@@ -5670,6 +6175,14 @@ class ViewInterpretation(ViewMap):
         self.propagateFaultButton = QAction("Propagate Fault (Auto-Track 3D)", self)
         self.propagateFaultButton.triggered.connect(self.propagate_fault)
         self.menuCreate.addAction(self.propagateFaultButton)
+
+        self.regularizeMultipartSamplingButton = QAction(
+            "Regularize Multipart Sampling...", self
+        )
+        self.regularizeMultipartSamplingButton.triggered.connect(
+            self.regularize_multipart_sampling
+        )
+        self.menuModify.addAction(self.regularizeMultipartSamplingButton)
 
         self.splitMultipartSlicesButton = QAction("Split Multipart Slices...", self)
         self.splitMultipartSlicesButton.triggered.connect(self.split_multipart_slices)
