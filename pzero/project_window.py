@@ -18,6 +18,7 @@ from PySide6.QtWidgets import QMainWindow, QMessageBox, QDialog, QLabel, QVBoxLa
 from PySide6.QtGui import QAction, QDesktopServices, QPixmap
 from PySide6.QtCore import Qt, QTimer
 
+import numpy as np
 from pandas import DataFrame as pd_DataFrame
 from pandas import read_csv as pd_read_csv
 from pandas import read_json as pd_read_json
@@ -27,6 +28,9 @@ from vtk import (
     vtkPolyData,
     vtkAppendPolyData,
     vtkOctreePointLocator,
+    vtkPoints,
+    vtkCellArray,
+    vtkTriangle,
     vtkUnstructuredGrid,
     vtkXMLPolyDataWriter,
     vtkXMLStructuredGridWriter,
@@ -224,6 +228,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Import GUI from project_window_ui.py"""
         self.setupUi(self)
         self.TextTerminal.setReadOnly(True)
+        self.actionRetriangulateSurface = QAction(self)
+        self.actionRetriangulateSurface.setObjectName("actionRetriangulateSurface")
+        self.actionRetriangulateSurface.setText("Retriangulate")
+        self.menuSurfaces.addAction(self.actionRetriangulateSurface)
 
         """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
         self.actionQuit.triggered.connect(self.close)
@@ -310,6 +318,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionXSectionIntersection.triggered.connect(lambda: intersection_xs(self))
         self.actionProject2XSection.triggered.connect(lambda: project_2_xs(self))
         self.actionSplitSurfaces.triggered.connect(lambda: split_surf(self))
+        self.actionRetriangulateSurface.triggered.connect(self.retriangulate_surface_dialog)
         self.actionRetopologize.triggered.connect(self.retopologize_surface)
 
         """View actions -> slots"""
@@ -1006,22 +1015,39 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 return candidate
         return None
 
-    def open_pymeshit_gui(self):
-        """Launch the MeshIt workflow GUI as a docked panel."""
+    def _load_pymeshit_gui_class(self):
+        """Load the bundled PyMeshIt workflow GUI class."""
         pymeshit_dir = self._locate_pymeshit_sources()
         if pymeshit_dir is None:
-            message = (
+            raise FileNotFoundError(
                 "Pymeshit sources were not found. Place the 'MeshIt-master' folder next to "
                 "PZero or set the PZERO_PYMESHIT_PATH environment variable."
             )
-            self.print_terminal(message)
-            QMessageBox.warning(self, "Pymeshit not found", message)
-            return
 
         sys_path_entry = str(pymeshit_dir)
         if sys_path_entry not in sys.path:
             sys.path.insert(0, sys_path_entry)
 
+        entry_path = (Path(pymeshit_dir) / PYMESHIT_ENTRY_FILE).resolve()
+        pymeshit_module = sys.modules.get(PYMESHIT_MODULE_NAME)
+
+        if Path(getattr(pymeshit_module, "__file__", "")).resolve() != entry_path:
+            importlib.invalidate_caches()
+            sys.modules.pop(PYMESHIT_MODULE_NAME, None)
+            spec = importlib.util.spec_from_file_location(
+                PYMESHIT_MODULE_NAME, str(entry_path)
+            )
+            if spec is None or spec.loader is None:
+                raise ImportError("Could not create module spec for Pymeshit GUI")
+            pymeshit_module = importlib.util.module_from_spec(spec)
+            sys.modules[PYMESHIT_MODULE_NAME] = pymeshit_module
+            spec.loader.exec_module(pymeshit_module)
+
+        meshit_gui_cls = getattr(pymeshit_module, PYMESHIT_CLASS_NAME)
+        return pymeshit_module, meshit_gui_cls
+
+    def open_pymeshit_gui(self):
+        """Launch the MeshIt workflow GUI as a docked panel."""
         bridge = PZeroPymeshitBridge(self)
 
         # Check if a PyMeshIt dock already exists and is still valid.
@@ -1044,20 +1070,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self._pymeshit_widget = None
 
         try:
-            importlib.invalidate_caches()
-            entry_path = (Path(pymeshit_dir) / PYMESHIT_ENTRY_FILE).resolve()
-            sys.modules.pop(PYMESHIT_MODULE_NAME, None)
-            spec = importlib.util.spec_from_file_location(
-                PYMESHIT_MODULE_NAME, str(entry_path)
-            )
-            if spec is None or spec.loader is None:
-                raise ImportError("Could not create module spec for Pymeshit GUI")
-            pymeshit_module = importlib.util.module_from_spec(spec)
-            sys.modules[PYMESHIT_MODULE_NAME] = pymeshit_module
-            spec.loader.exec_module(pymeshit_module)
+            pymeshit_module, meshit_gui_cls = self._load_pymeshit_gui_class()
             module_path = Path(getattr(pymeshit_module, "__file__", "")).resolve()
             self.print_terminal(f"Pymeshit module loaded from: {module_path}")
-            meshit_gui_cls = getattr(pymeshit_module, PYMESHIT_CLASS_NAME)
+        except FileNotFoundError as exc:
+            message = str(exc)
+            self.print_terminal(message)
+            QMessageBox.warning(self, "Pymeshit not found", message)
+            return
         except (ImportError, AttributeError) as exc:
             error_msg = f"Error importing Pymeshit GUI: {exc}"
             self.print_terminal(error_msg)
@@ -1255,6 +1275,159 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             opt_widget=retop_par_widg,
             function=retopo,
         )
+
+    def retriangulate_surface_dialog(self):
+        """Retriangulate the first selected geology TriSurf using the PyMeshIt workflow."""
+        if self.shown_table != "tabGeology":
+            self.print_terminal("Retriangulate works on Geological Collection TriSurf objects only.")
+            return
+        if not self.selected_uids:
+            self.print_terminal("No selected objects")
+            return
+
+        uid = self.selected_uids[0]
+        if len(self.selected_uids) > 1:
+            self.print_terminal("Multiple surfaces selected, retriangulating the first one only.")
+
+        if self.geol_coll.get_uid_topology(uid) != "TriSurf":
+            self.print_terminal("Selected geology object is not a TriSurf.")
+            return
+
+        source_surface = self.geol_coll.get_uid_vtk_obj(uid)
+        points = np.asarray(source_surface.points, dtype=float)
+        if points.ndim != 2 or points.shape[0] < 3:
+            self.print_terminal("Selected TriSurf has too few points for retriangulation.")
+            return
+
+        try:
+            pymeshit_module, meshit_gui_cls = self._load_pymeshit_gui_class()
+        except FileNotFoundError as exc:
+            message = str(exc)
+            self.print_terminal(message)
+            QMessageBox.warning(self, "Pymeshit not found", message)
+            return
+        except (ImportError, AttributeError) as exc:
+            error_msg = f"Error importing Pymeshit GUI: {exc}"
+            self.print_terminal(error_msg)
+            QMessageBox.critical(self, "Pymeshit import error", error_msg)
+            return
+
+        temp_gui = None
+        try:
+            temp_gui = meshit_gui_cls(parent=self, auto_show=False)
+            temp_gui.hide()
+            temp_gui.datasets = [
+                {
+                    "name": self.geol_coll.get_uid_name(uid),
+                    "type": "SURFACE",
+                    "points": np.asarray(points, dtype=float).copy(),
+                    "visible": True,
+                    "color": (0.7, 0.7, 0.7),
+                }
+            ]
+
+            try:
+                default_refine = float(temp_gui._calculate_default_size_for_surface(0))
+                if default_refine <= 0.0:
+                    default_refine = 1.0
+            except Exception:
+                default_refine = 1.0
+
+            input_dict = {
+                "hull_method": [
+                    "Hull:",
+                    ["Alpha", "Delaunay", "3D angular map"],
+                    "Delaunay",
+                ],
+                "refine_length": ["Segmentation:", float(default_refine)],
+                "tri_method": [
+                    "Triangulation:",
+                    ["Standard CDT", "Isomap unfolding"],
+                    "Standard CDT",
+                ],
+            }
+            retri_input = multiple_input_dialog(
+                title="Retriangulate surface", input_dict=input_dict
+            )
+            if not retri_input:
+                return
+
+            hull_method_map = {
+                "Alpha": "alpha_shape_2d",
+                "Delaunay": "delaunay",
+                "3D angular map": "angular_gap",
+            }
+            tri_method_map = {
+                "Standard CDT": "standard",
+                "Isomap unfolding": "isomap",
+            }
+
+            refine_length = float(retri_input["refine_length"])
+            if refine_length <= 0.0:
+                raise ValueError("Segmentation RefineByLength must be > 0.")
+
+            temp_gui.hull_method_by_surface = {0: hull_method_map[retri_input["hull_method"]]}
+            temp_gui.seg_length_by_surface[0] = refine_length
+            temp_gui.tri_method_by_surface = {0: tri_method_map[retri_input["tri_method"]]}
+
+            idw_index = temp_gui.interp_combo.findText("IDW (p=4)")
+            if idw_index >= 0:
+                temp_gui.interp_combo.setCurrentIndex(idw_index)
+
+            if not temp_gui._compute_hull_for_dataset(0):
+                raise RuntimeError("Hull computation failed.")
+            if not temp_gui._compute_segments_for_dataset(0):
+                raise RuntimeError("Segmentation failed.")
+            if not temp_gui._run_triangulation_for_dataset(0):
+                raise RuntimeError("Triangulation failed.")
+
+            tri_result = temp_gui.datasets[0].get("triangulation_result") or {}
+            vertices = np.asarray(tri_result.get("vertices"), dtype=float)
+            triangles = np.asarray(tri_result.get("triangles"), dtype=int)
+            if vertices.ndim != 2 or vertices.shape[0] < 3 or triangles.ndim != 2 or triangles.shape[0] < 1:
+                raise RuntimeError("PyMeshIt did not return a valid triangulation.")
+
+            build_trisurf = getattr(pymeshit_module, "_build_trisurf_from_arrays", None)
+            if callable(build_trisurf):
+                retriangulated_surface = build_trisurf(vertices, triangles)
+            else:
+                retriangulated_surface = TriSurf()
+                vtk_points = vtkPoints()
+                for pt in vertices:
+                    vtk_points.InsertNextPoint(float(pt[0]), float(pt[1]), float(pt[2]))
+                retriangulated_surface.SetPoints(vtk_points)
+                vtk_triangles = vtkCellArray()
+                for tri in triangles:
+                    triangle = vtkTriangle()
+                    triangle.GetPointIds().SetId(0, int(tri[0]))
+                    triangle.GetPointIds().SetId(1, int(tri[1]))
+                    triangle.GetPointIds().SetId(2, int(tri[2]))
+                    vtk_triangles.InsertNextCell(triangle)
+                retriangulated_surface.SetPolys(vtk_triangles)
+
+            try:
+                retriangulated_surface.vtk_set_normals()
+            except Exception:
+                pass
+
+            self.geol_coll.replace_vtk(uid, retriangulated_surface)
+            self.print_terminal(
+                f"Retriangulated '{self.geol_coll.get_uid_name(uid)}' "
+                f"({len(vertices)} vertices, {len(triangles)} triangles)"
+            )
+        except ValueError as exc:
+            QMessageBox.warning(self, "Invalid input", str(exc))
+        except Exception as exc:
+            error_msg = f"Retriangulation failed: {exc}"
+            self.print_terminal(error_msg)
+            QMessageBox.critical(self, "Retriangulate surface", error_msg)
+        finally:
+            if temp_gui is not None:
+                try:
+                    temp_gui.close()
+                except Exception:
+                    pass
+                temp_gui.deleteLater()
 
     def connected_parts(self):
         """Calculate connectivity of PolyLine and TriSurf entities."""
