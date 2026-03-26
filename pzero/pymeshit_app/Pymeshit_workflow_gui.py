@@ -18159,6 +18159,56 @@ segmentation, triangulation, and visualization.
                     vtk_triangles.InsertNextCell(triangle)
                 trisurf.SetPolys(vtk_triangles)
                 return trisurf
+
+            def _collect_mesh_properties(vtk_mesh):
+                """Collect point and cell array metadata for a mesh3d entity."""
+                properties_names = []
+                properties_components = []
+                properties_types = []
+
+                for data_obj in (vtk_mesh.GetPointData(), vtk_mesh.GetCellData()):
+                    if not data_obj:
+                        continue
+                    for i in range(data_obj.GetNumberOfArrays()):
+                        array = data_obj.GetArray(i)
+                        if array is None or not array.GetName():
+                            continue
+                        key = array.GetName()
+                        if key in properties_names:
+                            continue
+                        properties_names.append(key)
+                        properties_components.append(array.GetNumberOfComponents())
+                        properties_types.append(array.GetDataTypeAsString())
+
+                return properties_names, properties_components, properties_types
+
+            def _export_tetra_mesh_entity(source_mesh, mesh_name):
+                """Deep-copy a PyVista/VTK unstructured grid into mesh3d_coll."""
+                vtk_mesh = TetraSolid()
+                vtk_mesh.DeepCopy(source_mesh)
+                if vtk_mesh.GetNumberOfCells() <= 0:
+                    return None, None
+
+                (
+                    properties_names,
+                    properties_components,
+                    properties_types,
+                ) = _collect_mesh_properties(vtk_mesh)
+
+                entity_dict = _build_entity_dict(
+                    project_window.mesh3d_coll,
+                    uid=str(uuid4()),
+                    name=mesh_name,
+                    scenario="PyMeshIt",
+                    parent_uid="",
+                    topology="TetraSolid",
+                    vtk_obj=vtk_mesh,
+                    properties_names=properties_names,
+                    properties_components=properties_components,
+                    properties_types=properties_types,
+                )
+                project_window.mesh3d_coll.add_entity_from_dict(entity_dict=entity_dict)
+                return vtk_mesh, properties_names
             
             # Import required modules
             from pzero.entities_factory import TetraSolid, TriSurf, PolyLine
@@ -18170,7 +18220,7 @@ segmentation, triangulation, and visualization.
             # Track export statistics
             exported_surfaces = 0
             exported_wells = 0
-            exported_mesh = False
+            exported_mesh_entities = 0
             export_details = []
             
             timestamp = time.strftime('%Y%m%d_%H%M%S')
@@ -18450,69 +18500,25 @@ segmentation, triangulation, and visualization.
                             if combined_mesh is None:
                                 combined_mesh = mesh
                         
-                        # Convert PyVista UnstructuredGrid to VTK UnstructuredGrid
-                        vtk_mesh = TetraSolid()
-                        vtk_mesh.DeepCopy(combined_mesh)
-                        
-                        if vtk_mesh.GetNumberOfCells() > 0:
-                            existing_tetra_uids = project_window.mesh3d_coll.df.loc[
-                                (project_window.mesh3d_coll.df["topology"] == "TetraSolid")
-                                & (project_window.mesh3d_coll.df["scenario"] == "PyMeshIt"),
-                                "uid",
-                            ].to_list()
-                            for existing_uid in existing_tetra_uids:
-                                project_window.mesh3d_coll.remove_entity(uid=existing_uid)
-                            if existing_tetra_uids:
-                                logger.info(
-                                    f"Removed {len(existing_tetra_uids)} existing PyMeshIt tetra mesh(es) before export"
-                                )
-
-                            # Extract properties from the mesh
-                            properties_names = []
-                            properties_components = []
-                            properties_types = []
-                            
-                            # Extract point data properties
-                            point_data_obj = vtk_mesh.GetPointData()
-                            if point_data_obj:
-                                for i in range(point_data_obj.GetNumberOfArrays()):
-                                    array = point_data_obj.GetArray(i)
-                                    if array and array.GetName():
-                                        key = array.GetName()
-                                        if key not in properties_names:
-                                            properties_names.append(key)
-                                            properties_components.append(array.GetNumberOfComponents())
-                                            properties_types.append(array.GetDataTypeAsString())
-                            
-                            # Extract cell data properties
-                            cell_data_obj = vtk_mesh.GetCellData()
-                            if cell_data_obj:
-                                for i in range(cell_data_obj.GetNumberOfArrays()):
-                                    array = cell_data_obj.GetArray(i)
-                                    if array and array.GetName():
-                                        key = array.GetName()
-                                        if key not in properties_names:
-                                            properties_names.append(key)
-                                            properties_components.append(array.GetNumberOfComponents())
-                                            properties_types.append(array.GetDataTypeAsString())
-                            
-                            # Create entity dictionary matching mesh3d collection format
-                            entity_dict = _build_entity_dict(
-                                project_window.mesh3d_coll,
-                                uid=str(uuid4()),
-                                name="TetraMesh_PyMeshIt",
-                                scenario="PyMeshIt",
-                                parent_uid="",
-                                topology="TetraSolid",
-                                vtk_obj=vtk_mesh,
-                                properties_names=properties_names,
-                                properties_components=properties_components,
-                                properties_types=properties_types,
+                        existing_tetra_uids = project_window.mesh3d_coll.df.loc[
+                            (project_window.mesh3d_coll.df["topology"] == "TetraSolid")
+                            & (project_window.mesh3d_coll.df["scenario"] == "PyMeshIt"),
+                            "uid",
+                        ].to_list()
+                        for existing_uid in existing_tetra_uids:
+                            project_window.mesh3d_coll.remove_entity(uid=existing_uid)
+                        if existing_tetra_uids:
+                            logger.info(
+                                f"Removed {len(existing_tetra_uids)} existing PyMeshIt tetra mesh(es) before export"
                             )
-                            
-                            # Add to mesh3d collection
-                            project_window.mesh3d_coll.add_entity_from_dict(entity_dict=entity_dict)
-                            exported_mesh = True
+
+                        vtk_mesh, properties_names = _export_tetra_mesh_entity(
+                            combined_mesh,
+                            "TetraMesh_PyMeshIt",
+                        )
+
+                        if vtk_mesh is not None:
+                            exported_mesh_entities += 1
                             
                             # Count cells
                             num_tetrahedra = vtk_mesh.GetNumberOfCells()
@@ -18531,7 +18537,67 @@ segmentation, triangulation, and visualization.
                             logger.info(f"Exported tetrahedral mesh to mesh3d_coll: {mesh_info}")
                         else:
                             export_details.append("✗ TetraMesh skipped: no cells")
-                            
+
+                        material_ids = None
+                        if hasattr(mesh, 'cell_data') and 'MaterialID' in mesh.cell_data:
+                            material_ids = np.asarray(mesh.cell_data['MaterialID'])
+
+                        material_catalog = {}
+                        for material_source in (
+                            getattr(self, 'tetra_materials', []) or [],
+                            getattr(getattr(self, 'tetra_mesh_generator', None), 'materials', []) or [],
+                        ):
+                            for material in material_source:
+                                mat_id = material.get('attribute')
+                                if mat_id is None:
+                                    continue
+                                material_catalog.setdefault(int(mat_id), material)
+
+                        if material_ids is not None and len(material_ids) == mesh.n_cells:
+                            unique_material_ids = [int(mat_id) for mat_id in np.unique(material_ids)]
+                            for mat_id in unique_material_ids:
+                                material_meta = material_catalog.get(mat_id, {})
+                                material_type = str(material_meta.get('type', 'FORMATION')).upper()
+                                if material_type == 'FAULT':
+                                    continue
+
+                                material_indices = np.where(material_ids == mat_id)[0]
+                                if len(material_indices) == 0:
+                                    continue
+
+                                material_mesh = mesh.extract_cells(material_indices)
+                                if material_mesh is None or material_mesh.n_cells == 0:
+                                    continue
+
+                                material_name = str(
+                                    material_meta.get('name')
+                                    or material_meta.get('feature')
+                                    or f"Material_{mat_id}"
+                                )
+                                export_name = f"TetraMesh_{material_name}"
+                                vtk_material_mesh, _ = _export_tetra_mesh_entity(
+                                    material_mesh,
+                                    export_name,
+                                )
+                                if vtk_material_mesh is None:
+                                    logger.warning(
+                                        f"Skipped formation material {mat_id}: extracted mesh has no cells"
+                                    )
+                                    continue
+
+                                exported_mesh_entities += 1
+                                formation_info = (
+                                    f"{vtk_material_mesh.GetNumberOfPoints()} vertices, "
+                                    f"{vtk_material_mesh.GetNumberOfCells()} tetrahedra"
+                                )
+                                export_details.append(
+                                    f"Formation '{material_name}' (ID {mat_id}) -> mesh3d_coll ({formation_info})"
+                                )
+                                logger.info(
+                                    f"Exported formation mesh '{material_name}' (ID {mat_id}) "
+                                    f"to mesh3d_coll: {formation_info}"
+                                )
+
                     except Exception as mesh_err:
                         logger.error(f"Failed to export tetrahedral mesh: {mesh_err}")
                         export_details.append(f"✗ TetraMesh failed: {str(mesh_err)}")
@@ -18549,7 +18615,7 @@ segmentation, triangulation, and visualization.
             summary_msg += f"<ul>"
             summary_msg += f"<li>Surfaces exported to geol_coll: <b>{exported_surfaces}</b></li>"
             summary_msg += f"<li>Wells exported to well_coll: <b>{exported_wells}</b></li>"
-            summary_msg += f"<li>Tetrahedral mesh exported: <b>{'Yes' if exported_mesh else 'No'}</b></li>"
+            summary_msg += f"<li>Mesh3D entities exported to mesh3d_coll: <b>{exported_mesh_entities}</b></li>"
             summary_msg += f"</ul>"
             
             if export_details:
@@ -18558,7 +18624,7 @@ segmentation, triangulation, and visualization.
                     summary_msg += f"<li>{detail}</li>"
                 summary_msg += f"</ul>"
             
-            total_exported = exported_surfaces + exported_wells + (1 if exported_mesh else 0)
+            total_exported = exported_surfaces + exported_wells + exported_mesh_entities
             if total_exported > 0:
                 summary_msg += f"<p style='color:green;'><b>Successfully exported {total_exported} entities to PZero!</b></p>"
             else:
@@ -18566,7 +18632,10 @@ segmentation, triangulation, and visualization.
             
             QMessageBox.information(self, "Export to PZero", summary_msg)
             
-            logger.info(f"PZero export complete: {exported_surfaces} surfaces, {exported_wells} wells, mesh={'Yes' if exported_mesh else 'No'}")
+            logger.info(
+                f"PZero export complete: {exported_surfaces} surfaces, "
+                f"{exported_wells} wells, {exported_mesh_entities} mesh entities"
+            )
             
         except Exception as e:
             logger.error(f"Failed to export to PZero: {str(e)}", exc_info=True)
