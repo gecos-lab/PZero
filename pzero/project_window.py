@@ -1339,6 +1339,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     ["Alpha", "Delaunay", "3D angular map"],
                     "Delaunay",
                 ],
+                "alpha_value": ["Alpha value:", 1.0],
                 "refine_length": ["Segmentation:", float(default_refine)],
                 "tri_method": [
                     "Triangulation:",
@@ -1363,12 +1364,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             }
 
             refine_length = float(retri_input["refine_length"])
+            alpha_value = float(retri_input["alpha_value"])
             if refine_length <= 0.0:
                 raise ValueError("Segmentation RefineByLength must be > 0.")
+            if alpha_value <= 0.0:
+                raise ValueError("Alpha value must be > 0.")
 
             temp_gui.hull_method_by_surface = {0: hull_method_map[retri_input["hull_method"]]}
             temp_gui.seg_length_by_surface[0] = refine_length
             temp_gui.tri_method_by_surface = {0: tri_method_map[retri_input["tri_method"]]}
+            temp_gui.hull_alpha_spin.setValue(alpha_value)
 
             idw_index = temp_gui.interp_combo.findText("IDW (p=4)")
             if idw_index >= 0:
