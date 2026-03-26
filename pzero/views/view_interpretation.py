@@ -23,6 +23,7 @@ from ..helpers.helper_dialogs import (
     message_dialog,
     multiple_input_dialog,
     input_one_value_dialog,
+    options_dialog,
 )
 from ..helpers.helper_widgets import Tracer
 
@@ -2313,6 +2314,83 @@ class ViewInterpretation(ViewMap):
             message_dialog(
                 title="Regularize Multipart Sampling",
                 message="Could not rebuild the selected multipart geometry.",
+            )
+            return
+
+        write_mode = options_dialog(
+            title="Regularize Multipart Sampling",
+            message=(
+                f"Do you want to overwrite the original multipart {entity_kind}, "
+                f"or keep it and add a new regularized entity?"
+            ),
+            yes_role="Overwrite",
+            no_role="New",
+            reject_role="Cancel",
+        )
+        if write_mode not in (0, 1):
+            return
+
+        if write_mode == 1:
+            import re
+
+            fallback_name = "fault" if entity_kind == "fault" else "multipart"
+            new_entity_dict = self._build_multipart_entity_dict_from_source(
+                source_uid=uid,
+                vtk_obj=new_vtk,
+                slice_indices=new_slices,
+                fallback_name=fallback_name,
+            )
+            if new_entity_dict is None:
+                message_dialog(
+                    title="Regularize Multipart Sampling",
+                    message="Could not build the new regularized multipart entity.",
+                )
+                return
+
+            base_name = self._build_propagated_entity_name(
+                seed_uid=uid,
+                slice_indices=[],
+                fallback_name=fallback_name,
+            )
+            base_name = re.sub(
+                r"\s+regularized\s*$", "", base_name, flags=re.IGNORECASE
+            )
+            if new_slices:
+                new_entity_dict["name"] = (
+                    f"{base_name} regularized ({new_slices[0]}-{new_slices[-1]})"
+                )
+            else:
+                new_entity_dict["name"] = f"{base_name} regularized"
+
+            new_uid = self.parent.geol_coll.add_entity_from_dict(new_entity_dict)
+            self._register_multipart_interpretation_entity(
+                uid=new_uid,
+                axis=axis,
+                slice_indices=new_slices,
+                slice_to_cell_index=slice_to_cell_index,
+            )
+            if new_uid in getattr(self, "multipart_horizons", {}):
+                self.multipart_horizons[new_uid]["seed_slice"] = entity_info.get(
+                    "seed_slice", new_slices[0]
+                )
+                self.update_multipart_horizon_visibility(uid)
+                self.update_multipart_horizon_visibility(new_uid)
+            if new_uid in getattr(self, "multipart_faults", {}):
+                self.multipart_faults[new_uid]["seed_slice"] = entity_info.get(
+                    "seed_slice", new_slices[0]
+                )
+                self.update_multipart_fault_visibility(uid)
+                self.update_multipart_fault_visibility(new_uid)
+
+            self._mark_slice_visibility_dirty()
+            self.plotter.render()
+            self.print_terminal(
+                f"Created regularized multipart {entity_kind} {new_uid[:8]}... from {uid[:8]}... "
+                f"across {stats['slice_count']} slices: "
+                f"{int(round(stats['old_median_points']))} -> {stats['new_points_per_slice']} "
+                f"points/slice, merged {stats['merged_part_count']} duplicate slice parts, "
+                f"median spacing {stats['old_median_spacing']:.3f}, "
+                f"smoothing sigma {stats['smooth_sigma']:.2f}."
             )
             return
 
