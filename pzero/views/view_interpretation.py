@@ -14,6 +14,7 @@ import numpy as np
 from copy import deepcopy
 import heapq
 from scipy import ndimage
+from scipy.optimize import linear_sum_assignment
 
 # PZero imports
 from .view_map import ViewMap
@@ -1563,6 +1564,287 @@ class ViewInterpretation(ViewMap):
         subset_line.Modified()
         return subset_line, remaining_slices, slice_to_cell_index
 
+    def _extract_multipart_branch_segments(
+        self, vtk_obj=None, axis=None, entity_kind="horizon"
+    ):
+        """Collect per-cell geometry descriptors used to separate disconnected multipart branches."""
+        if vtk_obj is None or vtk_obj.GetNumberOfCells() == 0:
+            return {}
+
+        cell_data = vtk_obj.GetCellData()
+        if cell_data is None or not cell_data.HasArray("slice_index"):
+            return {}
+
+        slice_array = cell_data.GetArray("slice_index")
+        _, in_plane_axes = self._get_slice_plane_axes(axis=axis)
+        primary_axis = self._get_multipart_sampling_primary_axis(
+            axis=axis, entity_kind=entity_kind
+        )
+        if primary_axis in in_plane_axes:
+            primary_axis_2d = in_plane_axes.index(primary_axis)
+        else:
+            primary_axis_2d = 0
+
+        segments_by_slice = {}
+        for cell_idx in range(vtk_obj.GetNumberOfCells()):
+            cell = vtk_obj.GetCell(cell_idx)
+            if cell is None:
+                continue
+
+            n_pts = cell.GetNumberOfPoints()
+            if n_pts < 2:
+                continue
+
+            points = np.array(
+                [vtk_obj.GetPoint(cell.GetPointId(i)) for i in range(n_pts)], dtype=float
+            )
+            centroid_3d = points.mean(axis=0)
+            centroid_2d = centroid_3d[list(in_plane_axes)]
+            order_value = float(centroid_3d[primary_axis])
+            segment = {
+                "cell_id": int(cell_idx),
+                "slice_idx": int(slice_array.GetValue(cell_idx)),
+                "points": points,
+                "centroid_2d": centroid_2d,
+                "order_value": order_value,
+                "primary_value": float(centroid_2d[primary_axis_2d]),
+                "point_count": int(n_pts),
+            }
+            segments_by_slice.setdefault(segment["slice_idx"], []).append(segment)
+
+        for slice_idx in list(segments_by_slice.keys()):
+            segments_by_slice[slice_idx].sort(
+                key=lambda segment: (segment["order_value"], segment["cell_id"])
+            )
+        return segments_by_slice
+
+    def _estimate_multipart_branch_match_distance(self, segments_by_slice=None):
+        """Estimate a stable matching distance for tracking disconnected slice branches."""
+        if not segments_by_slice:
+            return 0.0
+
+        same_slice_separations = []
+        for slice_segments in segments_by_slice.values():
+            if len(slice_segments) < 2:
+                continue
+            centers = [segment["centroid_2d"] for segment in slice_segments]
+            for idx in range(len(centers)):
+                nearest = None
+                for jdx in range(len(centers)):
+                    if idx == jdx:
+                        continue
+                    dist = float(np.linalg.norm(centers[idx] - centers[jdx]))
+                    if nearest is None or dist < nearest:
+                        nearest = dist
+                if nearest is not None and nearest > 0.0:
+                    same_slice_separations.append(nearest)
+
+        if same_slice_separations:
+            return max(1.0e-6, float(np.median(same_slice_separations)) * 0.6)
+
+        ordered_slices = sorted(segments_by_slice.keys())
+        adjacent_motion = []
+        for prev_slice, next_slice in zip(ordered_slices[:-1], ordered_slices[1:]):
+            prev_segments = segments_by_slice.get(prev_slice, [])
+            next_segments = segments_by_slice.get(next_slice, [])
+            if not prev_segments or not next_segments:
+                continue
+            for segment in next_segments:
+                nearest = min(
+                    float(
+                        np.linalg.norm(
+                            segment["centroid_2d"] - prev_segment["centroid_2d"]
+                        )
+                    )
+                    for prev_segment in prev_segments
+                )
+                if nearest > 0.0:
+                    adjacent_motion.append(nearest)
+
+        if adjacent_motion:
+            return max(1.0e-6, float(np.median(adjacent_motion)) * 2.0)
+        return 0.0
+
+    def _build_multipart_branch_name(
+        self,
+        seed_uid=None,
+        slice_indices=None,
+        branch_index=1,
+        branch_count=1,
+        fallback_name="multipart",
+    ):
+        """Build a stable name for one separated branch of a multipart interpretation entity."""
+        base_name = self._build_propagated_entity_name(
+            seed_uid=seed_uid,
+            slice_indices=[],
+            fallback_name=fallback_name,
+        )
+        if branch_count > 1:
+            import re
+
+            base_name = re.sub(r"\s+part\s+\d+\s*$", "", base_name, flags=re.IGNORECASE)
+            base_name = f"{base_name} part {int(branch_index)}"
+
+        clean = sorted({int(idx) for idx in (slice_indices or [])})
+        if not clean:
+            return base_name
+        return f"{base_name} ({clean[0]}-{clean[-1]})"
+
+    def _detect_disconnected_multipart_branches(
+        self,
+        vtk_obj=None,
+        axis=None,
+        entity_kind="horizon",
+        max_slice_gap=2,
+        match_distance=0.0,
+    ):
+        """Group same-slice disconnected cells into continuous multipart branches across slices."""
+        segments_by_slice = self._extract_multipart_branch_segments(
+            vtk_obj=vtk_obj,
+            axis=axis,
+            entity_kind=entity_kind,
+        )
+        if not segments_by_slice:
+            return [], {}
+
+        max_slice_gap = max(0, int(max_slice_gap))
+        auto_match_distance = self._estimate_multipart_branch_match_distance(
+            segments_by_slice=segments_by_slice
+        )
+        if match_distance is None or float(match_distance) <= 0.0:
+            match_distance = auto_match_distance
+        else:
+            match_distance = float(match_distance)
+
+        branches = []
+        next_branch_id = 0
+        ordered_slices = sorted(segments_by_slice.keys())
+
+        for slice_idx in ordered_slices:
+            current_segments = list(segments_by_slice.get(slice_idx, []))
+            if not current_segments:
+                continue
+
+            eligible_branch_ids = [
+                branch["branch_id"]
+                for branch in branches
+                if slice_idx - branch["last_slice_idx"] <= max_slice_gap + 1
+            ]
+            branch_map = {branch["branch_id"]: branch for branch in branches}
+            matched_segment_ids = set()
+            matched_branch_ids = set()
+
+            if eligible_branch_ids and current_segments:
+                branch_rows = [branch_map[branch_id] for branch_id in eligible_branch_ids]
+                cost_matrix = np.full(
+                    (len(branch_rows), len(current_segments)),
+                    fill_value=1.0e9,
+                    dtype=float,
+                )
+                raw_center_deltas = {}
+
+                for row_idx, branch in enumerate(branch_rows):
+                    for col_idx, segment in enumerate(current_segments):
+                        center_delta = float(
+                            np.linalg.norm(
+                                segment["centroid_2d"] - branch["last_centroid_2d"]
+                            )
+                        )
+                        order_delta = abs(
+                            float(segment["order_value"]) - float(branch["last_order_value"])
+                        )
+                        slice_gap = max(0, int(slice_idx - branch["last_slice_idx"] - 1))
+                        gap_penalty = slice_gap * max(match_distance, 1.0)
+                        raw_center_deltas[(row_idx, col_idx)] = center_delta
+                        cost_matrix[row_idx, col_idx] = center_delta + 0.35 * order_delta + gap_penalty
+
+                row_ids, col_ids = linear_sum_assignment(cost_matrix)
+                for row_idx, col_idx in zip(row_ids, col_ids):
+                    center_delta = raw_center_deltas[(row_idx, col_idx)]
+                    allow_match = (
+                        match_distance <= 0.0 or center_delta <= float(match_distance)
+                    )
+                    if not allow_match:
+                        continue
+
+                    branch = branch_rows[row_idx]
+                    segment = current_segments[col_idx]
+                    branch["segments"].append(segment)
+                    branch["last_slice_idx"] = int(slice_idx)
+                    branch["last_centroid_2d"] = np.asarray(
+                        segment["centroid_2d"], dtype=float
+                    )
+                    branch["last_order_value"] = float(segment["order_value"])
+                    matched_segment_ids.add(segment["cell_id"])
+                    matched_branch_ids.add(branch["branch_id"])
+
+            for segment in current_segments:
+                if segment["cell_id"] in matched_segment_ids:
+                    continue
+                branches.append(
+                    {
+                        "branch_id": next_branch_id,
+                        "segments": [segment],
+                        "last_slice_idx": int(slice_idx),
+                        "last_centroid_2d": np.asarray(segment["centroid_2d"], dtype=float),
+                        "last_order_value": float(segment["order_value"]),
+                    }
+                )
+                next_branch_id += 1
+
+        branch_payloads = []
+        for branch in branches:
+            cell_ids = [segment["cell_id"] for segment in branch["segments"]]
+            if not cell_ids:
+                continue
+
+            slice_indices = sorted(
+                {int(segment["slice_idx"]) for segment in branch["segments"]}
+            )
+            centroid_stack = np.vstack(
+                [np.asarray(segment["centroid_2d"], dtype=float) for segment in branch["segments"]]
+            )
+            branch_payloads.append(
+                {
+                    "branch_id": int(branch["branch_id"]),
+                    "cell_ids": cell_ids,
+                    "slice_indices": slice_indices,
+                    "cell_count": len(cell_ids),
+                    "mean_order_value": float(
+                        np.mean(
+                            [
+                                float(segment["order_value"])
+                                for segment in branch["segments"]
+                            ]
+                        )
+                    ),
+                    "mean_centroid_2d": centroid_stack.mean(axis=0),
+                }
+            )
+
+        branch_payloads.sort(
+            key=lambda payload: (
+                -payload["cell_count"],
+                payload["slice_indices"][0] if payload["slice_indices"] else 10**9,
+                payload["mean_order_value"],
+            )
+        )
+        for branch_index, payload in enumerate(branch_payloads, start=1):
+            payload["branch_index"] = branch_index
+
+        return branch_payloads, {
+            "auto_match_distance": float(auto_match_distance),
+            "used_match_distance": float(match_distance),
+            "slice_count": len(ordered_slices),
+            "max_parts_per_slice": max(
+                len(slice_segments) for slice_segments in segments_by_slice.values()
+            ),
+            "multi_part_slice_count": int(
+                sum(1 for slice_segments in segments_by_slice.values() if len(slice_segments) > 1)
+            ),
+            "branch_count": len(branch_payloads),
+        }
+
     def _get_slice_plane_axes(self, axis=None):
         """Return the normal and in-plane coordinate indices for a slice axis."""
         axis = axis or self.current_axis
@@ -2372,6 +2654,212 @@ class ViewInterpretation(ViewMap):
             f"Split multipart {entity_kind} {uid[:8]}... into "
             f"{remaining_slices[0]}-{remaining_slices[-1]} and "
             f"{extracted_slices[0]}-{extracted_slices[-1]}."
+        )
+
+    def separate_disconnected_multipart_parts(self):
+        """Separate one multipart horizon/fault into multiple branch entities when same-slice parts are disconnected."""
+        selection = self._get_selected_multipart_entity_for_edit(
+            action_title="Separate Disconnected Multipart Parts"
+        )
+        if selection is None:
+            return
+
+        uid = selection["uid"]
+        entity_kind = selection["entity_kind"]
+        entity_info = selection["entity_info"]
+        vtk_obj = selection["vtk_obj"]
+        axis = entity_info.get("axis", self.current_axis)
+
+        segments_by_slice = self._extract_multipart_branch_segments(
+            vtk_obj=vtk_obj,
+            axis=axis,
+            entity_kind=entity_kind,
+        )
+        if not segments_by_slice:
+            message_dialog(
+                title="Separate Disconnected Multipart Parts",
+                message="The selected multipart entity has no valid slice segments to analyze.",
+            )
+            return
+
+        multi_part_slices = [
+            slice_idx
+            for slice_idx, slice_segments in segments_by_slice.items()
+            if len(slice_segments) > 1
+        ]
+        if not multi_part_slices:
+            message_dialog(
+                title="Separate Disconnected Multipart Parts",
+                message="No slice in the selected multipart entity contains multiple disconnected parts.",
+            )
+            return
+
+        auto_match_distance = self._estimate_multipart_branch_match_distance(
+            segments_by_slice=segments_by_slice
+        )
+        settings = multiple_input_dialog(
+            title="Separate Disconnected Multipart Parts",
+            input_dict={
+                "max_gap_slices": [
+                    "Allow the same part to disappear for up to N slices:",
+                    2,
+                ],
+                "match_distance": [
+                    "Match distance in slice plane (0 = auto):",
+                    float(auto_match_distance),
+                ],
+            },
+        )
+        if settings is None:
+            return
+
+        try:
+            max_gap_slices = max(0, int(settings["max_gap_slices"]))
+            match_distance = float(settings["match_distance"])
+        except Exception:
+            message_dialog(
+                title="Separate Disconnected Multipart Parts",
+                message="Invalid separation settings.",
+            )
+            return
+
+        branches, stats = self._detect_disconnected_multipart_branches(
+            vtk_obj=vtk_obj,
+            axis=axis,
+            entity_kind=entity_kind,
+            max_slice_gap=max_gap_slices,
+            match_distance=match_distance,
+        )
+        if len(branches) <= 1:
+            message_dialog(
+                title="Separate Disconnected Multipart Parts",
+                message="The selected multipart entity could not be separated into multiple continuous parts with the current settings.",
+            )
+            return
+
+        seed_slice = entity_info.get("seed_slice")
+        branches.sort(
+            key=lambda payload: (
+                0 if seed_slice in payload.get("slice_indices", []) else 1,
+                -payload.get("cell_count", 0),
+                payload.get("branch_index", 10**9),
+            )
+        )
+        for branch_index, payload in enumerate(branches, start=1):
+            payload["branch_index"] = branch_index
+
+        split_payloads = []
+        for payload in branches:
+            branch_vtk, branch_slices, branch_map = self._build_multipart_subset_vtk(
+                vtk_obj=vtk_obj,
+                kept_cell_ids=payload["cell_ids"],
+            )
+            if branch_vtk is None or not branch_slices:
+                continue
+            payload["vtk_obj"] = branch_vtk
+            payload["slice_indices"] = branch_slices
+            payload["slice_to_cell_index"] = branch_map
+            split_payloads.append(payload)
+
+        if len(split_payloads) <= 1:
+            message_dialog(
+                title="Separate Disconnected Multipart Parts",
+                message="The selected multipart entity could not be rewritten into multiple valid branch entities.",
+            )
+            return
+
+        branch_count = len(split_payloads)
+        fallback_name = "fault" if entity_kind == "fault" else "multipart"
+
+        self._remove_filtered_actor(f"multipart_slice_{uid}")
+        self._remove_filtered_actor(f"multipart_fault_slice_{uid}")
+        self._remove_raw_actor_for_uid(uid)
+
+        primary_payload = split_payloads[0]
+        primary_name = self._build_multipart_branch_name(
+            seed_uid=uid,
+            slice_indices=primary_payload["slice_indices"],
+            branch_index=1,
+            branch_count=branch_count,
+            fallback_name=fallback_name,
+        )
+        self._register_multipart_interpretation_entity(
+            uid=uid,
+            axis=axis,
+            slice_indices=primary_payload["slice_indices"],
+            slice_to_cell_index=primary_payload["slice_to_cell_index"],
+        )
+        if uid in getattr(self, "multipart_horizons", {}):
+            self.multipart_horizons[uid]["seed_slice"] = (
+                int(seed_slice)
+                if seed_slice in primary_payload["slice_indices"]
+                else primary_payload["slice_indices"][0]
+            )
+        if uid in getattr(self, "multipart_faults", {}):
+            self.multipart_faults[uid]["seed_slice"] = (
+                int(seed_slice)
+                if seed_slice in primary_payload["slice_indices"]
+                else primary_payload["slice_indices"][0]
+            )
+        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=primary_payload["vtk_obj"])
+        self.parent.geol_coll.set_uid_name(uid=uid, name=primary_name)
+
+        new_uids = []
+        for payload in split_payloads[1:]:
+            new_entity_dict = self._build_multipart_entity_dict_from_source(
+                source_uid=uid,
+                vtk_obj=payload["vtk_obj"],
+                slice_indices=payload["slice_indices"],
+                fallback_name=fallback_name,
+            )
+            if new_entity_dict is None:
+                continue
+
+            new_entity_dict["name"] = self._build_multipart_branch_name(
+                seed_uid=uid,
+                slice_indices=payload["slice_indices"],
+                branch_index=payload["branch_index"],
+                branch_count=branch_count,
+                fallback_name=fallback_name,
+            )
+            new_uid = self.parent.geol_coll.add_entity_from_dict(new_entity_dict)
+            self._register_multipart_interpretation_entity(
+                uid=new_uid,
+                axis=axis,
+                slice_indices=payload["slice_indices"],
+                slice_to_cell_index=payload["slice_to_cell_index"],
+            )
+            if new_uid in getattr(self, "multipart_horizons", {}):
+                self.multipart_horizons[new_uid]["seed_slice"] = payload["slice_indices"][0]
+            if new_uid in getattr(self, "multipart_faults", {}):
+                self.multipart_faults[new_uid]["seed_slice"] = payload["slice_indices"][0]
+            new_uids.append(new_uid)
+
+        try:
+            self.parent.geol_coll.modelReset.emit()
+        except Exception:
+            pass
+
+        try:
+            self.parent.signals.metadata_modified.emit([uid], self.parent.geol_coll)
+        except Exception:
+            pass
+
+        self._mark_slice_visibility_dirty()
+        if entity_kind == "horizon":
+            self.update_multipart_horizon_visibility(uid)
+            for new_uid in new_uids:
+                self.update_multipart_horizon_visibility(new_uid)
+        else:
+            self.update_multipart_fault_visibility(uid)
+            for new_uid in new_uids:
+                self.update_multipart_fault_visibility(new_uid)
+        self.plotter.render()
+
+        self.print_terminal(
+            f"Separated multipart {entity_kind} {uid[:8]}... into {len(new_uids) + 1} parts "
+            f"(max parts/slice: {stats['max_parts_per_slice']}, "
+            f"match distance: {stats['used_match_distance']:.3f})."
         )
 
     def update_slice_colormap(self):
@@ -6187,6 +6675,14 @@ class ViewInterpretation(ViewMap):
         self.splitMultipartSlicesButton = QAction("Split Multipart Slices...", self)
         self.splitMultipartSlicesButton.triggered.connect(self.split_multipart_slices)
         self.menuModify.addAction(self.splitMultipartSlicesButton)
+
+        self.separateDisconnectedMultipartButton = QAction(
+            "Separate Disconnected Multipart Parts...", self
+        )
+        self.separateDisconnectedMultipartButton.triggered.connect(
+            self.separate_disconnected_multipart_parts
+        )
+        self.menuModify.addAction(self.separateDisconnectedMultipartButton)
 
         self.deleteMultipartSlicesButton = QAction("Delete Multipart Slices...", self)
         self.deleteMultipartSlicesButton.triggered.connect(self.delete_multipart_slices)
