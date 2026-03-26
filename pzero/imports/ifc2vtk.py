@@ -128,9 +128,12 @@ def vtk2ifc(self=None, out_file_name: str | None = None) -> bool:
 
     try:
         import ifcopenshell
+        import ifcopenshell.api.aggregate
         import ifcopenshell.api.context
         import ifcopenshell.api.geometry
+        import ifcopenshell.api.project
         import ifcopenshell.api.root
+        import ifcopenshell.api.spatial
         import ifcopenshell.api.unit
     except ImportError:
         self.print_terminal(
@@ -145,8 +148,8 @@ def vtk2ifc(self=None, out_file_name: str | None = None) -> bool:
 
     out_file_name = _ensure_ifc_extension(out_file_name)
 
-    model = ifcopenshell.file(schema="IFC4X3_ADD2")
-    ifcopenshell.api.root.create_entity(
+    model = ifcopenshell.api.project.create_file(version="IFC4X3")
+    project = ifcopenshell.api.root.create_entity(
         model,
         ifc_class="IfcProject",
         name="PZero IFC Export",
@@ -157,6 +160,28 @@ def vtk2ifc(self=None, out_file_name: str | None = None) -> bool:
     area = ifcopenshell.api.unit.add_si_unit(model, unit_type="AREAUNIT")
     volume = ifcopenshell.api.unit.add_si_unit(model, unit_type="VOLUMEUNIT")
     ifcopenshell.api.unit.assign_unit(model, units=[length, area, volume])
+
+    site = ifcopenshell.api.root.create_entity(
+        model, ifc_class="IfcSite", name="PZero Site"
+    )
+    building = ifcopenshell.api.root.create_entity(
+        model, ifc_class="IfcBuilding", name="PZero Building"
+    )
+    storey = ifcopenshell.api.root.create_entity(
+        model, ifc_class="IfcBuildingStorey", name="PZero Storey"
+    )
+    ifcopenshell.api.aggregate.assign_object(
+        model, products=[site], relating_object=project
+    )
+    ifcopenshell.api.aggregate.assign_object(
+        model, products=[building], relating_object=site
+    )
+    ifcopenshell.api.aggregate.assign_object(
+        model, products=[storey], relating_object=building
+    )
+    ifcopenshell.api.geometry.edit_object_placement(model, product=site)
+    ifcopenshell.api.geometry.edit_object_placement(model, product=building)
+    ifcopenshell.api.geometry.edit_object_placement(model, product=storey)
 
     model_context = ifcopenshell.api.context.add_context(model, context_type="Model")
     body_context = ifcopenshell.api.context.add_context(
@@ -174,6 +199,9 @@ def vtk2ifc(self=None, out_file_name: str | None = None) -> bool:
             name=item["name"],
         )
         ifcopenshell.api.geometry.edit_object_placement(model, product=element)
+        ifcopenshell.api.spatial.assign_container(
+            model, products=[element], relating_structure=storey
+        )
 
         point_list = model.create_entity(
             "IfcCartesianPointList3D",
