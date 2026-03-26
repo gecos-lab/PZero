@@ -10,7 +10,7 @@ from os import path as os_path
 
 from numpy import asarray as np_asarray
 
-from pzero.entities_factory import TetraSolid, TriSurf
+from pzero.entities_factory import TetraSolid, TriSurf, Voxet
 
 
 def _ensure_ifc_extension(out_file_name: str) -> str:
@@ -32,6 +32,7 @@ def _mesh_payload(vtk_obj) -> tuple[list[list[float]], list[list[int]]]:
     Convert a supported mesh entity into a triangulated outer surface suitable for IFC export.
 
     Mesh3D objects are exported as closed tessellations by extracting the visible boundary surface.
+    This supports tetrahedral meshes and structured volumetric grids such as Voxet.
     """
     import pyvista as pv
 
@@ -80,9 +81,9 @@ def _collect_export_items(self=None) -> list[dict]:
         collection = self.mesh3d_coll
         for uid in self.selected_uids:
             vtk_obj = collection.get_uid_vtk_obj(uid)
-            if not isinstance(vtk_obj, TetraSolid):
+            if not isinstance(vtk_obj, (TetraSolid, Voxet)):
                 self.print_terminal(
-                    f"IFC export skipped mesh uid {uid}: only TetraSolid is supported in the first spike."
+                    f"IFC export skipped mesh uid {uid}: only TetraSolid and Voxet are supported in the first spike."
                 )
                 continue
 
@@ -116,7 +117,7 @@ def vtk2ifc(self=None, out_file_name: str | None = None) -> bool:
 
     Geological TriSurfs are exported as open tessellations (Closed = FALSE).
     Mesh collection items are exported as closed tessellations (Closed = TRUE) when
-    a valid outer triangulated surface can be extracted.
+    a valid outer triangulated surface can be extracted from TetraSolid or Voxet data.
     """
     if not self.selected_uids:
         self.print_terminal("IFC export requires at least one selected object.")
