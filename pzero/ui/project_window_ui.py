@@ -438,8 +438,8 @@ class Ui_ProjectWindow(object):
         self.menuInterpolation.addAction(self.actionRetopologize)
         self.menuWindows.addAction(self.action3DView)
         self.menuWindows.addAction(self.actionMapView)
-        self.menuWindows.addAction(self.actionInterpretationView)
         self.menuWindows.addAction(self.actionXSectionView)
+        self.menuWindows.addAction(self.actionInterpretationView)
         self.menuWindows.addAction(self.actionWellLogView)
         self.menuWindows.addSeparator()
         self.menuWindows.addAction(self.actionStereoplotView)
@@ -625,11 +625,11 @@ class Ui_ProjectWindow(object):
         self.actionMapView.setText(
             QCoreApplication.translate("ProjectWindow", "Map View", None)
         )
-        self.actionInterpretationView.setText(
-            QCoreApplication.translate("ProjectWindow", "Interpretation Window", None)
-        )
         self.actionXSectionView.setText(
             QCoreApplication.translate("ProjectWindow", "X-section View", None)
+        )
+        self.actionInterpretationView.setText(
+            QCoreApplication.translate("ProjectWindow", "Interpretation Window", None)
         )
         self.actionWellLogView.setText(
             QCoreApplication.translate("ProjectWindow", "Well Log View", None)

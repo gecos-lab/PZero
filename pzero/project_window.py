@@ -294,11 +294,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionMapView.triggered.connect(
             lambda: DockWindow(parent=self, window_type="ViewMap")
         )
-        self.actionInterpretationView.triggered.connect(
-            lambda: DockWindow(parent=self, window_type="ViewInterpretation")
-        )
+
         self.actionXSectionView.triggered.connect(
             lambda: DockWindow(parent=self, window_type="ViewXsection")
+        )
+        self.actionInterpretationView.triggered.connect(
+            lambda: DockWindow(parent=self, window_type="ViewInterpretation")
         )
         self.actionStereoplotView.triggered.connect(
             lambda: DockWindow(parent=self, window_type="ViewStereoplot")
