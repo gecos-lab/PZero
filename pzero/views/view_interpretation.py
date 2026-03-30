@@ -104,6 +104,8 @@ class ViewInterpretation(ViewMap):
 
         # Current state
         self.current_seismic_uid = None
+        self.current_source_collection_name = None
+        self.current_source_topology = None
         self.current_axis = 'Inline' # Inline, Crossline, Z-slice
         self.current_slice_index = 0
         self.slice_actor = None
@@ -180,13 +182,13 @@ class ViewInterpretation(ViewMap):
         
     def show_actor_with_property(self, uid=None, coll_name=None, show_property=None, visible=None):
         """Override to prevent showing full seismic volumes and full multipart horizons - we only show slices."""
-        # Check if this is a seismic entity that we're slicing
-        if coll_name == 'image_coll' and uid:
+        # Check if this is a volumetric source that we're slicing
+        if coll_name in {'image_coll', 'mesh3d_coll'} and uid:
             try:
-                topology = self.parent.image_coll.get_uid_topology(uid)
-                if topology == 'Seismics':
-                    # Don't show the full seismic volume - we show slices instead
-                    self.print_terminal(f"Skipping full volume display for seismic: {uid}")
+                collection = getattr(self.parent, coll_name)
+                topology = collection.get_uid_topology(uid)
+                if topology in self._supported_interpretation_source_topologies():
+                    self.print_terminal(f"Skipping full volume display for interpretation source: {uid}")
                     self.seismic_uids_to_hide.add(uid)
                     return
             except:
@@ -269,8 +271,8 @@ class ViewInterpretation(ViewMap):
         top_layout = QHBoxLayout()
         main_layout.addLayout(top_layout)
         
-        # Seismic Volume Selector
-        top_layout.addWidget(QLabel("Volume:"))
+        # Structured source selector
+        top_layout.addWidget(QLabel("Source:"))
         self.combo_volume = QComboBox()
         self.combo_volume.currentIndexChanged.connect(self.on_volume_changed)
         top_layout.addWidget(self.combo_volume)
@@ -356,9 +358,9 @@ class ViewInterpretation(ViewMap):
         if hasattr(self, '_is_propagating') and self._is_propagating:
             return
 
-        # Check if it's the image collection (where seismics live)
-        if collection == self.parent.image_coll:
-            self.print_terminal("New entities added to image collection, refreshing volume list...")
+        # Check if structured volumetric sources changed
+        if collection in [getattr(self.parent, "image_coll", None), getattr(self.parent, "mesh3d_coll", None)]:
+            self.print_terminal("New volumetric entities added, refreshing source list...")
             self.refresh_volume_list()
         # Check if it's the geological collection (where lines live)
         elif collection == self.parent.geol_coll:
@@ -420,58 +422,142 @@ class ViewInterpretation(ViewMap):
                         self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=True)
                 except Exception as e:
                     self.print_terminal(f"Error displaying new entity {uid}: {e}")
-        
+
+    def _supported_interpretation_source_topologies(self):
+        """Return the volumetric topologies supported by the interpretation view."""
+        return {"Seismics", "Voxet", "XsVoxet", "Image3D"}
+
+    def _iter_interpretation_sources(self):
+        """Collect structured volumetric sources from image and mesh collections."""
+        supported = self._supported_interpretation_source_topologies()
+        candidates = []
+        for coll_name, label in (("image_coll", "Image"), ("mesh3d_coll", "Mesh")):
+            collection = getattr(self.parent, coll_name, None)
+            if collection is None:
+                continue
+            try:
+                all_uids = collection.get_uids
+            except Exception:
+                continue
+            for uid in all_uids:
+                try:
+                    topology = collection.get_uid_topology(uid)
+                    if topology not in supported:
+                        continue
+                    name = collection.get_uid_name(uid)
+                    candidates.append(
+                        {
+                            "label": f"{label}: {name} [{topology}]",
+                            "uid": uid,
+                            "collection": coll_name,
+                            "topology": topology,
+                        }
+                    )
+                except Exception:
+                    continue
+        return candidates
+
+    def _apply_source_selection(self, source_info=None):
+        """Update active source metadata from combo-box item data."""
+        if not source_info:
+            self.current_seismic_uid = None
+            self.current_source_collection_name = None
+            self.current_source_topology = None
+            return
+
+        if isinstance(source_info, dict):
+            self.current_seismic_uid = source_info.get("uid")
+            self.current_source_collection_name = source_info.get("collection")
+            self.current_source_topology = source_info.get("topology")
+            return
+
+        self.current_seismic_uid = source_info
+        self.current_source_collection_name = "image_coll"
+        self.current_source_topology = "Seismics"
+
+    def _get_current_source_collection(self):
+        """Return the collection owning the current interpretation source."""
+        coll_name = getattr(self, "current_source_collection_name", None)
+        return getattr(self.parent, coll_name, None) if coll_name else None
+
+    def _get_current_source_vtk(self):
+        """Return the VTK dataset of the current interpretation source."""
+        if not self.current_seismic_uid:
+            return None
+        collection = self._get_current_source_collection()
+        if collection is None:
+            return None
+        try:
+            return collection.get_uid_vtk_obj(self.current_seismic_uid)
+        except Exception:
+            return None
+
+    def _get_current_scalar_name(self, dataset=None):
+        """Return the preferred scalar array for the active structured volume."""
+        dataset = dataset or getattr(self, "_cached_seismic", None)
+        if dataset is None:
+            return None
+        if "intensity" in dataset.array_names:
+            return "intensity"
+        for name in dataset.array_names:
+            try:
+                arr = np.asarray(dataset[name])
+                if arr.ndim == 1:
+                    return name
+            except Exception:
+                continue
+        return dataset.array_names[0] if dataset.array_names else None
+
+    def _get_cached_volume_data_3d(self, cast_dtype=None):
+        """Return cached scalar data reshaped to the active volume dimensions."""
+        if not hasattr(self, "_cached_seismic") or self._cached_seismic is None:
+            return None, None
+        scalar_name = self._get_current_scalar_name(self._cached_seismic)
+        if not scalar_name:
+            return None, None
+        data = np.asarray(self._cached_seismic[scalar_name]).reshape(self._cached_dims, order="F")
+        if cast_dtype is not None:
+            data = data.astype(cast_dtype)
+        return data, scalar_name
+
     def refresh_volume_list(self):
-        """Refresh the list of available seismic volumes"""
+        """Refresh the list of available structured interpretation sources."""
         # Guard: Check if combo_volume exists (may not during early initialization)
         if not hasattr(self, 'combo_volume') or self.combo_volume is None:
             self.print_terminal("refresh_volume_list: combo_volume not yet initialized")
             return
             
-        self.print_terminal("Refreshing seismic volume list...")
+        self.print_terminal("Refreshing interpretation source list...")
         self.combo_volume.blockSignals(True)
         
         # Remember current selection if any
-        previous_uid = self.current_seismic_uid
+        previous_key = (self.current_source_collection_name, self.current_seismic_uid)
         
         self.combo_volume.clear()
         
-        # Find all Seismics entities in image_coll - use the same approach as mesh slicer
-        candidates = []
         try:
-            if hasattr(self.parent, 'image_coll') and self.parent.image_coll is not None:
-                # Get all UIDs from the collection using the property
-                all_uids = self.parent.image_coll.get_uids
-                self.print_terminal(f"image_coll has {len(all_uids)} entities (UIDs)")
-                
-                for uid in all_uids:
-                    topology = self.parent.image_coll.get_uid_topology(uid)
-                    name = self.parent.image_coll.get_uid_name(uid)
-                    self.print_terminal(f"  Entity: {name}, topology: {topology}, uid: {uid}")
-                    
-                    if topology == 'Seismics':
-                        candidates.append((name, uid))
-                        self.print_terminal(f"  -> Found Seismics: {name} ({uid})")
-                        
-                self.print_terminal(f"Total Seismics found: {len(candidates)}")
-            else:
-                self.print_terminal("No image_coll found on parent!")
+            candidates = self._iter_interpretation_sources()
+            self.print_terminal(f"Total structured sources found: {len(candidates)}")
         except Exception as e:
-            self.print_terminal(f"Error getting seismic volumes: {e}")
+            self.print_terminal(f"Error getting interpretation sources: {e}")
             import traceback
             self.print_terminal(traceback.format_exc())
+            candidates = []
                     
-        for name, uid in candidates:
-            self.combo_volume.addItem(name, uid)
+        for source_info in candidates:
+            self.combo_volume.addItem(source_info["label"], source_info)
             
         self.combo_volume.blockSignals(False)
         
         if self.combo_volume.count() > 0:
             # Try to restore previous selection, otherwise select first
             restored = False
-            if previous_uid:
+            if previous_key[1]:
                 for i in range(self.combo_volume.count()):
-                    if self.combo_volume.itemData(i) == previous_uid:
+                    data = self.combo_volume.itemData(i)
+                    if not isinstance(data, dict):
+                        continue
+                    if (data.get("collection"), data.get("uid")) == previous_key:
                         self.combo_volume.setCurrentIndex(i)
                         restored = True
                         break
@@ -479,21 +565,26 @@ class ViewInterpretation(ViewMap):
             if not restored:
                 self.combo_volume.setCurrentIndex(0)
             
-            self.current_seismic_uid = self.combo_volume.currentData()
-            self.print_terminal(f"Selected volume UID: {self.current_seismic_uid}")
+            self._apply_source_selection(self.combo_volume.currentData())
+            self.print_terminal(
+                f"Selected source UID: {self.current_seismic_uid} "
+                f"({self.current_source_topology} from {self.current_source_collection_name})"
+            )
             self.update_slice_limits()
             self.update_camera_orientation()
             self.update_slice()
         else:
-            self.current_seismic_uid = None
-            self.print_terminal("No seismic volumes found in image_coll!")
+            self._apply_source_selection(None)
+            self.print_terminal("No structured interpretation sources found.")
         
     def on_volume_changed(self, index):
         if index < 0:
             return
-        self.current_seismic_uid = self.combo_volume.itemData(index)
+        self._apply_source_selection(self.combo_volume.itemData(index))
         if self.current_seismic_uid:
-            self.print_terminal(f"Volume changed to: {self.combo_volume.currentText()} ({self.current_seismic_uid})")
+            self.print_terminal(
+                f"Source changed to: {self.combo_volume.currentText()} ({self.current_seismic_uid})"
+            )
             
             # Reset indexing on volume change to re-scan for the new volume
             self._lines_indexed = False
@@ -510,6 +601,12 @@ class ViewInterpretation(ViewMap):
                 del self._cached_seismic
             if hasattr(self, '_cached_scalar_range'):
                 del self._cached_scalar_range
+            if hasattr(self, '_cached_scalar_name'):
+                del self._cached_scalar_name
+            if hasattr(self, '_cached_affine'):
+                del self._cached_affine
+            if hasattr(self, '_cached_affine_uid'):
+                del self._cached_affine_uid
             
             # Pre-populate the seismic cache BEFORE scanning horizons
             # This is needed because scan_and_index_single_horizon uses _cached_bounds/_cached_dims
@@ -548,7 +645,7 @@ class ViewInterpretation(ViewMap):
             return
             
         # Get vtk object
-        seismic = self.parent.image_coll.get_uid_vtk_obj(self.current_seismic_uid)
+        seismic = self._get_current_source_vtk()
         if not seismic:
             return
             
@@ -638,19 +735,20 @@ class ViewInterpretation(ViewMap):
             return  # Cache is already valid
         
         try:
-            seismic_vtk = self.parent.image_coll.get_uid_vtk_obj(self.current_seismic_uid)
+            seismic_vtk = self._get_current_source_vtk()
             if not seismic_vtk:
-                self.print_terminal("Could not get seismic VTK object for cache")
+                self.print_terminal("Could not get interpretation source VTK object for cache")
                 return
             self._cached_seismic = pv.wrap(seismic_vtk)
             self._cached_seismic_uid = self.current_seismic_uid
             self._cached_dims = self._cached_seismic.dimensions
             self._cached_bounds = self._cached_seismic.bounds
-            self.print_terminal(f"Pre-cached seismic dims: {self._cached_dims}, bounds: {self._cached_bounds}")
+            self._cached_scalar_name = self._get_current_scalar_name(self._cached_seismic)
+            self.print_terminal(f"Pre-cached source dims: {self._cached_dims}, bounds: {self._cached_bounds}")
             
             # Also cache scalar range for consistent colormap
-            if 'intensity' in self._cached_seismic.array_names:
-                self._cached_scalar_range = self._cached_seismic.get_data_range('intensity')
+            if self._cached_scalar_name:
+                self._cached_scalar_range = self._cached_seismic.get_data_range(self._cached_scalar_name)
             else:
                 self._cached_scalar_range = None
         except Exception as e:
@@ -658,7 +756,7 @@ class ViewInterpretation(ViewMap):
 
     def update_slice(self):
         if not self.current_seismic_uid:
-            self.print_terminal("No seismic UID selected")
+            self.print_terminal("No interpretation source selected")
             return
         
         # Disable rendering during updates to prevent flickering
@@ -667,20 +765,21 @@ class ViewInterpretation(ViewMap):
         
         # Cache the seismic wrapper to avoid repeated wrapping
         if not hasattr(self, '_cached_seismic') or not hasattr(self, '_cached_seismic_uid') or self._cached_seismic_uid != self.current_seismic_uid:
-            self.print_terminal(f"Caching seismic data for {self.current_seismic_uid}")
-            seismic_vtk = self.parent.image_coll.get_uid_vtk_obj(self.current_seismic_uid)
+            self.print_terminal(f"Caching source data for {self.current_seismic_uid}")
+            seismic_vtk = self._get_current_source_vtk()
             if not seismic_vtk:
-                self.print_terminal("Could not get seismic VTK object")
+                self.print_terminal("Could not get interpretation source VTK object")
                 return
             self._cached_seismic = pv.wrap(seismic_vtk)
             self._cached_seismic_uid = self.current_seismic_uid
             self._cached_dims = self._cached_seismic.dimensions
             self._cached_bounds = self._cached_seismic.bounds
-            self.print_terminal(f"Seismic dims: {self._cached_dims}, bounds: {self._cached_bounds}")
+            self._cached_scalar_name = self._get_current_scalar_name(self._cached_seismic)
+            self.print_terminal(f"Source dims: {self._cached_dims}, bounds: {self._cached_bounds}")
             # Calculate scalar range from the FULL volume for consistent colormap across all slices
             # Use get_data_range for the full extent (like mesh slicer does in view_3d)
-            if 'intensity' in self._cached_seismic.array_names:
-                self._cached_scalar_range = self._cached_seismic.get_data_range('intensity')
+            if self._cached_scalar_name:
+                self._cached_scalar_range = self._cached_seismic.get_data_range(self._cached_scalar_name)
                 self.print_terminal(f"Scalar range (full volume): {self._cached_scalar_range}")
             else:
                 self._cached_scalar_range = None
@@ -756,13 +855,16 @@ class ViewInterpretation(ViewMap):
                         subset.points = self._project_points_to_plane(pts, plane_center, plane_normal)
                     except Exception:
                         pass
+            else:
+                self.current_slice_plane_center = None
+                self.current_slice_plane_normal = None
             
             self.print_terminal(f"Slice position for {self.current_axis} index {self.current_slice_index}: {self.current_slice_position}")
             
-            scalars = 'intensity' if 'intensity' in subset.array_names else (subset.array_names[0] if subset.array_names else None)
+            scalars = self._get_current_scalar_name(subset)
             
             # Get colormap and scalar range
-            cmap = self.get_seismic_colormap()
+            cmap = self.get_seismic_colormap(scalars)
             scalar_range = self.scalar_range if hasattr(self, 'scalar_range') else None
             
             # Check if actor exists - update in place for smooth transition
@@ -1036,12 +1138,12 @@ class ViewInterpretation(ViewMap):
                     
 
     
-    def get_seismic_colormap(self):
-        """Get the colormap for 'intensity' property from the legend manager, or default to gray."""
+    def get_seismic_colormap(self, property_name=None):
+        """Get the colormap for the active scalar property from the legend manager."""
+        property_name = property_name or getattr(self, "_cached_scalar_name", None) or "intensity"
         try:
             if hasattr(self.parent, 'prop_legend_df') and self.parent.prop_legend_df is not None:
-                # Look for 'intensity' property colormap
-                row = self.parent.prop_legend_df[self.parent.prop_legend_df['property_name'] == 'intensity']
+                row = self.parent.prop_legend_df[self.parent.prop_legend_df['property_name'] == property_name]
                 if not row.empty:
                     return row['colormap'].iloc[0]
         except:
@@ -3007,7 +3109,7 @@ class ViewInterpretation(ViewMap):
         self.disable_actions()
         
         if not self.current_seismic_uid:
-            self.print_terminal("Please select a seismic volume first!")
+            self.print_terminal("Please select a structured volume first!")
             self.enable_actions()
             return
         
@@ -4536,7 +4638,7 @@ class ViewInterpretation(ViewMap):
         self.disable_actions()
 
         if not self.current_seismic_uid:
-            self.print_terminal("Please select a seismic volume first!")
+            self.print_terminal("Please select a structured volume first!")
             self.enable_actions()
             return
 
@@ -4796,20 +4898,12 @@ class ViewInterpretation(ViewMap):
         if not hasattr(self, '_cached_seismic') or self._cached_seismic is None:
             return None, None, None, None
         
-        seismic = self._cached_seismic
         dims = self._cached_dims
         bounds = self._cached_bounds
-        
-        # Get the intensity/amplitude data
-        if 'intensity' in seismic.array_names:
-            data = seismic['intensity']
-        elif seismic.array_names:
-            data = seismic[seismic.array_names[0]]
-        else:
+
+        data_3d, _scalar_name = self._get_cached_volume_data_3d()
+        if data_3d is None:
             return None, None, None, None
-        
-        # Reshape to 3D grid
-        data_3d = data.reshape(dims, order='F')  # Fortran order for VTK
         
         # Calculate spacing
         spacing = [
@@ -4944,27 +5038,42 @@ class ViewInterpretation(ViewMap):
             if getattr(self, "_cached_affine_uid", None) == self.current_seismic_uid:
                 return getattr(self, "_cached_affine", None)
 
-            seismic_vtk = self.parent.image_coll.get_uid_vtk_obj(self.current_seismic_uid)
+            seismic_vtk = self._get_current_source_vtk()
             if seismic_vtk is None:
                 return None
             dims = seismic_vtk.GetDimensions()
             nx, ny, nz = int(dims[0]), int(dims[1]), int(dims[2])
-            origin = np.array(seismic_vtk.GetPoint(0), dtype=float)
-            a0 = (
-                np.array(seismic_vtk.GetPoint(1), dtype=float) - origin
-                if nx > 1
-                else np.array([1.0, 0.0, 0.0], dtype=float)
-            )
-            a1 = (
-                np.array(seismic_vtk.GetPoint(nx), dtype=float) - origin
-                if ny > 1
-                else np.array([0.0, 1.0, 0.0], dtype=float)
-            )
-            a2 = (
-                np.array(seismic_vtk.GetPoint(nx * ny), dtype=float) - origin
-                if nz > 1
-                else np.array([0.0, 0.0, 1.0], dtype=float)
-            )
+            if hasattr(seismic_vtk, "GetOrigin") and hasattr(seismic_vtk, "GetSpacing"):
+                origin = np.array(seismic_vtk.GetOrigin(), dtype=float)
+                spacing = np.array(seismic_vtk.GetSpacing(), dtype=float)
+                direction = np.eye(3, dtype=float)
+                if hasattr(seismic_vtk, "GetDirectionMatrix"):
+                    dmat = seismic_vtk.GetDirectionMatrix()
+                    if dmat is not None:
+                        direction = np.array(
+                            [[dmat.GetElement(r, c) for c in range(3)] for r in range(3)],
+                            dtype=float,
+                        )
+                a0 = direction[:, 0] * (spacing[0] if nx > 1 else 1.0)
+                a1 = direction[:, 1] * (spacing[1] if ny > 1 else 1.0)
+                a2 = direction[:, 2] * (spacing[2] if nz > 1 else 1.0)
+            else:
+                origin = np.array(seismic_vtk.GetPoint(0), dtype=float)
+                a0 = (
+                    np.array(seismic_vtk.GetPoint(1), dtype=float) - origin
+                    if nx > 1
+                    else np.array([1.0, 0.0, 0.0], dtype=float)
+                )
+                a1 = (
+                    np.array(seismic_vtk.GetPoint(nx), dtype=float) - origin
+                    if ny > 1
+                    else np.array([0.0, 1.0, 0.0], dtype=float)
+                )
+                a2 = (
+                    np.array(seismic_vtk.GetPoint(nx * ny), dtype=float) - origin
+                    if nz > 1
+                    else np.array([0.0, 0.0, 1.0], dtype=float)
+                )
             affine = (origin, a0, a1, a2, (nx, ny, nz))
             self._cached_affine = affine
             self._cached_affine_uid = self.current_seismic_uid
@@ -5372,9 +5481,9 @@ class ViewInterpretation(ViewMap):
         """
         self.disable_actions()
         
-        # Check if we have a seismic volume
+        # Check if we have an active structured volume
         if not self.current_seismic_uid:
-            self.print_terminal("No seismic volume loaded!")
+            self.print_terminal("No structured volume loaded!")
             self.enable_actions()
             return
         
@@ -5780,15 +5889,10 @@ class ViewInterpretation(ViewMap):
         bounds = self._cached_bounds
         
         # Get the 3D data array
-        if 'intensity' in seismic.array_names:
-            data = seismic['intensity']
-        elif seismic.array_names:
-            data = seismic[seismic.array_names[0]]
-        else:
+        data_3d, _scalar_name = self._get_cached_volume_data_3d(cast_dtype=np.float32)
+        if data_3d is None:
             self.print_terminal("No data arrays in seismic!")
             return
-        
-        data_3d = data.reshape(dims, order='F').astype(np.float32)
         
         # Calculate spacing
         spacing = [
@@ -6415,16 +6519,10 @@ class ViewInterpretation(ViewMap):
         dims = self._cached_dims
         bounds = self._cached_bounds
         
-        # Get the 3D data array
-        if 'intensity' in seismic.array_names:
-            data = seismic['intensity']
-        elif seismic.array_names:
-            data = seismic[seismic.array_names[0]]
-        else:
+        data_3d, _scalar_name = self._get_cached_volume_data_3d(cast_dtype=np.float32)
+        if data_3d is None:
             self.print_terminal("No data arrays in seismic!")
             return
-        
-        data_3d = data.reshape(dims, order='F').astype(np.float32)
         
         # Calculate spacing
         spacing = [
@@ -7147,20 +7245,13 @@ class ViewInterpretation(ViewMap):
             self.update_slice()
     
     def clear_seismic_volumes(self):
-        """Remove any full seismic volume actors from the plotter."""
+        """Remove any full structured-source actors from the plotter."""
         try:
-            # Get all seismic UIDs from image_coll
-            if hasattr(self.parent, 'image_coll') and self.parent.image_coll is not None:
-                for uid in self.parent.image_coll.get_uids:
-                    try:
-                        topology = self.parent.image_coll.get_uid_topology(uid)
-                        if topology == 'Seismics':
-                            # Try to remove this actor if it exists
-                            if uid in self.plotter.renderer.actors:
-                                self.plotter.remove_actor(uid)
-                                self.print_terminal(f"Cleared full seismic volume: {uid}")
-                    except:
-                        pass
+            for source_info in self._iter_interpretation_sources():
+                uid = source_info.get("uid")
+                if uid in self.plotter.renderer.actors:
+                    self.plotter.remove_actor(uid)
+                    self.print_terminal(f"Cleared full source volume: {uid}")
         except Exception as e:
             self.print_terminal(f"Error clearing seismic volumes: {e}")
 

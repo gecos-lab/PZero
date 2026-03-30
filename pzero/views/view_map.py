@@ -20,6 +20,7 @@ from ..entities_factory import (
     VertexSet,
     PolyLine,
     TriSurf,
+    TetraSolid,
     XsVertexSet,
     XsPolyLine,
     DEM,
@@ -461,6 +462,55 @@ class ViewMap(View2D):
                 )
             else:
                 this_actor = None
+        elif isinstance(plot_entity, TetraSolid):
+            plot_rgb_option = None
+            preference = "point"
+            if plot_entity.GetNumberOfCells() > 0:
+                if show_property == "none" or show_property is None:
+                    show_property = None
+                elif show_property == "X":
+                    show_property = plot_entity.points_X
+                elif show_property == "Y":
+                    show_property = plot_entity.points_Y
+                elif show_property == "Z":
+                    show_property = plot_entity.points_Z
+                elif isinstance(show_property, str) and show_property.endswith("]"):
+                    pos1 = show_property.index("[")
+                    pos2 = show_property.index("]")
+                    original_prop = show_property[:pos1]
+                    index = int(show_property[pos1 + 1 : pos2])
+                    if original_prop in plot_entity.point_data_keys:
+                        show_property = plot_entity.get_point_data(original_prop)[:, index]
+                    elif original_prop in plot_entity.cell_data_keys:
+                        show_property = plot_entity.get_cell_data(original_prop)[:, index]
+                        preference = "cell"
+                    else:
+                        show_property = None
+                elif show_property in plot_entity.point_data_keys:
+                    if plot_entity.get_point_data_shape(show_property)[-1] == 3:
+                        plot_rgb_option = True
+                elif show_property in plot_entity.cell_data_keys:
+                    if plot_entity.get_cell_data_shape(show_property)[-1] == 3:
+                        plot_rgb_option = True
+                    preference = "cell"
+                else:
+                    show_property = None
+                this_actor = self.plot_mesh(
+                    uid=uid,
+                    plot_entity=plot_entity,
+                    color_RGB=color_RGB,
+                    show_property=show_property,
+                    color_bar_range=None,
+                    show_property_title=show_property_title,
+                    line_thick=line_thick,
+                    plot_texture_option=False,
+                    plot_rgb_option=plot_rgb_option,
+                    visible=visible,
+                    opacity=opacity,
+                    preference=preference,
+                )
+            else:
+                this_actor = None
         elif isinstance(plot_entity, Voxet):
             plot_rgb_option = None
             if plot_entity.cells_number > 0:
@@ -477,6 +527,14 @@ class ViewMap(View2D):
                     ]
                 ):
                     show_property = None
+                elif isinstance(show_property, str) and show_property.endswith("]"):
+                    pos1 = show_property.index("[")
+                    pos2 = show_property.index("]")
+                    original_prop = show_property[:pos1]
+                    index = int(show_property[pos1 + 1 : pos2])
+                    show_property = plot_entity.get_point_data(original_prop)[
+                        :, :, :, index
+                    ]
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
