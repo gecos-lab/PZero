@@ -9,6 +9,7 @@ from PySide6.QtCore import QEventLoop
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFrame,
     QFormLayout,
     QHeaderView,
     QLabel,
@@ -249,6 +250,19 @@ def _first_match(columns, aliases, used_columns):
     return None
 
 
+def _count_file_lines(file_path):
+    """Return the number of lines in a text file."""
+    with open(file_path, "rb") as input_stream:
+        return sum(1 for _line in input_stream)
+
+
+def _normalise_role_value(value, valid_roles):
+    """Return a canonical role when it matches a valid role."""
+    text_value = _normalise_text_value(value, fallback="undef")
+    valid_role_map = {str(role).casefold(): str(role) for role in valid_roles}
+    return valid_role_map.get(text_value.casefold(), text_value)
+
+
 def _build_default_entity_name(file_path, feature_value, fallback_name=None):
     """Return a useful entity name when no explicit name column is assigned."""
     clean_name = _normalise_text_value(fallback_name, fallback="")
@@ -296,8 +310,6 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
 
     def _setup_window(self):
         """Configure static UI elements."""
-        self.PathlineEdit.setReadOnly(True)
-        self.PathtoolButton.setEnabled(True)
         self.AssignTable.setColumnCount(3)
         self.AssignTable.setHorizontalHeaderLabels(
             ["Column name", "Assigned attribute", "Custom property name"]
@@ -305,41 +317,25 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         self.AssignTable.setColumnWidth(1, 200)
         self.AssignTable.setColumnWidth(2, 240)
 
-        self._update_selected_files_text()
+        self.PathlineEdit.hide()
+        self.PathtoolButton.hide()
+        self.ImportGroupBox.hide()
+        self.OptionsFrame.setFrameShape(QFrame.Shape.NoFrame)
+        self.OptionsLayout.setContentsMargins(0, 0, 0, 0)
 
         self.HasHeaderCheckBox = QCheckBox(self.OptionsFrame)
         self.HasHeaderCheckBox.setText("First row contains headers")
         self.HasHeaderCheckBox.setChecked(True)
-
-        self.FeatureLineEdit = QLineEdit(self.OptionsFrame)
-        self.FeatureLineEdit.setPlaceholderText("Required if no feature column is mapped")
-        self.FeatureLineEdit.setText(DEFAULT_FEATURE)
-
-        self.RoleComboBox = QComboBox(self.OptionsFrame)
-        self.RoleComboBox.addItems(self.valid_roles)
-        self.RoleComboBox.setCurrentText("undef")
-
-        self.NameLineEdit = QLineEdit(self.OptionsFrame)
-        self.NameLineEdit.setPlaceholderText("Optional fixed name (blank = derive from file)")
-
-        self.ScenarioLineEdit = QLineEdit(self.OptionsFrame)
-        self.ScenarioLineEdit.setPlaceholderText("Optional fixed scenario")
-        self.ScenarioLineEdit.setText(DEFAULT_SCENARIO)
-
         self.formLayout.setWidget(3, QFormLayout.ItemRole.LabelRole, QLabel("Headers"))
-        self.formLayout.setWidget(3, QFormLayout.ItemRole.FieldRole, self.HasHeaderCheckBox)
-        self.formLayout.setWidget(4, QFormLayout.ItemRole.LabelRole, QLabel("Feature"))
-        self.formLayout.setWidget(4, QFormLayout.ItemRole.FieldRole, self.FeatureLineEdit)
-        self.formLayout.setWidget(5, QFormLayout.ItemRole.LabelRole, QLabel("Role"))
-        self.formLayout.setWidget(5, QFormLayout.ItemRole.FieldRole, self.RoleComboBox)
-        self.formLayout.setWidget(6, QFormLayout.ItemRole.LabelRole, QLabel("Name"))
-        self.formLayout.setWidget(6, QFormLayout.ItemRole.FieldRole, self.NameLineEdit)
-        self.formLayout.setWidget(7, QFormLayout.ItemRole.LabelRole, QLabel("Scenario"))
-        self.formLayout.setWidget(7, QFormLayout.ItemRole.FieldRole, self.ScenarioLineEdit)
+        self.formLayout.setWidget(
+            3, QFormLayout.ItemRole.FieldRole, self.HasHeaderCheckBox
+        )
+
+        self.StartRowspinBox.setValue(0)
+        self._set_default_import_range()
 
     def _connect_signals(self):
         """Connect UI signals."""
-        self.PathtoolButton.clicked.connect(self._select_input_files)
         self.StartRowspinBox.valueChanged.connect(self._refresh_preview)
         self.EndRowspinBox.valueChanged.connect(self._refresh_preview)
         self.SeparatorcomboBox.currentTextChanged.connect(self._refresh_preview)
@@ -367,6 +363,7 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         else:
             self.SeparatorcomboBox.setCurrentText(detected_sep)
 
+        self._set_default_import_range()
         self._refresh_preview()
 
     def _pick_preview_path(self):
@@ -393,26 +390,23 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         else:
             self.PathlineEdit.setText(f"{len(self.in_file_names)} files selected")
 
-    def _select_input_files(self):
-        """Open the file picker from inside the import dialog."""
-        selected_files = open_files_dialog(
-            parent=self,
-            caption="Import XYZ points from file(s)",
-            filter=FILE_DIALOG_FILTER,
-        )
-        if not selected_files:
-            return
-
-        self.in_file_names = list(selected_files)
-        self.preview_path = self._pick_preview_path()
-        self._update_selected_files_text()
-
+    def _set_default_import_range(self):
+        """Use the whole preview file as the default import interval."""
         if not self.preview_path:
-            self.AssignTable.setRowCount(0)
-            self.dataView.setModel(None)
+            self.EndRowspinBox.setValue(self.EndRowspinBox.maximum())
             return
 
-        self._load_initial_preview()
+        try:
+            line_count = _count_file_lines(self.preview_path)
+        except OSError:
+            self.EndRowspinBox.setValue(self.EndRowspinBox.maximum())
+            return
+
+        if line_count <= 0:
+            self.EndRowspinBox.setValue(self.EndRowspinBox.maximum())
+            return
+
+        self.EndRowspinBox.setValue(max(line_count - 1, 1))
 
     def _current_separator(self):
         """Return the currently-selected separator."""
@@ -489,10 +483,10 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         self._update_preview_model()
 
     def _auto_assign_columns(self):
-        """Auto-assign well-known attributes using exact sanitised matching."""
+        """Auto-assign only recognised attributes; leave all others as N.a."""
         column_names = list(self.input_data_df.columns)
         used_columns = set()
-        auto_map = {idx: "As is" for idx in range(len(column_names))}
+        auto_map = {idx: "N.a." for idx in range(len(column_names))}
 
         for field_name in (
             "X",
@@ -548,7 +542,7 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             self.AssignTable.setCellWidget(row_idx, 1, attr_combo)
             self.AssignTable.setCellWidget(row_idx, 2, custom_line)
 
-            current_value = self.rename_dict.get(row_idx, "As is")
+            current_value = self.rename_dict.get(row_idx, "N.a.")
             if current_value in SPECIAL_ASSIGNMENTS:
                 attr_combo.setCurrentText(current_value)
             elif isinstance(current_value, str) and current_value.startswith("user_"):
@@ -556,7 +550,7 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
                 custom_line.setEnabled(True)
                 custom_line.setText(current_value)
             else:
-                attr_combo.setCurrentText("As is")
+                attr_combo.setCurrentText("N.a.")
 
         self.AssignTable.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.AssignTable.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
@@ -575,7 +569,7 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
                     continue
                 other_combo = self.AssignTable.cellWidget(other_row, 1)
                 if other_combo and other_combo.currentText() == selected_value:
-                    other_combo.setCurrentText("As is")
+                    other_combo.setCurrentText("N.a.")
 
         if selected_value == "dir":
             for other_row in range(self.AssignTable.rowCount()):
@@ -583,14 +577,14 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
                     continue
                 other_combo = self.AssignTable.cellWidget(other_row, 1)
                 if other_combo and other_combo.currentText() == "dip_dir":
-                    other_combo.setCurrentText("As is")
+                    other_combo.setCurrentText("N.a.")
         elif selected_value == "dip_dir":
             for other_row in range(self.AssignTable.rowCount()):
                 if other_row == row_idx:
                     continue
                 other_combo = self.AssignTable.cellWidget(other_row, 1)
                 if other_combo and other_combo.currentText() == "dir":
-                    other_combo.setCurrentText("As is")
+                    other_combo.setCurrentText("N.a.")
 
         custom_line = self.AssignTable.cellWidget(row_idx, 2)
         source_column = str(self.input_data_df.columns[row_idx])
@@ -699,10 +693,10 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
                 "start_row": self.StartRowspinBox.value(),
                 "end_row": self.EndRowspinBox.value(),
                 "column_specs": [],
-                "feature_value": _normalise_text_value(self.FeatureLineEdit.text(), DEFAULT_FEATURE),
-                "role_value": _normalise_text_value(self.RoleComboBox.currentText(), "undef"),
-                "name_value": str(self.NameLineEdit.text()).strip(),
-                "scenario_value": _normalise_text_value(self.ScenarioLineEdit.text(), DEFAULT_SCENARIO),
+                "feature_value": DEFAULT_FEATURE,
+                "role_value": "undef",
+                "name_value": "",
+                "scenario_value": DEFAULT_SCENARIO,
             }
             self.close()
             self.loop.quit()
@@ -754,14 +748,6 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             )
             return
 
-        feature_value = _normalise_text_value(self.FeatureLineEdit.text(), DEFAULT_FEATURE)
-        role_value = _normalise_text_value(self.RoleComboBox.currentText(), "undef")
-        name_value = str(self.NameLineEdit.text()).strip()
-        scenario_value = _normalise_text_value(
-            self.ScenarioLineEdit.text(),
-            DEFAULT_SCENARIO,
-        )
-
         self.result = {
             "in_file_names": list(self.in_file_names),
             "collection_name": self.collection_name,
@@ -770,10 +756,10 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             "start_row": start_row,
             "end_row": end_row,
             "column_specs": column_specs,
-            "feature_value": feature_value,
-            "role_value": role_value,
-            "name_value": name_value,
-            "scenario_value": scenario_value,
+            "feature_value": DEFAULT_FEATURE,
+            "role_value": "undef",
+            "name_value": "",
+            "scenario_value": DEFAULT_SCENARIO,
         }
 
         self.close()
@@ -872,6 +858,12 @@ def _read_tabular_dataframe(file_path, import_config):
             input_df[text_column] = input_df[text_column].apply(
                 lambda value, fb=fallback: _normalise_text_value(value, fb)
             )
+
+    if "role" in input_df.columns:
+        valid_roles = _get_valid_roles_for_collection(import_config["collection_name"])
+        input_df["role"] = input_df["role"].apply(
+            lambda value: _normalise_role_value(value, valid_roles)
+        )
 
     return input_df
 
@@ -1033,6 +1025,15 @@ def xyz2vtk(self=None, in_file_names=None, collection_name="Geology"):
         return
 
     selected_files = list(in_file_names or [])
+    if not selected_files:
+        selected_files = open_files_dialog(
+            parent=self,
+            caption="Import XYZ points from file(s)",
+            filter=FILE_DIALOG_FILTER,
+        )
+        if not selected_files:
+            return
+
     text_files = []
     vtk_files = []
     failed_files = []
