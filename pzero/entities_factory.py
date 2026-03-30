@@ -1393,6 +1393,92 @@ class TetraSolid(vtkUnstructuredGrid):
         return tsolid_copy
 
     @property
+    def bounds(self):
+        return self.GetBounds()
+
+    @property
+    def points_number(self):
+        return self.GetNumberOfPoints()
+
+    @property
+    def points(self):
+        return WrapDataObject(self).Points
+
+    @property
+    def points_X(self):
+        return self.points[:, 0]
+
+    @property
+    def points_Y(self):
+        return self.points[:, 1]
+
+    @property
+    def points_Z(self):
+        return self.points[:, 2]
+
+    @property
+    def point_data_keys(self):
+        try:
+            return WrapDataObject(self).PointData.keys()
+        except:
+            return []
+
+    def get_point_data(self, data_key=None):
+        point_data = (
+            WrapDataObject(self)
+            .PointData[data_key]
+            .reshape(
+                (
+                    self.get_point_data_shape(data_key=data_key)[0],
+                    self.get_point_data_shape(data_key=data_key)[1],
+                )
+            )
+        )
+        return np_squeeze(np_array(point_data))
+
+    def get_point_data_shape(self, data_key=None):
+        n_points = np_shape(WrapDataObject(self).PointData[data_key])[0]
+        try:
+            n_components = np_shape(WrapDataObject(self).PointData[data_key])[1]
+        except:
+            n_components = 1
+        return [n_points, n_components]
+
+    def get_point_data_type(self, data_key=None):
+        return WrapDataObject(self).PointData[data_key].dtype.name
+
+    @property
+    def cell_data_keys(self):
+        try:
+            return WrapDataObject(self).CellData.keys()
+        except:
+            return []
+
+    def get_cell_data(self, data_key=None):
+        cell_data = (
+            WrapDataObject(self)
+            .CellData[data_key]
+            .reshape(
+                (
+                    self.get_cell_data_shape(data_key=data_key)[0],
+                    self.get_cell_data_shape(data_key=data_key)[1],
+                )
+            )
+        )
+        return np_squeeze(np_array(cell_data))
+
+    def get_cell_data_shape(self, data_key=None):
+        n_cells = np_shape(WrapDataObject(self).CellData[data_key])[0]
+        try:
+            n_components = np_shape(WrapDataObject(self).CellData[data_key])[1]
+        except:
+            n_components = 1
+        return [n_cells, n_components]
+
+    def get_cell_data_type(self, data_key=None):
+        return WrapDataObject(self).CellData[data_key].dtype.name
+
+    @property
     def cells(self):
         """Returns cells as Numpy array
         In TetraSolid the cells are instances of vtkTetra identified by vtkCellType VTK_TETRA = 10
