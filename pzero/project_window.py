@@ -78,6 +78,7 @@ from pzero.imports.segy2vtk import segy2vtk, read_segy_file
 from pzero.imports.shp2vtk import shp2vtk
 from pzero.imports.stl2vtk import vtk2stl, vtk2stl_dilation
 from pzero.imports.well2vtk import well2vtk
+from pzero.imports.xyz2vtk import xyz2vtk
 from pzero.ui.project_window_ui import Ui_ProjectWindow
 from .entities_factory import (
     VertexSet,
@@ -181,6 +182,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         super(ProjectWindow, self).__init__(*args, **kwargs)
         """Import GUI from project_window_ui.py"""
         self.setupUi(self)
+        self._install_import_xyz_action()
         self.TextTerminal.setReadOnly(True)
 
         """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
@@ -218,6 +220,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportGocad.triggered.connect(self.import_gocad)
         self.actionImportGocadXsection.triggered.connect(self.import_gocad_sections)
         self.actionImportBoundary.triggered.connect(self.import_gocad_boundary)
+        self.actionImportXYZ.triggered.connect(self.import_XYZ)
         self.actionImportPyVista.triggered.connect(lambda: pyvista2vtk(self=self))
         self.actionImportPC.triggered.connect(self.import_PC)
         self.actionImportSHP.triggered.connect(self.import_SHP)
@@ -3043,6 +3046,45 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Import section traces from different kinds of files."""
         # sections_from_file(self)
         pass
+
+    def _install_import_xyz_action(self):
+        """Add the generic XYZ import action to the File menu."""
+        self.actionImportXYZ = QAction("Import XYZ", self)
+        self.actionImportXYZ.setObjectName("actionImportXYZ")
+        self.actionImportXYZ.setStatusTip(
+            "Import multiple XYZ-like point files as VertexSet entities"
+        )
+        self.menuFile.insertAction(self.actionImportPC, self.actionImportXYZ)
+
+    def import_XYZ(self):
+        """Import multiple generic XYZ point files into a selected collection."""
+        self.print_terminal("Importing generic XYZ points")
+        in_file_names = open_files_dialog(
+            parent=self,
+            caption="Import XYZ points from file(s)",
+            filter=(
+                "Supported XYZ files (*.csv *.dat *.txt *.xyz *.asc *.vtu *.vtk *.vtp);;"
+                "Text files (*.csv *.dat *.txt *.xyz *.asc);;"
+                "VTK files (*.vtu *.vtk *.vtp)"
+            ),
+        )
+        if not in_file_names:
+            return
+
+        collection_name = input_combo_dialog(
+            parent=self,
+            title="Collection",
+            label="Assign collection",
+            choice_list=["Geology", "Fluid contacts", "Background data"],
+        )
+        if not collection_name:
+            return
+
+        xyz2vtk(
+            self=self,
+            in_file_names=in_file_names,
+            collection_name=collection_name,
+        )
 
     def import_PC(self):
         """Import point cloud data. File extension dependent (.txt, .xyz, .las) -> Ui_ImportOptionsWindow ui to preview the data (similar to stereonet)"""
