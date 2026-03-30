@@ -4,7 +4,9 @@ PZero© Andrea Bistacchi"""
 # PySide6 imports
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QComboBox, QSlider, QSpinBox, QVBoxLayout, QCheckBox
+    QWidget, QHBoxLayout, QLabel, QComboBox, QSlider, QSpinBox, QVBoxLayout, QCheckBox,
+    QDialog, QDockWidget, QDoubleSpinBox, QRadioButton, QButtonGroup, QGroupBox, 
+    QGridLayout, QFormLayout, QPushButton, QMessageBox
 )
 from PySide6.QtCore import Qt, QTimer
 
@@ -13,8 +15,19 @@ import pyvista as pv
 import numpy as np
 from copy import deepcopy
 import heapq
+from math import floor as math_floor, log10 as math_log10
+from re import sub as re_sub, IGNORECASE as re_IGNORECASE
+from traceback import format_exc as traceback_format_exc
 from scipy import ndimage
 from scipy.optimize import linear_sum_assignment
+from pandas import DataFrame as pd_DataFrame
+from pandas import concat as pd_concat
+from shiboken6 import isValid as shiboken_is_valid
+
+# VTK imports
+from vtk import (
+    vtkCellArray, vtkIntArray, vtkPoints, vtkStringArray, vtkIdList, vtkPolyData
+)
 
 # PZero imports
 from .view_map import ViewMap
@@ -24,7 +37,9 @@ from ..helpers.helper_dialogs import (
     multiple_input_dialog,
     input_one_value_dialog,
     options_dialog,
+    progress_dialog,
 )
+from ..helpers.autotracker import propagate_horizon, propagate_fault
 from ..helpers.helper_widgets import Tracer
 
 class ViewInterpretation(ViewMap):
@@ -33,9 +48,7 @@ class ViewInterpretation(ViewMap):
         Override BaseView bootstrap so slice-aware multipart geology is not added as a
         raw full actor before interpretation-specific filtering is ready.
         """
-        from pandas import DataFrame as pd_DataFrame
-        from pandas import concat as pd_concat
-        from ..helpers.helper_dialogs import progress_dialog
+
 
         for collection_name in self.tree_collection_dict.values():
             try:
@@ -227,7 +240,6 @@ class ViewInterpretation(ViewMap):
         
         # For all other entities, use normal display
         super().show_actor_with_property(uid=uid, coll_name=coll_name, show_property=show_property, visible=visible)
-        
         # After showing, increase line width for interpretation lines
         if coll_name == 'geol_coll' and uid:
             try:
@@ -329,7 +341,6 @@ class ViewInterpretation(ViewMap):
         
         # Add to main layout
         # Using a QDockWidget for controls to ensure it doesn't interfere with the render window
-        from PySide6.QtWidgets import QDockWidget
         self.controls_dock = QDockWidget("Interpretation Controls", self)
         self.controls_dock.setWidget(control_widget)
         self.controls_dock.setAllowedAreas(Qt.TopDockWidgetArea | Qt.BottomDockWidgetArea)
@@ -458,8 +469,7 @@ class ViewInterpretation(ViewMap):
                 self.print_terminal("No image_coll found on parent!")
         except Exception as e:
             self.print_terminal(f"Error getting seismic volumes: {e}")
-            import traceback
-            self.print_terminal(traceback.format_exc())
+            self.print_terminal(traceback_format_exc())
                     
         for name, uid in candidates:
             self.combo_volume.addItem(name, uid)
@@ -830,8 +840,6 @@ class ViewInterpretation(ViewMap):
 
         except Exception as e:
             self.print_terminal(f"Error updating slice: {e}")
-            import traceback
-            self.print_terminal(traceback.format_exc())
         
         # Restore normal update rate and render once at the end
         # This prevents flickering by batching all visual updates
@@ -864,8 +872,7 @@ class ViewInterpretation(ViewMap):
                     def get_scale_and_title(min_v, max_v, title):
                         mean_v = (min_v + max_v) / 2.0
                         if abs(mean_v) > 0:
-                            import math
-                            power = math.floor(math.log10(abs(mean_v)))
+                            power = math_floor(math_log10(abs(mean_v)))
                             # Only scale if >= 10000 or <= 0.0001
                             if abs(power) >= 4:
                                 scale = 10**power
@@ -1164,7 +1171,6 @@ class ViewInterpretation(ViewMap):
             vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
             if vtk_obj is None:
                 return
-            from vtk import vtkIntArray, vtkStringArray
 
             field_data = vtk_obj.GetFieldData()
             if field_data is None:
@@ -1272,7 +1278,6 @@ class ViewInterpretation(ViewMap):
             source = point_data.GetArray("slice_index")
             if source is None:
                 return
-            from vtk import vtkIntArray
             alias = vtkIntArray()
             alias.SetName(prop_name)
             alias.SetNumberOfComponents(1)
@@ -1371,8 +1376,7 @@ class ViewInterpretation(ViewMap):
             clean = []
 
         if isinstance(base_name, str):
-            import re
-            base_name = re.sub(r"\s*\(\d+\s*-\s*\d+\)\s*$", "", base_name).strip()
+            base_name = re_sub(r"\s*\(\d+\s*-\s*\d+\)\s*$", "", base_name).strip()
 
         if not clean:
             return base_name
@@ -1467,8 +1471,6 @@ class ViewInterpretation(ViewMap):
         """Create a new multipart PolyLine keeping only the requested cells."""
         if vtk_obj is None or not kept_cell_ids:
             return None, [], {}
-
-        from vtk import vtkCellArray, vtkIntArray, vtkPoints
 
         source_cell_data = vtk_obj.GetCellData()
         cell_slice_array = (
@@ -1681,9 +1683,7 @@ class ViewInterpretation(ViewMap):
             fallback_name=fallback_name,
         )
         if branch_count > 1:
-            import re
-
-            base_name = re.sub(r"\s+part\s+\d+\s*$", "", base_name, flags=re.IGNORECASE)
+            base_name = re_sub(r"\s+part\s+\d+\s*$", "", base_name, flags=re_IGNORECASE)
             base_name = f"{base_name} part {int(branch_index)}"
 
         clean = sorted({int(idx) for idx in (slice_indices or [])})
@@ -2160,7 +2160,7 @@ class ViewInterpretation(ViewMap):
                 if cell["slice_idx"] in keep_original:
                     smoothed_stack[row_idx, :, :] = resampled_stack[row_idx, :, :]
 
-        from vtk import vtkCellArray, vtkIntArray, vtkPoints
+
 
         new_points = vtkPoints()
         new_lines = vtkCellArray()
@@ -2331,8 +2331,6 @@ class ViewInterpretation(ViewMap):
             return
 
         if write_mode == 1:
-            import re
-
             fallback_name = "fault" if entity_kind == "fault" else "multipart"
             new_entity_dict = self._build_multipart_entity_dict_from_source(
                 source_uid=uid,
@@ -2352,8 +2350,8 @@ class ViewInterpretation(ViewMap):
                 slice_indices=[],
                 fallback_name=fallback_name,
             )
-            base_name = re.sub(
-                r"\s+regularized\s*$", "", base_name, flags=re.IGNORECASE
+            base_name = re_sub(
+                r"\s+regularized\s*$", "", base_name, flags=re_IGNORECASE
             )
             if new_slices:
                 new_entity_dict["name"] = (
@@ -3294,8 +3292,7 @@ class ViewInterpretation(ViewMap):
                         
         except Exception as e:
             self.print_terminal(f"Error updating interpretation line visibility: {e}")
-            import traceback
-            self.print_terminal(traceback.format_exc())
+            self.print_terminal(traceback_format_exc())
 
     def set_actor_visibility(self, uid, visible):
         """Helper to safely set actor visibility with caching."""
@@ -3490,8 +3487,7 @@ class ViewInterpretation(ViewMap):
                     
             except Exception as e:
                 self.print_terminal(f"Error filtering multipart horizon {horizon_uid}: {e}")
-                import traceback
-                self.print_terminal(traceback.format_exc())
+                self.print_terminal(traceback_format_exc())
                 # Fall back to showing full horizon
                 self.set_actor_visibility(horizon_uid, True)
 
@@ -3511,7 +3507,6 @@ class ViewInterpretation(ViewMap):
         Args:
             uid: Specific fault UID to update, or None to update all multipart faults
         """
-        from vtk import vtkPoints, vtkCellArray, vtkPolyData
         
         if not hasattr(self, 'multipart_faults'):
             return
@@ -3672,8 +3667,7 @@ class ViewInterpretation(ViewMap):
                 
         except Exception as e:
             self.print_terminal(f"Error scanning horizons: {e}")
-            import traceback
-            self.print_terminal(traceback.format_exc())
+            self.print_terminal(traceback_format_exc())
             
         self._lines_indexed = True
         self.print_terminal(f"Indexing complete. Processed {count} potential horizons.")
@@ -3967,7 +3961,6 @@ class ViewInterpretation(ViewMap):
 
             axis_name, per_cell, unique_slices, _ = best
 
-            from vtk import vtkIntArray, vtkStringArray
 
             # Build cell-level slice_index array.
             cell_slice_arr = vtkIntArray()
@@ -5301,8 +5294,7 @@ class ViewInterpretation(ViewMap):
             
         except Exception as e:
             self.print_terminal(f"Error in auto-tracking: {e}")
-            import traceback
-            self.print_terminal(traceback.format_exc())
+            self.print_terminal(traceback_format_exc())
         
         finally:
             self._cleanup_autotrack()
@@ -5420,9 +5412,7 @@ class ViewInterpretation(ViewMap):
         all_lines.sort(key=lambda x: (x[2], x[1]))
         
         # Create selection dialog
-        from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QComboBox, QSpinBox, 
-                                         QDoubleSpinBox, QLabel, QPushButton, QRadioButton, 
-                                         QButtonGroup, QGroupBox, QCheckBox, QGridLayout, QFormLayout)
+
         
         dialog = QDialog(self)
         dialog.setWindowTitle("Propagate Horizon")
@@ -5713,8 +5703,7 @@ class ViewInterpretation(ViewMap):
             )
         except Exception as e:
             self.print_terminal(f"Error during propagation: {e}")
-            import traceback
-            self.print_terminal(traceback.format_exc())
+            self.print_terminal(traceback_format_exc())
         
         self.enable_actions()
     
@@ -5767,8 +5756,7 @@ class ViewInterpretation(ViewMap):
         """
         if attributes is None:
             attributes = ['amplitude', 'edge']
-        from vtk import vtkPoints, vtkCellArray, vtkIntArray
-        from ..helpers.autotracker import propagate_horizon
+
         
         # Get the seismic data
         if not hasattr(self, '_cached_seismic') or self._cached_seismic is None:
@@ -6087,7 +6075,6 @@ class ViewInterpretation(ViewMap):
                 multipart_line.GetCellData().AddArray(cell_slice_array)
                 
                 # Store the slice axis as field data so it can be recovered on project reload
-                from vtk import vtkStringArray
                 axis_array = vtkStringArray()
                 axis_array.SetName("slice_axis")
                 axis_array.SetNumberOfValues(1)
@@ -6163,8 +6150,7 @@ class ViewInterpretation(ViewMap):
 
         except Exception as e:
             self.print_terminal(f"Error in propagation: {e}")
-            import traceback
-            self.print_terminal(traceback.format_exc())
+            self.print_terminal(traceback_format_exc())
         
         finally:
             self._is_propagating = False
@@ -6180,7 +6166,6 @@ class ViewInterpretation(ViewMap):
         
         # Get existing lines that could be fault seeds
         if not hasattr(self, 'interpretation_lines') or not self.interpretation_lines:
-            from PySide6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "No Fault Seed Lines", 
                 "Please draw a VERTICAL fault line first:\n\n"
                 "1. Use 'Draw Interpretation Line' from the menu\n"
@@ -6204,7 +6189,6 @@ class ViewInterpretation(ViewMap):
                 all_lines.append((uid, name, slice_idx))
         
         if not all_lines:
-            from PySide6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "No Lines", 
                 "No seed lines found for the current seismic volume.\n\n"
                 "Draw a vertical line on a fault using 'Draw Interpretation Line'.")
@@ -6212,9 +6196,7 @@ class ViewInterpretation(ViewMap):
             return
         
         # Show compact dialog
-        from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QComboBox, QSpinBox, 
-                                         QDoubleSpinBox, QLabel, QPushButton, QRadioButton, 
-                                         QButtonGroup, QGroupBox, QCheckBox, QFormLayout)
+ 
         
         dialog = QDialog(self)
         dialog.setWindowTitle("Propagate Fault")
@@ -6374,8 +6356,7 @@ class ViewInterpretation(ViewMap):
             )
         except Exception as e:
             self.print_terminal(f"Error during fault propagation: {e}")
-            import traceback
-            self.print_terminal(traceback.format_exc())
+            self.print_terminal(traceback_format_exc())
         
         self.enable_actions()
 
@@ -6394,11 +6375,7 @@ class ViewInterpretation(ViewMap):
         if attributes is None:
             attributes = ['vertical_edge', 'discontinuity']
         
-        from ..helpers.autotracker import propagate_fault
-        from vtk import vtkPoints, vtkCellArray, vtkIdList, vtkIntArray
-        from ..entities_factory import PolyLine
-        from copy import deepcopy
-        import numpy as np
+
         
         # Get seed line geometry using correct method
         seed_line = self.parent.geol_coll.get_uid_vtk_obj(seed_uid)
@@ -6610,7 +6587,6 @@ class ViewInterpretation(ViewMap):
                     multipart_fault.GetCellData().AddArray(cell_array)
                     
                     # Store the slice axis as field data so it can be recovered on project reload
-                    from vtk import vtkStringArray
                     axis_array = vtkStringArray()
                     axis_array.SetName("slice_axis")
                     axis_array.SetNumberOfValues(1)
@@ -6677,8 +6653,7 @@ class ViewInterpretation(ViewMap):
         
         except Exception as e:
             self.print_terminal(f"Error in fault propagation: {e}")
-            import traceback
-            self.print_terminal(traceback.format_exc())
+            self.print_terminal(traceback_format_exc())
         
         finally:
             self._is_propagating = False
@@ -6953,7 +6928,6 @@ class ViewInterpretation(ViewMap):
         if obj is None:
             return False
         try:
-            from shiboken6 import isValid as shiboken_is_valid
 
             return bool(shiboken_is_valid(obj))
         except Exception:
