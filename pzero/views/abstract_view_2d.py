@@ -69,72 +69,88 @@ class View2D(ViewVTK):
         # ------------------------------------
 
         self.drawLineButton = QAction("Draw line", self)
+        self._set_action_icon(self.drawLineButton, "DrawLine.svg")
         self.drawLineButton.triggered.connect(lambda: draw_line(self))
         self.menuCreate.addAction(self.drawLineButton)
 
         self.editLineButton = QAction("Edit line", self)
+        self._set_action_icon(self.editLineButton, "EditLine.svg")
         self.editLineButton.triggered.connect(lambda: edit_line(self))
         self.menuModify.addAction(self.editLineButton)
 
         self.sortLineButton = QAction("Sort line nodes", self)
+        self._set_action_icon(self.sortLineButton, "SortLineNodes.svg")
         self.sortLineButton.triggered.connect(lambda: sort_line_nodes(self))
         self.menuModify.addAction(self.sortLineButton)
 
         self.moveLineButton = QAction("Move line", self)
+        self._set_action_icon(self.moveLineButton, "MoveLine.svg")
         self.moveLineButton.triggered.connect(lambda: self.vector_by_mouse(move_line))
         self.menuModify.addAction(self.moveLineButton)
 
         self.rotateLineButton = QAction("Rotate line", self)
+        self._set_action_icon(self.rotateLineButton, "RotateLine.svg")
         self.rotateLineButton.triggered.connect(lambda: rotate_line(self))
         self.menuModify.addAction(self.rotateLineButton)
 
         self.extendButton = QAction("Extend line", self)
+        self._set_action_icon(self.extendButton, "ExtendLine.svg")
         self.extendButton.triggered.connect(lambda: extend_line(self))
         self.menuModify.addAction(self.extendButton)
 
         self.splitLineByLineButton = QAction("Split line-line", self)
+        self._set_action_icon(self.splitLineByLineButton, "SplitLineLine.svg")
         self.splitLineByLineButton.triggered.connect(lambda: split_line_line(self))
         self.menuModify.addAction(self.splitLineByLineButton)
 
         self.splitLineByPointButton = QAction("Split line-point", self)
+        self._set_action_icon(self.splitLineByPointButton, "SplitLinePoint.svg")
         self.splitLineByPointButton.triggered.connect(
             lambda: split_line_existing_point(self)
         )
         self.menuModify.addAction(self.splitLineByPointButton)
 
         self.mergeLineButton = QAction("Weld lines", self)
+        self._set_action_icon(self.mergeLineButton, "MergeLines.svg")
         self.mergeLineButton.triggered.connect(lambda: merge_lines(self))
         self.menuModify.addAction(self.mergeLineButton)
 
         self.snapLineButton = QAction("Snap to intersection", self)
+        self._set_action_icon(self.snapLineButton, "SnapLine.svg")
         self.snapLineButton.triggered.connect(lambda: snap_line(self))
         self.menuModify.addAction(self.snapLineButton)
 
         self.resampleDistanceButton = QAction("Resample distance", self)
+        self._set_action_icon(self.resampleDistanceButton, "ResampleDistance.svg")
         self.resampleDistanceButton.triggered.connect(
             lambda: resample_lines_distance(self)
         )
         self.menuModify.addAction(self.resampleDistanceButton)
 
         self.resampleNumberButton = QAction("Resample number", self)
+        self._set_action_icon(self.resampleNumberButton, "ResampleNumber.svg")
         self.resampleNumberButton.triggered.connect(
             lambda: resample_lines_number_points(self)
         )
         self.menuModify.addAction(self.resampleNumberButton)
 
         self.simplifyButton = QAction("Simplify line", self)
+        self._set_action_icon(self.simplifyButton, "SimplifyLine.svg")
         self.simplifyButton.triggered.connect(lambda: simplify_line(self))
         self.menuModify.addAction(self.simplifyButton)
 
         self.copyParallelButton = QAction("Copy parallel", self)
+        self._set_action_icon(self.copyParallelButton, "CopyParallel.svg")
         self.copyParallelButton.triggered.connect(lambda: copy_parallel(self))
         self.menuCreate.addAction(self.copyParallelButton)
 
         self.copyKinkButton = QAction("Copy kink", self)
+        self._set_action_icon(self.copyKinkButton, "CopyKink.svg")
         self.copyKinkButton.triggered.connect(lambda: copy_kink(self))
         self.menuCreate.addAction(self.copyKinkButton)
 
         self.copySimilarButton = QAction("Copy similar", self)
+        self._set_action_icon(self.copySimilarButton, "CopySimilar.svg")
         self.copySimilarButton.triggered.connect(
             lambda: self.vector_by_mouse(copy_similar)
         )

@@ -2922,6 +2922,7 @@ class View3D(ViewVTK):
         from ..two_d_lines import draw_line_3d
 
         self.drawLine3DButton = QAction("Draw line (3D mode)", self)
+        self._set_action_icon(self.drawLine3DButton, "DrawLine.svg")
         self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
         self.menuCreate.addAction(self.drawLine3DButton)
 

@@ -5,6 +5,7 @@ from sys import argv, exit, platform
 
 from PySide6.QtWidgets import QApplication, QSplashScreen
 from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt
 
 # from PySide6.QtCore import Qt
 
@@ -15,6 +16,7 @@ from PySide6.QtGui import QPixmap
 #     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
 
 # Start Qt application
+QApplication.setAttribute(Qt.AA_DontShowIconsInMenus, False)
 app = QApplication(argv)
  # set application icon for ico if available
 icon_path = QPixmap("_internal/pzero.ico")

@@ -2,8 +2,11 @@
 PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QIcon, QPixmap, QPainter, QColor
 from PySide6.QtWidgets import QAbstractItemView
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtSvg import QSvgRenderer
+from pathlib import Path
 
 # numpy import____
 from numpy import column_stack as np_column_stack
@@ -53,6 +56,43 @@ class ViewVTK(BaseView):
 
     def __init__(self, *args, **kwargs):
         super(ViewVTK, self).__init__(*args, **kwargs)
+
+    @staticmethod
+    def _icon_path(icon_name: str):
+        """Return the absolute path to an icon asset if it exists."""
+        icon_path = Path(__file__).resolve().parents[2] / "icons" / icon_name
+        if icon_path.is_file():
+            return str(icon_path)
+        return None
+
+    def _set_action_icon(self, action, icon_name: str):
+        """Assign an icon to an action when the asset exists."""
+        icon_path = self._icon_path(icon_name)
+        if icon_path:
+            icon = self._build_action_icon(icon_path)
+            action.setIcon(icon)
+            action.setIconVisibleInMenu(True)
+
+    def _build_action_icon(self, icon_path: str):
+        """Build a light-themed icon so dark SVG strokes remain visible in menus."""
+        path = Path(icon_path)
+        if path.suffix.lower() == ".svg":
+            icon = QIcon()
+            for size in (16, 20, 24, 32):
+                pixmap = QPixmap(size, size)
+                pixmap.fill(Qt.transparent)
+
+                renderer = QSvgRenderer(str(path))
+                painter = QPainter(pixmap)
+                renderer.render(painter)
+                painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+                painter.fillRect(pixmap.rect(), QColor("#f2f2f2"))
+                painter.end()
+
+                icon.addPixmap(pixmap, QIcon.Normal, QIcon.Off)
+            return icon
+
+        return QIcon(str(path))
 
     # ================================  General methods shared by all views - built incrementally =====================
 
@@ -106,18 +146,22 @@ class ViewVTK(BaseView):
         # then add new code specific to this class
 
         self.zoomActive = QAction("Zoom to active", self)
+        self._set_action_icon(self.zoomActive, "ZoomToActive.svg")
         self.zoomActive.triggered.connect(self.zoom_active)
         self.menuView.addAction(self.zoomActive)
 
         self.selectLineButton = QAction("Select entity", self)
+        self._set_action_icon(self.selectLineButton, "SelectEntity.svg")
         self.selectLineButton.triggered.connect(self.select_actor_with_mouse)
         self.menuSelect.addAction(self.selectLineButton)
 
         self.clearSelectionButton = QAction("Clear Selection", self)
+        self._set_action_icon(self.clearSelectionButton, "ClearSelection.svg")
         self.clearSelectionButton.triggered.connect(self.clear_selection)
         self.menuSelect.addAction(self.clearSelectionButton)
 
         self.removeEntityButton = QAction("Remove Entity", self)
+        self._set_action_icon(self.removeEntityButton, "RemoveEntity.svg")
         self.removeEntityButton.triggered.connect(self.remove_entity)
         self.menuModify.addAction(self.removeEntityButton)
 
@@ -126,6 +170,7 @@ class ViewVTK(BaseView):
         self.menuView.addAction(self.vertExagButton)
 
         self.actionExportScreen = QAction("Take screenshot", self)
+        self._set_action_icon(self.actionExportScreen, "TakeScreenshot.svg")
         self.actionExportScreen.triggered.connect(self.export_screen)
         self.menuView.addAction(self.actionExportScreen)
 

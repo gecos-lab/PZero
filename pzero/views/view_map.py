@@ -58,23 +58,27 @@ class ViewMap(View2D):
 
         # then add new code specific to this class
         self.sectionFromStrikeButton = QAction("Section from strike", self)
+        self._set_action_icon(self.sectionFromStrikeButton, "SectionFromAzimuth.svg")
         self.sectionFromStrikeButton.triggered.connect(
             lambda: self.vector_by_mouse(section_from_strike)
         )
         self.menuCreate.addAction(self.sectionFromStrikeButton)
 
         self.boundaryFromPointsButton = QAction("Boundary from 2 points", self)
+        self._set_action_icon(self.boundaryFromPointsButton, "BoundaryFrom2Points.svg")
         self.boundaryFromPointsButton.triggered.connect(
             lambda: self.vector_by_mouse(boundary_from_points)
         )
         self.menuCreate.addAction(self.boundaryFromPointsButton)
         self.boundaryFromThreePointsButton = QAction("Boundary from 3 points", self)
+        self._set_action_icon(self.boundaryFromThreePointsButton, "BoundaryFrom2Points.svg")
         self.boundaryFromThreePointsButton.triggered.connect(
             lambda: self.vector_by_mouse(boundary_from_three_points)
         )
         self.menuCreate.addAction(self.boundaryFromThreePointsButton)
 
         self.boundaryFromOBBButton = QAction("Boundary from OBB", self)
+        self._set_action_icon(self.boundaryFromOBBButton, "BoundaryFrom2Points.svg")
         self.boundaryFromOBBButton.triggered.connect(
             lambda: boundary_from_obb(self)
         )
