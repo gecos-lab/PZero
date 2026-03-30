@@ -300,7 +300,12 @@ def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
 
 
 def input_checkbox_dialog(
-    title="title", label="label", choice_list=None, exclusive=False
+    title="title",
+    label="label",
+    choice_list=None,
+    exclusive=False,
+    return_selection_order=False,
+    highlight_first_selection=False,
 ):
     """Open a dialog with a text line explaining the widget, followed by a list of checkboxes.
     If exclusive=True, only one checkbox can be selected at a time (radio button behavior).
@@ -331,12 +336,32 @@ def input_checkbox_dialog(
     objects_qt = {}
     i = 0
 
-    def handle_checkbox_click(clicked_element):
-        """Handle exclusive checkbox behavior"""
-        if exclusive and objects_qt[clicked_element][0].isChecked():
-            for element in choice_list:
-                if element != clicked_element:
-                    objects_qt[element][0].setChecked(False)
+    selection_order = []
+
+    def refresh_first_selection_highlight():
+        if not highlight_first_selection:
+            return
+        first_selected = selection_order[0] if selection_order else None
+        for element in choice_list:
+            if element == first_selected:
+                objects_qt[element][0].setStyleSheet("font-weight: 700;")
+            else:
+                objects_qt[element][0].setStyleSheet("")
+
+    def handle_checkbox_toggle(clicked_element, checked):
+        """Track click-order selection and enforce exclusive behavior when required."""
+        if checked:
+            if clicked_element in selection_order:
+                selection_order.remove(clicked_element)
+            selection_order.append(clicked_element)
+            if exclusive:
+                for element in choice_list:
+                    if element != clicked_element:
+                        objects_qt[element][0].setChecked(False)
+        else:
+            if clicked_element in selection_order:
+                selection_order.remove(clicked_element)
+        refresh_first_selection_highlight()
 
     # FOR loop that builds checkboxes according to the choice_list
     for element in choice_list:
@@ -345,16 +370,16 @@ def input_checkbox_dialog(
         # Create QCheckBoxes.
         objects_qt[element][0] = QCheckBox(content)
         objects_qt[element][0].setText(element)  # set text for the checkbox
-        if exclusive:
-            objects_qt[element][0].clicked.connect(
-                lambda checked, el=element: handle_checkbox_click(el)
-            )
+        objects_qt[element][0].toggled.connect(
+            lambda checked, el=element: handle_checkbox_toggle(el, checked)
+        )
         gridLayout.addWidget(objects_qt[element][0], i, 0)
         i += 1
 
     # Set the first checkbox as checked if exclusive is True
     if exclusive and choice_list:
         objects_qt[choice_list[0]][0].setChecked(True)
+    refresh_first_selection_highlight()
 
     # Add stretch to make scroll area expandable
     main_layout.addStretch()
@@ -402,10 +427,13 @@ def input_checkbox_dialog(
     if not objects_qt:
         return
     else:
-        output_list = []
-        for element in choice_list:
-            if objects_qt[element][0].isChecked():
-                output_list.append(element)
+        if return_selection_order:
+            output_list = selection_order.copy()
+        else:
+            output_list = []
+            for element in choice_list:
+                if objects_qt[element][0].isChecked():
+                    output_list.append(element)
         output = output_list if output_list else None
     return output
 
