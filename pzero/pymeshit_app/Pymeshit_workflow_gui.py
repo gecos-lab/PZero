@@ -152,6 +152,55 @@ def extend_surface_points(points: np.ndarray, extension_factor: float) -> np.nda
 
     return extended
 
+
+def _polyline_extension_mode_for_role(role: Optional[str]) -> str:
+    """Choose how a polyline grows based on its geological role."""
+    normalized = str(role or "").strip().lower()
+    if not normalized:
+        return "horizontal"
+    if "fault" in normalized or normalized == "tectonic":
+        return "vertical"
+    return "horizontal"
+
+
+def extend_polyline_points(
+    points: np.ndarray,
+    extension_factor: float,
+    role: Optional[str] = None,
+) -> np.ndarray:
+    """
+    Extend a polyline according to its role.
+
+    Fault-like polylines are extended vertically by scaling only Z around the
+    centroid. Tops and all other polylines default to horizontal growth by
+    scaling only X/Y around the centroid.
+    """
+    if points is None:
+        return points
+    if extension_factor <= 0.0:
+        return np.asarray(points, dtype=float).copy()
+
+    pts = np.asarray(points, dtype=float)
+    if pts.ndim != 2 or pts.shape[1] != 3 or pts.shape[0] < 2:
+        return pts.copy()
+
+    centroid = pts.mean(axis=0)
+    centered = pts - centroid
+    if np.linalg.norm(centered) < 1e-12:
+        return pts.copy()
+
+    scale = 1.0 + extension_factor
+    extended = pts.copy()
+    mode = _polyline_extension_mode_for_role(role)
+
+    if mode == "vertical":
+        extended[:, 2] = centroid[2] + centered[:, 2] * scale
+    else:
+        extended[:, 0] = centroid[0] + centered[:, 0] * scale
+        extended[:, 1] = centroid[1] + centered[:, 1] * scale
+
+    return extended
+
 # Worker class for background computations
 class ComputationWorker(QObject):
     dataset_finished = Signal(int, str, bool) # index, name, success
@@ -2906,7 +2955,7 @@ class MeshItWorkflowGUI(QWidget):
         self.load_from_pzero_btn.setToolTip(
             "Open dialog with advanced options:\n"
             "- Load TriSurf or PolyLine as XYZ points\n"
-            "- Per-surface extension factor\n"
+            "- Per-geometry extension factor\n"
             "Use the embedded table below for quick loading."
         )
         self.load_from_pzero_btn.clicked.connect(self._open_pzero_loader_dialog)
@@ -2964,6 +3013,7 @@ class MeshItWorkflowGUI(QWidget):
             "Drag entities from PZero collection tables here.\n"
             "Adjust Extension Factor and 'As Points' options per dataset.\n"
             "TriSurf and PolyLine entities can be imported as XYZ points.\n"
+            "Polyline extension follows role: faults grow vertically, tops horizontally.\n"
             "Click 'Load' to import pending items."
         )
         self.dataset_table.dataset_selection_changed.connect(self._on_unified_dataset_selection_changed)
@@ -12461,7 +12511,7 @@ segmentation, triangulation, and visualization.
         ----------
         records : List[Tuple[PZeroEntityRecord, bool, float]]
             Tuples containing (record, load_as_points, extension_factor). extension_factor
-            defaults to 0.0 for dialogs that do not expose the per-surface control.
+            defaults to 0.0 for dialogs that do not expose the per-geometry control.
         """
         loaded = 0
         skipped = 0
@@ -12499,6 +12549,7 @@ segmentation, triangulation, and visualization.
                 # Check if this is a TriSurf entity (already triangulated)
                 is_trisurf = record.topology == "TriSurf"
                 is_polyline = self.pzero_bridge.is_polyline_topology(record.topology)
+                record_role = getattr(record, "role", "")
                 dataset_type = self.pzero_bridge.default_dataset_type(
                     record.topology, load_as_points=bool(load_as_points)
                 )
@@ -12537,6 +12588,7 @@ segmentation, triangulation, and visualization.
                         "collection_key": record.collection_key,
                         "uid": record.uid,
                         "source_topology": record.topology,
+                        "role": record_role,
                         "loaded_as_points": False,
                         "triangulation_result": {
                             "vertices": vertices,
@@ -12545,6 +12597,7 @@ segmentation, triangulation, and visualization.
                         "is_pre_triangulated": True,  # Flag to skip hull/triangulation steps
                     }
                     if extension_factor > 0.0:
+                        dataset["extension_factor"] = extension_factor
                         dataset["surface_extension_factor"] = extension_factor
                     
                     # Extract convex hull from boundary edges
@@ -12616,9 +12669,11 @@ segmentation, triangulation, and visualization.
                         "collection_key": record.collection_key,
                         "uid": record.uid,
                         "source_topology": record.topology,
+                        "role": record_role,
                         "loaded_as_points": True,
                     }
                     if extension_factor > 0.0:
+                        dataset["extension_factor"] = extension_factor
                         dataset["surface_extension_factor"] = extension_factor
                     self.datasets.append(dataset)
                     loaded += 1
@@ -12647,6 +12702,13 @@ segmentation, triangulation, and visualization.
                         skipped += 1
                         continue
 
+                    if is_polyline and extension_factor > 0.0:
+                        points = extend_polyline_points(
+                            points,
+                            extension_factor,
+                            role=record_role,
+                        )
+
                     dataset_name = self._make_unique_dataset_name(record.name)
                     dataset = {
                         "name": dataset_name,
@@ -12659,16 +12721,26 @@ segmentation, triangulation, and visualization.
                         "collection_key": record.collection_key,
                         "uid": record.uid,
                         "source_topology": record.topology,
+                        "role": record_role,
                         "loaded_as_points": bool(load_as_points),
                     }
+                    if extension_factor > 0.0:
+                        dataset["extension_factor"] = extension_factor
+                        dataset["surface_extension_factor"] = extension_factor
                     self.datasets.append(dataset)
                     loaded += 1
                     if is_polyline:
+                        extension_mode = _polyline_extension_mode_for_role(record_role)
                         logger.info(
-                            "Loaded PolyLine %s as %s: %d points",
+                            "Loaded PolyLine %s as %s: %d points%s",
                             record.name,
                             "XYZ points" if load_as_points else "WELL",
                             len(points),
+                            (
+                                f" ({extension_mode} extension {extension_factor:.2f})"
+                                if extension_factor > 0.0
+                                else ""
+                            ),
                         )
                     
             except Exception as exc:  # pragma: no cover - defensive
@@ -25618,9 +25690,22 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         cb_layout.setContentsMargins(0, 0, 0, 0)
         self.setItemWidget(item, self.COL_AS_POINTS, cb_widget)
 
-        extend_spin.setEnabled(record.topology == "TriSurf")
-        if record.topology != "TriSurf":
-            extend_spin.setToolTip("Surface extension applies only to TriSurf imports.")
+        supports_extension = record.topology in {"TriSurf", "PolyLine", "XsPolyLine"}
+        extend_spin.setEnabled(supports_extension)
+        if record.topology == "TriSurf":
+            extend_spin.setToolTip(
+                "Extend this surface footprint by the selected factor (0.2 = 20%)."
+            )
+        elif record.topology in {"PolyLine", "XsPolyLine"}:
+            extension_mode = _polyline_extension_mode_for_role(getattr(record, "role", ""))
+            extend_spin.setToolTip(
+                "Extend this polyline by the selected factor. "
+                f"{extension_mode.capitalize()} extension is chosen from its role."
+            )
+        else:
+            extend_spin.setToolTip(
+                "Geometry extension applies only to TriSurf and PolyLine imports."
+            )
         
         # Store reference to pending item
         self._pending_items.append({
@@ -25669,7 +25754,7 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         self.addTopLevelItem(item)
         
         # For loaded items, show read-only extension factor
-        ext_factor = dataset.get('surface_extension_factor', 0.0)
+        ext_factor = dataset.get('extension_factor', dataset.get('surface_extension_factor', 0.0))
         item.setText(self.COL_EXTEND, f"{ext_factor:.2f}")
         
         # Show if loaded as points
@@ -25776,7 +25861,7 @@ class PZeroEntitySelectionDialog(QDialog):
             self.tree.addTopLevelItem(parent_item)
 
             for record in records:
-                is_trisurf = record.topology == "TriSurf"
+                supports_extension = record.topology in {"TriSurf", "PolyLine", "XsPolyLine"}
                 supports_as_points = self._supports_as_points(record)
                 child = QTreeWidgetItem(
                     [
@@ -25812,15 +25897,24 @@ class PZeroEntitySelectionDialog(QDialog):
                 else:
                     child.setText(4, "-")
 
-                if is_trisurf:
+                if supports_extension:
                     spinbox = QDoubleSpinBox(self.tree)
                     spinbox.setDecimals(2)
                     spinbox.setRange(0.0, 1.0)
                     spinbox.setSingleStep(0.05)
                     spinbox.setValue(0.0)
-                    spinbox.setToolTip(
-                        "Extend this surface footprint by the selected factor (0.2 = 20%)."
-                    )
+                    if record.topology == "TriSurf":
+                        spinbox.setToolTip(
+                            "Extend this surface footprint by the selected factor (0.2 = 20%)."
+                        )
+                    else:
+                        extension_mode = _polyline_extension_mode_for_role(
+                            getattr(record, "role", "")
+                        )
+                        spinbox.setToolTip(
+                            "Extend this polyline by the selected factor. "
+                            f"{extension_mode.capitalize()} extension is chosen from its role."
+                        )
                     spinbox.setKeyboardTracking(False)
                     spinbox.show()
                     self.tree.setItemWidget(child, 5, spinbox)
@@ -25835,7 +25929,7 @@ class PZeroEntitySelectionDialog(QDialog):
             if i == 4:  # "Load as Points" column
                 header.setSectionResizeMode(i, QHeaderView.Fixed)
                 self.tree.setColumnWidth(i, 120)  # Set explicit width for checkbox column
-            elif i == 5:  # Surface extension column
+            elif i == 5:  # Geometry extension column
                 header.setSectionResizeMode(i, QHeaderView.Fixed)
                 self.tree.setColumnWidth(i, 130)
             else:
@@ -25869,7 +25963,7 @@ class PZeroEntitySelectionDialog(QDialog):
         -------
         List[Tuple[PZeroEntityRecord, bool, float]]
             Tuples of (record, load_as_points, extension_factor). extension_factor equals
-            the per-surface extend factor selected in the table (0.0 if not applicable).
+            the per-geometry extend factor selected in the table (0.0 if not applicable).
         """
         selections = []
         for index in range(self.tree.topLevelItemCount()):

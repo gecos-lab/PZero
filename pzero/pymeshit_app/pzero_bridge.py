@@ -19,6 +19,7 @@ class PZeroEntityRecord:
     name: str
     topology: str
     point_count: int
+    role: str = ""
     face_id: Optional[int] = None  # For boundary faces: 0=bottom, 1=top, 2=front, 3=back, 4=left, 5=right
 
 
@@ -79,6 +80,7 @@ class PZeroPymeshitBridge:
                 continue
 
             topology_column = "topology" if "topology" in collection.df.columns else None
+            role_column = "role" if "role" in collection.df.columns else None
             name_column = "name" if "name" in collection.df.columns else None
 
             for _, row in collection.df.iterrows():
@@ -101,6 +103,7 @@ class PZeroPymeshitBridge:
                             uid=uid,
                             name=f"{base_name} - {face_name}",
                             topology="BORDER",  # Mark as BORDER for PyMeshIt
+                            role=str(row.get(role_column, "")) if role_column else "",
                             point_count=4,  # Each face has 4 points
                             face_id=face_id,
                         )
@@ -112,6 +115,7 @@ class PZeroPymeshitBridge:
                         uid=uid,
                         name=str(row.get(name_column, uid)) if name_column else str(uid),
                         topology=str(row.get(topology_column, "")) if topology_column else "",
+                        role=str(row.get(role_column, "")) if role_column else "",
                         point_count=point_count,
                     )
                     records.append(record)
