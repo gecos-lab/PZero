@@ -2164,13 +2164,15 @@ def project_2_xs(self):
         "tabGeology": "geol_coll",
         "tabFluids": "fluid_coll",
         "tabBackgrounds": "backgrnd_coll",
+        "tabWells": "well_coll",
     }
     if self.shown_table not in valid_tables:
         self.print_terminal(
-            " -- Only geology, fluids, and background objects can be projected -- "
+            " -- Only geology, fluids, background, and well objects can be projected -- "
         )
         return
     source_coll = getattr(self, valid_tables[self.shown_table])
+    is_well_projection = self.shown_table == "tabWells"
     self.print_terminal(
         "Projection to X-sections: when multiple sections are selected, the first is used as reference; non-parallel sections are discarded (tollerance: ±1°)."
     )
@@ -2180,20 +2182,21 @@ def project_2_xs(self):
     # Deep copy list of selected uids needed otherwise problems can arise if the
     # main geology table is deselected while the dataframe is built.
     input_uids = deepcopy(self.selected_uids)
-    # Select points and polylines only.
+    # Select only supported topologies.
+    valid_topologies = ["PolyLine", "XsPolyLine"] if is_well_projection else [
+        "VertexSet",
+        "PolyLine",
+        "XsVertexSet",
+        "XsPolyLine",
+    ]
     input_uids_clean = deepcopy(input_uids)
     for uid in input_uids:
-        if source_coll.get_uid_topology(uid) not in [
-            "VertexSet",
-            "PolyLine",
-            "XsVertexSet",
-            "XsPolyLine",
-        ]:
+        if source_coll.get_uid_topology(uid) not in valid_topologies:
             input_uids_clean.remove(uid)
     input_uids = deepcopy(input_uids_clean)
     del input_uids_clean
     if not input_uids:
-        print("No valid input data selected.")
+        self.print_terminal("No valid input data selected.")
         return
 
     def _clip_polyline_to_distance_band(polyline_obj, max_dist):
@@ -2246,6 +2249,36 @@ def project_2_xs(self):
                 clipped.append_point(np_array(q1, dtype=np_float64))
                 clipped.append_cell(np_array([id0, id0 + 1]))
         return clipped
+
+    def _project_xyz_to_section(x_coords, y_coords, z_coords, section_origin, section_normal):
+        """Project XYZ coordinates to a section along the chosen projection axis."""
+        ox, oy, oz = section_origin
+        nx, ny, nz = section_normal
+        t_vals = (nx * (ox - x_coords) + ny * (oy - y_coords) + nz * (oz - z_coords)) / (
+            nx * alpha + ny * beta + nz * gamma
+        )
+        return (
+            (x_coords + alpha * t_vals).astype(np_float32),
+            (y_coords + beta * t_vals).astype(np_float32),
+            (z_coords + gamma * t_vals).astype(np_float32),
+            t_vals,
+        )
+
+    def _project_xyz_matrix(xyz_matrix, section_origin, section_normal):
+        """Project an Nx3 coordinate matrix to a section."""
+        xyz_matrix = np_array(xyz_matrix, dtype=np_float64).reshape(-1, 3)
+        proj_x, proj_y, proj_z, t_vals = _project_xyz_to_section(
+            xyz_matrix[:, 0],
+            xyz_matrix[:, 1],
+            xyz_matrix[:, 2],
+            section_origin,
+            section_normal,
+        )
+        projected_xyz = xyz_matrix.copy()
+        projected_xyz[:, 0] = proj_x
+        projected_xyz[:, 1] = proj_y
+        projected_xyz[:, 2] = proj_z
+        return projected_xyz, t_vals
 
     # Multi-selection dialog as in intersection_xs.
     selected_xs_names = input_checkbox_dialog(
@@ -2332,6 +2365,10 @@ def project_2_xs(self):
         self.print_terminal(
             "Polyline geometry filtering is ON: only segments within max distance are projected."
         )
+        if is_well_projection:
+            self.print_terminal(
+                "Well traces keep their full projected geometry; max distance is used only to decide whether the projected well is kept."
+            )
 
     # Check for projection trend parallel to accepted cross-sections.
     for _, section_uid in parallel_sections:
@@ -2363,97 +2400,108 @@ def project_2_xs(self):
     )
     gamma = np_float64(-np_sin(proj_plunge * np_pi / 180.0))
 
-    # Project each selected entity on each accepted section.
-    for xs_name, xs_uid in parallel_sections:
-        # Exclude objects that already belong to the current target section,
-        # so they are not duplicated on the same section.
-        section_filter_query = (
-            f'not (((topology == "XsVertexSet") or (topology == "XsPolyLine")) '
-            f'and (parent_uid == "{xs_uid}"))'
-        )
-        section_input_uids = source_coll.filter_uids(
-            query=section_filter_query, uids=input_uids
-        )
-        section_input_uids_set = set(section_input_uids)
-        section_input_uids = [
-            uid for uid in input_uids if uid in section_input_uids_set
-        ]
-
-        ox = np_float64(self.xsect_coll.get_uid_origin_x(xs_uid))
-        oy = np_float64(self.xsect_coll.get_uid_origin_y(xs_uid))
-        oz = np_float64(self.xsect_coll.get_uid_origin_z(xs_uid))
-        nx = np_float64(self.xsect_coll.get_uid_normal_x(xs_uid))
-        ny = np_float64(self.xsect_coll.get_uid_normal_y(xs_uid))
-        nz = np_float64(self.xsect_coll.get_uid_normal_z(xs_uid))
-        for uid in section_input_uids:
-            entity_dict = deepcopy(source_coll.entity_dict)
-            entity_dict["name"] = source_coll.get_uid_name(uid) + "_prj_" + xs_name
-            entity_dict["role"] = source_coll.get_uid_role(uid)
-            entity_dict["feature"] = source_coll.get_uid_feature(uid)
-            entity_dict["scenario"] = source_coll.get_uid_scenario(uid)
-            entity_dict["properties_names"] = source_coll.get_uid_properties_names(uid)
-            entity_dict["properties_components"] = (
-                source_coll.get_uid_properties_components(uid)
+    def _project_gfb_entities(collection, entity_uids):
+        """Project GFB entities to all accepted sections."""
+        if not entity_uids:
+            return
+        for xs_name, xs_uid in parallel_sections:
+            section_filter_query = (
+                f'not (((topology == "XsVertexSet") or (topology == "XsPolyLine")) '
+                f'and (parent_uid == "{xs_uid}"))'
             )
-            entity_dict["parent_uid"] = xs_uid
-            if source_coll.get_uid_topology(uid) == "VertexSet":
-                entity_dict["topology"] = "XsVertexSet"
-                out_vtk = XsVertexSet(x_section_uid=xs_uid, parent=self)
-                out_vtk.DeepCopy(source_coll.get_uid_vtk_obj(uid))
-            elif (
-                source_coll.get_uid_topology(uid) == "PolyLine"
-                or source_coll.get_uid_topology(uid) == "XsPolyLine"
-            ):
-                entity_dict["topology"] = "XsPolyLine"
-                out_vtk = XsPolyLine(x_section_uid=xs_uid, parent=self)
-                out_vtk.DeepCopy(source_coll.get_uid_vtk_obj(uid))
-            else:
-                entity_dict["topology"] = source_coll.get_uid_topology(uid)
-                out_vtk = source_coll.get_uid_vtk_obj(uid).deep_copy()
-            # np_float64 is needed to calculate "t" with good precision.
-            xo = out_vtk.points_X.astype(np_float64)
-            yo = out_vtk.points_Y.astype(np_float64)
-            zo = out_vtk.points_Z.astype(np_float64)
-            t = (nx * (ox - xo) + ny * (oy - yo) + nz * (oz - zo)) / (
-                nx * alpha + ny * beta + nz * gamma
+            section_input_uids = collection.filter_uids(
+                query=section_filter_query, uids=entity_uids
             )
+            section_input_uids_set = set(section_input_uids)
+            section_input_uids = [
+                uid for uid in entity_uids if uid in section_input_uids_set
+            ]
 
-            out_vtk.points_X[:] = (xo + alpha * t).astype(np_float32)
-            out_vtk.points_Y[:] = (yo + beta * t).astype(np_float32)
-            out_vtk.points_Z[:] = (zo + gamma * t).astype(np_float32)
-            out_vtk.set_point_data("distance", np_abs(t))
-            out_vtk.set_point_data("signed_distance", t)
+            section_origin = (
+                np_float64(self.xsect_coll.get_uid_origin_x(xs_uid)),
+                np_float64(self.xsect_coll.get_uid_origin_y(xs_uid)),
+                np_float64(self.xsect_coll.get_uid_origin_z(xs_uid)),
+            )
+            section_normal = (
+                np_float64(self.xsect_coll.get_uid_normal_x(xs_uid)),
+                np_float64(self.xsect_coll.get_uid_normal_y(xs_uid)),
+                np_float64(self.xsect_coll.get_uid_normal_z(xs_uid)),
+            )
+            for uid in section_input_uids:
+                source_topology = collection.get_uid_topology(uid)
+                if source_topology not in [
+                    "VertexSet",
+                    "PolyLine",
+                    "XsVertexSet",
+                    "XsPolyLine",
+                ]:
+                    continue
+                entity_dict = deepcopy(collection.entity_dict)
+                entity_dict["name"] = collection.get_uid_name(uid) + "_prj_" + xs_name
+                entity_dict["role"] = collection.get_uid_role(uid)
+                entity_dict["feature"] = collection.get_uid_feature(uid)
+                entity_dict["scenario"] = collection.get_uid_scenario(uid)
+                entity_dict["properties_names"] = collection.get_uid_properties_names(uid)
+                entity_dict["properties_components"] = (
+                    collection.get_uid_properties_components(uid)
+                )
+                entity_dict["parent_uid"] = xs_uid
 
-            if entity_dict["topology"] == "XsVertexSet":
-                if xs_dist <= 0:
-                    entity_dict["vtk_obj"] = out_vtk
-                    source_coll.add_entity_from_dict(entity_dict=entity_dict)
+                if source_topology in ["VertexSet", "XsVertexSet"]:
+                    entity_dict["topology"] = "XsVertexSet"
+                    out_vtk = XsVertexSet(x_section_uid=xs_uid, parent=self)
+                    out_vtk.DeepCopy(collection.get_uid_vtk_obj(uid))
                 else:
-                    thresh = vtkThresholdPoints()
-                    thresh.SetInputData(out_vtk)
-                    thresh.ThresholdByLower(xs_dist)
-                    thresh.SetInputArrayToProcess(
-                        0, 0, 0, vtkDataObject().FIELD_ASSOCIATION_POINTS, "distance"
-                    )
-                    thresh.Update()
-                    thresholded = thresh.GetOutput()
-                    if thresholded.GetNumberOfPoints() > 0:
-                        out_vtk.DeepCopy(thresholded)
+                    entity_dict["topology"] = "XsPolyLine"
+                    out_vtk = XsPolyLine(x_section_uid=xs_uid, parent=self)
+                    out_vtk.DeepCopy(collection.get_uid_vtk_obj(uid))
+
+                proj_x, proj_y, proj_z, t_vals = _project_xyz_to_section(
+                    out_vtk.points_X.astype(np_float64),
+                    out_vtk.points_Y.astype(np_float64),
+                    out_vtk.points_Z.astype(np_float64),
+                    section_origin,
+                    section_normal,
+                )
+                out_vtk.points_X[:] = proj_x
+                out_vtk.points_Y[:] = proj_y
+                out_vtk.points_Z[:] = proj_z
+                out_vtk.set_point_data("distance", np_abs(t_vals))
+                out_vtk.set_point_data("signed_distance", t_vals)
+
+                if entity_dict["topology"] == "XsVertexSet":
+                    if xs_dist <= 0:
                         entity_dict["vtk_obj"] = out_vtk
-                        source_coll.add_entity_from_dict(entity_dict=entity_dict)
+                        collection.add_entity_from_dict(entity_dict=entity_dict)
                     else:
-                        self.print_terminal(
-                            f'No measure found for group {entity_dict["name"]}, try to extend the maximum distance'
+                        thresh = vtkThresholdPoints()
+                        thresh.SetInputData(out_vtk)
+                        thresh.ThresholdByLower(xs_dist)
+                        thresh.SetInputArrayToProcess(
+                            0,
+                            0,
+                            0,
+                            vtkDataObject().FIELD_ASSOCIATION_POINTS,
+                            "distance",
                         )
-            elif entity_dict["topology"] == "XsPolyLine":
+                        thresh.Update()
+                        thresholded = thresh.GetOutput()
+                        if thresholded.GetNumberOfPoints() > 0:
+                            out_vtk.DeepCopy(thresholded)
+                            entity_dict["vtk_obj"] = out_vtk
+                            collection.add_entity_from_dict(entity_dict=entity_dict)
+                        else:
+                            self.print_terminal(
+                                f'No measure found for group {entity_dict["name"]}, try to extend the maximum distance'
+                            )
+                    continue
+
                 polyline_for_parts = out_vtk
                 if xs_dist > 0 and filter_polyline_geometry:
-                    # Clip full polyline using nodal signed_distance property.
                     polyline_for_parts = _clip_polyline_to_distance_band(
                         out_vtk, xs_dist
                     )
                     if polyline_for_parts.GetNumberOfPoints() > 0:
-                        # Reconnect contiguous clipped segments into cleaner polylines.
                         clip_clean = vtkCleanPolyData()
                         clip_clean.ConvertLinesToPointsOff()
                         clip_clean.ConvertPolysToLinesOff()
@@ -2473,8 +2521,6 @@ def project_2_xs(self):
                 if polyline_parts is None:
                     polyline_parts = []
                 if not polyline_parts and polyline_for_parts.GetNumberOfPoints() > 0:
-                    # Safety fallback: if split_parts fails to return components,
-                    # still process the geometry as a single part.
                     polyline_parts = [polyline_for_parts.deep_copy()]
                 for part in polyline_parts:
                     region_output = part
@@ -2486,8 +2532,6 @@ def project_2_xs(self):
                             dist_vals = numpy_support.vtk_to_numpy(dist_vtk)
                             if dist_vals.min() <= xs_dist:
                                 keep_region = True
-                        # If no sampled point is inside the buffer, still keep lines
-                        # that cross the section (sign change of signed distance).
                         if not keep_region:
                             signed_vtk = region_output.GetPointData().GetArray(
                                 "signed_distance"
@@ -2501,7 +2545,6 @@ def project_2_xs(self):
                                     keep_region = True
                     if keep_region:
                         part_entity_dict = deepcopy(entity_dict)
-                        # Ensure each extracted region gets a fresh uid.
                         part_entity_dict["uid"] = ""
                         part_entity_dict["vtk_obj"] = XsPolyLine(
                             x_section_uid=xs_uid, parent=self
@@ -2510,9 +2553,146 @@ def project_2_xs(self):
                         for data_key in part_entity_dict["vtk_obj"].point_data_keys:
                             if data_key not in part_entity_dict["properties_names"]:
                                 part_entity_dict["vtk_obj"].remove_point_data(data_key)
-                        source_coll.add_entity_from_dict(
-                            entity_dict=part_entity_dict
+                        collection.add_entity_from_dict(entity_dict=part_entity_dict)
+
+    def _project_well_entities(well_uids):
+        """Project wells in well collection, preserving well-specific field data."""
+        if not well_uids:
+            return
+        for xs_name, xs_uid in parallel_sections:
+            section_filter_query = (
+                f'not ((topology == "XsPolyLine") and (parent_uid == "{xs_uid}"))'
+            )
+            section_input_uids = self.well_coll.filter_uids(
+                query=section_filter_query, uids=well_uids
+            )
+            section_input_uids_set = set(section_input_uids)
+            section_input_uids = [
+                uid for uid in well_uids if uid in section_input_uids_set
+            ]
+
+            section_origin = (
+                np_float64(self.xsect_coll.get_uid_origin_x(xs_uid)),
+                np_float64(self.xsect_coll.get_uid_origin_y(xs_uid)),
+                np_float64(self.xsect_coll.get_uid_origin_z(xs_uid)),
+            )
+            section_normal = (
+                np_float64(self.xsect_coll.get_uid_normal_x(xs_uid)),
+                np_float64(self.xsect_coll.get_uid_normal_y(xs_uid)),
+                np_float64(self.xsect_coll.get_uid_normal_z(xs_uid)),
+            )
+            for uid in section_input_uids:
+                entity_dict = deepcopy(self.well_coll.entity_dict)
+                entity_dict["name"] = self.well_coll.get_uid_name(uid) + "_prj_" + xs_name
+                entity_dict["scenario"] = self.well_coll.get_uid_scenario(uid)
+                entity_dict["parent_uid"] = xs_uid
+                entity_dict["topology"] = "XsPolyLine"
+                entity_dict["properties_names"] = self.well_coll.get_uid_properties_names(
+                    uid
+                )
+                entity_dict["properties_components"] = (
+                    self.well_coll.get_uid_properties_components(uid)
+                )
+                row_idx = self.well_coll.df[self.well_coll.df["uid"] == uid].index[0]
+                entity_dict["properties_types"] = deepcopy(
+                    self.well_coll.df.at[row_idx, "properties_types"]
+                )
+                entity_dict["markers"] = deepcopy(self.well_coll.df.at[row_idx, "markers"])
+
+                out_vtk = self.well_coll.get_uid_vtk_obj(uid).deep_copy()
+                proj_x, proj_y, proj_z, t_vals = _project_xyz_to_section(
+                    out_vtk.points_X.astype(np_float64),
+                    out_vtk.points_Y.astype(np_float64),
+                    out_vtk.points_Z.astype(np_float64),
+                    section_origin,
+                    section_normal,
+                )
+                out_vtk.points_X[:] = proj_x
+                out_vtk.points_Y[:] = proj_y
+                out_vtk.points_Z[:] = proj_z
+                out_vtk.set_point_data("distance", np_abs(t_vals))
+                out_vtk.set_point_data("signed_distance", t_vals)
+
+                field_keys = list(out_vtk.get_field_data_keys())
+                for field_key in field_keys:
+                    is_position_key = field_key == "pmarker_head" or field_key.startswith(
+                        "pmarker_"
+                    )
+                    if not is_position_key and field_key.startswith("p"):
+                        is_position_key = (
+                            field_key not in ["pname", "pMD"]
+                            and field_key[1:] in field_keys
                         )
+                    if not is_position_key:
+                        continue
+                    try:
+                        field_xyz = (
+                            np_array(out_vtk.get_field_data(field_key), dtype=np_float64)
+                            .reshape(-1, 3)
+                        )
+                    except (TypeError, ValueError):
+                        continue
+                    projected_field_xyz, _ = _project_xyz_matrix(
+                        field_xyz, section_origin, section_normal
+                    )
+                    out_vtk.GetFieldData().RemoveArray(field_key)
+                    out_vtk.set_field_data(name=field_key, data=projected_field_xyz)
+
+                keep_well = out_vtk.GetNumberOfPoints() > 0
+                if xs_dist > 0 and keep_well:
+                    keep_well = False
+                    if np_abs(t_vals).min() <= xs_dist:
+                        keep_well = True
+                    elif t_vals.min() <= 0.0 and t_vals.max() >= 0.0:
+                        keep_well = True
+                if keep_well:
+                    entity_dict["vtk_obj"] = out_vtk
+                    self.well_coll.add_entity_from_dict(entity_dict=entity_dict)
+                else:
+                    self.print_terminal(
+                        f'No measure found for well {entity_dict["name"]}, try to extend the maximum distance'
+                    )
+
+    def _get_linked_child_uids(well_uids):
+        """Collect entities linked to wells through parent_uid in GFB collections."""
+        ordered_well_uids = list(dict.fromkeys([uid for uid in well_uids if uid]))
+        linked_map = {}
+        for collection in [self.geol_coll, self.fluid_coll, self.backgrnd_coll]:
+            linked_uids = []
+            for well_uid in ordered_well_uids:
+                matches = collection.df.loc[
+                    collection.df["parent_uid"] == well_uid, "uid"
+                ].tolist()
+                linked_uids.extend(matches)
+            linked_map[collection] = list(dict.fromkeys(linked_uids))
+        return linked_map
+
+    if is_well_projection:
+        linked_choice = options_dialog(
+            title="Project well-linked objects",
+            message=(
+                "Do you want to project also geology, fluids, and background "
+                "objects linked to the selected well(s)?"
+            ),
+            yes_role="Yes",
+            no_role="No",
+            reject_role="Cancel",
+        )
+        if linked_choice in [-1, 2]:
+            return
+        _project_well_entities(input_uids)
+        if linked_choice == 0:
+            linked_map = _get_linked_child_uids(input_uids)
+            total_linked = sum(len(uids) for uids in linked_map.values())
+            if total_linked == 0:
+                self.print_terminal(
+                    "No geology, fluids, or background objects linked to the selected well(s)."
+                )
+            for collection, linked_uids in linked_map.items():
+                if linked_uids:
+                    _project_gfb_entities(collection, linked_uids)
+    else:
+        _project_gfb_entities(source_coll, input_uids)
 
     if discarded_sections > 0:
         self.print_terminal(
