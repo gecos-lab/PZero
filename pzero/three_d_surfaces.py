@@ -2160,9 +2160,17 @@ def project_2_dem(self):
 @freeze_gui_onoff
 def project_2_xs(self):
     """Projection of a copy of point/polyline geological entities to selected planar cross sections, along an axis specified with plunge/trend."""
-    if self.shown_table != "tabGeology":
-        self.print_terminal(" -- Only geological objects can be projected -- ")
+    valid_tables = {
+        "tabGeology": "geol_coll",
+        "tabFluids": "fluid_coll",
+        "tabBackgrounds": "backgrnd_coll",
+    }
+    if self.shown_table not in valid_tables:
+        self.print_terminal(
+            " -- Only geology, fluids, and background objects can be projected -- "
+        )
         return
+    source_coll = getattr(self, valid_tables[self.shown_table])
     self.print_terminal(
         "Projection to X-sections: when multiple sections are selected, the first is used as reference; non-parallel sections are discarded (tollerance: ±1°)."
     )
@@ -2175,7 +2183,7 @@ def project_2_xs(self):
     # Select points and polylines only.
     input_uids_clean = deepcopy(input_uids)
     for uid in input_uids:
-        if self.geol_coll.get_uid_topology(uid) not in [
+        if source_coll.get_uid_topology(uid) not in [
             "VertexSet",
             "PolyLine",
             "XsVertexSet",
@@ -2363,7 +2371,7 @@ def project_2_xs(self):
             f'not (((topology == "XsVertexSet") or (topology == "XsPolyLine")) '
             f'and (parent_uid == "{xs_uid}"))'
         )
-        section_input_uids = self.geol_coll.filter_uids(
+        section_input_uids = source_coll.filter_uids(
             query=section_filter_query, uids=input_uids
         )
         section_input_uids_set = set(section_input_uids)
@@ -2378,32 +2386,30 @@ def project_2_xs(self):
         ny = np_float64(self.xsect_coll.get_uid_normal_y(xs_uid))
         nz = np_float64(self.xsect_coll.get_uid_normal_z(xs_uid))
         for uid in section_input_uids:
-            entity_dict = deepcopy(self.geol_coll.entity_dict)
-            entity_dict["name"] = self.geol_coll.get_uid_name(uid) + "_prj_" + xs_name
-            entity_dict["role"] = self.geol_coll.get_uid_role(uid)
-            entity_dict["feature"] = self.geol_coll.get_uid_feature(uid)
-            entity_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
-            entity_dict["properties_names"] = self.geol_coll.get_uid_properties_names(
-                uid
-            )
+            entity_dict = deepcopy(source_coll.entity_dict)
+            entity_dict["name"] = source_coll.get_uid_name(uid) + "_prj_" + xs_name
+            entity_dict["role"] = source_coll.get_uid_role(uid)
+            entity_dict["feature"] = source_coll.get_uid_feature(uid)
+            entity_dict["scenario"] = source_coll.get_uid_scenario(uid)
+            entity_dict["properties_names"] = source_coll.get_uid_properties_names(uid)
             entity_dict["properties_components"] = (
-                self.geol_coll.get_uid_properties_components(uid)
+                source_coll.get_uid_properties_components(uid)
             )
             entity_dict["parent_uid"] = xs_uid
-            if self.geol_coll.get_uid_topology(uid) == "VertexSet":
+            if source_coll.get_uid_topology(uid) == "VertexSet":
                 entity_dict["topology"] = "XsVertexSet"
                 out_vtk = XsVertexSet(x_section_uid=xs_uid, parent=self)
-                out_vtk.DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
+                out_vtk.DeepCopy(source_coll.get_uid_vtk_obj(uid))
             elif (
-                self.geol_coll.get_uid_topology(uid) == "PolyLine"
-                or self.geol_coll.get_uid_topology(uid) == "XsPolyLine"
+                source_coll.get_uid_topology(uid) == "PolyLine"
+                or source_coll.get_uid_topology(uid) == "XsPolyLine"
             ):
                 entity_dict["topology"] = "XsPolyLine"
                 out_vtk = XsPolyLine(x_section_uid=xs_uid, parent=self)
-                out_vtk.DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
+                out_vtk.DeepCopy(source_coll.get_uid_vtk_obj(uid))
             else:
-                entity_dict["topology"] = self.geol_coll.get_uid_topology(uid)
-                out_vtk = self.geol_coll.get_uid_vtk_obj(uid).deep_copy()
+                entity_dict["topology"] = source_coll.get_uid_topology(uid)
+                out_vtk = source_coll.get_uid_vtk_obj(uid).deep_copy()
             # np_float64 is needed to calculate "t" with good precision.
             xo = out_vtk.points_X.astype(np_float64)
             yo = out_vtk.points_Y.astype(np_float64)
@@ -2421,7 +2427,7 @@ def project_2_xs(self):
             if entity_dict["topology"] == "XsVertexSet":
                 if xs_dist <= 0:
                     entity_dict["vtk_obj"] = out_vtk
-                    self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
+                    source_coll.add_entity_from_dict(entity_dict=entity_dict)
                 else:
                     thresh = vtkThresholdPoints()
                     thresh.SetInputData(out_vtk)
@@ -2434,7 +2440,7 @@ def project_2_xs(self):
                     if thresholded.GetNumberOfPoints() > 0:
                         out_vtk.DeepCopy(thresholded)
                         entity_dict["vtk_obj"] = out_vtk
-                        self.geol_coll.add_entity_from_dict(entity_dict=entity_dict)
+                        source_coll.add_entity_from_dict(entity_dict=entity_dict)
                     else:
                         self.print_terminal(
                             f'No measure found for group {entity_dict["name"]}, try to extend the maximum distance'
@@ -2504,7 +2510,7 @@ def project_2_xs(self):
                         for data_key in part_entity_dict["vtk_obj"].point_data_keys:
                             if data_key not in part_entity_dict["properties_names"]:
                                 part_entity_dict["vtk_obj"].remove_point_data(data_key)
-                        self.geol_coll.add_entity_from_dict(
+                        source_coll.add_entity_from_dict(
                             entity_dict=part_entity_dict
                         )
 

@@ -3065,12 +3065,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         vtk_object = VertexSet()
                     elif self.backgrnd_coll.get_uid_topology(uid) == "PolyLine":
                         vtk_object = PolyLine()
-                    # elif self.backgrnd_coll.get_uid_topology(uid) == 'TriSurf':
-                    #     vtk_object = TriSurf()
-                    # elif self.backgrnd_coll.get_uid_topology(uid) == 'XsVertexSet':
-                    #     vtk_object = XsVertexSet(self.backgrnd_coll.get_uid_x_section(uid), parent=self)
-                    # elif self.backgrnd_coll.get_uid_topology(uid) == 'XsPolyLine':
-                    #     vtk_object = XsPolyLine(self.backgrnd_coll.get_uid_x_section(uid), parent=self)
+                    elif self.backgrnd_coll.get_uid_topology(uid) == "TriSurf":
+                        vtk_object = TriSurf()
+                    elif self.backgrnd_coll.get_uid_topology(uid) == "XsVertexSet":
+                        vtk_object = XsVertexSet(
+                            self.backgrnd_coll.get_uid_x_section(uid), parent=self
+                        )
+                    elif self.backgrnd_coll.get_uid_topology(uid) == "XsPolyLine":
+                        vtk_object = XsPolyLine(
+                            self.backgrnd_coll.get_uid_x_section(uid), parent=self
+                        )
                     pd_reader = vtkXMLPolyDataReader()
                     pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
                     pd_reader.Update()
