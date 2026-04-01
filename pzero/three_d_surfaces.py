@@ -1976,9 +1976,15 @@ def project_2_dem(self):
     DEM file also as MapImage (--> as vtkImageData) and to use this entity as source data for the
     projection"""
     # self.print_terminal("Vertical Projection: project target lines onto a terrain image")
-    if self.shown_table != "tabGeology":
-        self.print_terminal(" -- Only geological objects can be interpolated -- ")
+    valid_tables = {
+        "tabGeology": "geol_coll",
+        "tabWells": "well_coll",
+    }
+    if self.shown_table not in valid_tables:
+        self.print_terminal(" -- Only geological objects and wells can be interpolated -- ")
         return
+    source_coll = getattr(self, valid_tables[self.shown_table])
+    is_well_projection = self.shown_table == "tabWells"
     # Check if some vtkPolyData is selected
     if not self.selected_uids:
         self.print_terminal("No input data selected.")
@@ -2016,6 +2022,125 @@ def project_2_dem(self):
     dom_uid = self.dom_coll.df.loc[self.dom_coll.df["name"] == dom_name, "uid"].values[
         0
     ]
+    project_linked_objects = False
+    linked_uids_by_well = {}
+    total_linked_objects = 0
+    updated_uids_by_coll = {}
+
+    def _register_updated_uid(collection, uid_value):
+        """Track metadata updates by collection."""
+        if collection not in updated_uids_by_coll:
+            updated_uids_by_coll[collection] = []
+        updated_uids_by_coll[collection].append(uid_value)
+
+    def _get_well_reference_xyz(well_vtk):
+        """Return the best available XYZ reference for a well head."""
+        field_keys = list(well_vtk.get_field_data_keys())
+        if "pmarker_head" in field_keys:
+            try:
+                head_xyz = np_array(
+                    well_vtk.get_field_data("pmarker_head"), dtype=np_float64
+                ).reshape(-1, 3)[0]
+                if head_xyz[0] == head_xyz[0] and head_xyz[1] == head_xyz[1]:
+                    return head_xyz
+            except Exception:
+                pass
+
+        points = getattr(well_vtk, "points", None)
+        if points is None or len(points) == 0:
+            return None
+
+        try:
+            ref_xyz = np_array(points[0], dtype=np_float64).reshape(3)
+        except Exception:
+            return None
+
+        if ref_xyz[0] != ref_xyz[0] or ref_xyz[1] != ref_xyz[1]:
+            return None
+        return ref_xyz
+
+    def _get_linked_child_uids_by_well(well_uids):
+        """Collect GFB entities linked to wells through parent_uid."""
+        linked_map = {}
+        for well_uid in well_uids:
+            well_children = {}
+            for collection in [self.geol_coll, self.fluid_coll, self.backgrnd_coll]:
+                child_uids = collection.df.loc[
+                    collection.df["parent_uid"] == well_uid, "uid"
+                ].tolist()
+                well_children[collection] = child_uids
+            linked_map[well_uid] = well_children
+        return linked_map
+
+    def _translate_gfb_linked_entities(source_well_uid, target_parent_uid, delta_z):
+        """Translate well-linked GFB entities by the same vertical offset used for the well."""
+        well_children = linked_uids_by_well.get(source_well_uid, {})
+        for collection, child_uids in well_children.items():
+            for child_uid in child_uids:
+                shifted_vtk = collection.get_uid_vtk_obj(child_uid).deep_copy()
+                if (
+                    not hasattr(shifted_vtk, "points_number")
+                    or shifted_vtk.points_number <= 0
+                ):
+                    prgs_bar.add_one()
+                    continue
+
+                shifted_points = shifted_vtk.points.copy()
+                shifted_points[:, 2] = shifted_points[:, 2] + delta_z
+                shifted_vtk.points = shifted_points
+                shifted_vtk.Modified()
+
+                if replace_on_off == 1:
+                    child_dict = deepcopy(collection.entity_dict)
+                    child_dict["uid"] = None
+                    child_dict["name"] = f"{collection.get_uid_name(child_uid)}_proj_DEM"
+                    child_dict["scenario"] = collection.get_uid_scenario(child_uid)
+                    child_dict["topology"] = collection.get_uid_topology(child_uid)
+                    child_dict["role"] = collection.get_uid_role(child_uid)
+                    child_dict["feature"] = collection.get_uid_feature(child_uid)
+                    child_dict["properties_names"] = collection.get_uid_properties_names(
+                        child_uid
+                    )
+                    child_dict["properties_components"] = (
+                        collection.get_uid_properties_components(child_uid)
+                    )
+                    child_dict["parent_uid"] = target_parent_uid
+                    child_dict["vtk_obj"] = shifted_vtk
+                    collection.add_entity_from_dict(child_dict)
+                else:
+                    collection.replace_vtk(uid=child_uid, vtk_object=shifted_vtk)
+                    collection.set_uid_name(
+                        uid=child_uid,
+                        name=f"{collection.get_uid_name(child_uid)}_proj_DEM",
+                    )
+                    _register_updated_uid(collection, child_uid)
+                prgs_bar.add_one()
+
+    if is_well_projection:
+        linked_choice = options_dialog(
+            title="Project well-linked objects",
+            message=(
+                "Do you want to translate also geology, fluids, and background "
+                "objects linked to the selected well(s)?"
+            ),
+            yes_role="Yes",
+            no_role="No",
+            reject_role="Cancel",
+        )
+        if linked_choice in [-1, 2]:
+            return
+        project_linked_objects = linked_choice == 0
+        if project_linked_objects:
+            linked_uids_by_well = _get_linked_child_uids_by_well(input_uids)
+            total_linked_objects = sum(
+                len(child_uids)
+                for well_children in linked_uids_by_well.values()
+                for child_uids in well_children.values()
+            )
+            if total_linked_objects == 0:
+                self.print_terminal(
+                    "No geology, fluids, or background objects linked to the selected well(s)."
+                )
     #     print("dom_uid ", dom_uid)
     #     Convert DEM (vtkStructuredGrid) in vtkImageData to perform the projection with vtkProjectedTerrainPath
     #     dem_to_image = vtkDEMReader()
@@ -2034,44 +2159,50 @@ def project_2_dem(self):
     #     img_uid = self.image_coll.df.loc[self.image_coll.df['name'] == img_name, 'uid'].values[0]
     # ----- some check is needed here. Check if the chosen image is a 2D map with elevation values -----
     prgs_bar = progress_dialog(
-        max_value=len(input_uids),
+        max_value=len(input_uids) + total_linked_objects,
         title_txt="Input dataframe",
         label_txt="Projecting data to DEM...",
         cancel_txt=None,
         parent=self,
     )
-    # Track UIDs to update at the end
-    updated_uids = []
 
     for uid in input_uids:
         # Determine which entity to project
         if replace_on_off == 1:  # No - first create a copy, then project only the copy
             # Create a copy of the original entity (not projected)
-            obj_dict = deepcopy(self.geol_coll.entity_dict)
+            obj_dict = deepcopy(source_coll.entity_dict)
             obj_dict["uid"] = None  # Will generate new uid
-            obj_dict["name"] = f"{self.geol_coll.get_uid_name(uid)}_proj_DEM"
-            obj_dict["feature"] = self.geol_coll.get_uid_feature(uid)
-            obj_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
-            obj_dict["role"] = self.geol_coll.get_uid_role(uid)
-            obj_dict["topology"] = self.geol_coll.get_uid_topology(uid)
-            obj_dict["properties_names"] = self.geol_coll.get_uid_properties_names(uid)
-            obj_dict["properties_components"] = (
-                self.geol_coll.get_uid_properties_components(uid)
-            )
+            obj_dict["name"] = f"{source_coll.get_uid_name(uid)}_proj_DEM"
+            obj_dict["scenario"] = source_coll.get_uid_scenario(uid)
+            obj_dict["topology"] = source_coll.get_uid_topology(uid)
+            obj_dict["properties_names"] = source_coll.get_uid_properties_names(uid)
+            obj_dict["properties_components"] = source_coll.get_uid_properties_components(uid)
+            if not is_well_projection:
+                obj_dict["feature"] = source_coll.get_uid_feature(uid)
+                obj_dict["role"] = source_coll.get_uid_role(uid)
+            else:
+                row_idx = source_coll.df[source_coll.df["uid"] == uid].index[0]
+                obj_dict["properties_types"] = deepcopy(
+                    source_coll.df.at[row_idx, "properties_types"]
+                )
+                obj_dict["markers"] = deepcopy(source_coll.df.at[row_idx, "markers"])
 
             # Create VTK object and copy geometry from original
-            if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
+            if is_well_projection:
+                obj_dict["vtk_obj"] = source_coll.get_uid_vtk_obj(uid).deep_copy()
+            elif isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
                 obj_dict["vtk_obj"] = PolyLine()
             elif isinstance(self.geol_coll.get_uid_vtk_obj(uid), Attitude):
                 obj_dict["vtk_obj"] = Attitude()
             elif isinstance(self.geol_coll.get_uid_vtk_obj(uid), VertexSet):
                 obj_dict["vtk_obj"] = VertexSet()
 
-            obj_dict["vtk_obj"].DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
+            if not is_well_projection:
+                obj_dict["vtk_obj"].DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
 
             # Add the copy to collection
             if obj_dict["vtk_obj"].points_number > 0:
-                new_uid = self.geol_coll.add_entity_from_dict(obj_dict)
+                new_uid = source_coll.add_entity_from_dict(obj_dict)
                 uid_to_project = new_uid
             else:
                 self.print_terminal(" -- empty object -- ")
@@ -2081,37 +2212,130 @@ def project_2_dem(self):
             uid_to_project = uid
 
         # Now project the target entity (either original or the new copy)
-        projection = vtkPointInterpolator2D()
-        projection.SetInputData(self.geol_coll.get_uid_vtk_obj(uid_to_project))
-        projection.SetSourceData(self.dom_coll.get_uid_vtk_obj(dom_uid))
-        projection.SetKernel(vtkVoronoiKernel())
-        projection.SetNullPointsStrategyToClosestPoint()
-        projection.SetZArrayName("elevation")
-        projection.Update()
+        if is_well_projection:
+            source_well = source_coll.get_uid_vtk_obj(uid_to_project)
+            if (
+                not hasattr(source_well, "points_number")
+                or source_well.points_number <= 0
+            ):
+                self.print_terminal(
+                    f" -- well {source_coll.get_uid_name(uid_to_project)} has no trace points -- "
+                )
+                prgs_bar.add_one()
+                continue
 
-        # Create temporary object to hold projected geometry
-        projected_obj = None
-        if isinstance(self.geol_coll.get_uid_vtk_obj(uid_to_project), PolyLine):
-            projected_obj = PolyLine()
-        elif isinstance(self.geol_coll.get_uid_vtk_obj(uid_to_project), Attitude):
-            projected_obj = Attitude()
-        elif isinstance(self.geol_coll.get_uid_vtk_obj(uid_to_project), VertexSet):
-            projected_obj = VertexSet()
+            head_xyz = _get_well_reference_xyz(source_well)
+            if head_xyz is None:
+                self.print_terminal(
+                    f" -- well {source_coll.get_uid_name(uid_to_project)} has no valid head/trace XY for DEM projection -- "
+                )
+                prgs_bar.add_one()
+                continue
 
-        if projected_obj is None:
-            self.print_terminal(f" -- Unknown object type for uid {uid_to_project} -- ")
-            prgs_bar.add_one()
-            continue
+            head_z = head_xyz[2]
+            if head_z != head_z:
+                first_trace_z = np_float64(source_well.points[0][2])
+                head_z = first_trace_z if first_trace_z == first_trace_z else 0.0
 
-        # Apply projection - use DeepCopy to ensure complete copy of geometry
-        projected_obj.DeepCopy(projection.GetOutput())
-        # Update Z coordinates with elevation data - recreate points array to ensure VTK recognizes the change
-        elevation = projected_obj.get_point_data("elevation")
-        new_points = projected_obj.points.copy()
-        new_points[:, 2] = elevation
-        projected_obj.points = new_points
-        # Force update of internal VTK structures
-        projected_obj.Modified()
+            head_probe = VertexSet()
+            head_probe.points = np_array([head_xyz], dtype=np_float64)
+            head_probe.auto_cells()
+
+            projection = vtkPointInterpolator2D()
+            projection.SetInputData(head_probe)
+            projection.SetSourceData(self.dom_coll.get_uid_vtk_obj(dom_uid))
+            projection.SetKernel(vtkVoronoiKernel())
+            projection.SetNullPointsStrategyToClosestPoint()
+            projection.SetZArrayName("elevation")
+            projection.Update()
+
+            projected_probe = VertexSet()
+            projected_probe.DeepCopy(projection.GetOutput())
+            if projected_probe.points_number == 0:
+                self.print_terminal(" -- empty object after projection -- ")
+                prgs_bar.add_one()
+                continue
+            elevation = np_array(
+                projected_probe.get_point_data("elevation"), dtype=np_float64
+            ).reshape(-1)
+            if elevation.size == 0:
+                self.print_terminal(" -- DEM elevation not available for projected well head -- ")
+                prgs_bar.add_one()
+                continue
+            target_head_z = np_float64(elevation[0])
+            if target_head_z != target_head_z:
+                self.print_terminal(" -- DEM returned an invalid elevation for well head -- ")
+                prgs_bar.add_one()
+                continue
+            delta_z = target_head_z - head_z
+
+            projected_obj = source_well.deep_copy()
+            new_points = projected_obj.points.copy()
+            new_points[:, 2] = new_points[:, 2] + delta_z
+            projected_obj.points = new_points
+
+            field_keys = list(projected_obj.get_field_data_keys())
+            for field_key in field_keys:
+                is_position_key = field_key == "pmarker_head" or field_key.startswith(
+                    "pmarker_"
+                )
+                if not is_position_key and field_key.startswith("p"):
+                    is_position_key = (
+                        field_key not in ["pname", "pMD"]
+                        and field_key[1:] in field_keys
+                    )
+                if not is_position_key:
+                    continue
+                try:
+                    field_xyz = np_array(
+                        projected_obj.get_field_data(field_key), dtype=np_float64
+                    ).reshape(-1, 3)
+                except (TypeError, ValueError):
+                    continue
+                field_xyz[:, 2] = field_xyz[:, 2] + delta_z
+                if field_key in list(projected_obj.get_field_data_keys()):
+                    projected_obj.GetFieldData().RemoveArray(field_key)
+                projected_obj.set_field_data(name=field_key, data=field_xyz)
+
+            if "pmarker_head" in list(projected_obj.get_field_data_keys()):
+                projected_obj.GetFieldData().RemoveArray("pmarker_head")
+            projected_obj.set_field_data(
+                name="pmarker_head",
+                data=np_array([[head_xyz[0], head_xyz[1], target_head_z]], dtype=np_float64),
+            )
+            projected_obj.Modified()
+        else:
+            projection = vtkPointInterpolator2D()
+            projection.SetInputData(self.geol_coll.get_uid_vtk_obj(uid_to_project))
+            projection.SetSourceData(self.dom_coll.get_uid_vtk_obj(dom_uid))
+            projection.SetKernel(vtkVoronoiKernel())
+            projection.SetNullPointsStrategyToClosestPoint()
+            projection.SetZArrayName("elevation")
+            projection.Update()
+
+            # Create temporary object to hold projected geometry
+            projected_obj = None
+            if isinstance(self.geol_coll.get_uid_vtk_obj(uid_to_project), PolyLine):
+                projected_obj = PolyLine()
+            elif isinstance(self.geol_coll.get_uid_vtk_obj(uid_to_project), Attitude):
+                projected_obj = Attitude()
+            elif isinstance(self.geol_coll.get_uid_vtk_obj(uid_to_project), VertexSet):
+                projected_obj = VertexSet()
+
+            if projected_obj is None:
+                self.print_terminal(f" -- Unknown object type for uid {uid_to_project} -- ")
+                prgs_bar.add_one()
+                continue
+
+            # Apply projection - use DeepCopy to ensure complete copy of geometry
+            projected_obj.DeepCopy(projection.GetOutput())
+            # Update Z coordinates with elevation data - recreate points array to ensure VTK recognizes the change
+            elevation = projected_obj.get_point_data("elevation")
+            new_points = projected_obj.points.copy()
+            new_points[:, 2] = elevation
+            projected_obj.points = new_points
+            # Force update of internal VTK structures
+            projected_obj.Modified()
 
         if projected_obj.points_number == 0:
             self.print_terminal(" -- empty object after projection -- ")
@@ -2120,26 +2344,44 @@ def project_2_dem(self):
 
         # Update the entity with projected geometry
         # Note: replace_vtk already emits geom_modified signal
-        self.geol_coll.replace_vtk(uid=uid_to_project, vtk_object=projected_obj)
+        if is_well_projection:
+            source_coll.set_uid_vtk_obj(uid=uid_to_project, vtk_obj=projected_obj)
+            self.signals.geom_modified.emit([uid_to_project], source_coll)
+        else:
+            self.geol_coll.replace_vtk(uid=uid_to_project, vtk_object=projected_obj)
 
         # Update entity name
         if replace_on_off == 1:  # No - set name for new entity
-            self.geol_coll.set_uid_name(
-                uid=uid_to_project, name=f"{self.geol_coll.get_uid_name(uid)}_proj_DEM"
+            source_coll.set_uid_name(
+                uid=uid_to_project, name=f"{source_coll.get_uid_name(uid)}_proj_DEM"
             )
         else:  # Yes - set name for original entity
-            self.geol_coll.set_uid_name(
-                uid=uid_to_project, name=f"{self.geol_coll.get_uid_name(uid)}_proj_DEM"
+            source_coll.set_uid_name(
+                uid=uid_to_project, name=f"{source_coll.get_uid_name(uid)}_proj_DEM"
             )
 
-        updated_uids.append(uid_to_project)
+        if is_well_projection:
+            source_coll.attr_modified_update_legend_table()
+
+        _register_updated_uid(source_coll, uid_to_project)
+
+        if is_well_projection and project_linked_objects:
+            _translate_gfb_linked_entities(
+                source_well_uid=uid,
+                target_parent_uid=uid_to_project,
+                delta_z=delta_z,
+            )
+
         prgs_bar.add_one()
 
     prgs_bar.close()
 
     # Emit metadata_modified signal for name changes (geom_modified already emitted by replace_vtk)
-    if updated_uids:
-        self.signals.metadata_modified.emit(updated_uids, self.geol_coll)
+    for collection, collection_uids in updated_uids_by_coll.items():
+        if collection_uids:
+            self.signals.metadata_modified.emit(
+                list(dict.fromkeys(collection_uids)), collection
+            )
 
     # Force render in all views to ensure visual update
     from pzero.views.dock_window import DockWindow

@@ -298,7 +298,7 @@ def freeze_gui_on(func):
             print(f"Function {func} started.")
             func(self, *args, **kwargs)
             print(f"Function {func} ended successfully.")
-        except:
+        except Exception:
             self.print_terminal(f"Function {func} cannot be started.")
     return wrapper
 
@@ -318,7 +318,7 @@ def freeze_gui_onoff(func):
             print(f"Function {func} started.")
             func(self, *args, **kwargs)
             print(f"Function {func} ended successfully.")
-        except:
+        except Exception:
             self.print_terminal(f"Function {func} cannot be started.")
         # Enable GUI after function is called.
         self.enable_actions()
