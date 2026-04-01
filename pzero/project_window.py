@@ -3389,15 +3389,37 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.prop_legend.update_widget(parent=self)
 
     def import_welldata(self):
-        path = open_file_dialog(
+        paths = open_files_dialog(
             parent=self, caption="Import well data", filter="XLXS files (*.xlsx)"
         )
 
-        if path:
-            well2vtk(self, path=path)
-            self.prop_legend.update_widget(parent=self)
-        else:
+        if not paths:
             return
+
+        imported_paths = []
+        skipped_paths = []
+
+        for path in paths:
+            self.print_terminal("in_file_name: " + path)
+            try:
+                well2vtk(self, path=path)
+                imported_paths.append(path)
+            except Exception as exc:
+                skipped_paths.append(path)
+                self.print_terminal(
+                    f"Rejected incompatible well file: {os_path.basename(path)} ({exc})"
+                )
+
+        if imported_paths:
+            self.prop_legend.update_widget(parent=self)
+            self.print_terminal(
+                f"Imported {len(imported_paths)} well file(s) successfully."
+            )
+
+        if skipped_paths:
+            self.print_terminal(
+                f"Rejected {len(skipped_paths)} incompatible well file(s)."
+            )
 
         # loc_attr_list = ['As is','LocationID', 'LocationType', 'Easting', 'Northing', 'GroundLevel', 'FinalDepth', 'Trend', 'Plunge','N.a.']
 
