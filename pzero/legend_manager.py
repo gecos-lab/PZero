@@ -86,13 +86,13 @@ class Legend(QObject):
     }
 
     others_legend_dict = {
-        "other_collection": ["Boundary", "DOM", "Image", "Mesh3D", "XSection"],
-        "color_R": [255, 255, 255, 255, 255],
-        "color_G": [255, 255, 255, 255, 255],
-        "color_B": [255, 255, 255, 255, 255],
-        "line_thick": [2, 2, 2, 1, 2],
-        "point_size": [0, 2, 0, 0, 0],
-        "opacity": [100, 100, 100, 100, 100],
+        "other_collection": ["Boundary", "DOM", "Image", "Mesh3D", "Wells", "XSection"],
+        "color_R": [255, 255, 255, 255, 255, 255],
+        "color_G": [255, 255, 255, 255, 255, 255],
+        "color_B": [255, 255, 255, 255, 255, 255],
+        "line_thick": [2, 2, 2, 1, 2, 2],
+        "point_size": [0, 2, 0, 0, 0, 0],
+        "opacity": [100, 100, 100, 100, 100, 100],
     }
 
     def __init__(self, parent=None, *args, **kwargs):
@@ -397,72 +397,6 @@ class Legend(QObject):
                             sender=sender, parent=parent
                         )
                     )
-
-        for well_name in pd_unique(parent.well_legend_df["name"]):
-            llevel_1 = QTreeWidgetItem(
-                parent.LegendTreeWidget, ["Wells"]
-            )  # self.GeologyTreeWidget as parent -> top level
-            llevel_2 = QTreeWidgetItem(
-                llevel_1, [well_name]
-            )  # llevel_1 as parent -> 2nd level
-            color_R = parent.well_legend_df.loc[
-                parent.well_legend_df["name"] == well_name, "color_R"
-            ].values[0]
-            color_G = parent.well_legend_df.loc[
-                parent.well_legend_df["name"] == well_name, "color_G"
-            ].values[0]
-            color_B = parent.well_legend_df.loc[
-                parent.well_legend_df["name"] == well_name, "color_B"
-            ].values[0]
-            line_thick = parent.well_legend_df.loc[
-                parent.well_legend_df["name"] == well_name, "line_thick"
-            ].values[0]
-            opacity = parent.well_legend_df.loc[
-                parent.well_legend_df["name"] == well_name, "opacity"
-            ].values[0]
-            # if not isinstance(sequence_value, str):
-            #     print("sequence_value: ", sequence_value)
-            #     sequence_value = "strati_0"
-            #     print("sequence_value: ", sequence_value)
-            "well_color_dialog_btn > QPushButton used to select color"
-            well_color_dialog_btn = QPushButton()
-            well_color_dialog_btn.locid = (
-                well_name  # this is to pass these values to the update function below
-            )
-            well_color_dialog_btn.setStyleSheet(
-                "background-color:rgb({},{},{})".format(color_R, color_G, color_B)
-            )
-            "well_line_thick_spn > QSpinBox used to select line thickness"
-            well_line_thick_spn = QSpinBox()
-            well_line_thick_spn.locid = (
-                well_name  # this is to pass these values to the update function below
-            )
-            well_line_thick_spn.setValue(line_thick)
-            "well_line_opacity_spn > QSpinBox used to select line thickness"
-            well_line_opacity_spn = QSpinBox()
-            well_line_opacity_spn.locid = well_name
-            well_line_opacity_spn.setMaximum(100)
-            well_line_opacity_spn.setValue(opacity)
-            "Create items"
-            parent.LegendTreeWidget.setItemWidget(llevel_2, 4, well_color_dialog_btn)
-            parent.LegendTreeWidget.setItemWidget(llevel_2, 5, well_line_thick_spn)
-            parent.LegendTreeWidget.setItemWidget(llevel_2, 7, well_line_opacity_spn)
-            "Set signals for the widgets below"
-            well_color_dialog_btn.clicked.connect(
-                lambda *, sender=well_color_dialog_btn: self.change_well_color(
-                    sender=sender, parent=parent
-                )
-            )
-            well_line_thick_spn.valueChanged.connect(
-                lambda *, sender=well_line_thick_spn: self.change_well_line_thick(
-                    sender=sender, parent=parent
-                )
-            )
-            well_line_opacity_spn.valueChanged.connect(
-                lambda *, sender=well_line_opacity_spn: self.change_well_line_opacity(
-                    sender=sender, parent=parent
-                )
-            )
 
         for role in pd_unique(parent.fluid_coll.legend_df["role"]):
             llevel_1 = QTreeWidgetItem(
@@ -1024,6 +958,11 @@ class Legend(QObject):
             parent.signals.legend_color_modified.emit(
                 parent.boundary_coll.df["uid"].tolist(), parent.boundary_coll
             )
+        elif other_collection == "Wells":
+            parent.signals.legend_color_modified.emit(
+                parent.well_coll.df["uid"].tolist(),
+                parent.well_coll,
+            )
 
     def change_other_feature_line_thick(self, sender=None, parent=None):
         # other_collection = self.sender().other_collection
@@ -1054,6 +993,11 @@ class Legend(QObject):
         elif other_collection == "Boundary":
             parent.signals.legend_thick_modified.emit(
                 parent.boundary_coll.df["uid"].tolist(), parent.boundary_coll
+            )
+        elif other_collection == "Wells":
+            parent.signals.legend_thick_modified.emit(
+                parent.well_coll.df["uid"].tolist(),
+                parent.well_coll,
             )
 
     def change_other_feature_point_size(self, sender=None, parent=None):
@@ -1114,88 +1058,11 @@ class Legend(QObject):
                 parent.image_coll.df["uid"].tolist(),
                 parent.image_coll,
             )
-
-    def change_well_color(self, parent=None, sender=None, feature=None):
-        # well_id = parent.geol_coll_df.loc[parent.geol_coll_df['uid'] == uid]
-        # locid = self.sender().locid
-        locid = sender.locid
-        # Here we use the same query as above to GET the color from the legend.
-        old_color_R = parent.well_legend_df.loc[
-            parent.well_legend_df["name"] == locid, "color_R"
-        ].values[0]
-        old_color_G = parent.well_legend_df.loc[
-            parent.well_legend_df["name"] == locid, "color_G"
-        ].values[0]
-        old_color_B = parent.well_legend_df.loc[
-            parent.well_legend_df["name"] == locid, "color_B"
-        ].values[0]
-        # https://doc.qt.io/qtforpython/PySide2/QtGui/QColor.html#PySide2.QtGui.QColor
-        color_in = QColor(old_color_R, old_color_G, old_color_B)
-        # https://doc.qt.io/qtforpython/PySide2/QtWidgets/QColorDialog.html#PySide2.QtWidgets.PySide2.QtWidgets.QColorDialog.getColor
-        color_out = QColorDialog.getColor(initial=color_in, title="Select color")
-        if not color_out.isValid():
-            color_out = color_in
-        new_color_R = color_out.red()
-        new_color_G = color_out.green()
-        new_color_B = color_out.blue()
-        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend.
-        parent.well_legend_df.loc[
-            parent.well_legend_df["name"] == locid, "color_R"
-        ] = new_color_R
-        parent.well_legend_df.loc[
-            parent.well_legend_df["name"] == locid, "color_G"
-        ] = new_color_G
-        parent.well_legend_df.loc[
-            parent.well_legend_df["name"] == locid, "color_B"
-        ] = new_color_B
-        # Update sender color.
-        # self.sender().setStyleSheet(
-        #     "background-color:rgb({},{},{})".format(
-        #         new_color_R, new_color_G, new_color_B
-        #     )
-        # )
-        sender.setStyleSheet(
-            "background-color:rgb({},{},{})".format(
-                new_color_R, new_color_G, new_color_B
+        elif other_collection == "Wells":
+            parent.signals.legend_opacity_modified.emit(
+                parent.well_coll.df["uid"].tolist(),
+                parent.well_coll,
             )
-        )
-        # Signal to update actors in windows. This is emitted only for the modified uid under the 'color' key.
-        updated_list = parent.well_coll.df.loc[
-            parent.well_coll.df["name"] == locid, "uid"
-        ].to_list()
-        parent.signals.legend_color_modified.emit(updated_list, parent.well_coll)
-
-    def change_well_line_thick(self, sender=None, parent=None):
-        # locid = self.sender().locid
-        # line_thick = self.sender().value()
-        locid = sender.locid
-        line_thick = sender.value()
-        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
-        parent.well_legend_df.loc[
-            parent.well_legend_df["name"] == locid, "line_thick"
-        ] = line_thick
-        # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
-        updated_list = parent.well_coll.df.loc[
-            parent.well_coll.df["name"] == locid, "uid"
-        ].to_list()
-        # print(updated_list)
-        parent.signals.legend_thick_modified.emit(updated_list, parent.well_coll)
-
-    def change_well_line_opacity(self, sender=None, parent=None):
-        # locid = self.sender().locid
-        # opacity = self.sender().value()
-        locid = sender.locid
-        opacity = sender.value()
-        # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
-        parent.well_legend_df.loc[
-            parent.well_legend_df["name"] == locid, "opacity"
-        ] = opacity
-        # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
-        updated_list = parent.well_coll.df.loc[
-            parent.well_coll.df["name"] == locid, "uid"
-        ].to_list()
-        # print(updated_list)
-        parent.signals.legend_opacity_modified.emit(updated_list, parent.well_coll)
 
     def change_fluid_feature_color(self, sender=None, parent=None):
         # role = self.sender().role

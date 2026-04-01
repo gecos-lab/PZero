@@ -3,12 +3,9 @@ PZero© Andrea Bistacchi"""
 
 from uuid import uuid4
 
-from numpy import random as np_random
 from numpy import ndarray as np_ndarray
-from numpy import round as np_round
 
 from pandas import DataFrame as pd_DataFrame
-from pandas import unique as pd_unique
 from pandas import concat as pd_concat
 
 from .AbstractCollection import BaseCollection
@@ -16,6 +13,7 @@ from .AbstractCollection import BaseCollection
 
 class WellCollection(BaseCollection):
     """Collection for all wells and their metadata."""
+    shared_legend_name = "Wells"
 
     def __init__(self, parent=None, *args, **kwargs):
         super(WellCollection, self).__init__(parent, *args, **kwargs)
@@ -73,36 +71,6 @@ class WellCollection(BaseCollection):
         # Reset data model.
         self.modelReset.emit()
         self.parent.prop_legend.update_widget(self.parent)
-        # Then update the legend if needed.
-        # Note that for performance reasons this is done explicitly here, when adding an entity to the
-        # collection, and not with a signal telling the legend to be updated by scanning the whole collection.
-        name = entity_dict["name"]
-        if self.parent.well_legend_df.loc[
-            self.parent.well_legend_df["name"] == name
-        ].empty:
-            R, G, B = np_round(np_random.random(3) * 255)
-            # New Pandas >= 2.0.0
-            self.parent.well_legend_df = pd_concat(
-                [
-                    self.parent.well_legend_df,
-                    pd_DataFrame(
-                        [
-                            {
-                                "name": name,
-                                "color_R": R,
-                                "color_G": G,
-                                "color_B": B,
-                                "line_thick": 2.0,
-                                "point_size": 0.0,
-                                "opacity": 100,
-                            }
-                        ]
-                    ),
-                ],
-                ignore_index=True,
-            )
-            self.parent.legend.update_widget(self.parent)
-            self.parent.prop_legend.update_widget(self.parent)
         # Then emit signal to update the views. A list of uids is emitted, even if the entity is just one.
         self.parent.signals.entities_added.emit([entity_dict["uid"]], self)
         return entity_dict["uid"]
@@ -124,63 +92,28 @@ class WellCollection(BaseCollection):
 
     def attr_modified_update_legend_table(self):
         """Update legend table when attributes are changed."""
-        # First remove unused names.
-        legend_updated = self.remove_unused_from_legend()
-        # Then add new names.
-        for uid in self.parent.well_coll.df["uid"].to_list():
-            name = self.parent.well_coll.df.loc[
-                self.parent.well_coll.df["uid"] == uid, "name"
-            ].values[0]
-            if self.parent.well_legend_df.loc[
-                self.parent.well_legend_df["name"] == name
-            ].empty:
-                # New Pandas >= 2.0.0
-                self.parent.well_legend_df = pd_concat(
-                    [
-                        self.parent.well_legend_df,
-                        pd_DataFrame(
-                            [
-                                {
-                                    "name": name,
-                                    "color_R": round(np_random.random() * 255),
-                                    "color_G": round(np_random.random() * 255),
-                                    "color_B": round(np_random.random() * 255),
-                                    "line_thick": 2.0,
-                                    "point_size": 0.0,
-                                    "opacity": 100,
-                                }
-                            ]
-                        ),
-                    ],
-                    ignore_index=True,
-                )
-                legend_updated = legend_updated or True
-        # When done, if the table was updated, update the widget. No signal is sent here to the views.
-        if legend_updated:
-            self.parent.legend.update_widget(self.parent)
+        # Not implemented for this collection, but required by the abstract superclass.
+        pass
 
     def remove_unused_from_legend(self):
         """Remove unused names from the well legend table."""
         legend_updated = False
-        name_in_legend = pd_unique(self.parent.well_legend_df["name"])
-        for name in name_in_legend:
-            if self.parent.well_coll.df.loc[
-                self.parent.well_coll.df["name"] == name
-            ].empty:
-                # Get index of row to be removed, then remove it in place with .drop().
-                idx_remove = self.parent.well_legend_df[
-                    self.parent.well_legend_df["name"] == name
-                ].index
-                self.parent.well_legend_df.drop(idx_remove, inplace=True)
-                legend_updated = legend_updated or True
         return legend_updated
 
     def get_uid_legend(self, uid: str = None) -> dict:
         """Get legend for a particular uid."""
-        name = self.df.loc[self.df["uid"] == uid, "name"].values[0]
-        legend_dict = self.parent.well_legend_df.loc[
-            self.parent.well_legend_df["name"] == name
+        legend_dict = self.parent.others_legend_df.loc[
+            self.parent.others_legend_df["other_collection"] == self.shared_legend_name
         ].to_dict("records")
+        if not legend_dict:
+            return {
+                "color_R": 255,
+                "color_G": 255,
+                "color_B": 255,
+                "line_thick": 2.0,
+                "point_size": 0.0,
+                "opacity": 100,
+            }
         return legend_dict[0]
 
     def set_uid_legend(

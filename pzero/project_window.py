@@ -1378,7 +1378,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.geol_coll.legend_df = pd_DataFrame(
             columns=list(Legend.geol_legend_dict.keys())
         )
-        self.well_legend_df = pd_DataFrame(columns=list(Legend.well_legend_dict.keys()))
         self.fluid_coll.legend_df = pd_DataFrame(
             columns=list(Legend.fluids_legend_dict.keys())
         )
@@ -1529,10 +1528,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             out_dir_name + "/prop_legend_df.json", orient="index"
         )
         # self.prop_legend_df.to_csv(out_dir_name + '/prop_legend_df.csv', encoding='utf-8', index=False)
-
-        self.well_legend_df.to_json(
-            out_dir_name + "/well_legend_table.json", orient="index"
-        )
 
         self.fluid_coll.legend_df.to_json(
             out_dir_name + "/fluids_legend_table.json", orient="index"
@@ -1916,38 +1911,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     by="time", ascending=True, inplace=True
                 )
 
-            # Read well legend tables.
-            if os_path.isfile(
-                (in_dir_name + "/well_legend_table.csv")
-            ) or os_path.isfile((in_dir_name + "/well_legend_table.json")):
-                if os_path.isfile((in_dir_name + "/well_legend_table.json")):
-                    new_well_legend_df = pd_read_json(
-                        in_dir_name + "/well_legend_table.json",
-                        orient="index",
-                        dtype=Legend.legend_dict_types,
-                    )
-                else:
-                    new_well_legend_df = pd_read_csv(
-                        in_dir_name + "/well_legend_table.csv",
-                        encoding="utf-8",
-                        dtype=Legend.legend_dict_types,
-                        keep_default_na=False,
-                    )
-                if not new_well_legend_df.empty:
-                    self.well_legend_df = new_well_legend_df
-                in_keys = set(self.well_legend_df.keys())
-                def_keys = set(Legend.well_legend_dict.keys())
-
-                diffs = def_keys.difference(in_keys)
-
-                if len(diffs) > 0:
-                    self.print_terminal(f"well_legend_table diffs: {diffs}")
-                    for diff in diffs:
-                        self.well_legend_df[diff] = Legend.well_legend_dict[diff]
-                    self.well_legend_df.sort_values(
-                        by="name", ascending=True, inplace=True
-                    )
-
             # Read fluids legend tables.
             if os_path.isfile(
                 (in_dir_name + "/fluids_legend_table.csv")
@@ -2030,6 +1993,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         dtype=Legend.legend_dict_types,
                         keep_default_na=False,
                     )
+                if not new_others_legend_df.empty:
+                    self.others_legend_df = new_others_legend_df
                 in_keys = set(self.others_legend_df.keys())
                 def_keys = set(Legend.others_legend_dict.keys())
 
@@ -2039,6 +2004,42 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     self.print_terminal(f"others_legend_table diffs: {diffs}")
                     for diff in diffs:
                         self.others_legend_df[diff] = Legend.others_legend_dict[diff]
+                default_other_rows = []
+                for idx, other_collection in enumerate(
+                    Legend.others_legend_dict["other_collection"]
+                ):
+                    if other_collection in self.others_legend_df[
+                        "other_collection"
+                    ].tolist():
+                        continue
+                    default_other_rows.append(
+                        {
+                            key: Legend.others_legend_dict[key][idx]
+                            for key in Legend.others_legend_dict.keys()
+                        }
+                    )
+                if default_other_rows:
+                    self.others_legend_df = pd_concat(
+                        [
+                            self.others_legend_df,
+                            pd_DataFrame(default_other_rows),
+                        ],
+                        ignore_index=True,
+                    )
+                other_order = {
+                    name: idx
+                    for idx, name in enumerate(
+                        Legend.others_legend_dict["other_collection"]
+                    )
+                }
+                self.others_legend_df["legend_order"] = self.others_legend_df[
+                    "other_collection"
+                ].map(other_order)
+                self.others_legend_df.sort_values(
+                    by="legend_order", ascending=True, inplace=True
+                )
+                self.others_legend_df.drop(columns=["legend_order"], inplace=True)
+                self.others_legend_df.reset_index(drop=True, inplace=True)
 
             if os_path.isfile((in_dir_name + "/prop_legend_df.csv")) or os_path.isfile(
                 (in_dir_name + "/prop_legend_df.json")
