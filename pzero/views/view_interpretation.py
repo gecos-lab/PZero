@@ -2241,32 +2241,101 @@ class ViewInterpretation(ViewMap):
         }
         return regularized_line, regularized_slices, slice_to_cell_index, stats
 
-    def regularize_multipart_sampling(self):
-        """Uniformly resample a propagated multipart horizon/fault for downstream modelling."""
-        selection = self._get_selected_multipart_entity_for_edit(
-            action_title="Regularize Multipart Sampling"
-        )
+    def _get_selected_multipart_entities_for_edit(self, action_title="Edit Multipart Slices"):
+        """Resolve all selected propagated multipart horizons/faults and validate their slice metadata."""
+        geol_uids = set(self.parent.geol_coll.get_uids)
+        selected_uids = [
+            uid
+            for uid in list(getattr(self.parent, "selected_uids", []) or [])
+            if uid in geol_uids
+        ]
+        if not selected_uids:
+            message_dialog(
+                title=action_title,
+                message="Select at least one propagated horizon or fault in the geology tree.",
+            )
+            return []
+
+        selections = []
+        skipped_uids = []
+        for uid in selected_uids:
+            selection = self._resolve_multipart_entity_for_edit(
+                uid=uid,
+                action_title=action_title,
+                show_messages=False,
+            )
+            if selection is None:
+                skipped_uids.append(uid)
+                continue
+            selections.append(selection)
+
+        if not selections:
+            message_dialog(
+                title=action_title,
+                message="None of the selected entities is a propagated multipart horizon or fault.",
+            )
+            return []
+
+        if skipped_uids:
+            skipped_labels = []
+            for uid in skipped_uids[:5]:
+                try:
+                    skipped_labels.append(self.parent.geol_coll.get_uid_name(uid))
+                except Exception:
+                    skipped_labels.append(f"{uid[:8]}...")
+            more_count = max(0, len(skipped_uids) - len(skipped_labels))
+            more_suffix = f" and {more_count} more" if more_count else ""
+            self.print_terminal(
+                "Skipped selected geology entities that are not editable multipart horizons/faults: "
+                f"{', '.join(skipped_labels)}{more_suffix}."
+            )
+
+        return selections
+
+    def _describe_multipart_entity_for_dialog(self, selection=None):
+        """Build a compact label for dialog titles when editing multipart entities."""
         if selection is None:
-            return
+            return "multipart entity"
+
+        uid = selection.get("uid")
+        entity_kind = selection.get("entity_kind", "multipart")
+        try:
+            entity_name = str(self.parent.geol_coll.get_uid_name(uid)).strip()
+        except Exception:
+            entity_name = ""
+
+        if entity_name:
+            return f"{entity_kind}: {entity_name}"
+        return f"{entity_kind}: {uid[:8]}..." if uid else entity_kind
+
+    def _regularize_single_multipart_entity(
+        self, selection=None, action_title="Regularize Multipart Sampling"
+    ):
+        """Regularize one propagated multipart horizon/fault and report whether the flow completed."""
+        if selection is None:
+            return "failed"
 
         uid = selection["uid"]
         entity_kind = selection["entity_kind"]
         entity_info = selection["entity_info"]
         vtk_obj = selection["vtk_obj"]
+        available_slices = selection["available_slices"]
         axis = entity_info.get("axis", self.current_axis)
+        entity_label = self._describe_multipart_entity_for_dialog(selection=selection)
+        dialog_title = f"{action_title} - {entity_label}"
 
         defaults = self._estimate_multipart_regularization_defaults(
             vtk_obj=vtk_obj, axis=axis, entity_kind=entity_kind
         )
         if defaults["slice_count"] == 0:
             message_dialog(
-                title="Regularize Multipart Sampling",
+                title=dialog_title,
                 message="The selected multipart entity does not contain valid line geometry.",
             )
-            return
+            return "failed"
 
         settings = multiple_input_dialog(
-            title="Regularize Multipart Sampling",
+            title=f"{dialog_title} ({available_slices[0]}-{available_slices[-1]})",
             input_dict={
                 "points_per_slice": [
                     "Points per slice:",
@@ -2284,7 +2353,7 @@ class ViewInterpretation(ViewMap):
             },
         )
         if settings is None:
-            return
+            return "cancelled"
 
         try:
             points_per_slice = max(2, int(settings["points_per_slice"]))
@@ -2292,14 +2361,14 @@ class ViewInterpretation(ViewMap):
             preserve_seed_slice = str(settings["preserve_seed_slice"]).strip().lower() != "no"
         except Exception:
             message_dialog(
-                title="Regularize Multipart Sampling",
+                title=dialog_title,
                 message="Invalid resampling parameters.",
             )
-            return
+            return "failed"
 
         preserve_slice_indices = []
         seed_slice = entity_info.get("seed_slice")
-        if preserve_seed_slice and seed_slice in selection["available_slices"]:
+        if preserve_seed_slice and seed_slice in available_slices:
             preserve_slice_indices.append(int(seed_slice))
 
         new_vtk, new_slices, slice_to_cell_index, stats = self._build_regularized_multipart_vtk(
@@ -2312,13 +2381,13 @@ class ViewInterpretation(ViewMap):
         )
         if new_vtk is None or not new_slices:
             message_dialog(
-                title="Regularize Multipart Sampling",
+                title=dialog_title,
                 message="Could not rebuild the selected multipart geometry.",
             )
-            return
+            return "failed"
 
         write_mode = options_dialog(
-            title="Regularize Multipart Sampling",
+            title=dialog_title,
             message=(
                 f"Do you want to overwrite the original multipart {entity_kind}, "
                 f"or keep it and add a new regularized entity?"
@@ -2328,7 +2397,7 @@ class ViewInterpretation(ViewMap):
             reject_role="Cancel",
         )
         if write_mode not in (0, 1):
-            return
+            return "cancelled"
 
         if write_mode == 1:
             import re
@@ -2342,10 +2411,10 @@ class ViewInterpretation(ViewMap):
             )
             if new_entity_dict is None:
                 message_dialog(
-                    title="Regularize Multipart Sampling",
+                    title=dialog_title,
                     message="Could not build the new regularized multipart entity.",
                 )
-                return
+                return "failed"
 
             base_name = self._build_propagated_entity_name(
                 seed_uid=uid,
@@ -2392,7 +2461,7 @@ class ViewInterpretation(ViewMap):
                 f"median spacing {stats['old_median_spacing']:.3f}, "
                 f"smoothing sigma {stats['smooth_sigma']:.2f}."
             )
-            return
+            return "done"
 
         self._remove_filtered_actor(f"multipart_slice_{uid}")
         self._remove_filtered_actor(f"multipart_fault_slice_{uid}")
@@ -2427,6 +2496,107 @@ class ViewInterpretation(ViewMap):
             f"median spacing {stats['old_median_spacing']:.3f}, "
             f"smoothing sigma {stats['smooth_sigma']:.2f}."
         )
+        return "done"
+
+    def regularize_multipart_sampling(self):
+        """Uniformly resample selected propagated multipart horizons/faults for downstream modelling."""
+        selections = self._get_selected_multipart_entities_for_edit(
+            action_title="Regularize Multipart Sampling"
+        )
+        if not selections:
+            return
+
+        processed_count = 0
+        total_count = len(selections)
+        for index, selection in enumerate(selections, start=1):
+            action_title = "Regularize Multipart Sampling"
+            if total_count > 1:
+                action_title = f"Regularize Multipart Sampling ({index}/{total_count})"
+
+            status = self._regularize_single_multipart_entity(
+                selection=selection,
+                action_title=action_title,
+            )
+            if status == "cancelled":
+                if total_count > 1 and index < total_count:
+                    self.print_terminal(
+                        f"Stopped multipart regularization after {processed_count} of "
+                        f"{total_count} selected entities."
+                    )
+                return
+            if status == "done":
+                processed_count += 1
+
+    def _resolve_multipart_entity_for_edit(
+        self, uid=None, action_title="Edit Multipart Slices", show_messages=True
+    ):
+        """Resolve one propagated multipart entity and validate its slice metadata."""
+        if uid not in set(self.parent.geol_coll.get_uids):
+            if show_messages:
+                message_dialog(
+                    title=action_title,
+                    message="The selected entity is not present in the geology tree.",
+                )
+            return None
+
+        self.scan_and_index_single_horizon(uid)
+
+        entity_kind = None
+        entity_info = None
+        if uid in getattr(self, "multipart_horizons", {}):
+            entity_kind = "horizon"
+            entity_info = self.multipart_horizons[uid]
+        elif uid in getattr(self, "multipart_faults", {}):
+            entity_kind = "fault"
+            entity_info = self.multipart_faults[uid]
+
+        if entity_info is None:
+            if show_messages:
+                message_dialog(
+                    title=action_title,
+                    message="The selected entity is not a propagated multipart horizon or fault.",
+                )
+            return None
+
+        vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        if vtk_obj is None or vtk_obj.GetNumberOfCells() == 0:
+            if show_messages:
+                message_dialog(
+                    title=action_title,
+                    message="The selected entity has no geometry to edit.",
+                )
+            return None
+
+        cell_data = vtk_obj.GetCellData()
+        if cell_data is None or not cell_data.HasArray("slice_index"):
+            if show_messages:
+                message_dialog(
+                    title=action_title,
+                    message="The selected multipart entity has no slice_index cell data.",
+                )
+            return None
+
+        available_slices = sorted(
+            {int(idx) for idx in entity_info.get("slice_indices", [])}
+            or set(self._extract_slice_indices_from_vtk(vtk_obj))
+        )
+        if not available_slices:
+            if show_messages:
+                message_dialog(
+                    title=action_title,
+                    message="No slice indices were found on the selected entity.",
+                )
+            return None
+
+        return {
+            "uid": uid,
+            "entity_kind": entity_kind,
+            "entity_info": entity_info,
+            "vtk_obj": vtk_obj,
+            "cell_data": cell_data,
+            "slice_array": cell_data.GetArray("slice_index"),
+            "available_slices": available_slices,
+        }
 
     def _get_selected_multipart_entity_for_edit(self, action_title="Edit Multipart Slices"):
         """Resolve the selected propagated multipart entity and validate its slice metadata."""
@@ -2442,61 +2612,11 @@ class ViewInterpretation(ViewMap):
             )
             return None
 
-        uid = selected_uids[0]
-        self.scan_and_index_single_horizon(uid)
-
-        entity_kind = None
-        entity_info = None
-        if uid in getattr(self, "multipart_horizons", {}):
-            entity_kind = "horizon"
-            entity_info = self.multipart_horizons[uid]
-        elif uid in getattr(self, "multipart_faults", {}):
-            entity_kind = "fault"
-            entity_info = self.multipart_faults[uid]
-
-        if entity_info is None:
-            message_dialog(
-                title=action_title,
-                message="The selected entity is not a propagated multipart horizon or fault.",
-            )
-            return None
-
-        vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
-        if vtk_obj is None or vtk_obj.GetNumberOfCells() == 0:
-            message_dialog(
-                title=action_title,
-                message="The selected entity has no geometry to edit.",
-            )
-            return None
-
-        cell_data = vtk_obj.GetCellData()
-        if cell_data is None or not cell_data.HasArray("slice_index"):
-            message_dialog(
-                title=action_title,
-                message="The selected multipart entity has no slice_index cell data.",
-            )
-            return None
-
-        available_slices = sorted(
-            {int(idx) for idx in entity_info.get("slice_indices", [])}
-            or set(self._extract_slice_indices_from_vtk(vtk_obj))
+        return self._resolve_multipart_entity_for_edit(
+            uid=selected_uids[0],
+            action_title=action_title,
+            show_messages=True,
         )
-        if not available_slices:
-            message_dialog(
-                title=action_title,
-                message="No slice indices were found on the selected entity.",
-            )
-            return None
-
-        return {
-            "uid": uid,
-            "entity_kind": entity_kind,
-            "entity_info": entity_info,
-            "vtk_obj": vtk_obj,
-            "cell_data": cell_data,
-            "slice_array": cell_data.GetArray("slice_index"),
-            "available_slices": available_slices,
-        }
 
     def delete_multipart_slices(self):
         """Delete a slice interval from the selected propagated multipart horizon/fault."""
