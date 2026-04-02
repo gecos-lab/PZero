@@ -282,6 +282,8 @@ def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
         for key in input_dict:
             if isinstance(input_dict[key][1], list):
                 output_dict[key] = objects_qt[key][1].currentText()
+            elif isinstance(input_dict[key][1], bool):
+                output_dict[key] = objects_qt[key][1].isChecked()
             elif isinstance(input_dict[key][1], int):
                 try:
                     output_dict[key] = int(objects_qt[key][1].text())

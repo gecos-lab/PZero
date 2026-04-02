@@ -2974,6 +2974,7 @@ def run_constrained_triangulation_py(
     gradient  = float(config.get('gradient', 2.0))
     min_angle = float(config.get('min_angle', 20.0))
     target_sz = float(config.get('target_size', 20.0))
+    uniform = bool(config.get('uniform', True))
     interp    = str(config.get('interp', 'Thin Plate Spline (TPS)'))
     smoothing = float(config.get('smoothing', 0.0))
     # Accept both current and legacy keys for triunsuitable feature inputs.
@@ -3059,7 +3060,7 @@ def run_constrained_triangulation_py(
             )
 
     tri_res = tri.triangulate(points=plc_points_2d, segments=plc_segments_indices, holes=plc_holes_2d,
-                              uniform=True, create_transition=False, create_feature_points=False)
+                              uniform=uniform, create_transition=not uniform, create_feature_points=False)
     if tri_res is None or 'vertices' not in tri_res or 'triangles' not in tri_res:
         raise RuntimeError("Constrained triangulation failed")
 

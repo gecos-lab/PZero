@@ -3623,6 +3623,14 @@ class MeshItWorkflowGUI(QWidget):
         self.uniform_checkbox.setChecked(True) # Default to uniform for consistent sizing
         quality_layout.addRow("Uniform:", self.uniform_checkbox)
 
+        self.tri_use_edges_checkbox = QCheckBox("Use edges")
+        self.tri_use_edges_checkbox.setChecked(False)
+        self.tri_use_edges_checkbox.setToolTip(
+            "Use the segmentation points and their connecting edges as the "
+            "constrained starting boundary for triangulation."
+        )
+        quality_layout.addRow("", self.tri_use_edges_checkbox)
+
         tri_layout.addWidget(quality_group)
 
 
@@ -10813,6 +10821,152 @@ segmentation, triangulation, and visualization.
         # Ensure uniqueness and return XY polyline (closed)
         coords = pts[np.array(ring[:-1], dtype=int)]
         return coords
+
+    def _build_boundary_constraints_from_segments(self, segments_data):
+        """Return unique 3D boundary points and exact edge connectivity from segmentation data."""
+        unique_points = []
+        point_to_index = {}
+        segment_indices = []
+
+        def add_point(raw_point):
+            point = np.asarray(raw_point, dtype=float).reshape(-1)
+            if point.size < 3:
+                raise ValueError("Boundary point must contain at least 3 coordinates")
+
+            xyz = np.array(point[:3], dtype=float)
+            key = tuple(np.round(xyz, 12))
+            idx = point_to_index.get(key)
+            if idx is None:
+                idx = len(unique_points)
+                point_to_index[key] = idx
+                unique_points.append(xyz)
+            return idx
+
+        if segments_data is None:
+            segments_iter = []
+        else:
+            segments_iter = segments_data
+
+        for seg in segments_iter:
+            seg_points = np.asarray(seg, dtype=float)
+            if seg_points.ndim == 1:
+                if seg_points.size < 6:
+                    continue
+                if seg_points.size % 3 != 0:
+                    continue
+                seg_points = seg_points.reshape(-1, 3)
+            elif seg_points.ndim != 2 or seg_points.shape[0] < 2:
+                continue
+
+            prev_idx = None
+            for raw_point in seg_points:
+                idx = add_point(raw_point)
+                if prev_idx is not None and idx != prev_idx:
+                    segment_indices.append([prev_idx, idx])
+                prev_idx = idx
+
+        if len(unique_points) < 3 or len(segment_indices) < 3:
+            raise ValueError("Insufficient segmentation edges for constrained triangulation")
+
+        return (
+            np.asarray(unique_points, dtype=float),
+            np.asarray(segment_indices, dtype=np.int32),
+        )
+
+    def _build_edge_triangulation_samples(self, boundary_xyz: np.ndarray, all_pts: np.ndarray) -> np.ndarray:
+        """
+        Build interpolation samples for edge-constrained triangulation.
+
+        Boundary points are kept first so PLC snap indices from Triangle continue
+        to map back to the exact segmentation vertices.
+        """
+        boundary_xyz = np.asarray(boundary_xyz, dtype=float)
+        samples = [np.array(point, dtype=float) for point in boundary_xyz]
+        seen = {tuple(np.round(point, 12)) for point in boundary_xyz}
+
+        all_pts_arr = np.asarray(all_pts, dtype=float)
+        if all_pts_arr.ndim != 2 or all_pts_arr.shape[0] == 0:
+            return np.asarray(samples, dtype=float)
+
+        for raw_point in all_pts_arr:
+            point = np.array(raw_point[:3], dtype=float)
+            key = tuple(np.round(point, 12))
+            if key in seen:
+                continue
+            seen.add(key)
+            samples.append(point)
+
+        return np.asarray(samples, dtype=float)
+
+    def _run_edge_boundary_triangulation(
+        self,
+        dataset_index: int,
+        dataset: dict,
+        all_pts: np.ndarray,
+        boundary_xyz: np.ndarray,
+        boundary_segs: np.ndarray,
+        gradient: float,
+        min_angle: float,
+        uniform: bool,
+        interp_label: str,
+        smoothing: float,
+    ) -> bool:
+        """Triangulate with segmentation edges as explicit PLC boundary constraints."""
+        try:
+            projection_input = np.asarray(all_pts, dtype=float)
+            if projection_input.ndim != 2 or projection_input.shape[0] < 3:
+                projection_input = np.asarray(boundary_xyz, dtype=float)
+
+            projection_params = self._calculate_surface_projection_params(projection_input)
+            centroid = np.asarray(projection_params["centroid"], dtype=float)
+            basis = np.asarray(projection_params["basis"], dtype=float)
+            boundary_uv = (np.asarray(boundary_xyz, dtype=float) - centroid) @ basis.T
+            boundary_uv = boundary_uv[:, :2]
+
+            try:
+                target_size = float(self._get_seg_target_length_for_dataset(dataset_index))
+                if target_size <= 1e-6:
+                    target_size = 1.0
+            except Exception:
+                target_size = 1.0
+
+            interpolation_samples = self._build_edge_triangulation_samples(boundary_xyz, all_pts)
+            config = {
+                "gradient": gradient,
+                "min_angle": min_angle,
+                "target_size": target_size,
+                "interp": interp_label,
+                "smoothing": smoothing,
+                "uniform": uniform,
+            }
+
+            vertices_3d, triangles, _ = run_constrained_triangulation_py(
+                boundary_uv,
+                boundary_segs,
+                np.empty((0, 2), dtype=float),
+                projection_params,
+                interpolation_samples,
+                config,
+            )
+
+            if vertices_3d is None or len(vertices_3d) == 0 or triangles is None or len(triangles) == 0:
+                raise RuntimeError("Edge-constrained triangulation returned an empty result")
+
+            dataset["triangulation_result"] = {
+                "vertices": vertices_3d,
+                "triangles": triangles,
+            }
+            return True
+
+        except Exception as exc:
+            logger.error(
+                "Edge-constrained triangulation failed for '%s': %s",
+                dataset.get("name", f"Dataset {dataset_index}"),
+                exc,
+                exc_info=True,
+            )
+            return False
+
     def _run_triangulation_for_dataset(self, dataset_index):
         """Run triangulation for a specific dataset index. Returns True on success, False on error."""
         if not (0 <= dataset_index < len(self.datasets)):
@@ -10835,6 +10989,10 @@ segmentation, triangulation, and visualization.
         gradient = self.gradient_input.value()
         min_angle = self.min_angle_input.value()
         uniform = self.uniform_checkbox.isChecked()
+        use_edges = (
+            hasattr(self, "tri_use_edges_checkbox")
+            and self.tri_use_edges_checkbox.isChecked()
+        )
         interp_label = self.interp_combo.currentText() if hasattr(self, "interp_combo") else "Thin Plate Spline (TPS)"
         smoothing = float(self.interp_smoothing_input.value()) if hasattr(self, "interp_smoothing_input") else 0.0
 
@@ -10856,7 +11014,12 @@ segmentation, triangulation, and visualization.
                 tri_method = "standard"
         tri_method = self._normalize_tri_method(tri_method)
 
-        logger.info(f"Triangulating '{dataset_name}' with method='{tri_method}'")
+        logger.info(
+            "Triangulating '%s' with method='%s' (use_edges=%s)",
+            dataset_name,
+            tri_method,
+            use_edges,
+        )
 
         try:
             import numpy as np
@@ -10866,6 +11029,7 @@ segmentation, triangulation, and visualization.
 
             # Get all points for this dataset
             all_pts = np.asarray(dataset['points'], dtype=float)
+            boundary_xyz, boundary_segs = self._build_boundary_constraints_from_segments(segments_data)
             
             # Isomap Unfolding triangulation for complex folded surfaces
             if tri_method == "isomap":
@@ -10885,12 +11049,12 @@ segmentation, triangulation, and visualization.
                     explicit_segments_list = []
                     
                     if segments_data is not None and len(segments_data) > 0:
-                        for s in segments_data:
-                            p1 = np.array(s[0], dtype=float)
-                            p2 = np.array(s[1], dtype=float)
+                        for start_idx, end_idx in boundary_segs:
+                            p1 = np.array(boundary_xyz[start_idx], dtype=float)
+                            p2 = np.array(boundary_xyz[end_idx], dtype=float)
                             k1 = tuple(np.round(p1, seg_round))
                             k2 = tuple(np.round(p2, seg_round))
-                            
+
                             if k1 not in pmap:
                                 pmap[k1] = len(boundary_points_list)
                                 boundary_points_list.append(p1)
@@ -10955,6 +11119,33 @@ segmentation, triangulation, and visualization.
                 except Exception as e:
                     logger.error(f"Isomap triangulation failed for {dataset_name}: {e}", exc_info=True)
                     logger.warning("Falling back to standard triangulation...")
+
+            if use_edges:
+                success = self._run_edge_boundary_triangulation(
+                    dataset_index=dataset_index,
+                    dataset=dataset,
+                    all_pts=all_pts,
+                    boundary_xyz=boundary_xyz,
+                    boundary_segs=boundary_segs,
+                    gradient=gradient,
+                    min_angle=min_angle,
+                    uniform=uniform,
+                    interp_label=interp_label,
+                    smoothing=smoothing,
+                )
+                if success:
+                    logger.info(
+                        "Triangulation for %s completed with segmentation edge constraints. "
+                        "V=%d, T=%d",
+                        dataset_name,
+                        len(dataset["triangulation_result"]["vertices"]),
+                        len(dataset["triangulation_result"]["triangles"]),
+                    )
+                    return True
+                logger.warning(
+                    "Edge-constrained triangulation failed for %s, falling back to the standard workflow.",
+                    dataset_name,
+                )
             
             # Standard triangulation method (original code)
             # Common rotation basis (C++ rotate-by-normal)
@@ -10977,20 +11168,6 @@ segmentation, triangulation, and visualization.
 
             R = build_rot(normal, onto_z=True); R_inv = build_rot(normal, onto_z=False)
             all_pts_rot = (R @ all_pts.T).T
-
-            # Build boundary points/segments from provided segments_data
-            unique_points_list, point_to_index, segment_indices = [], {}, []
-            cur = 0
-            for seg in segments_data:
-                p0, p1 = np.asarray(seg[0], float), np.asarray(seg[1], float)
-                t0, t1 = tuple(np.round(p0, 12)), tuple(np.round(p1, 12))
-                if t0 not in point_to_index: point_to_index[t0]=cur; unique_points_list.append(p0); i0=cur; cur+=1
-                else: i0 = point_to_index[t0]
-                if t1 not in point_to_index: point_to_index[t1]=cur; unique_points_list.append(p1); i1=cur; cur+=1
-                else: i1 = point_to_index[t1]
-                segment_indices.append([i0, i1])
-            boundary_xyz = np.asarray(unique_points_list, float)
-            boundary_segs = np.asarray(segment_indices, int)
 
             boundary_rot = (R @ boundary_xyz.T).T
             provided_xy = boundary_rot[:, :2]

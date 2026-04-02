@@ -1346,6 +1346,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     ["Standard CDT", "Isomap unfolding"],
                     "Standard CDT",
                 ],
+                "use_edges": ["Use edges", False],
             }
             retri_input = multiple_input_dialog(
                 title="Retriangulate surface", input_dict=input_dict
@@ -1365,6 +1366,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
             refine_length = float(retri_input["refine_length"])
             alpha_value = float(retri_input["alpha_value"])
+            use_edges = bool(retri_input.get("use_edges", False))
             if refine_length <= 0.0:
                 raise ValueError("Segmentation RefineByLength must be > 0.")
             if alpha_value <= 0.0:
@@ -1374,6 +1376,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             temp_gui.seg_length_by_surface[0] = refine_length
             temp_gui.tri_method_by_surface = {0: tri_method_map[retri_input["tri_method"]]}
             temp_gui.hull_alpha_spin.setValue(alpha_value)
+            if hasattr(temp_gui, "tri_use_edges_checkbox"):
+                temp_gui.tri_use_edges_checkbox.setChecked(use_edges)
 
             idw_index = temp_gui.interp_combo.findText("IDW (p=4)")
             if idw_index >= 0:
