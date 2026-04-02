@@ -3406,9 +3406,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 imported_paths.append(path)
             except Exception as exc:
                 skipped_paths.append(path)
-                self.print_terminal(
-                    f"Rejected incompatible well file: {os_path.basename(path)} ({exc})"
-                )
 
         if imported_paths:
             self.prop_legend.update_widget(parent=self)
