@@ -334,6 +334,42 @@ def sort_line_nodes(self):
     self.clear_selection()
 
 
+def _get_editable_line_source_coll(self, selected_uids=None):
+    valid_tables = {
+        "tabGeology": "geol_coll",
+        "tabFluids": "fluid_coll",
+        "tabBackgrounds": "backgrnd_coll",
+    }
+    if self.parent.shown_table not in valid_tables:
+        self.print_terminal(
+            " -- Move Line is supported only for geology, fluids, and backgrounds -- "
+        )
+        return None
+
+    source_coll = getattr(self.parent, valid_tables[self.parent.shown_table])
+    if selected_uids is None:
+        selected_uids = self.selected_uids
+
+    if not selected_uids:
+        self.print_terminal(" -- No input data selected -- ")
+        return None
+
+    for current_uid in selected_uids:
+        if (source_coll.get_uid_topology(current_uid) != "PolyLine") and (
+            source_coll.get_uid_topology(current_uid) != "XsPolyLine"
+        ):
+            self.print_terminal(f" -- Selected data {current_uid} is not a line -- ")
+            return None
+    return source_coll
+
+
+def start_checked_line_tool(self, tool_func, selected_uids=None):
+    """Validate line selection before starting a line editing tool."""
+    if _get_editable_line_source_coll(self, selected_uids=selected_uids) is None:
+        return
+    tool_func(self)
+
+
 def move_line(self, vector):
     """Move the whole line by rigid-body translation.
     Here transformation to UV is not necessary since the translation vector is already in world space
@@ -350,33 +386,24 @@ def move_line(self, vector):
         freeze_gui_off(self)
         return
 
+    source_coll = _get_editable_line_source_coll(self)
+    if source_coll is None:
+        freeze_gui_off(self)
+        return
+
     for current_uid in self.selected_uids:
-        if (self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine") and (
-            self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
-        ):
-            self.print_terminal(f" -- Selected data {current_uid} is not a line -- ")
-            break
 
         # Editing loop.
         # -----For some reason in the following the [:] is needed.-----
-        x = (
-            self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X[:]
-            + vector.deltas[0]
-        )
-        y = (
-            self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y[:]
-            + vector.deltas[1]
-        )
-        z = (
-            self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z[:]
-            + vector.deltas[2]
-        )
+        x = source_coll.get_uid_vtk_obj(current_uid).points_X[:] + vector.deltas[0]
+        y = source_coll.get_uid_vtk_obj(current_uid).points_Y[:] + vector.deltas[1]
+        z = source_coll.get_uid_vtk_obj(current_uid).points_Z[:] + vector.deltas[2]
 
         points = np_stack((x, y, z), axis=1)
-        self.parent.geol_coll.get_uid_vtk_obj(current_uid).points = points
-        left_right(self, uid=current_uid)
+        source_coll.get_uid_vtk_obj(current_uid).points = points
+        left_right(self, uid=current_uid, source_coll=source_coll)
         # Deselect input line.
-        self.parent.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
+        self.parent.signals.geom_modified.emit([current_uid], source_coll)
     # Deselect input line.
     self.clear_selection()
     freeze_gui_off(self)
@@ -385,13 +412,13 @@ def move_line(self, vector):
 @freeze_gui_onoff
 def rotate_line(self):
     """Rotate lines by rigid-body rotation using Shapely."""
+    source_coll = _get_editable_line_source_coll(self)
+    if source_coll is None:
+        return
+
     self.print_terminal(
         "Rotate Line. Rotate the whole line by rigid-body rotation. Please insert angle of anticlockwise rotation."
     )
-    # Check if at least a line is selected.
-    if not self.selected_uids:
-        self.print_terminal(" -- No input data selected -- ")
-        return
     # Input rotation angle. None exits the function.
     angle = input_one_value_dialog(
         parent=self,
@@ -403,16 +430,11 @@ def rotate_line(self):
         self.print_terminal(" -- Angle is None -- ")
         return
     for current_uid in self.selected_uids:
-        if (self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine") and (
-            self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
-        ):
-            self.print_terminal(" -- Selected data is not a line -- ")
-            return
         if isinstance(self, ViewMap):
-            inU = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_X
-            inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Y
+            inU = source_coll.get_uid_vtk_obj(current_uid).points_X
+            inV = source_coll.get_uid_vtk_obj(current_uid).points_Y
         elif isinstance(self, ViewXsection):
-            in_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid)
+            in_vtk_obj = source_coll.get_uid_vtk_obj(current_uid)
             inU, inV = self.parent.xsect_coll.world2plane(
                 section_uid=self.this_x_section_uid,
                 X=in_vtk_obj.points_X,
@@ -433,16 +455,16 @@ def rotate_line(self):
         if isinstance(self, ViewMap):
             outX = outU
             outY = outV
-            outZ = self.parent.geol_coll.get_uid_vtk_obj(current_uid).points_Z
+            outZ = source_coll.get_uid_vtk_obj(current_uid).points_Z
         elif isinstance(self, ViewXsection):
             outX, outY, outZ = self.parent.xsect_coll.plane2world(
                 self.this_x_section_uid, outU, outV
             )
         outXYZ = np_column_stack((outX, outY, outZ))
-        self.parent.geol_coll.get_uid_vtk_obj(current_uid).points = outXYZ
-        left_right(self, uid=current_uid)
+        source_coll.get_uid_vtk_obj(current_uid).points = outXYZ
+        left_right(self, uid=current_uid, source_coll=source_coll)
         # emit uid as list to force redraw()
-        self.parent.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
+        self.parent.signals.geom_modified.emit([current_uid], source_coll)
     # Deselect input line.
     self.clear_selection()
 
@@ -467,7 +489,7 @@ def extend_line(self):
         #         vtk_obj = PolyLine()
         vtk_obj.ShallowCopy(traced_pld)
 
-        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
+        source_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
         extender.EnabledOff()
         self.clear_selection()
         freeze_gui_off(self)
@@ -481,12 +503,10 @@ def extend_line(self):
         self.print_terminal(" -- No input data selected -- ")
         freeze_gui_off(self)
         return
-    if (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0]) != "PolyLine"
-    ) and (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0]) != "XsPolyLine"
-    ):
-        self.print_terminal(" -- Selected data is not a line -- ")
+    source_coll = _get_editable_line_source_coll(
+        self, selected_uids=self.selected_uids[:1]
+    )
+    if source_coll is None:
         freeze_gui_off(self)
         return
     # If more than one line is selected, keep the first
@@ -2000,23 +2020,25 @@ def measure_distance(self, vector):
     freeze_gui_off(self)
 
 
-def flip_line(self, uid=None):
+def flip_line(self, uid=None, source_coll=None):
     """Flip points array top to bottom in order to reverse the line order."""
     # self.parent.geol_coll.get_uid_vtk_obj(uid).points = np_flip(self.parent.geol_coll.get_uid_vtk_obj(uid).points, 0)
-    self.parent.geol_coll.get_uid_vtk_obj(uid).points = np_flipud(
-        self.parent.geol_coll.get_uid_vtk_obj(uid).points
-    )
+    if source_coll is None:
+        source_coll = self.parent.geol_coll
+    source_coll.get_uid_vtk_obj(uid).points = np_flipud(source_coll.get_uid_vtk_obj(uid).points)
 
 
-def left_right(self, uid=None):
+def left_right(self, uid=None, source_coll=None):
     """Ensures lines are oriented left-to-right and bottom-to-top in map or cross-section"""
+    if source_coll is None:
+        source_coll = self.parent.geol_coll
     if isinstance(self, ViewMap):
         # if isinstance(self, ViewMap):
-        U_line = self.parent.geol_coll.get_uid_vtk_obj(uid).points_X
-        V_line = self.parent.geol_coll.get_uid_vtk_obj(uid).points_Y
+        U_line = source_coll.get_uid_vtk_obj(uid).points_X
+        V_line = source_coll.get_uid_vtk_obj(uid).points_Y
     # elif isinstance(self, ViewXsection):
     elif isinstance(self, ViewXsection):
-        vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        vtk_obj = source_coll.get_uid_vtk_obj(uid)
         U_line, V_line = self.parent.xsect_coll.world2plane(
             section_uid=self.this_x_section_uid,
             X=vtk_obj.points_X,
@@ -2031,11 +2053,11 @@ def left_right(self, uid=None):
     if len(U_line) < 2:
         return
     if U_line[0] > U_line[-1]:  # reverse if right-to-left
-        flip_line(self, uid=uid)
+        flip_line(self, uid=uid, source_coll=source_coll)
     elif (
         U_line[0] == U_line[-1] and V_line[0] > V_line[-1]
     ):  # reverse if vertical up-to-down
-        flip_line(self, uid=uid)
+        flip_line(self, uid=uid, source_coll=source_coll)
 
 
 def int_node(line1, line2):

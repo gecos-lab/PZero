@@ -51,6 +51,7 @@ class View2D(ViewVTK):
             edit_line,
             sort_line_nodes,
             move_line,
+            start_checked_line_tool,
             rotate_line,
             extend_line,
             split_line_line,
@@ -83,15 +84,25 @@ class View2D(ViewVTK):
         self.menuModify.addAction(self.sortLineButton)
 
         self.moveLineButton = QAction("Move line", self)
-        self.moveLineButton.triggered.connect(lambda: self.vector_by_mouse(move_line))
+        self.moveLineButton.triggered.connect(
+            lambda: start_checked_line_tool(
+                self, lambda view: view.vector_by_mouse(move_line)
+            )
+        )
         self.menuModify.addAction(self.moveLineButton)
 
         self.rotateLineButton = QAction("Rotate line", self)
-        self.rotateLineButton.triggered.connect(lambda: rotate_line(self))
+        self.rotateLineButton.triggered.connect(
+            lambda: start_checked_line_tool(self, rotate_line)
+        )
         self.menuModify.addAction(self.rotateLineButton)
 
         self.extendButton = QAction("Extend line", self)
-        self.extendButton.triggered.connect(lambda: extend_line(self))
+        self.extendButton.triggered.connect(
+            lambda: start_checked_line_tool(
+                self, extend_line, selected_uids=self.selected_uids[:1]
+            )
+        )
         self.menuModify.addAction(self.extendButton)
 
         self.splitLineByLineButton = QAction("Split line-line", self)
