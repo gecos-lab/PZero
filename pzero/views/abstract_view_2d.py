@@ -76,11 +76,17 @@ class View2D(ViewVTK):
         self.menuCreate.addAction(self.drawLineButton)
 
         self.editLineButton = QAction("Edit line", self)
-        self.editLineButton.triggered.connect(lambda: edit_line(self))
+        self.editLineButton.triggered.connect(
+            lambda: start_checked_line_tool(
+                self, edit_line, selected_uids=self.selected_uids[:1]
+            )
+        )
         self.menuModify.addAction(self.editLineButton)
 
         self.sortLineButton = QAction("Sort line nodes", self)
-        self.sortLineButton.triggered.connect(lambda: sort_line_nodes(self))
+        self.sortLineButton.triggered.connect(
+            lambda: start_checked_line_tool(self, sort_line_nodes)
+        )
         self.menuModify.addAction(self.sortLineButton)
 
         self.moveLineButton = QAction("Move line", self)
@@ -106,50 +112,72 @@ class View2D(ViewVTK):
         self.menuModify.addAction(self.extendButton)
 
         self.splitLineByLineButton = QAction("Split line-line", self)
-        self.splitLineByLineButton.triggered.connect(lambda: split_line_line(self))
+        self.splitLineByLineButton.triggered.connect(
+            lambda: start_checked_line_tool(self, split_line_line, min_selected=2)
+        )
         self.menuModify.addAction(self.splitLineByLineButton)
 
         self.splitLineByPointButton = QAction("Split line-point", self)
         self.splitLineByPointButton.triggered.connect(
-            lambda: split_line_existing_point(self)
+            lambda: start_checked_line_tool(
+                self, split_line_existing_point, selected_uids=self.selected_uids[:1]
+            )
         )
         self.menuModify.addAction(self.splitLineByPointButton)
 
         self.mergeLineButton = QAction("Weld lines", self)
-        self.mergeLineButton.triggered.connect(lambda: merge_lines(self))
+        self.mergeLineButton.triggered.connect(
+            lambda: start_checked_line_tool(self, merge_lines, min_selected=2)
+        )
         self.menuModify.addAction(self.mergeLineButton)
 
         self.snapLineButton = QAction("Snap to intersection", self)
-        self.snapLineButton.triggered.connect(lambda: snap_line(self))
+        self.snapLineButton.triggered.connect(
+            lambda: start_checked_line_tool(self, snap_line, min_selected=2)
+        )
         self.menuModify.addAction(self.snapLineButton)
 
         self.resampleDistanceButton = QAction("Resample distance", self)
         self.resampleDistanceButton.triggered.connect(
-            lambda: resample_lines_distance(self)
+            lambda: start_checked_line_tool(self, resample_lines_distance)
         )
         self.menuModify.addAction(self.resampleDistanceButton)
 
         self.resampleNumberButton = QAction("Resample number", self)
         self.resampleNumberButton.triggered.connect(
-            lambda: resample_lines_number_points(self)
+            lambda: start_checked_line_tool(self, resample_lines_number_points)
         )
         self.menuModify.addAction(self.resampleNumberButton)
 
         self.simplifyButton = QAction("Simplify line", self)
-        self.simplifyButton.triggered.connect(lambda: simplify_line(self))
+        self.simplifyButton.triggered.connect(
+            lambda: start_checked_line_tool(self, simplify_line)
+        )
         self.menuModify.addAction(self.simplifyButton)
 
         self.copyParallelButton = QAction("Copy parallel", self)
-        self.copyParallelButton.triggered.connect(lambda: copy_parallel(self))
+        self.copyParallelButton.triggered.connect(
+            lambda: start_checked_line_tool(
+                self, copy_parallel, selected_uids=self.selected_uids[:1]
+            )
+        )
         self.menuCreate.addAction(self.copyParallelButton)
 
         self.copyKinkButton = QAction("Copy kink", self)
-        self.copyKinkButton.triggered.connect(lambda: copy_kink(self))
+        self.copyKinkButton.triggered.connect(
+            lambda: start_checked_line_tool(
+                self, copy_kink, selected_uids=self.selected_uids[:1]
+            )
+        )
         self.menuCreate.addAction(self.copyKinkButton)
 
         self.copySimilarButton = QAction("Copy similar", self)
         self.copySimilarButton.triggered.connect(
-            lambda: self.vector_by_mouse(copy_similar)
+            lambda: start_checked_line_tool(
+                self,
+                lambda view: view.vector_by_mouse(copy_similar),
+                selected_uids=self.selected_uids[:1],
+            )
         )
         self.menuCreate.addAction(self.copySimilarButton)
 

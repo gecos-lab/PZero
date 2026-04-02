@@ -29,6 +29,7 @@ from shapely.ops import snap as shp_snap
 from shapely.ops import split as shp_split
 
 from .helpers.helper_dialogs import (
+    input_combo_dialog,
     multiple_input_dialog,
     input_one_value_dialog,
     message_dialog,
@@ -38,6 +39,24 @@ from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gu
 from .entities_factory import PolyLine, XsPolyLine
 
 from .views.view_map import ViewMap; from .views.view_xsection import ViewXsection
+
+
+def _choose_draw_line_collection(self):
+    collection_map = {
+        "Geology": self.parent.geol_coll,
+        "Fluid contacts": self.parent.fluid_coll,
+        "Background data": self.parent.backgrnd_coll,
+    }
+    selected_collection = input_combo_dialog(
+        parent=self,
+        title="Line destination",
+        label="Choose destination collection",
+        choice_list=list(collection_map.keys()),
+    )
+    if selected_collection is None:
+        return None
+    return collection_map[selected_collection]
+
 
 @freeze_gui_on
 def draw_line(self):
@@ -49,28 +68,39 @@ def draw_line(self):
         )
         if traced_pld.GetNumberOfPoints() > 0:
             input_dict["vtk_obj"].ShallowCopy(traced_pld)
-            self.parent.geol_coll.add_entity_from_dict(input_dict)
+            source_coll.add_entity_from_dict(input_dict)
         tracer.EnabledOff()
         # self.enable_actions()
         freeze_gui_off(self)
 
     # self.disable_actions()
-    # Create deepcopy of the geological entity dictionary.
-    line_dict = deepcopy(self.parent.geol_coll.entity_dict)
+    source_coll = _choose_draw_line_collection(self)
+    if source_coll is None:
+        freeze_gui_off(self)
+        return
+
+    # Create deepcopy of the selected collection entity dictionary.
+    line_dict = deepcopy(source_coll.entity_dict)
+    feature_list = source_coll.legend_df["feature"].tolist()
+    if not feature_list:
+        feature_list = [line_dict["feature"]]
+    scenario_list = list(set(source_coll.legend_df["scenario"].tolist()))
+    if not scenario_list:
+        scenario_list = [line_dict["scenario"]]
     # One dictionary is set as input for a general widget of multiple-value-input"""
     line_dict_in = {
         "name": ["PolyLine name: ", "new_pline"],
         "role": [
             "Role: ",
-            self.parent.geol_coll.valid_roles,
+            source_coll.valid_roles,
         ],
         "feature": [
             "Feature: ",
-            self.parent.geol_coll.legend_df["feature"].tolist(),
+            feature_list,
         ],
         "scenario": [
             "Scenario: ",
-            list(set(self.parent.geol_coll.legend_df["scenario"].tolist())),
+            scenario_list,
         ],
     }
     line_dict_updt = multiple_input_dialog(
@@ -211,7 +241,7 @@ def draw_line_3d(self):
         
         if traced_pld and traced_pld.GetNumberOfPoints() > 0:
             line_dict["vtk_obj"].ShallowCopy(traced_pld)
-            self.parent.geol_coll.add_entity_from_dict(line_dict)
+            source_coll.add_entity_from_dict(line_dict)
             self.print_terminal(f"✓ Created line with {len(tracer_3d.points)} points")
         
         # Clean up
@@ -220,24 +250,35 @@ def draw_line_3d(self):
         freeze_gui_off(self)
     
     # self.disable_actions()
-    
-    # Create deepcopy of the geological entity dictionary
-    line_dict = deepcopy(self.parent.geol_coll.entity_dict)
-    
+
+    source_coll = _choose_draw_line_collection(self)
+    if source_coll is None:
+        freeze_gui_off(self)
+        return
+
+    # Create deepcopy of the selected collection entity dictionary
+    line_dict = deepcopy(source_coll.entity_dict)
+    feature_list = source_coll.legend_df["feature"].tolist()
+    if not feature_list:
+        feature_list = [line_dict["feature"]]
+    scenario_list = list(set(source_coll.legend_df["scenario"].tolist()))
+    if not scenario_list:
+        scenario_list = [line_dict["scenario"]]
+
     # One dictionary is set as input for a general widget of multiple-value-input
     line_dict_in = {
         "name": ["PolyLine name: ", "new_pline"],
         "role": [
             "Role: ",
-            self.parent.geol_coll.valid_roles,
+            source_coll.valid_roles,
         ],
         "feature": [
             "Feature: ",
-            self.parent.geol_coll.legend_df["feature"].tolist(),
+            feature_list,
         ],
         "scenario": [
             "Scenario: ",
-            list(set(self.parent.geol_coll.legend_df["scenario"].tolist())),
+            scenario_list,
         ],
     }
     
@@ -268,73 +309,7 @@ def draw_line_3d(self):
     
     self.print_terminal("3D Line Drawing: Left-click on surfaces to add points, Right-click to finish")
 
-
-@freeze_gui_on
-def edit_line(self):
-    def end_edit(event, uid):
-        self.plotter.untrack_click_position(side="right")
-        traced_pld = (
-            editor.GetContourRepresentation().GetContourRepresentationAsPolyData()
-        )
-        if isinstance(self, ViewMap):
-            vtk_obj = PolyLine()
-        elif isinstance(self, ViewXsection):
-            vtk_obj = XsPolyLine(
-                x_section_uid=self.this_x_section_uid, parent=self.parent
-            )
-        # elif isinstance(self, View3D):
-        #     vtk_obj = PolyLine()
-        vtk_obj.ShallowCopy(traced_pld)
-        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
-        editor.EnabledOff()
-        self.clear_selection()
-        freeze_gui_off(self)
-
-    if not self.selected_uids:
-        self.print_terminal(" -- No input data selected -- ")
-        freeze_gui_off(self)
-        return
-    # self.disable_actions()
-    sel_uid = self.selected_uids[0]
-    actor = self.plotter.renderer.actors[sel_uid]
-    data = actor.mapper.dataset
-    # self.tracer.SetInputData(data)
-    editor = Editor(self)
-    editor.EnabledOn()
-    editor.initialize(data, "edit")
-    self.plotter.track_click_position(
-        side="right", callback=lambda event: end_edit(event, sel_uid)
-    )
-
-
-@freeze_gui_onoff
-def sort_line_nodes(self):
-    """Sort line nodes."""
-    self.print_terminal("Sort line nodes according to cell order.")
-    # """Terminate running event loops"""
-    # self.stop_event_loops()
-    # Check if a line is selected
-    if not self.selected_uids:
-        self.print_terminal(" -- No input data selected -- ")
-        return
-    # for action in self.findChildren(QAction):
-    #     if isinstance(action.parentWidget(), NavigationToolbar) is False:
-    #         action.setDisabled(True)
-    # If more than one line is selected, keep the first.
-    for current_uid in self.selected_uids:
-        # For some reason in the following the [:] is needed.
-        self.parent.geol_coll.get_uid_vtk_obj(
-            current_uid
-        ).sort_nodes()  # this could be probably done per-part__________________________
-        # Deselect input line.
-        self.parent.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
-        # for action in self.findChildren(QAction):
-        #     action.setEnabled(True)
-    # Deselect input line.
-    self.clear_selection()
-
-
-def _get_editable_line_source_coll(self, selected_uids=None):
+def _get_editable_line_source_coll(self, selected_uids=None, min_selected=1):
     valid_tables = {
         "tabGeology": "geol_coll",
         "tabFluids": "fluid_coll",
@@ -353,6 +328,11 @@ def _get_editable_line_source_coll(self, selected_uids=None):
     if not selected_uids:
         self.print_terminal(" -- No input data selected -- ")
         return None
+    if len(selected_uids) < min_selected:
+        self.print_terminal(
+            f" -- Not enough input data selected. Select at least {min_selected} objects -- "
+        )
+        return None
 
     for current_uid in selected_uids:
         if (source_coll.get_uid_topology(current_uid) != "PolyLine") and (
@@ -363,11 +343,85 @@ def _get_editable_line_source_coll(self, selected_uids=None):
     return source_coll
 
 
-def start_checked_line_tool(self, tool_func, selected_uids=None):
+def start_checked_line_tool(self, tool_func, selected_uids=None, min_selected=1):
     """Validate line selection before starting a line editing tool."""
-    if _get_editable_line_source_coll(self, selected_uids=selected_uids) is None:
+    if (
+        _get_editable_line_source_coll(
+            self, selected_uids=selected_uids, min_selected=min_selected
+        )
+        is None
+    ):
         return
     tool_func(self)
+    
+@freeze_gui_on
+def edit_line(self):
+    def end_edit(event, uid):
+        self.plotter.untrack_click_position(side="right")
+        traced_pld = (
+            editor.GetContourRepresentation().GetContourRepresentationAsPolyData()
+        )
+        if isinstance(self, ViewMap):
+            vtk_obj = PolyLine()
+        elif isinstance(self, ViewXsection):
+            vtk_obj = XsPolyLine(
+                x_section_uid=self.this_x_section_uid, parent=self.parent
+            )
+        # elif isinstance(self, View3D):
+        #     vtk_obj = PolyLine()
+        vtk_obj.ShallowCopy(traced_pld)
+        source_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
+        editor.EnabledOff()
+        self.clear_selection()
+        freeze_gui_off(self)
+
+    source_coll = _get_editable_line_source_coll(
+        self, selected_uids=self.selected_uids[:1]
+    )
+    if source_coll is None:
+        freeze_gui_off(self)
+        return
+    # self.disable_actions()
+    sel_uid = self.selected_uids[0]
+    actor = self.plotter.renderer.actors[sel_uid]
+    data = actor.mapper.dataset
+    # self.tracer.SetInputData(data)
+    editor = Editor(self)
+    editor.EnabledOn()
+    editor.initialize(data, "edit")
+    self.plotter.track_click_position(
+        side="right", callback=lambda event: end_edit(event, sel_uid)
+    )
+
+
+@freeze_gui_onoff
+def sort_line_nodes(self):
+    """Sort line nodes."""
+    source_coll = _get_editable_line_source_coll(self)
+    if source_coll is None:
+        return
+
+    self.print_terminal("Sort line nodes according to cell order.")
+    # """Terminate running event loops"""
+    # self.stop_event_loops()
+    # for action in self.findChildren(QAction):
+    #     if isinstance(action.parentWidget(), NavigationToolbar) is False:
+    #         action.setDisabled(True)
+    # If more than one line is selected, keep the first.
+    for current_uid in self.selected_uids:
+        # For some reason in the following the [:] is needed.
+        source_coll.get_uid_vtk_obj(
+            current_uid
+        ).sort_nodes()  # this could be probably done per-part__________________________
+        # Deselect input line.
+        self.parent.signals.geom_modified.emit([current_uid], source_coll)
+        # for action in self.findChildren(QAction):
+        #     action.setEnabled(True)
+    # Deselect input line.
+    self.clear_selection()
+
+
+
 
 
 def move_line(self, vector):
@@ -527,30 +581,16 @@ def split_line_line(self):
     """Split line (paper) with another line (scissors). First, select the paper-line then the scissors-line"""
     # print("Split line with line. Line to be split has been selected, please select an intersecting line.")   #Reviw needed
     # Terminate running event loops
-    # Check if a line is selected
-    if not self.selected_uids:
-        self.print_terminal(" -- No input data selected -- ")
-        return
-    elif len(self.selected_uids) <= 1:
-        self.print_terminal(
-            " -- Not enough input data selected. Select at least 2 objects -- "
-        )
+    source_coll = _get_editable_line_source_coll(self, min_selected=2)
+    if source_coll is None:
         return
 
     current_uid_scissors = self.selected_uids[-1]
-    if (
-        self.parent.geol_coll.get_uid_topology(current_uid_scissors) != "PolyLine"
-    ) and (
-        self.parent.geol_coll.get_uid_topology(current_uid_scissors) != "XsPolyLine"
-    ):
-        self.print_terminal(" -- Selected scissor is not a line -- ")
-        return
-
     if isinstance(self, ViewMap):
-        inU = self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors).points_X
-        inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors).points_Y
+        inU = source_coll.get_uid_vtk_obj(current_uid_scissors).points_X
+        inV = source_coll.get_uid_vtk_obj(current_uid_scissors).points_Y
     elif isinstance(self, ViewXsection):
-        in_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid_scissors)
+        in_vtk_obj = source_coll.get_uid_vtk_obj(current_uid_scissors)
         inU, inV = self.parent.xsect_coll.world2plane(
             section_uid=self.this_x_section_uid,
             X=in_vtk_obj.points_X,
@@ -562,19 +602,11 @@ def split_line_line(self):
     shp_line_in_scissors = shp_linestring(inUV_scissors)
 
     for current_uid_paper in self.selected_uids[:-1]:
-        if (
-            self.parent.geol_coll.get_uid_topology(current_uid_paper) != "PolyLine"
-        ) and (
-            self.parent.geol_coll.get_uid_topology(current_uid_paper) != "XsPolyLine"
-        ):
-            self.print_terminal(" -- Selected paper is not a line -- ")
-            return
-
         if isinstance(self, ViewMap):
-            inU = self.parent.geol_coll.get_uid_vtk_obj(current_uid_paper).points_X
-            inV = self.parent.geol_coll.get_uid_vtk_obj(current_uid_paper).points_Y
+            inU = source_coll.get_uid_vtk_obj(current_uid_paper).points_X
+            inV = source_coll.get_uid_vtk_obj(current_uid_paper).points_Y
         elif isinstance(self, ViewXsection):
-            in_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid_paper)
+            in_vtk_obj = source_coll.get_uid_vtk_obj(current_uid_paper)
             inU, inV = self.parent.xsect_coll.world2plane(
                 section_uid=self.this_x_section_uid,
                 X=in_vtk_obj.points_X,
@@ -601,35 +633,38 @@ def split_line_line(self):
         if not shp_line_in_paper.crosses(shp_line_in_scissors):
             paper_to_split, splitter = int_node(shp_line_in_paper, shp_line_in_scissors)
         if not paper_to_split.intersects(splitter):
+            self.print_terminal(
+                f" -- Paper line {current_uid_paper} does not intersect scissor line {current_uid_scissors} -- "
+            )
             self.clear_selection()
             return
         split_lines = shp_split(paper_to_split, splitter)
         if len(split_lines.geoms) < 2:
+            self.print_terminal(
+                f" -- Scissor line {current_uid_scissors} does not split paper line {current_uid_paper} -- "
+            )
             self.clear_selection()
             return
         replace = 1  # replace = 1 for the first line to operate replace_vtk
         uids = [current_uid_scissors]
         for line in split_lines.geoms:
             # Create empty dictionary for the output lines.
-            new_line = deepcopy(self.parent.geol_coll.entity_dict)
+            new_line = deepcopy(source_coll.entity_dict)
             new_line["name"] = (
-                self.parent.geol_coll.df.loc[
-                    self.parent.geol_coll.df["uid"] == current_uid_paper, "name"
-                ].values[0]
+                source_coll.df.loc[source_coll.df["uid"] == current_uid_paper, "name"].values[0]
                 + "_split"
             )
-            new_line["topology"] = self.parent.geol_coll.df.loc[
-                self.parent.geol_coll.df["uid"] == current_uid_paper, "topology"
+            new_line["topology"] = source_coll.df.loc[
+                source_coll.df["uid"] == current_uid_paper, "topology"
             ].values[0]
-            new_line["role"] = self.parent.geol_coll.df.loc[
-                self.parent.geol_coll.df["uid"] == current_uid_paper, "role"
+            new_line["role"] = source_coll.df.loc[
+                source_coll.df["uid"] == current_uid_paper, "role"
             ].values[0]
-            new_line["feature"] = self.parent.geol_coll.df.loc[
-                self.parent.geol_coll.df["uid"] == current_uid_paper,
-                "feature",
+            new_line["feature"] = source_coll.df.loc[
+                source_coll.df["uid"] == current_uid_paper, "feature"
             ].values[0]
-            new_line["scenario"] = self.parent.geol_coll.df.loc[
-                self.parent.geol_coll.df["uid"] == current_uid_paper, "scenario"
+            new_line["scenario"] = source_coll.df.loc[
+                source_coll.df["uid"] == current_uid_paper, "scenario"
             ].values[0]
             outU = np_array(line.coords)[:, 0]
             outV = np_array(line.coords)[:, 1]
@@ -655,21 +690,17 @@ def split_line_line(self):
             if new_line["vtk_obj"].points_number > 0:
                 # Replace VTK object
                 if replace == 1:
-                    self.parent.geol_coll.replace_vtk(
-                        uid=current_uid_paper, vtk_object=new_line["vtk_obj"]
-                    )
-                    self.parent.signals.geom_modified.emit(
-                        [current_uid_paper], self.parent.geol_coll
-                    )
+                    source_coll.replace_vtk(uid=current_uid_paper, vtk_object=new_line["vtk_obj"])
+                    self.parent.signals.geom_modified.emit([current_uid_paper], source_coll)
                     replace = 0
                     uids.append(current_uid_paper)
                 else:
                     # Create entity from the dictionary
-                    uid = self.parent.geol_coll.add_entity_from_dict(new_line)
+                    uid = source_coll.add_entity_from_dict(new_line)
                     uids.append(uid)
                 del new_line["vtk_obj"]
             else:
-                self.print_terminal("Empty object")
+                self.print_terminal(f" -- Split generated an empty object for {current_uid_paper} -- ")
         # Deselect input line and force redraw
 
         # self.parent.signals.geom_modified.emit(uids)  # emit uid as list to force redraw()
@@ -685,28 +716,26 @@ def split_line_existing_point(self):
         point_pos = selector.active_pos
         self.plotter.untrack_click_position(side="right")
         # Create empty dictionary for the output lines
-        new_line_1 = deepcopy(self.parent.geol_coll.entity_dict)
-        new_line_2 = deepcopy(self.parent.geol_coll.entity_dict)
+        new_line_1 = deepcopy(source_coll.entity_dict)
+        new_line_2 = deepcopy(source_coll.entity_dict)
         new_line_2["name"] = (
-            self.parent.geol_coll.df.loc[
-                self.parent.geol_coll.df["uid"] == uid, "name"
-            ].values[0]
+            source_coll.df.loc[source_coll.df["uid"] == uid, "name"].values[0]
             + "_split"
         )
-        new_line_2["topology"] = self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["uid"] == uid, "topology"
+        new_line_2["topology"] = source_coll.df.loc[
+            source_coll.df["uid"] == uid, "topology"
         ].values[0]
-        new_line_2["role"] = self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["uid"] == uid, "role"
+        new_line_2["role"] = source_coll.df.loc[
+            source_coll.df["uid"] == uid, "role"
         ].values[0]
-        new_line_2["feature"] = self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["uid"] == uid, "feature"
+        new_line_2["feature"] = source_coll.df.loc[
+            source_coll.df["uid"] == uid, "feature"
         ].values[0]
-        new_line_2["scenario"] = self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["uid"] == uid, "scenario"
+        new_line_2["scenario"] = source_coll.df.loc[
+            source_coll.df["uid"] == uid, "scenario"
         ].values[0]
 
-        vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        vtk_obj = source_coll.get_uid_vtk_obj(uid)
 
         if isinstance(self, ViewMap):
             inU_line = deepcopy(vtk_obj.points_X)
@@ -780,13 +809,13 @@ def split_line_existing_point(self):
         new_line_2["vtk_obj"].auto_cells()
         # Replace VTK object
         if new_line_1["vtk_obj"].points_number > 0:
-            self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=new_line_1["vtk_obj"])
+            source_coll.replace_vtk(uid=uid, vtk_object=new_line_1["vtk_obj"])
             del new_line_1
         else:
             self.print_terminal("Empty object")
         # Create entity from the dictionary
         if new_line_2["vtk_obj"].points_number > 0:
-            self.parent.geol_coll.add_entity_from_dict(new_line_2)
+            source_coll.add_entity_from_dict(new_line_2)
             del new_line_2
         else:
             self.print_terminal("Empty object")
@@ -798,16 +827,10 @@ def split_line_existing_point(self):
     self.print_terminal(
         "Split line at existing point. Line to be split has been selected,\nplease select an existing point for splitting."
     )
-    # Check if a line is selecte
-    if not self.selected_uids:
-        self.print_terminal(" -- No input data selected -- ")
-        return
-    if (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0]) != "PolyLine"
-    ) and (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0]) != "XsPolyLine"
-    ):
-        self.print_terminal(" -- Selected data is not a line -- ")
+    source_coll = _get_editable_line_source_coll(
+        self, selected_uids=self.selected_uids[:1]
+    )
+    if source_coll is None:
         return
     # If more than one line is selected, keep the first
     sel_uid = self.selected_uids[0]
@@ -832,69 +855,51 @@ def split_line_vector(self, vector):
 def merge_lines(self):
     """Merge two (contiguous or non-contiguous) lines.
     Metadata will be taken from the first selected line."""
-    # Check if at least 2 lines are selected.
-    self.print_terminal(f"self.selected_uids: {self.selected_uids}")
-    if not self.selected_uids:
-        self.print_terminal(" -- No input data selected -- ")
-        # self.enable_actions()
+    source_coll = _get_editable_line_source_coll(self, min_selected=2)
+    if source_coll is None:
         return
+
+    self.print_terminal(f"self.selected_uids: {self.selected_uids}")
     # Create local copy of selected_uids
     in_uids = self.selected_uids
-    if len(in_uids) <= 1:
-        self.print_terminal(
-            " -- Not enough input data selected. Select at least 2 objects -- "
-        )
-        # self.enable_actions()
-        return
-    # Check if all input entities are PolyLine or XsPolyLine
-    # print(in_uids)
-    for uid in in_uids:
-        if self.parent.geol_coll.get_uid_topology(uid) == "PolyLine":
-            continue
-        elif self.parent.geol_coll.get_uid_topology(uid) == "XsPolyLine":
-            continue
-        else:
-            self.print_terminal(" -- Selection must include lines only -- ")
-            # self.enable_actions()
-            return
     # For XsPolyLine, check that they all belong to the same cross-section.
     this_xsection = None
     for uid in in_uids:
-        if self.parent.geol_coll.get_uid_topology(uid) == "XsPolyLine":
+        if source_coll.get_uid_topology(uid) == "XsPolyLine":
             if this_xsection is None:
-                this_xsection = self.parent.geol_coll.get_uid_x_section(uid)
+                this_xsection = source_coll.get_uid_x_section(uid)
             elif this_xsection is not None:
-                if self.parent.geol_coll.get_uid_x_section(uid) != this_xsection:
+                if source_coll.get_uid_x_section(uid) != this_xsection:
                     self.print_terminal(
                         " -- Selection must include lines belonging to the same cross-section only -- "
                     )
                     # self.enable_actions()
                     return
     # Create empty dictionary for the output line.
-    new_line = deepcopy(self.parent.geol_coll.entity_dict)
+    new_line = deepcopy(source_coll.entity_dict)
     # Populate metadata from first selected line.
     source_uid = in_uids[0]
-    new_line["name"] = self.parent.geol_coll.get_uid_name(source_uid)
-    new_line["topology"] = self.parent.geol_coll.get_uid_topology(source_uid)
-    new_line["role"] = self.parent.geol_coll.get_uid_role(source_uid)
-    new_line["feature"] = self.parent.geol_coll.get_uid_feature(source_uid)
-    new_line["scenario"] = self.parent.geol_coll.get_uid_scenario(source_uid)
-    new_line["parent_uid"] = self.parent.geol_coll.get_uid_x_section(source_uid)
+    new_line["name"] = source_coll.get_uid_name(source_uid)
+    new_line["topology"] = source_coll.get_uid_topology(source_uid)
+    new_line["role"] = source_coll.get_uid_role(source_uid)
+    new_line["feature"] = source_coll.get_uid_feature(source_uid)
+    new_line["scenario"] = source_coll.get_uid_scenario(source_uid)
+    new_line["parent_uid"] = source_coll.get_uid_x_section(source_uid)
     new_line["properties_names"] = deepcopy(
-        self.parent.geol_coll.get_uid_properties_names(source_uid)
+        source_coll.get_uid_properties_names(source_uid)
     )
     new_line["properties_components"] = deepcopy(
-        self.parent.geol_coll.get_uid_properties_components(source_uid)
+        source_coll.get_uid_properties_components(source_uid)
     )
     # Create empty PolyLine() or XsPolyLine().
-    if self.parent.geol_coll.get_uid_topology(source_uid) == "XsPolyLine":
+    if source_coll.get_uid_topology(source_uid) == "XsPolyLine":
         new_line["vtk_obj"] = XsPolyLine()
     else:
         new_line["vtk_obj"] = PolyLine()
     # Add points to new merged line.
-    points_0 = self.parent.geol_coll.get_uid_vtk_obj(in_uids[0]).points.copy()
+    points_0 = source_coll.get_uid_vtk_obj(in_uids[0]).points.copy()
     for uid in in_uids[1::]:
-        points_1 = self.parent.geol_coll.get_uid_vtk_obj(uid).points.copy()
+        points_1 = source_coll.get_uid_vtk_obj(uid).points.copy()
         first2first = points_0[1, :] - points_1[1, :]
         first2first_norm = np_norm(first2first)
         first2last = points_0[1, :] - points_1[-1, :]
@@ -924,7 +929,7 @@ def merge_lines(self):
     # Automatically create all line cells.
     new_line["vtk_obj"].auto_cells()
         # Add merged line first. Remove source lines only if add succeeds.
-    out_uid = self.parent.geol_coll.add_entity_from_dict(new_line)
+    out_uid = source_coll.add_entity_from_dict(new_line)
     if not out_uid:
         self.print_terminal(" -- Failed to add merged line. Input lines not removed -- ")
         self.enable_actions()
@@ -934,7 +939,7 @@ def merge_lines(self):
     for uid in in_uids:
         if uid == out_uid:
             continue
-        self.parent.geol_coll.remove_entity(uid)
+        source_coll.remove_entity(uid)
 def _ordered_unique_uids(uids):
     ordered = []
     for uid in uids:
@@ -1058,21 +1063,11 @@ def _endpoint_extension_candidates(line_coords, eps=1e-12):
 @freeze_gui_onoff
 def snap_line(self):
     """Snap selected lines by trimming short terminal branches and extending close endpoints."""
-    if not self.selected_uids:
-        self.print_terminal(" -- No input data selected -- ")
+    source_coll = _get_editable_line_source_coll(self, min_selected=2)
+    if source_coll is None:
         return
 
     ordered_selected_uids = _ordered_unique_uids(self.selected_uids)
-    if len(ordered_selected_uids) < 2:
-        self.print_terminal(" -- Select at least 2 lines -- ")
-        return
-
-    for uid in ordered_selected_uids:
-        if (self.parent.geol_coll.get_uid_topology(uid) != "PolyLine") and (
-            self.parent.geol_coll.get_uid_topology(uid) != "XsPolyLine"
-        ):
-            self.print_terminal(" -- Selected data is not a line -- ")
-            return
 
     tolerance = input_one_value_dialog(
         parent=self,
@@ -1093,7 +1088,7 @@ def snap_line(self):
 
     if isinstance(self, ViewMap):
         for uid in ordered_selected_uids:
-            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            vtk_obj = source_coll.get_uid_vtk_obj(uid)
             in_u = np_array(vtk_obj.points_X).reshape(-1)
             in_v = np_array(vtk_obj.points_Y).reshape(-1)
             in_uv = _dedupe_consecutive_coords(np_column_stack((in_u, in_v)), eps=eps)
@@ -1103,7 +1098,7 @@ def snap_line(self):
             line_uv[uid] = in_uv
     elif isinstance(self, ViewXsection):
         for uid in ordered_selected_uids:
-            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            vtk_obj = source_coll.get_uid_vtk_obj(uid)
             in_u, in_v = self.parent.xsect_coll.world2plane(
                 section_uid=self.this_x_section_uid,
                 X=vtk_obj.points_X,
@@ -1281,7 +1276,7 @@ def snap_line(self):
         out_vtk.points = np_column_stack((out_x, out_y, out_z))
         out_vtk.auto_cells()
         if out_vtk.points_number >= 2:
-            self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=out_vtk)
+            source_coll.replace_vtk(uid=uid, vtk_object=out_vtk)
 
     self.print_terminal(
         "Snap to intersection completed: updated "
@@ -1298,9 +1293,8 @@ def snap_line(self):
 @freeze_gui_onoff
 def resample_lines_distance(self):
     """Resample selected line with constant specified spacing."""
-    # Check if at least a line is selected.
-    if not self.selected_uids:
-        self.print_terminal(" -- No input data selected -- ")
+    source_coll = _get_editable_line_source_coll(self)
+    if source_coll is None:
         return
     # Input distance for evenly spacing resampling.
     # Add a message to not use it with Draw Line 3D method
@@ -1323,27 +1317,18 @@ def resample_lines_distance(self):
         return
     # distance_delta = int(distance_delta)
     for current_uid in self.selected_uids:
-        if (self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine") and (
-            self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
-        ):
-            self.print_terminal(" -- Selected data is not a line -- ")
-            return
         # Create empty dictionary for the output line.
-        new_line = deepcopy(self.parent.geol_coll.entity_dict)
+        new_line = deepcopy(source_coll.entity_dict)
         # Define topology and parent_uid. Get coordinates of input line.
         if isinstance(self, ViewMap):
             new_line["topology"] = "PolyLine"
             new_line["parent_uid"] = None
-            inU = deepcopy(
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 0]
-            )
-            inV = deepcopy(
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 1]
-            )
+            inU = deepcopy(source_coll.get_uid_vtk_obj(current_uid).points[:, 0])
+            inV = deepcopy(source_coll.get_uid_vtk_obj(current_uid).points[:, 1])
         elif isinstance(self, ViewXsection):
             new_line["topology"] = "XsPolyLine"
             new_line["parent_uid"] = self.this_x_section_uid
-            in_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid)
+            in_vtk_obj = source_coll.get_uid_vtk_obj(current_uid)
             inU, inV = self.parent.xsect_coll.world2plane(
                 section_uid=self.this_x_section_uid,
                 X=in_vtk_obj.points_X,
@@ -1384,15 +1369,13 @@ def resample_lines_distance(self):
         new_line["vtk_obj"].auto_cells()
         # Replace VTK object.
         if new_line["vtk_obj"].points_number > 0:
-            self.parent.geol_coll.replace_vtk(
-                uid=current_uid, vtk_object=new_line["vtk_obj"]
-            )
+            source_coll.replace_vtk(uid=current_uid, vtk_object=new_line["vtk_obj"])
             del new_line
         else:
             self.print_terminal(" -- Empty object -- ")
         # Deselect input line and emit uid as list to force redraw.
         self.clear_selection()
-        self.parent.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
+        self.parent.signals.geom_modified.emit([current_uid], source_coll)
         self.print_terminal(
             f"Line {current_uid} resampled with distance = {distance_delta}"
         )
@@ -1402,9 +1385,8 @@ def resample_lines_distance(self):
 def resample_lines_number_points(self):
     # this must be done per-part___________________________________________________
     """Resample selected line with constant spacing defined by a specified number of nodes."""
-    # Check if at least a line is selected.
-    if not self.selected_uids:
-        self.print_terminal(" -- No input data selected -- ")
+    source_coll = _get_editable_line_source_coll(self)
+    if source_coll is None:
         return
     # Input the number of points for evenly spacing resampling.
     self.print_terminal(
@@ -1431,27 +1413,18 @@ def resample_lines_number_points(self):
     else:
         number_of_points = int(number_of_points)
     for current_uid in self.selected_uids:
-        if (self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine") and (
-            self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
-        ):
-            self.print_terminal(" -- Selected data is not a line -- ")
-            return
         # Create empty dictionary for the output line.
-        new_line = deepcopy(self.parent.geol_coll.entity_dict)
+        new_line = deepcopy(source_coll.entity_dict)
         # Define topology and parent_uid. Get coordinates of input line.
         if isinstance(self, ViewMap):
             new_line["topology"] = "PolyLine"
             new_line["parent_uid"] = None
-            inU = deepcopy(
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 0]
-            )
-            inV = deepcopy(
-                self.parent.geol_coll.get_uid_vtk_obj(current_uid).points[:, 1]
-            )
+            inU = deepcopy(source_coll.get_uid_vtk_obj(current_uid).points[:, 0])
+            inV = deepcopy(source_coll.get_uid_vtk_obj(current_uid).points[:, 1])
         elif isinstance(self, ViewXsection):
             new_line["topology"] = "XsPolyLine"
             new_line["parent_uid"] = self.this_x_section_uid
-            in_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid)
+            in_vtk_obj = source_coll.get_uid_vtk_obj(current_uid)
             inU, inV = self.parent.xsect_coll.world2plane(
                 section_uid=self.this_x_section_uid,
                 X=in_vtk_obj.points_X,
@@ -1492,15 +1465,13 @@ def resample_lines_number_points(self):
         new_line["vtk_obj"].auto_cells()
         # Replace VTK object.
         if new_line["vtk_obj"].points_number > 0:
-            self.parent.geol_coll.replace_vtk(
-                uid=current_uid, vtk_object=new_line["vtk_obj"]
-            )
+            source_coll.replace_vtk(uid=current_uid, vtk_object=new_line["vtk_obj"])
             del new_line
         else:
             self.print_terminal(" -- Empty object -- ")
         # Deselect input line and emit uid as list to force redraw.
         self.clear_selection()
-        self.parent.signals.geom_modified.emit([current_uid], self.parent.geol_coll)
+        self.parent.signals.geom_modified.emit([current_uid], source_coll)
         self.print_terminal(
             f"Line {current_uid} resampled with number of points = {number_of_points}"
         )
@@ -1509,15 +1480,14 @@ def resample_lines_number_points(self):
 @freeze_gui_onoff
 def simplify_line(self):
     """Return a simplified representation of the line. Permits the user to choose a value for the Tolerance parameter."""
+    source_coll = _get_editable_line_source_coll(self)
+    if source_coll is None:
+        return
+
     self.print_terminal(
         "Simplify line. Define tolerance value: "
         "small values result in more vertices and great similarity with the input line."
     )
-
-    # Check if a line is selected
-    if not self.selected_uids:
-        self.print_terminal(" -- No input data selected -- ")
-        return
 
     # Ask for the tolerance parameter
     tolerance_p = input_one_value_dialog(
@@ -1534,19 +1504,13 @@ def simplify_line(self):
 
     try:
         for current_uid in self.selected_uids:
-            if (self.parent.geol_coll.get_uid_topology(current_uid) != "PolyLine") and (
-                self.parent.geol_coll.get_uid_topology(current_uid) != "XsPolyLine"
-            ):
-                self.print_terminal(" -- Selected data is not a line -- ")
-                continue
-
-            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(current_uid)
+            vtk_obj = source_coll.get_uid_vtk_obj(current_uid)
             if vtk_obj is None or vtk_obj.points_number <= 0:
                 self.print_terminal(f" --  Object not valid for {current_uid} -- ")
                 continue
 
             # Editing loop. Create empty dictionary for the output line
-            new_line = deepcopy(self.parent.geol_coll.entity_dict)
+            new_line = deepcopy(source_coll.entity_dict)
 
             # Get coordinates of input line.
             if isinstance(self, ViewMap):
@@ -1605,12 +1569,8 @@ def simplify_line(self):
 
             # Replace VTK object
             if new_line["vtk_obj"].points_number > 0:
-                self.parent.geol_coll.replace_vtk(
-                    uid=current_uid, vtk_object=new_line["vtk_obj"]
-                )
-                self.parent.signals.geom_modified.emit(
-                    [current_uid], self.parent.geol_coll
-                )
+                source_coll.replace_vtk(uid=current_uid, vtk_object=new_line["vtk_obj"])
+                self.parent.signals.geom_modified.emit([current_uid], source_coll)
             else:
                 self.print_terminal(
                     f"Empty geometry after parallel offset {current_uid}"
@@ -1632,16 +1592,10 @@ def copy_parallel(self):
     self.print_terminal("Copy Parallel. Create a line copied and translated.")
     # Terminate running event loops
 
-    # Check if a line is selected"""
-    if not self.selected_uids:
-        self.print_terminal(" -- No input data selected -- ")
-        return
-    if (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0]) != "PolyLine"
-    ) and (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0]) != "XsPolyLine"
-    ):
-        self.print_terminal(" -- Selected data is not a line -- ")
+    source_coll = _get_editable_line_source_coll(
+        self, selected_uids=self.selected_uids[:1]
+    )
+    if source_coll is None:
         return
     # If more than one line is selected, keep the first."""
     input_uid = self.selected_uids[0]
@@ -1658,32 +1612,26 @@ def copy_parallel(self):
         # self.enable_actions()
         return
 
-    in_line_name = self.parent.geol_coll.df.loc[
-        self.parent.geol_coll.df["uid"] == input_uid, "name"
-    ].values[0]
+    in_line_name = source_coll.df.loc[source_coll.df["uid"] == input_uid, "name"].values[0]
     out_line_name = in_line_name + "_para_" + "%d" % distance
 
     # Create empty dictionary for the output line and set name and role.
     # -----IN THE FUTURE see if other metadata should be automatically set.
-    line_dict = deepcopy(self.parent.geol_coll.entity_dict)
+    line_dict = deepcopy(source_coll.entity_dict)
     line_dict["name"] = out_line_name
-    line_dict["role"] = self.parent.geol_coll.df.loc[
-        self.parent.geol_coll.df["uid"] == input_uid, "role"
-    ].values[0]
-    line_dict["feature"] = self.parent.geol_coll.get_uid_feature(self.selected_uids[0])
-    line_dict["scenario"] = self.parent.geol_coll.get_uid_scenario(
-        self.selected_uids[0]
-    )
+    line_dict["role"] = source_coll.df.loc[source_coll.df["uid"] == input_uid, "role"].values[0]
+    line_dict["feature"] = source_coll.get_uid_feature(self.selected_uids[0])
+    line_dict["scenario"] = source_coll.get_uid_scenario(self.selected_uids[0])
     if isinstance(self, ViewMap):
         # if isinstance(self, (ViewMap, ViewMap)):
-        inU = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_X
-        inV = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Y
+        inU = source_coll.get_uid_vtk_obj(input_uid).points_X
+        inV = source_coll.get_uid_vtk_obj(input_uid).points_Y
 
         line_dict["vtk_obj"] = PolyLine()
         line_dict["topology"] = "PolyLine"
     # elif isinstance(self, (ViewXsection, ViewXsection)):
     elif isinstance(self, ViewXsection):
-        in_vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(input_uid)
+        in_vtk_obj = source_coll.get_uid_vtk_obj(input_uid)
         inU, inV = self.parent.xsect_coll.world2plane(
             section_uid=self.this_x_section_uid,
             X=in_vtk_obj.points_X,
@@ -1751,8 +1699,8 @@ def copy_parallel(self):
     line_dict["vtk_obj"].auto_cells()
     # Create entity from the dictionary and run left_right.
     if line_dict["vtk_obj"].points_number > 0:
-        output_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
-        left_right(self, uid=output_uid)
+        output_uid = source_coll.add_entity_from_dict(line_dict)
+        left_right(self, uid=output_uid, source_coll=source_coll)
     else:
         self.print_terminal("Empty object")
 
@@ -1764,22 +1712,16 @@ def copy_kink(self):
     a positive distance creates a line shifted upwards and to the left."""
     self.print_terminal("Copy Kink. Create a line copied and translated.")
 
-    # Check if a line is selected
-    if not self.selected_uids:
-        self.print_terminal(" -- No input data selected -- ")
-        return
-    if (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0]) != "PolyLine"
-    ) and (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0]) != "XsPolyLine"
-    ):
-        self.print_terminal(" -- Selected data is not a line -- ")
+    source_coll = _get_editable_line_source_coll(
+        self, selected_uids=self.selected_uids[:1]
+    )
+    if source_coll is None:
         return
 
     # If more than one line is selected, keep the first.
     input_uid = self.selected_uids[0]
 
-    vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(input_uid)
+    vtk_obj = source_coll.get_uid_vtk_obj(input_uid)
     if vtk_obj is None or vtk_obj.points_number <= 0:
         self.print_terminal(" -- Oggetto VTK non valido -- ")
         return
@@ -1794,21 +1736,15 @@ def copy_kink(self):
     if distance is None:
         return
 
-    in_line_name = self.parent.geol_coll.df.loc[
-        self.parent.geol_coll.df["uid"] == input_uid, "name"
-    ].values[0]
+    in_line_name = source_coll.df.loc[source_coll.df["uid"] == input_uid, "name"].values[0]
     out_line_name = in_line_name + "_kink_" + "%d" % distance
 
     # Create empty dictionary for the output line and set name and role.
-    line_dict = deepcopy(self.parent.geol_coll.entity_dict)
+    line_dict = deepcopy(source_coll.entity_dict)
     line_dict["name"] = out_line_name
-    line_dict["role"] = self.parent.geol_coll.df.loc[
-        self.parent.geol_coll.df["uid"] == input_uid, "role"
-    ].values[0]
-    line_dict["feature"] = self.parent.geol_coll.get_uid_feature(self.selected_uids[0])
-    line_dict["scenario"] = self.parent.geol_coll.get_uid_scenario(
-        self.selected_uids[0]
-    )
+    line_dict["role"] = source_coll.df.loc[source_coll.df["uid"] == input_uid, "role"].values[0]
+    line_dict["feature"] = source_coll.get_uid_feature(self.selected_uids[0])
+    line_dict["scenario"] = source_coll.get_uid_scenario(self.selected_uids[0])
 
     try:
         if isinstance(self, ViewMap):
@@ -1834,7 +1770,7 @@ def copy_kink(self):
 
         # Deselect input line.
         self.clear_selection()
-        self.parent.signals.geom_modified.emit([input_uid], self.parent.geol_coll)
+        self.parent.signals.geom_modified.emit([input_uid], source_coll)
 
         # Run the Shapely function.
         shp_line_in = shp_linestring(inUV)
@@ -1885,8 +1821,8 @@ def copy_kink(self):
 
         # Create entity from the dictionary and run left_right.
         if line_dict["vtk_obj"].points_number > 0:
-            output_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
-            left_right(self, uid=output_uid)
+            output_uid = source_coll.add_entity_from_dict(line_dict)
+            left_right(self, uid=output_uid, source_coll=source_coll)
         else:
             self.print_terminal("Empty object")
 
@@ -1902,17 +1838,10 @@ def copy_similar(self, vector):
     self.print_terminal("Copy Similar. Create a line copied and translated.")
     # Terminate running event loops
     # self.stop_event_loops()
-    # Check if a line is selected
-    if not self.selected_uids:
-        self.print_terminal(" -- No input data selected -- ")
-        freeze_gui_off(self)
-        return
-    if (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0]) != "PolyLine"
-    ) and (
-        self.parent.geol_coll.get_uid_topology(self.selected_uids[0]) != "XsPolyLine"
-    ):
-        self.print_terminal(" -- Selected data is not a line -- ")
+    source_coll = _get_editable_line_source_coll(
+        self, selected_uids=self.selected_uids[:1]
+    )
+    if source_coll is None:
         freeze_gui_off(self)
         return
     # If more than one line is selected, keep the first.
@@ -1921,14 +1850,10 @@ def copy_similar(self, vector):
     # ----IN THE FUTURE add a test to check that the selected feature is a geological feature
     # Create empty dictionary for the output line and set name and role.
     # IN THE FUTURE see if other metadata should be automatically set.
-    line_dict = deepcopy(self.parent.geol_coll.entity_dict)
-    line_dict["role"] = self.parent.geol_coll.df.loc[
-        self.parent.geol_coll.df["uid"] == input_uid, "role"
-    ].values[0]
-    line_dict["feature"] = self.parent.geol_coll.get_uid_feature(self.selected_uids[0])
-    line_dict["scenario"] = self.parent.geol_coll.get_uid_scenario(
-        self.selected_uids[0]
-    )
+    line_dict = deepcopy(source_coll.entity_dict)
+    line_dict["role"] = source_coll.df.loc[source_coll.df["uid"] == input_uid, "role"].values[0]
+    line_dict["feature"] = source_coll.get_uid_feature(self.selected_uids[0])
+    line_dict["scenario"] = source_coll.get_uid_scenario(self.selected_uids[0])
     if isinstance(self, ViewMap):
         line_dict["vtk_obj"] = PolyLine()
         line_dict["topology"] = "PolyLine"
@@ -1937,9 +1862,9 @@ def copy_similar(self, vector):
         line_dict["topology"] = "XsPolyLine"
         line_dict["parent_uid"] = self.this_x_section_uid
     # Get coordinates of input line.
-    inX = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_X
-    inY = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Y
-    inZ = self.parent.geol_coll.get_uid_vtk_obj(input_uid).points_Z
+    inX = source_coll.get_uid_vtk_obj(input_uid).points_X
+    inY = source_coll.get_uid_vtk_obj(input_uid).points_Y
+    inZ = source_coll.get_uid_vtk_obj(input_uid).points_Z
     # Get similar folding vector.
     if vector.length == 0:
         self.print_terminal("Zero-length vector")
@@ -1955,16 +1880,14 @@ def copy_similar(self, vector):
     line_dict["vtk_obj"].points = outXYZ
     line_dict["vtk_obj"].auto_cells()
     # Set output line name.
-    in_line_name = self.parent.geol_coll.df.loc[
-        self.parent.geol_coll.df["uid"] == input_uid, "name"
-    ].values[0]
+    in_line_name = source_coll.df.loc[source_coll.df["uid"] == input_uid, "name"].values[0]
     distance = vector.length
     out_line_name = f"{in_line_name}_simi_{round(distance, 2)}"
 
     line_dict["name"] = out_line_name
     # Create entity from the dictionary and run left_right.
-    output_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
-    left_right(self, uid=output_uid)
+    output_uid = source_coll.add_entity_from_dict(line_dict)
+    left_right(self, uid=output_uid, source_coll=source_coll)
     # Deselect input line.
     if line_dict["vtk_obj"].points_number > 0:
         self.clear_selection()
