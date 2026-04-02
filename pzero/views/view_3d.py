@@ -12,6 +12,26 @@ from PySide6.QtWidgets import QMenu
 
 # Numpy imports____
 from numpy import append as np_append
+from numpy import array as np_array
+from numpy import linspace as np_linspace
+from numpy import argmin as np_argmin
+from numpy import argmax as np_argmax
+from numpy import mean as np_mean
+from numpy import asarray as np_asarray
+from numpy import linalg as np_linalg
+from numpy import max as np_max
+from numpy import min as np_min
+from numpy import sum as np_sum
+from numpy import diff as np_diff
+from numpy import zeros as np_zeros
+from numpy import vstack as np_vstack
+from numpy import empty as np_empty
+from numpy import ones as np_ones
+from numpy import abs as np_abs
+from numpy import count_nonzero as np_count_nonzero
+from numpy import cross as np_cross
+from numpy import dot as np_dot
+from numpy import any as np_any
 
 # VTK imports____
 from vtkmodules.util import numpy_support
@@ -1464,7 +1484,7 @@ class View3D(ViewVTK):
             # Generate evenly spaced positions between start and end position
             import numpy as np
 
-            positions = np.linspace(
+            positions = np_linspace(
                 start_norm, end_norm, n_slices
             )  # Normalized positions
 
@@ -1637,7 +1657,7 @@ class View3D(ViewVTK):
             end_norm = end_slider.value() / 100.0
             import numpy as np
 
-            positions = np.linspace(start_norm, end_norm, slices_spin.value())
+            positions = np_linspace(start_norm, end_norm, slices_spin.value())
             # Resolve property once
             main_uid = self.get_entity_uid_by_name(entity_name)
             prop_text = None
@@ -3079,7 +3099,7 @@ class View3D(ViewVTK):
             update_preview()
 
         def get_vector():
-            return np.array(
+            return np_array(
                 [x_spin.value(), y_spin.value(), z_spin.value()],
                 dtype=float,
             )
@@ -3106,13 +3126,13 @@ class View3D(ViewVTK):
             )
         )
         x_button.clicked.connect(
-            lambda: set_vector(np.array([default_distance, 0.0, 0.0]))
+            lambda: set_vector(np_array([default_distance, 0.0, 0.0]))
         )
         y_button.clicked.connect(
-            lambda: set_vector(np.array([0.0, default_distance, 0.0]))
+            lambda: set_vector(np_array([0.0, default_distance, 0.0]))
         )
         z_button.clicked.connect(
-            lambda: set_vector(np.array([0.0, 0.0, default_distance]))
+            lambda: set_vector(np_array([0.0, 0.0, default_distance]))
         )
 
         for spin in [x_spin, y_spin, z_spin, distance_spin]:
@@ -3197,18 +3217,18 @@ class View3D(ViewVTK):
 
     def _make_unit_vector(self, vector):
         """Return a normalized direction vector or None for zero-length input."""
-        vector = np.asarray(vector, dtype=float).reshape(3)
-        magnitude = np.linalg.norm(vector)
+        vector = np_asarray(vector, dtype=float).reshape(3)
+        magnitude = np_linalg.norm(vector)
         if magnitude <= 1e-9:
             return None
         return vector / magnitude
 
     def _resolve_extension_displacement(self, direction=None, distance=1.0):
         """Convert UI values into a displacement vector and its normalized direction."""
-        base_vector = np.asarray(direction, dtype=float).reshape(3)
+        base_vector = np_asarray(direction, dtype=float).reshape(3)
         scale = float(distance)
         displacement_vector = base_vector * scale
-        magnitude = float(np.linalg.norm(displacement_vector))
+        magnitude = float(np_linalg.norm(displacement_vector))
         if magnitude <= 1e-9:
             return None, None, 0.0
         return displacement_vector / magnitude, displacement_vector, magnitude
@@ -3217,7 +3237,7 @@ class View3D(ViewVTK):
         """Choose a moderate default extension distance from object size."""
         try:
             bounds = vtk_obj.bounds
-            extents = np.array(
+            extents = np_array(
                 [
                     bounds[1] - bounds[0],
                     bounds[3] - bounds[2],
@@ -3225,7 +3245,7 @@ class View3D(ViewVTK):
                 ],
                 dtype=float,
             )
-            scale = float(np.max(extents))
+            scale = float(np_max(extents))
             if scale <= 0.0:
                 return 1.0
             return max(scale * 0.15, 1.0)
@@ -3247,7 +3267,7 @@ class View3D(ViewVTK):
         }
 
         if topology == "TriSurf" and role in fault_roles:
-            return np.array([0.0, 0.0, 1.0], dtype=float)
+            return np_array([0.0, 0.0, 1.0], dtype=float)
 
         if topology == "PolyLine":
             try:
@@ -3263,15 +3283,15 @@ class View3D(ViewVTK):
                     ordered = part.deep_copy()
                     ordered.poly2lines()
                     ordered.sort_nodes()
-                    points = np.asarray(ordered.points, dtype=float)
+                    points = np_asarray(ordered.points, dtype=float)
                 except Exception:
-                    points = np.asarray(part.points, dtype=float)
+                    points = np_asarray(part.points, dtype=float)
                 if points.shape[0] < 2:
                     continue
-                segment_lengths = np.linalg.norm(
-                    np.diff(points[:, :2], axis=0), axis=1
+                segment_lengths = np_linalg.norm(
+                    np_diff(points[:, :2], axis=0), axis=1
                 )
-                part_length = float(np.sum(segment_lengths))
+                part_length = float(np_sum(segment_lengths))
                 if part_length > longest_length:
                     longest_length = part_length
                     longest_part = points
@@ -3285,7 +3305,7 @@ class View3D(ViewVTK):
 
         try:
             bounds = vtk_obj.bounds
-            extents = np.array(
+            extents = np_array(
                 [
                     bounds[1] - bounds[0],
                     bounds[3] - bounds[2],
@@ -3296,12 +3316,12 @@ class View3D(ViewVTK):
             if topology == "TriSurf" and role not in fault_roles:
                 axis = 0 if extents[0] >= extents[1] else 1
             else:
-                axis = int(np.argmax(extents))
-            vector = np.zeros(3, dtype=float)
+                axis = int(np_argmax(extents))
+            vector = np_zeros(3, dtype=float)
             vector[axis] = 1.0
             return vector
         except Exception:
-            return np.array([1.0, 0.0, 0.0], dtype=float)
+            return np_array([1.0, 0.0, 0.0], dtype=float)
 
     def _show_extend_surface_preview(self, uid=None, vtk_obj=None):
         """Render the preview geometry for the extend tool."""
@@ -3438,7 +3458,7 @@ class View3D(ViewVTK):
             except Exception:
                 pass
 
-            points = np.asarray(part.points, dtype=float)
+            points = np_asarray(part.points, dtype=float)
             if points.shape[0] < 2:
                 continue
 
@@ -3446,26 +3466,26 @@ class View3D(ViewVTK):
             point_data = {}
             for key in part.point_data_keys:
                 components = part.get_point_data_shape(key)[1]
-                array = np.asarray(part.get_point_data(key))
+                array = np_asarray(part.get_point_data(key))
                 point_data[key] = array.reshape(points.shape[0], components).copy()
 
             if side in ["negative", "both"]:
                 start_point = points[0] - displacement_vector
-                new_points = np.vstack((start_point, new_points))
+                new_points = np_vstack((start_point, new_points))
                 for key in point_data:
-                    point_data[key] = np.vstack((point_data[key][0:1], point_data[key]))
+                    point_data[key] = np_vstack((point_data[key][0:1], point_data[key]))
                 preview = PolyLine()
-                preview.points = np.vstack((points[0], start_point))
+                preview.points = np_vstack((points[0], start_point))
                 preview.auto_cells()
                 preview_parts.append(preview)
 
             if side in ["positive", "both"]:
                 end_point = points[-1] + displacement_vector
-                new_points = np.vstack((new_points, end_point))
+                new_points = np_vstack((new_points, end_point))
                 for key in point_data:
-                    point_data[key] = np.vstack((point_data[key], point_data[key][-1:]))
+                    point_data[key] = np_vstack((point_data[key], point_data[key][-1:]))
                 preview = PolyLine()
-                preview.points = np.vstack((points[-1], end_point))
+                preview.points = np_vstack((points[-1], end_point))
                 preview.auto_cells()
                 preview_parts.append(preview)
 
@@ -3499,10 +3519,10 @@ class View3D(ViewVTK):
 
         boundary = pv.wrap(boundary_filter.GetOutput())
         if boundary.n_points <= 0 or boundary.n_lines <= 0:
-            return np.empty((0, 2), dtype=int)
+            return np_empty((0, 2), dtype=int)
 
-        line_cells = np.asarray(boundary.lines).reshape((-1, 3))[:, 1:3]
-        original_ids = np.asarray(boundary.point_data["vtkIdFilter_Ids"], dtype=int)
+        line_cells = np_asarray(boundary.lines).reshape((-1, 3))[:, 1:3]
+        original_ids = np_asarray(boundary.point_data["vtkIdFilter_Ids"], dtype=int)
         return original_ids[line_cells]
 
     def _select_trisurf_boundary_edge_sets(
@@ -3517,19 +3537,19 @@ class View3D(ViewVTK):
         ):
             return []
 
-        point_scores = np.asarray(points @ selection_unit, dtype=float)
+        point_scores = np_asarray(points @ selection_unit, dtype=float)
         edge_mid_scores = (
             point_scores[boundary_edges[:, 0]] + point_scores[boundary_edges[:, 1]]
         ) / 2.0
         edge_vectors = points[boundary_edges[:, 1]] - points[boundary_edges[:, 0]]
-        edge_lengths = np.linalg.norm(edge_vectors, axis=1)
+        edge_lengths = np_linalg.norm(edge_vectors, axis=1)
         valid_length_mask = edge_lengths > 1e-9
-        if not np.any(valid_length_mask):
+        if not np_any(valid_length_mask):
             return []
 
-        edge_parallel = np.ones(boundary_edges.shape[0], dtype=float)
-        edge_parallel[valid_length_mask] = np.abs(
-            np.sum(
+        edge_parallel = np_ones(boundary_edges.shape[0], dtype=float)
+        edge_parallel[valid_length_mask] = np_abs(
+            np_sum(
                 (edge_vectors[valid_length_mask] / edge_lengths[valid_length_mask][:, None])
                 * selection_unit[None, :],
                 axis=1,
@@ -3538,10 +3558,10 @@ class View3D(ViewVTK):
 
         orientation_limit = 0.6
         candidate_mask = edge_parallel <= orientation_limit
-        if np.count_nonzero(candidate_mask) < 2:
+        if np_count_nonzero(candidate_mask) < 2:
             candidate_mask = edge_parallel <= 0.75
-        if np.count_nonzero(candidate_mask) < 2:
-            candidate_mask = np.ones(boundary_edges.shape[0], dtype=bool)
+        if np_count_nonzero(candidate_mask) < 2:
+            candidate_mask = np_ones(boundary_edges.shape[0], dtype=bool)
 
         candidate_edges = boundary_edges[candidate_mask]
         candidate_scores = edge_mid_scores[candidate_mask]
@@ -3574,12 +3594,12 @@ class View3D(ViewVTK):
         if not components:
             return []
 
-        component_means = np.array(
-            [float(np.mean(candidate_scores[component])) for component in components],
+        component_means = np_array(
+            [float(np_mean(candidate_scores[component])) for component in components],
             dtype=float,
         )
         split_threshold = float(
-            (np.max(component_means) + np.min(component_means)) / 2.0
+            (np_max(component_means) + np_min(component_means)) / 2.0
         )
 
         def gather_component_edges(select_positive=True):
@@ -3590,7 +3610,7 @@ class View3D(ViewVTK):
                     if mean_score >= split_threshold
                 ]
                 if not selected_components:
-                    max_idx = int(np.argmax(component_means))
+                    max_idx = int(np_argmax(component_means))
                     selected_components = [components[max_idx]]
             else:
                 selected_components = [
@@ -3599,7 +3619,7 @@ class View3D(ViewVTK):
                     if mean_score <= split_threshold
                 ]
                 if not selected_components:
-                    min_idx = int(np.argmin(component_means))
+                    min_idx = int(np_argmin(component_means))
                     selected_components = [components[min_idx]]
 
             selected_ids = sorted(
@@ -3622,8 +3642,8 @@ class View3D(ViewVTK):
         clean_trisurf = TriSurf()
         clean_trisurf.DeepCopy(clean_output)
 
-        points = np.asarray(clean_trisurf.points, dtype=float)
-        cells = np.asarray(clean_trisurf.cells, dtype=int)
+        points = np_asarray(clean_trisurf.points, dtype=float)
+        cells = np_asarray(clean_trisurf.cells, dtype=int)
         if points.shape[0] < 3 or cells.shape[0] < 1:
             return None
 
@@ -3636,14 +3656,14 @@ class View3D(ViewVTK):
 
         tri_vectors_1 = points[cells[:, 1]] - points[cells[:, 0]]
         tri_vectors_2 = points[cells[:, 2]] - points[cells[:, 0]]
-        tri_normals = np.cross(tri_vectors_1, tri_vectors_2)
-        tri_norm_lengths = np.linalg.norm(tri_normals, axis=1)
+        tri_normals = np_cross(tri_vectors_1, tri_vectors_2)
+        tri_norm_lengths = np_linalg.norm(tri_normals, axis=1)
         valid_normals = tri_normals[tri_norm_lengths > 1e-9]
         if valid_normals.size == 0:
             return None
-        average_normal = self._make_unit_vector(np.mean(valid_normals, axis=0))
+        average_normal = self._make_unit_vector(np_mean(valid_normals, axis=0))
         if average_normal is None:
-            average_normal = np.array([0.0, 0.0, 1.0], dtype=float)
+            average_normal = np_array([0.0, 0.0, 1.0], dtype=float)
 
         boundary_edges = self._collect_trisurf_boundary_edges(clean_trisurf)
         if boundary_edges.shape[0] == 0:
@@ -3667,7 +3687,7 @@ class View3D(ViewVTK):
         for key in clean_trisurf.point_data_keys:
             components = clean_trisurf.get_point_data_shape(key)[1]
             point_data_components[key] = components
-            array = np.asarray(clean_trisurf.get_point_data(key)).reshape(
+            array = np_asarray(clean_trisurf.get_point_data(key)).reshape(
                 points.shape[0], components
             )
             point_data_lists[key] = array.tolist()
@@ -3687,11 +3707,11 @@ class View3D(ViewVTK):
             return new_id
 
         def quad_triangles(idx0, idx1, idx2, idx3, point_source):
-            normal_test = np.cross(
-                np.asarray(point_source[idx1]) - np.asarray(point_source[idx0]),
-                np.asarray(point_source[idx2]) - np.asarray(point_source[idx0]),
+            normal_test = np_cross(
+                np_asarray(point_source[idx1]) - np_asarray(point_source[idx0]),
+                np_asarray(point_source[idx2]) - np_asarray(point_source[idx0]),
             )
-            if np.dot(normal_test, average_normal) >= 0.0:
+            if np_dot(normal_test, average_normal) >= 0.0:
                 return [[idx0, idx1, idx2], [idx0, idx2, idx3]]
             return [[idx0, idx2, idx1], [idx0, idx3, idx2]]
 
@@ -3729,18 +3749,18 @@ class View3D(ViewVTK):
             if not preview_points or not preview_cells:
                 return None
             preview_obj = TriSurf()
-            preview_obj.points = np.asarray(preview_points, dtype=float)
+            preview_obj.points = np_asarray(preview_points, dtype=float)
             for cell in preview_cells:
-                preview_obj.append_cell(np.asarray(cell, dtype=int))
+                preview_obj.append_cell(np_asarray(cell, dtype=int))
             preview_obj.Modified()
             return preview_obj
 
         out_obj = TriSurf()
-        out_obj.points = np.asarray(point_list, dtype=float)
+        out_obj.points = np_asarray(point_list, dtype=float)
         for cell in new_cells:
-            out_obj.append_cell(np.asarray(cell, dtype=int))
+            out_obj.append_cell(np_asarray(cell, dtype=int))
         for key, values in point_data_lists.items():
-            array = np.asarray(values)
+            array = np_asarray(values)
             if point_data_components[key] == 1:
                 out_obj.set_point_data(key, array.reshape(-1))
             else:
