@@ -13,6 +13,7 @@ import pyvista as pv
 import numpy as np
 from copy import deepcopy
 import heapq
+from shapely.geometry import LineString as shp_linestring
 from scipy import ndimage
 from scipy.optimize import linear_sum_assignment
 
@@ -1855,6 +1856,271 @@ class ViewInterpretation(ViewMap):
             return 1, (0, 2)
         return 2, (0, 1)
 
+    def _resolve_polyline_axis_for_simplify(self, uid=None, vtk_obj=None):
+        """Resolve the slice axis used to simplify interpretation polylines."""
+        if uid in getattr(self, "multipart_horizons", {}):
+            axis = self.multipart_horizons[uid].get("axis")
+            if axis:
+                return axis
+        if uid in getattr(self, "multipart_faults", {}):
+            axis = self.multipart_faults[uid].get("axis")
+            if axis:
+                return axis
+
+        slice_info = self._extract_single_slice_interpretation_metadata(
+            uid=uid, vtk_obj=vtk_obj
+        )
+        if slice_info and slice_info.get("axis"):
+            return slice_info["axis"]
+
+        try:
+            field_data = vtk_obj.GetFieldData() if vtk_obj is not None else None
+            if field_data is not None:
+                for array_name in ("slice_axis", "single_slice_axis"):
+                    if not field_data.HasArray(array_name):
+                        continue
+                    axis_array = field_data.GetAbstractArray(array_name)
+                    if axis_array and axis_array.GetNumberOfValues() > 0:
+                        axis = axis_array.GetValue(0)
+                        if axis:
+                            return axis
+        except Exception:
+            pass
+
+        if vtk_obj is not None:
+            try:
+                bounds = vtk_obj.GetBounds()
+                x_range = abs(bounds[1] - bounds[0])
+                y_range = abs(bounds[3] - bounds[2])
+                z_range = abs(bounds[5] - bounds[4])
+                range_by_axis = {
+                    "Inline": x_range,
+                    "Crossline": y_range,
+                    "Z-slice": z_range,
+                }
+                return min(range_by_axis, key=range_by_axis.get)
+            except Exception:
+                pass
+
+        return self.current_axis
+
+    def _simplify_polyline_cell_points(self, points=None, tolerance=0.1, axis=None):
+        """Simplify one polyline cell in the correct slice plane."""
+        clean_points, _source_s, keep_mask = self._prepare_polyline_sampling(points)
+        if clean_points is None or keep_mask is None:
+            return None
+
+        normal_axis, in_plane_axes = self._get_slice_plane_axes(axis=axis)
+        in_plane_points = clean_points[:, list(in_plane_axes)]
+        if in_plane_points.shape[0] < 2:
+            return None
+
+        simplified_uv = in_plane_points
+        if tolerance > 0.0 and in_plane_points.shape[0] > 2:
+            shp_line_in = shp_linestring(in_plane_points)
+            shp_line_out = shp_line_in.simplify(
+                float(tolerance), preserve_topology=False
+            )
+            if shp_line_out is None or shp_line_out.is_empty:
+                simplified_uv = np.vstack((in_plane_points[0], in_plane_points[-1]))
+            elif hasattr(shp_line_out, "coords"):
+                simplified_uv = np.asarray(shp_line_out.coords, dtype=float)
+            elif hasattr(shp_line_out, "geoms"):
+                candidate_coords = [
+                    np.asarray(geom.coords, dtype=float)
+                    for geom in shp_line_out.geoms
+                    if hasattr(geom, "coords") and len(geom.coords) >= 2
+                ]
+                if candidate_coords:
+                    simplified_uv = max(candidate_coords, key=len)
+
+        if simplified_uv.ndim != 2 or simplified_uv.shape[0] < 2:
+            simplified_uv = np.vstack((in_plane_points[0], in_plane_points[-1]))
+
+        if simplified_uv.shape[0] > 1:
+            keep_out = np.ones(simplified_uv.shape[0], dtype=bool)
+            keep_out[1:] = (
+                np.linalg.norm(np.diff(simplified_uv, axis=0), axis=1) > 1.0e-9
+            )
+            simplified_uv = simplified_uv[keep_out]
+        if simplified_uv.shape[0] < 2:
+            simplified_uv = np.vstack((in_plane_points[0], in_plane_points[-1]))
+
+        source_indices = []
+        search_start = 0
+        for out_uv in simplified_uv:
+            candidate_points = in_plane_points[search_start:]
+            if candidate_points.size == 0:
+                source_idx = in_plane_points.shape[0] - 1
+            else:
+                distances = np.linalg.norm(candidate_points - out_uv, axis=1)
+                source_idx = search_start + int(np.argmin(distances))
+            source_indices.append(source_idx)
+            search_start = min(source_idx, in_plane_points.shape[0] - 1)
+
+        if len(source_indices) < 2:
+            source_indices = [0, in_plane_points.shape[0] - 1]
+            simplified_uv = np.vstack((in_plane_points[0], in_plane_points[-1]))
+
+        simplified_points = np.zeros((simplified_uv.shape[0], 3), dtype=float)
+        simplified_points[:, in_plane_axes[0]] = simplified_uv[:, 0]
+        simplified_points[:, in_plane_axes[1]] = simplified_uv[:, 1]
+        simplified_points[:, normal_axis] = float(
+            np.median(clean_points[:, normal_axis])
+        )
+
+        return {
+            "points": simplified_points,
+            "keep_mask": keep_mask,
+            "source_indices": source_indices,
+        }
+
+    def _build_simplified_polyline_vtk(self, vtk_obj=None, tolerance=0.1, axis=None):
+        """Simplify all cells of a PolyLine while preserving interpretation metadata."""
+        if vtk_obj is None or vtk_obj.GetNumberOfCells() == 0:
+            return None, [], {}, {}
+
+        from vtk import vtkCellArray, vtkIntArray, vtkPoints
+
+        source_point_data = vtk_obj.GetPointData()
+        source_cell_data = vtk_obj.GetCellData()
+        source_field_data = vtk_obj.GetFieldData()
+
+        point_slice_array = (
+            source_point_data.GetArray("slice_index")
+            if source_point_data is not None and source_point_data.HasArray("slice_index")
+            else None
+        )
+        cell_slice_array = (
+            source_cell_data.GetArray("slice_index")
+            if source_cell_data is not None and source_cell_data.HasArray("slice_index")
+            else None
+        )
+
+        new_points = vtkPoints()
+        new_lines = vtkCellArray()
+        selected_point_ids = []
+        selected_cell_ids = []
+        point_slice_values = []
+        cell_slice_values = []
+        old_total_points = 0
+
+        for cell_idx in range(vtk_obj.GetNumberOfCells()):
+            cell = vtk_obj.GetCell(cell_idx)
+            if cell is None:
+                continue
+
+            n_pts = cell.GetNumberOfPoints()
+            if n_pts < 2:
+                continue
+
+            point_ids = [cell.GetPointId(i) for i in range(n_pts)]
+            raw_points = np.array(
+                [vtk_obj.GetPoint(point_id) for point_id in point_ids], dtype=float
+            )
+            old_total_points += int(n_pts)
+
+            simplified = self._simplify_polyline_cell_points(
+                points=raw_points,
+                tolerance=tolerance,
+                axis=axis,
+            )
+            if simplified is None:
+                continue
+
+            clean_point_ids = np.asarray(point_ids, dtype=int)[simplified["keep_mask"]]
+            simplified_points = simplified["points"]
+            source_indices = simplified["source_indices"]
+            if simplified_points.shape[0] < 2 or clean_point_ids.size < 2:
+                continue
+
+            start_idx = new_points.GetNumberOfPoints()
+            for local_idx, point in enumerate(simplified_points):
+                new_points.InsertNextPoint(float(point[0]), float(point[1]), float(point[2]))
+                source_point_id = int(clean_point_ids[source_indices[local_idx]])
+                selected_point_ids.append(source_point_id)
+
+                if point_slice_array is not None:
+                    point_slice_values.append(int(point_slice_array.GetValue(source_point_id)))
+                elif cell_slice_array is not None:
+                    point_slice_values.append(int(cell_slice_array.GetValue(cell_idx)))
+
+            new_lines.InsertNextCell(simplified_points.shape[0])
+            for point_id in range(start_idx, start_idx + simplified_points.shape[0]):
+                new_lines.InsertCellPoint(point_id)
+
+            selected_cell_ids.append(cell_idx)
+            if cell_slice_array is not None:
+                cell_slice_values.append(int(cell_slice_array.GetValue(cell_idx)))
+
+        if new_points.GetNumberOfPoints() == 0 or new_lines.GetNumberOfCells() == 0:
+            return None, [], {}, {}
+
+        simplified_line = PolyLine()
+        simplified_line.SetPoints(new_points)
+        simplified_line.SetLines(new_lines)
+
+        self._copy_selected_numeric_arrays(
+            source_data=source_point_data,
+            target_data=simplified_line.GetPointData(),
+            selected_ids=selected_point_ids,
+            skip_names={"slice_index"},
+            skip_prefixes=("slices_",),
+        )
+        self._copy_selected_numeric_arrays(
+            source_data=source_cell_data,
+            target_data=simplified_line.GetCellData(),
+            selected_ids=selected_cell_ids,
+            skip_names={"slice_index"},
+            skip_prefixes=("slices_",),
+        )
+        self._copy_field_data_arrays(
+            source_data=source_field_data,
+            target_data=simplified_line.GetFieldData(),
+        )
+
+        if point_slice_values:
+            point_slice_out = vtkIntArray()
+            point_slice_out.SetName("slice_index")
+            point_slice_out.SetNumberOfComponents(1)
+            for slice_idx in point_slice_values:
+                point_slice_out.InsertNextValue(int(slice_idx))
+            simplified_line.GetPointData().AddArray(point_slice_out)
+
+        if cell_slice_values:
+            cell_slice_out = vtkIntArray()
+            cell_slice_out.SetName("slice_index")
+            cell_slice_out.SetNumberOfComponents(1)
+            for slice_idx in cell_slice_values:
+                cell_slice_out.InsertNextValue(int(slice_idx))
+            simplified_line.GetCellData().AddArray(cell_slice_out)
+
+        slice_indices = sorted(
+            {
+                int(slice_idx)
+                for slice_idx in (cell_slice_values or point_slice_values)
+                if int(slice_idx) >= 0
+            }
+        )
+        slice_to_cell_index = {}
+        for new_cell_idx, slice_idx in enumerate(cell_slice_values):
+            slice_idx = int(slice_idx)
+            if slice_idx not in slice_to_cell_index:
+                slice_to_cell_index[slice_idx] = new_cell_idx
+
+        if slice_indices:
+            self._ensure_slice_index_property_metadata(
+                vtk_obj=simplified_line, slice_indices=slice_indices
+            )
+        simplified_line.Modified()
+
+        stats = {
+            "old_total_points": int(old_total_points),
+            "new_total_points": int(new_points.GetNumberOfPoints()),
+            "cell_count": int(new_lines.GetNumberOfCells()),
+        }
+        return simplified_line, slice_indices, slice_to_cell_index, stats
+
     def _prepare_polyline_sampling(self, points):
         """Remove duplicate vertices and build cumulative arclength coordinates."""
         clean_points = np.asarray(points, dtype=float)
@@ -2526,6 +2792,99 @@ class ViewInterpretation(ViewMap):
                 return
             if status == "done":
                 processed_count += 1
+
+    def simplify_selected_lines(self):
+        """Simplify selected interpretation polylines, including multipart entities."""
+        self.print_terminal(
+            "Simplify line. Define tolerance value: small values preserve more vertices."
+        )
+
+        selected_uids = list(getattr(self.parent, "selected_uids", []) or [])
+        if not selected_uids:
+            self.print_terminal(" -- No input data selected -- ")
+            return
+
+        tolerance_p = input_one_value_dialog(
+            parent=self,
+            title="Simplify - Tolerance",
+            label="Insert tolerance parameter",
+            default_value="0.1",
+        )
+        if tolerance_p is None:
+            return
+        if tolerance_p <= 0:
+            tolerance_p = 0.1
+
+        processed_uids = []
+        for uid in selected_uids:
+            if uid not in set(self.parent.geol_coll.get_uids):
+                continue
+
+            try:
+                topology = self.parent.geol_coll.get_uid_topology(uid)
+            except Exception:
+                topology = None
+            if topology != "PolyLine":
+                self.print_terminal(f" -- Selected data is not a line: {uid} -- ")
+                continue
+
+            try:
+                vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            except Exception:
+                vtk_obj = None
+            if vtk_obj is None or vtk_obj.GetNumberOfCells() == 0:
+                self.print_terminal(f" -- Object not valid for {uid} -- ")
+                continue
+
+            self.scan_and_index_single_horizon(uid)
+            axis = self._resolve_polyline_axis_for_simplify(uid=uid, vtk_obj=vtk_obj)
+            new_vtk, slice_indices, slice_to_cell_index, stats = (
+                self._build_simplified_polyline_vtk(
+                    vtk_obj=vtk_obj,
+                    tolerance=tolerance_p,
+                    axis=axis,
+                )
+            )
+            if new_vtk is None or new_vtk.GetNumberOfCells() == 0:
+                self.print_terminal(f" -- Simplification failed for {uid} -- ")
+                continue
+
+            self._remove_filtered_actor(f"multipart_slice_{uid}")
+            self._remove_filtered_actor(f"multipart_fault_slice_{uid}")
+            self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=new_vtk)
+
+            if slice_indices:
+                self._register_multipart_interpretation_entity(
+                    uid=uid,
+                    axis=axis,
+                    slice_indices=slice_indices,
+                    slice_to_cell_index=slice_to_cell_index,
+                )
+            elif uid in getattr(self, "interpretation_lines", {}):
+                self.register_interpretation_line(uid, self.interpretation_lines[uid])
+
+            processed_uids.append(uid)
+            if uid in getattr(self, "multipart_horizons", {}):
+                entity_kind = "multipart horizon"
+            elif uid in getattr(self, "multipart_faults", {}):
+                entity_kind = "multipart fault"
+            else:
+                entity_kind = "line"
+            self.print_terminal(
+                f"Simplified {entity_kind} {uid[:8]}... on {axis}: "
+                f"{stats['old_total_points']} -> {stats['new_total_points']} points "
+                f"across {stats['cell_count']} cell(s)."
+            )
+
+        if not processed_uids:
+            return
+
+        self._mark_slice_visibility_dirty()
+        self.update_interpretation_line_visibility()
+        self.update_all_multipart_horizons_visibility()
+        self.update_all_multipart_faults_visibility()
+        self.plotter.render()
+        self.clear_selection()
 
     def _resolve_multipart_entity_for_edit(
         self, uid=None, action_title="Edit Multipart Slices", show_messages=True
@@ -6868,6 +7227,10 @@ class ViewInterpretation(ViewMap):
         self.regularizeMultipartSamplingButton.triggered.connect(
             self.regularize_multipart_sampling
         )
+        self.simplifyLineButton = QAction("Simplify line", self)
+        self.simplifyLineButton.triggered.connect(self.simplify_selected_lines)
+        self.menuModify.addAction(self.simplifyLineButton)
+
         self.menuModify.addAction(self.regularizeMultipartSamplingButton)
 
         self.splitMultipartSlicesButton = QAction("Split Multipart Slices...", self)
