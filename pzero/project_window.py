@@ -128,6 +128,7 @@ from .three_d_surfaces import (
 )
 
 from pzero.views.dock_window import DockWindow
+from pzero.views.table_view_dialog import TableViewDialog
 from .processing.CRS import CRS_list, CRS_transform_selected
 # import json
 from json import dump as json_dump
@@ -304,6 +305,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionStereoplotView.triggered.connect(
             lambda: DockWindow(parent=self, window_type="ViewStereoplot")
         )
+        self.actionTableView = QAction("Table View", self)
+        self.actionTableView.setObjectName("actionTableView")
+        self.actionTableView.triggered.connect(self.open_table_view_dialog)
+        self.menuWindows.insertAction(self.actionXYPlotView, self.actionTableView)
 
         """File>CRS actions -> slots"""
         self.actionTransformSelectedCRS.triggered.connect(
@@ -408,6 +413,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def open_release_url(self):
         QDesktopServices.openUrl(QUrl("https://github.com/gecos-lab/PZero/releases"))
+
+    def open_table_view_dialog(self):
+        """Open the custom tables dialog."""
+        if getattr(self, "table_view_dialog", None) is None:
+            self.table_view_dialog = TableViewDialog(parent=self)
+        self.table_view_dialog.refresh_table_list()
+        self.table_view_dialog.show()
+        self.table_view_dialog.raise_()
+        self.table_view_dialog.activateWindow()
+
     """Methods used to manage the entities shown in tables."""
 
     @property
@@ -1311,6 +1326,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # this is used to delete open windows when the current project is closed (and a new one is opened)
         self.signals.project_close.emit()
 
+        if getattr(self, "table_view_dialog", None) is not None:
+            self.table_view_dialog.close()
+        self.table_view_dialog = None
+        self.custom_tables = {}
+
         # Create the geol_coll GeologicalCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         # and connect the model to GeologyTableView (a Qt QTableView created with QTDesigner and provided by
         # Ui_ProjectWindow). Setting the model also updates the view.
@@ -1536,6 +1556,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.backgrnd_coll.legend_df.to_json(
             out_dir_name + "/backgrounds_legend_table.json", orient="index"
         )
+
+        self.save_custom_tables(out_dir_name=out_dir_name)
 
         # --------------------- SAVE tables ---------------------
 
@@ -1782,6 +1804,60 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.SetInputData(self.backgrnd_coll.get_uid_vtk_obj(uid))
             pd_writer.Write()
             prgs_bar.add_one()
+
+    def save_custom_tables(self, out_dir_name: str = None):
+        """Persist user-defined tables alongside the project revision."""
+        if not out_dir_name:
+            return
+
+        tables_payload = {"version": 1, "tables": []}
+        for table_name, dataframe in self.custom_tables.items():
+            exported_df = dataframe.copy()
+            exported_df = exported_df.where(exported_df.notna(), "")
+            exported_df = exported_df.astype(str)
+            tables_payload["tables"].append(
+                {
+                    "name": table_name,
+                    "dataframe": {
+                        "columns": exported_df.columns.tolist(),
+                        "data": exported_df.values.tolist(),
+                    },
+                }
+            )
+
+        with open(out_dir_name + "/custom_tables.json", "w", encoding="utf-8") as fout:
+            json_dump(tables_payload, fout, indent=2)
+
+    def load_custom_tables(self, in_dir_name: str = None):
+        """Load user-defined project tables."""
+        self.custom_tables = {}
+        if not in_dir_name:
+            return
+
+        custom_tables_path = in_dir_name + "/custom_tables.json"
+        if not os_path.isfile(custom_tables_path):
+            return
+
+        with open(custom_tables_path, "r", encoding="utf-8") as fin:
+            tables_payload = json_load(fin)
+
+        for table_payload in tables_payload.get("tables", []):
+            table_name = str(table_payload.get("name", "")).strip()
+            if not table_name:
+                continue
+
+            dataframe_payload = table_payload.get("dataframe", {})
+            columns = [
+                str(column_name)
+                for column_name in dataframe_payload.get("columns", [])
+            ]
+            data = dataframe_payload.get("data", [])
+            self.custom_tables[table_name] = pd_DataFrame(data=data, columns=columns)
+
+        if self.custom_tables:
+            self.print_terminal(
+                f"Loaded {len(self.custom_tables)} custom table(s)."
+            )
 
     def new_project(self):
         """Creates a new empty project, after having cleared all variables."""
@@ -3086,6 +3162,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.backgrnd_coll.table_model.endResetModel()
             # Update legend.
             self.prop_legend.update_widget(parent=self)
+            self.load_custom_tables(in_dir_name=in_dir_name)
 
 
         except BaseException as e:
