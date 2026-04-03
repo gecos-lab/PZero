@@ -6,6 +6,7 @@ from pyvista import read as pv_read
 from qtpy.QtWidgets import QFileDialog
 from copy import deepcopy
 import os
+from pzero.helpers.helper_dialogs import input_combo_dialog
 
 from pzero.entities_factory import (
     VertexSet,
@@ -29,6 +30,21 @@ def _get_cell_data_type(vtk_obj, key):
     if hasattr(vtk_obj, "get_cell_data_type"):
         return vtk_obj.get_cell_data_type(key)
     return vtk_obj.GetCellData().GetArray(key).GetDataTypeAsString()
+
+
+def _choose_volume_output_collection(self, topology):
+    """Ask whether a structured volume should be stored in Images or Meshes."""
+    collection_name = input_combo_dialog(
+        parent=self,
+        title="Collection",
+        label=f"Assign {topology} to collection",
+        choice_list=["Images", "Meshes"],
+    )
+    if collection_name == "Images":
+        return self.image_coll
+    if collection_name == "Meshes":
+        return self.mesh3d_coll
+    return None
 
 
 def pyvista2vtk(self):
@@ -94,7 +110,10 @@ def pyvista2vtk(self):
                 wrapped_obj = Voxet()
             wrapped_obj.ShallowCopy(curr_obj)
             curr_obj = wrapped_obj
-            out_coll = self.mesh3d_coll
+            out_coll = _choose_volume_output_collection(self, topology)
+            if out_coll is None:
+                self.print_terminal("pyvista2vtk - import cancelled by user.")
+                return
         elif cell_type == 1:
             curr_obj.__class__ = VertexSet
             topology = "VertexSet"
@@ -110,6 +129,10 @@ def pyvista2vtk(self):
             curr_obj = wrapped_obj
             topology = "TetraSolid"
             out_coll = self.mesh3d_coll
+            self.print_terminal(
+                "pyvista2vtk - TetraSolid imported into Meshes. "
+                "Interpretation view currently supports structured volumes only."
+            )
         else:
             self.print_terminal("pyvista2vtk - unrecognized cell type.")
             return  # Exit if cell type is not recognized
