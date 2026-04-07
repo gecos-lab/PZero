@@ -3564,6 +3564,9 @@ class ViewInterpretation(ViewMap):
                 if filtered_polydata is None:
                     self.set_actor_visibility(horizon_uid, False)
                     continue
+                filtered_polydata = self._align_polydata_to_current_slice(
+                    filtered_polydata
+                )
 
                 n_filtered_cells = filtered_polydata.GetNumberOfCells()
                 n_filtered_points = filtered_polydata.GetNumberOfPoints()
@@ -3613,8 +3616,6 @@ class ViewInterpretation(ViewMap):
         Args:
             uid: Specific fault UID to update, or None to update all multipart faults
         """
-        from vtk import vtkPoints, vtkCellArray, vtkPolyData
-        
         if not hasattr(self, 'multipart_faults'):
             return
         
@@ -3636,6 +3637,8 @@ class ViewInterpretation(ViewMap):
                 self._remove_filtered_actor(actor_name)
             except Exception:
                 pass
+            # Multipart faults must never leak their full actor into the slice view.
+            self._remove_raw_actor_for_uid(fault_uid)
 
             if not self._is_uid_enabled_in_tree(fault_uid):
                 self.set_actor_visibility(fault_uid, False)
@@ -3682,37 +3685,18 @@ class ViewInterpretation(ViewMap):
                     matching_cell_ids.append(i)
             
             if len(matching_cell_ids) == 0:
+                self.set_actor_visibility(fault_uid, False)
                 continue
-            
-            # Extract the matching cells manually
-            new_points = vtkPoints()
-            new_lines = vtkCellArray()
-            point_map = {}  # old_id -> new_id
-            
-            for cell_id in matching_cell_ids:
-                cell = vtk_obj.GetCell(cell_id)
-                n_pts = cell.GetNumberOfPoints()
-                
-                new_line_pts = []
-                for j in range(n_pts):
-                    old_pt_id = cell.GetPointId(j)
-                    
-                    if old_pt_id not in point_map:
-                        pt = vtk_obj.GetPoint(old_pt_id)
-                        new_pt_id = new_points.InsertNextPoint(pt)
-                        point_map[old_pt_id] = new_pt_id
-                    
-                    new_line_pts.append(point_map[old_pt_id])
-                
-                # Add the line cell
-                new_lines.InsertNextCell(len(new_line_pts))
-                for pt_id in new_line_pts:
-                    new_lines.InsertCellPoint(pt_id)
-            
-            # Create filtered polydata
-            filtered_polydata = vtkPolyData()
-            filtered_polydata.SetPoints(new_points)
-            filtered_polydata.SetLines(new_lines)
+            filtered_polydata, _, _ = self._build_multipart_subset_vtk(
+                vtk_obj=vtk_obj,
+                kept_cell_ids=matching_cell_ids,
+            )
+            if filtered_polydata is None:
+                self.set_actor_visibility(fault_uid, False)
+                continue
+            filtered_polydata = self._align_polydata_to_current_slice(
+                filtered_polydata
+            )
             
             n_filtered_cells = filtered_polydata.GetNumberOfCells()
             n_filtered_points = filtered_polydata.GetNumberOfPoints()
@@ -3732,6 +3716,8 @@ class ViewInterpretation(ViewMap):
                     pickable=True,
                     reset_camera=False
                 )
+            else:
+                self.set_actor_visibility(fault_uid, False)
 
     def update_all_multipart_faults_visibility(self):
         """Update visibility for all multipart faults based on current slice."""
@@ -4174,6 +4160,40 @@ class ViewInterpretation(ViewMap):
                 del actors[actor_name]
         except Exception:
             pass
+
+    def _align_polydata_to_current_slice(self, vtk_obj=None):
+        """Snap a temporary interpretation polyline to the active slice plane."""
+        if vtk_obj is None or vtk_obj.GetNumberOfPoints() == 0:
+            return vtk_obj
+
+        try:
+            aligned_points = np.asarray(vtk_obj.points, dtype=np.float64).copy()
+        except Exception:
+            return vtk_obj
+
+        plane_center = getattr(self, "current_slice_plane_center", None)
+        plane_normal = getattr(self, "current_slice_plane_normal", None)
+
+        if plane_center is not None and plane_normal is not None:
+            try:
+                aligned_points = self._project_points_to_plane(
+                    aligned_points, plane_center, plane_normal
+                )
+            except Exception:
+                pass
+        else:
+            if self.current_axis == "Inline":
+                aligned_points[:, 0] = self.current_slice_position
+            elif self.current_axis == "Crossline":
+                aligned_points[:, 1] = self.current_slice_position
+            elif self.current_axis == "Z-slice":
+                aligned_points[:, 2] = self.current_slice_position
+
+        try:
+            vtk_obj.points = aligned_points
+        except Exception:
+            pass
+        return vtk_obj
 
     def _is_uid_enabled_in_tree(self, uid=None):
         """Return the current checkbox-driven visibility state for a uid."""
@@ -5370,11 +5390,10 @@ class ViewInterpretation(ViewMap):
                     except Exception:
                         pass
                 else:
-                    offset = 1.0
                     if self.current_axis == 'Inline':
-                        points_array[:, 0] = self.current_slice_position - offset
+                        points_array[:, 0] = self.current_slice_position
                     else:
-                        points_array[:, 1] = self.current_slice_position - offset
+                        points_array[:, 1] = self.current_slice_position
             elif self.current_axis == 'Z-slice':
                 points_array[:, 2] = self.current_slice_position
             

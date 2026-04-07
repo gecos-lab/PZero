@@ -6,6 +6,7 @@ from pyvista import read as pv_read
 from qtpy.QtWidgets import QFileDialog
 from copy import deepcopy
 import os
+from vtk import vtkXMLImageDataReader
 from pzero.helpers.helper_dialogs import input_combo_dialog
 
 from pzero.entities_factory import (
@@ -18,18 +19,49 @@ from pzero.entities_factory import (
 )
 
 
-def _get_point_data_type(vtk_obj, key):
-    if hasattr(vtk_obj, "get_point_data_type"):
-        return vtk_obj.get_point_data_type(key)
-    if hasattr(vtk_obj, "get_point_data_types"):
-        return vtk_obj.get_point_data_types(key)
-    return vtk_obj.GetPointData().GetArray(key).GetDataTypeAsString()
+def _read_dataset(in_file_name):
+    """Use a direct VTK reader for .vti files and fall back to PyVista otherwise."""
+    if os.path.splitext(in_file_name)[1].lower() == ".vti":
+        reader = vtkXMLImageDataReader()
+        reader.SetFileName(in_file_name)
+        reader.Update()
+        return reader.GetOutput()
+    return pv_read(in_file_name)
 
 
-def _get_cell_data_type(vtk_obj, key):
-    if hasattr(vtk_obj, "get_cell_data_type"):
-        return vtk_obj.get_cell_data_type(key)
-    return vtk_obj.GetCellData().GetArray(key).GetDataTypeAsString()
+def _collect_properties_metadata(vtk_obj):
+    """Extract array metadata without materializing NumPy views of large datasets."""
+    properties_names = []
+    properties_components = []
+    properties_types = []
+
+    point_data = vtk_obj.GetPointData()
+    if point_data:
+        for idx in range(point_data.GetNumberOfArrays()):
+            array = point_data.GetArray(idx)
+            if array is None:
+                continue
+            name = array.GetName()
+            if not name:
+                continue
+            properties_names.append(name)
+            properties_components.append(array.GetNumberOfComponents())
+            properties_types.append(array.GetDataTypeAsString())
+
+    cell_data = vtk_obj.GetCellData()
+    if cell_data:
+        for idx in range(cell_data.GetNumberOfArrays()):
+            array = cell_data.GetArray(idx)
+            if array is None:
+                continue
+            name = array.GetName()
+            if not name or name in properties_names:
+                continue
+            properties_names.append(name)
+            properties_components.append(array.GetNumberOfComponents())
+            properties_types.append(array.GetDataTypeAsString())
+
+    return properties_names, properties_components, properties_types
 
 
 def _choose_volume_output_collection(self, topology):
@@ -87,11 +119,11 @@ def pyvista2vtk(self):
         cell_type = -1
         out_coll = self.geol_coll
 
-        # Read file with pv_read() function and detect topology
+        # Read file and detect topology
         try:
-            curr_obj = pv_read(in_file_name)
+            curr_obj = _read_dataset(in_file_name)
 
-            if curr_obj.GetNumberOfCells() > 0:
+            if not curr_obj.IsA("vtkImageData") and curr_obj.GetNumberOfCells() > 0:
                 # Get topology (CellType) of first cell in object
                 cell_type = curr_obj.GetCellType(0)
         except Exception as e:
@@ -143,22 +175,9 @@ def pyvista2vtk(self):
         curr_obj_attributes["name"] = os.path.basename(in_file_name)
         curr_obj_attributes["topology"] = topology
         curr_obj_attributes["vtk_obj"] = curr_obj
-        properties_names = []
-        properties_components = []
-        properties_types = []
-
-        if hasattr(curr_obj, "point_data_keys"):
-            for key in curr_obj.point_data_keys:
-                properties_names.append(key)
-                properties_components.append(curr_obj.get_point_data_shape(key)[-1])
-                properties_types.append(_get_point_data_type(curr_obj, key))
-
-        if hasattr(curr_obj, "cell_data_keys"):
-            for key in curr_obj.cell_data_keys:
-                if key not in properties_names:
-                    properties_names.append(key)
-                    properties_components.append(curr_obj.get_cell_data_shape(key)[-1])
-                    properties_types.append(_get_cell_data_type(curr_obj, key))
+        properties_names, properties_components, properties_types = (
+            _collect_properties_metadata(curr_obj)
+        )
 
         curr_obj_attributes["properties_names"] = properties_names
         curr_obj_attributes["properties_components"] = properties_components
