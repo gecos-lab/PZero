@@ -26,7 +26,8 @@ from ..helpers.helper_dialogs import (
     input_one_value_dialog,
     options_dialog,
 )
-from ..helpers.helper_widgets import Tracer
+from ..helpers.helper_widgets import Editor, Tracer
+from ..helpers.helper_functions import freeze_gui_off, freeze_gui_on
 
 class ViewInterpretation(ViewMap):
     def add_all_entities(self):
@@ -1379,6 +1380,513 @@ class ViewInterpretation(ViewMap):
             return True
 
         return False
+
+    def _get_visible_line_actor_for_uid(self, uid=None):
+        """Return the currently visible actor used to display a line uid in this view."""
+        if not uid:
+            return None
+
+        actors = getattr(self.plotter.renderer, "actors", {})
+        for actor_name in (
+            f"multipart_slice_{uid}",
+            f"multipart_fault_slice_{uid}",
+            uid,
+            f"geol_coll_{uid}",
+            f"geo_{uid}",
+        ):
+            actor = actors.get(actor_name)
+            if actor is not None:
+                try:
+                    if actor.GetVisibility():
+                        return actor
+                except Exception:
+                    return actor
+        return None
+
+    def _begin_slice_line_edit_pick_mode(self):
+        """Temporarily make the seismic slice the only pickable actor during line editing."""
+        self._edit_pickable_state = {}
+        for name, actor in self.plotter.renderer.actors.items():
+            try:
+                self._edit_pickable_state[name] = actor.GetPickable()
+                actor.SetPickable(name == "seismic_slice_actor")
+            except Exception:
+                pass
+
+        try:
+            if self.slice_actor is not None:
+                self.slice_actor.SetPickable(True)
+        except Exception:
+            pass
+
+    def _get_plotter_scale_factors(self):
+        """Return the active plotter scale as XYZ factors."""
+        try:
+            scale = self.plotter.scale
+            if scale is not None and len(scale) >= 3:
+                sx = float(scale[0]) if scale[0] not in (None, 0) else 1.0
+                sy = float(scale[1]) if scale[1] not in (None, 0) else 1.0
+                sz = float(scale[2]) if scale[2] not in (None, 0) else 1.0
+                return sx, sy, sz
+        except Exception:
+            pass
+        return 1.0, 1.0, 1.0
+
+    def _build_editor_input_polydata(self, data=None):
+        """Build a temporary polyline in display-space coordinates for the editor widget."""
+        if data is None:
+            return None
+
+        editor_line = PolyLine()
+        try:
+            editor_line.DeepCopy(data)
+        except Exception:
+            return data
+
+        try:
+            pts = np.asarray(editor_line.points, dtype=float).copy()
+        except Exception:
+            return editor_line
+
+        sx, sy, sz = self._get_plotter_scale_factors()
+        pts[:, 0] *= sx
+        pts[:, 1] *= sy
+        pts[:, 2] *= sz
+        editor_line.points = pts
+        editor_line.Modified()
+        return editor_line
+
+    def _end_slice_line_edit_pick_mode(self):
+        """Restore actor pickability after line editing."""
+        saved_state = getattr(self, "_edit_pickable_state", None)
+        if saved_state:
+            for name, pickable in saved_state.items():
+                try:
+                    if name in self.plotter.renderer.actors:
+                        self.plotter.renderer.actors[name].SetPickable(pickable)
+                except Exception:
+                    pass
+        if hasattr(self, "_edit_pickable_state"):
+            try:
+                del self._edit_pickable_state
+            except Exception:
+                pass
+
+    def _prepare_numeric_array_builders(
+        self, source_data=None, skip_names=None, skip_prefixes=None
+    ):
+        """Create writable numeric arrays matching the source VTK data arrays."""
+        if source_data is None:
+            return []
+
+        skip_names = set(skip_names or [])
+        skip_prefixes = tuple(skip_prefixes or ())
+        builders = []
+        for array_idx in range(source_data.GetNumberOfArrays()):
+            source_array = source_data.GetArray(array_idx)
+            if source_array is None:
+                continue
+            array_name = source_array.GetName() or ""
+            if array_name in skip_names:
+                continue
+            if array_name and any(array_name.startswith(prefix) for prefix in skip_prefixes):
+                continue
+
+            target_array = source_array.NewInstance()
+            target_array.SetName(array_name)
+            target_array.SetNumberOfComponents(source_array.GetNumberOfComponents())
+            builders.append((source_array, target_array))
+        return builders
+
+    def _append_numeric_tuple(self, builders=None, source_idx=None, default_idx=None):
+        """Append one tuple to each target numeric array."""
+        for source_array, target_array in builders or []:
+            tuple_idx = None
+            if source_idx is not None and 0 <= source_idx < source_array.GetNumberOfTuples():
+                tuple_idx = source_idx
+            elif default_idx is not None and 0 <= default_idx < source_array.GetNumberOfTuples():
+                tuple_idx = default_idx
+
+            if tuple_idx is None:
+                target_array.InsertNextTuple(
+                    tuple(0.0 for _ in range(source_array.GetNumberOfComponents()))
+                )
+            else:
+                target_array.InsertNextTuple(source_array.GetTuple(tuple_idx))
+
+    def _build_multipart_vtk_with_replaced_slice(
+        self, vtk_obj=None, slice_idx=None, edited_points=None
+    ):
+        """Return a multipart PolyLine where one slice is replaced with edited geometry."""
+        if vtk_obj is None or edited_points is None:
+            return None, [], {}
+
+        edited_points = np.asarray(edited_points, dtype=float)
+        if edited_points.ndim != 2 or edited_points.shape[0] < 2:
+            return None, [], {}
+
+        cell_data = vtk_obj.GetCellData()
+        if cell_data is None or not cell_data.HasArray("slice_index"):
+            return None, [], {}
+
+        from vtk import vtkCellArray, vtkIntArray, vtkPoints
+
+        point_data = vtk_obj.GetPointData()
+        field_data = vtk_obj.GetFieldData()
+        cell_slice_array = cell_data.GetArray("slice_index")
+        point_slice_array = (
+            point_data.GetArray("slice_index")
+            if point_data is not None and point_data.HasArray("slice_index")
+            else None
+        )
+
+        reference_cell_id = None
+        reference_point_id = None
+        for old_cell_id in range(vtk_obj.GetNumberOfCells()):
+            if int(cell_slice_array.GetValue(old_cell_id)) != int(slice_idx):
+                continue
+            reference_cell_id = old_cell_id
+            cell = vtk_obj.GetCell(old_cell_id)
+            if cell is not None and cell.GetNumberOfPoints() > 0:
+                reference_point_id = cell.GetPointId(0)
+            break
+
+        if reference_cell_id is None:
+            return None, [], {}
+
+        point_builders = self._prepare_numeric_array_builders(
+            source_data=point_data,
+            skip_names={"slice_index"},
+            skip_prefixes=("slices_",),
+        )
+        cell_builders = self._prepare_numeric_array_builders(
+            source_data=cell_data,
+            skip_names={"slice_index"},
+            skip_prefixes=("slices_",),
+        )
+
+        new_points = vtkPoints()
+        new_lines = vtkCellArray()
+        point_slice_values = []
+        cell_slice_values = []
+        edited_inserted = False
+
+        for old_cell_id in range(vtk_obj.GetNumberOfCells()):
+            old_slice_idx = int(cell_slice_array.GetValue(old_cell_id))
+            if old_slice_idx == int(slice_idx):
+                if edited_inserted:
+                    continue
+
+                start_idx = new_points.GetNumberOfPoints()
+                for point in edited_points:
+                    new_points.InsertNextPoint(float(point[0]), float(point[1]), float(point[2]))
+                    point_slice_values.append(int(slice_idx))
+                    self._append_numeric_tuple(
+                        builders=point_builders,
+                        source_idx=None,
+                        default_idx=reference_point_id,
+                    )
+
+                new_lines.InsertNextCell(int(edited_points.shape[0]))
+                for point_id in range(start_idx, start_idx + int(edited_points.shape[0])):
+                    new_lines.InsertCellPoint(point_id)
+
+                cell_slice_values.append(int(slice_idx))
+                self._append_numeric_tuple(
+                    builders=cell_builders,
+                    source_idx=None,
+                    default_idx=reference_cell_id,
+                )
+                edited_inserted = True
+                continue
+
+            cell = vtk_obj.GetCell(old_cell_id)
+            if cell is None:
+                continue
+
+            n_pts = cell.GetNumberOfPoints()
+            if n_pts < 2:
+                continue
+
+            start_idx = new_points.GetNumberOfPoints()
+            for point_idx in range(n_pts):
+                old_point_id = cell.GetPointId(point_idx)
+                point = vtk_obj.GetPoint(old_point_id)
+                new_points.InsertNextPoint(float(point[0]), float(point[1]), float(point[2]))
+                if point_slice_array is not None:
+                    point_slice_values.append(int(point_slice_array.GetValue(old_point_id)))
+                else:
+                    point_slice_values.append(old_slice_idx)
+                self._append_numeric_tuple(
+                    builders=point_builders,
+                    source_idx=old_point_id,
+                    default_idx=reference_point_id,
+                )
+
+            new_lines.InsertNextCell(n_pts)
+            for point_id in range(start_idx, start_idx + n_pts):
+                new_lines.InsertCellPoint(point_id)
+
+            cell_slice_values.append(old_slice_idx)
+            self._append_numeric_tuple(
+                builders=cell_builders,
+                source_idx=old_cell_id,
+                default_idx=reference_cell_id,
+            )
+
+        if not edited_inserted or new_points.GetNumberOfPoints() == 0 or new_lines.GetNumberOfCells() == 0:
+            return None, [], {}
+
+        rebuilt_line = PolyLine()
+        rebuilt_line.SetPoints(new_points)
+        rebuilt_line.SetLines(new_lines)
+
+        for _source_array, target_array in point_builders:
+            rebuilt_line.GetPointData().AddArray(target_array)
+        for _source_array, target_array in cell_builders:
+            rebuilt_line.GetCellData().AddArray(target_array)
+        self._copy_field_data_arrays(
+            source_data=field_data,
+            target_data=rebuilt_line.GetFieldData(),
+        )
+
+        point_slice_out = vtkIntArray()
+        point_slice_out.SetName("slice_index")
+        point_slice_out.SetNumberOfComponents(1)
+        for value in point_slice_values:
+            point_slice_out.InsertNextValue(int(value))
+        rebuilt_line.GetPointData().AddArray(point_slice_out)
+
+        cell_slice_out = vtkIntArray()
+        cell_slice_out.SetName("slice_index")
+        cell_slice_out.SetNumberOfComponents(1)
+        for value in cell_slice_values:
+            cell_slice_out.InsertNextValue(int(value))
+        rebuilt_line.GetCellData().AddArray(cell_slice_out)
+
+        slice_indices = sorted({int(value) for value in cell_slice_values if int(value) >= 0})
+        slice_to_cell_index = {}
+        for new_cell_idx, value in enumerate(cell_slice_values):
+            value = int(value)
+            if value not in slice_to_cell_index:
+                slice_to_cell_index[value] = new_cell_idx
+
+        self._ensure_slice_index_property_metadata(
+            vtk_obj=rebuilt_line,
+            slice_indices=slice_indices,
+        )
+        rebuilt_line.Modified()
+        return rebuilt_line, slice_indices, slice_to_cell_index
+
+    def _finalize_standard_line_edit(self, uid=None, editor=None):
+        """Apply a standard line edit result to a single geometry uid."""
+        try:
+            self.plotter.untrack_click_position(side="right")
+        except Exception:
+            pass
+        self._end_slice_line_edit_pick_mode()
+
+        try:
+            traced_pld = (
+                editor.GetContourRepresentation().GetContourRepresentationAsPolyData()
+            )
+        except Exception:
+            traced_pld = None
+
+        try:
+            if editor is not None:
+                editor.EnabledOff()
+        except Exception:
+            pass
+
+        if traced_pld is None or traced_pld.GetNumberOfPoints() < 2:
+            self.clear_selection()
+            freeze_gui_off(self)
+            return
+
+        points = np.array(traced_pld.GetPoints().GetData(), dtype=float)
+        snapped_points = self.snap_points_to_slice(points, points_are_display_coords=True)
+
+        vtk_obj = PolyLine()
+        vtk_obj.points = snapped_points
+        vtk_obj.auto_cells()
+
+        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
+
+        if uid in getattr(self, "interpretation_lines", {}):
+            self._store_single_slice_interpretation_metadata(
+                uid=uid,
+                slice_info=self.interpretation_lines[uid],
+            )
+            self.set_actor_visibility(uid, True)
+
+        self.plotter.render()
+        self.clear_selection()
+        freeze_gui_off(self)
+
+    def _finalize_multipart_line_edit(self, selection=None, editor=None):
+        """Rewrite the active slice of a multipart propagated line after editing."""
+        try:
+            self.plotter.untrack_click_position(side="right")
+        except Exception:
+            pass
+        self._end_slice_line_edit_pick_mode()
+
+        try:
+            traced_pld = (
+                editor.GetContourRepresentation().GetContourRepresentationAsPolyData()
+            )
+        except Exception:
+            traced_pld = None
+
+        try:
+            if editor is not None:
+                editor.EnabledOff()
+        except Exception:
+            pass
+
+        if traced_pld is None or traced_pld.GetNumberOfPoints() < 2 or selection is None:
+            self.clear_selection()
+            freeze_gui_off(self)
+            return
+
+        uid = selection["uid"]
+        entity_kind = selection["entity_kind"]
+        entity_info = selection["entity_info"]
+        slice_idx = int(self.current_slice_index)
+
+        points = np.array(traced_pld.GetPoints().GetData(), dtype=float)
+        snapped_points = self.snap_points_to_slice(points, points_are_display_coords=True)
+        current_vtk = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        new_vtk, slice_indices, _slice_to_cell_index = self._build_multipart_vtk_with_replaced_slice(
+            vtk_obj=current_vtk,
+            slice_idx=slice_idx,
+            edited_points=snapped_points,
+        )
+        if new_vtk is None:
+            message_dialog(
+                title="Edit line",
+                message="Could not rewrite the edited slice back into the multipart line.",
+            )
+            self.clear_selection()
+            freeze_gui_off(self)
+            return
+
+        self._remove_filtered_actor(f"multipart_slice_{uid}")
+        self._remove_filtered_actor(f"multipart_fault_slice_{uid}")
+        self._remove_raw_actor_for_uid(uid)
+        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=new_vtk)
+        self.scan_and_index_single_horizon(uid)
+
+        seed_slice = entity_info.get("seed_slice")
+        if uid in getattr(self, "multipart_horizons", {}) and seed_slice in slice_indices:
+            self.multipart_horizons[uid]["seed_slice"] = int(seed_slice)
+        if uid in getattr(self, "multipart_faults", {}) and seed_slice in slice_indices:
+            self.multipart_faults[uid]["seed_slice"] = int(seed_slice)
+
+        self._mark_slice_visibility_dirty()
+        if entity_kind == "horizon":
+            self.update_multipart_horizon_visibility(uid)
+        else:
+            self.update_multipart_fault_visibility(uid)
+        self.plotter.render()
+
+        self.print_terminal(
+            f"Edited multipart {entity_kind} {uid[:8]}... on slice {slice_idx}: "
+            f"{len(points)} control points updated."
+        )
+        self.clear_selection()
+        freeze_gui_off(self)
+
+    @freeze_gui_on
+    def edit_selected_line(self):
+        """Edit a visible interpretation line or the current slice of a multipart line."""
+        selected_uids = [
+            uid
+            for uid in list(getattr(self.parent, "selected_uids", []) or [])
+            if uid in set(self.parent.geol_coll.get_uids)
+        ]
+        if not selected_uids:
+            self.print_terminal(" -- No input data selected -- ")
+            freeze_gui_off(self)
+            return
+
+        sel_uid = selected_uids[0]
+        selection = self._resolve_multipart_entity_for_edit(
+            uid=sel_uid,
+            action_title="Edit line",
+            show_messages=False,
+        )
+
+        if selection is not None:
+            entity_info = selection["entity_info"]
+            if entity_info.get("seismic_uid") != self.current_seismic_uid or entity_info.get("axis") != self.current_axis:
+                message_dialog(
+                    title="Edit line",
+                    message="Show the propagated line on its matching seismic and axis before editing it.",
+                )
+                freeze_gui_off(self)
+                return
+            if self.current_slice_index not in selection["available_slices"]:
+                message_dialog(
+                    title="Edit line",
+                    message="Move to a slice where the selected propagated line is visible before editing it.",
+                )
+                freeze_gui_off(self)
+                return
+
+            actor = self._get_visible_line_actor_for_uid(sel_uid)
+            if actor is None:
+                message_dialog(
+                    title="Edit line",
+                    message="The selected propagated line is not currently visible in the interpretation view.",
+                )
+                freeze_gui_off(self)
+                return
+
+            data = actor.GetMapper().GetInput()
+            editor_data = self._build_editor_input_polydata(data=data)
+            self._begin_slice_line_edit_pick_mode()
+            editor = Editor(self)
+            editor.EnabledOn()
+            editor.initialize(editor_data, "edit")
+            self.plotter.track_click_position(
+                side="right",
+                callback=lambda event: self._finalize_multipart_line_edit(
+                    selection=selection,
+                    editor=editor,
+                ),
+            )
+            return
+
+        try:
+            topology = self.parent.geol_coll.get_uid_topology(sel_uid)
+        except Exception:
+            topology = None
+        if topology != "PolyLine":
+            self.print_terminal(" -- Selected data is not a line -- ")
+            freeze_gui_off(self)
+            return
+
+        actor = self._get_visible_line_actor_for_uid(sel_uid)
+        if actor is None:
+            self.print_terminal(" -- Selected line is not visible in the current interpretation slice -- ")
+            freeze_gui_off(self)
+            return
+
+        data = actor.GetMapper().GetInput()
+        editor_data = self._build_editor_input_polydata(data=data)
+        self._begin_slice_line_edit_pick_mode()
+        editor = Editor(self)
+        editor.EnabledOn()
+        editor.initialize(editor_data, "edit")
+        self.plotter.track_click_position(
+            side="right",
+            callback=lambda event: self._finalize_standard_line_edit(
+                uid=sel_uid,
+                editor=editor,
+            ),
+        )
 
     def _build_propagated_entity_name(self, seed_uid, slice_indices, fallback_name):
         """
@@ -3693,10 +4201,10 @@ class ViewInterpretation(ViewMap):
         # Debug: print plane bounds to verify it's at the right position
         self.print_terminal(f"Picking plane bounds: {plane.bounds}")
 
-    def snap_points_to_slice(self, points):
+    def snap_points_to_slice(self, points, points_are_display_coords=True):
         """Snap points to the current slice plane based on the current axis and slice position.
-        Points from the tracer are in display coordinates (with VE applied), so we need to
-        convert them back to real world coordinates before storing."""
+        Points from the tracer are typically in display coordinates (with VE applied), so
+        convert them back to real world coordinates before storing when requested."""
         snapped = points.copy()
         
         # Get the current vertical exaggeration from the plotter scale
@@ -3712,9 +4220,9 @@ class ViewInterpretation(ViewMap):
         
         self.print_terminal(f"Snapping with v_exag={v_exag}, axis={self.current_axis}, slice_pos={self.current_slice_position}")
         
-        # Only Z coordinates need to be unscaled (X and Y don't have exaggeration)
-        # The tracer picks in display space which has vertical exaggeration applied to Z
-        if v_exag != 1.0:
+        # Only Z coordinates need to be unscaled when the picked points come from
+        # display-space interactions such as traced contours on the rendered slice.
+        if points_are_display_coords and v_exag != 1.0:
             snapped[:, 2] = snapped[:, 2] / v_exag
             self.print_terminal(f"Unscaled Z by factor {v_exag}")
         
@@ -7256,6 +7764,9 @@ class ViewInterpretation(ViewMap):
         self.regularizeMultipartSamplingButton.triggered.connect(
             self.regularize_multipart_sampling
         )
+        self.editLineButton = QAction("Edit line", self)
+        self.editLineButton.triggered.connect(self.edit_selected_line)
+        self.menuModify.addAction(self.editLineButton)
         self.simplifyLineButton = QAction("Simplify line", self)
         self.simplifyLineButton.triggered.connect(self.simplify_selected_lines)
         self.menuModify.addAction(self.simplifyLineButton)
