@@ -104,6 +104,7 @@ from .properties_manager import PropertiesCMaps
 from .three_d_surfaces import (
     interpolation_delaunay_2d,
     poisson_interpolation,
+    regularized_grid_surface_interpolation,
     implicit_model_loop_structural,
     surface_smoothing,
     linear_extrusion,
@@ -248,6 +249,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Interpolation actions -> slots"""
         self.actionDelaunay2D.triggered.connect(lambda: interpolation_delaunay_2d(self))
         self.actionPoisson.triggered.connect(lambda: poisson_interpolation(self))
+        self.actionRegularizedGridSurface.triggered.connect(
+            lambda: regularized_grid_surface_interpolation(self)
+        )
         self.actionLoopStructural.triggered.connect(
             lambda: implicit_model_loop_structural(self)
         )

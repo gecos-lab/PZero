@@ -354,6 +354,402 @@ def get_aligned_bounds_from_obb(boundary_coll, boundary_uid, obb_info):
     return origin_x, origin_y, origin_z, max_x, max_y, max_z
 
 
+def _normalize_vectors(vectors):
+    """Return normalized vectors and a validity mask for non-zero rows."""
+    from numpy import array as np_array
+    from numpy import linalg as np_linalg
+    from numpy import zeros_like as np_zeros_like
+
+    vectors = np_array(vectors, dtype=float)
+    if vectors.ndim == 1:
+        vectors = vectors.reshape(1, -1)
+
+    norms = np_linalg.norm(vectors, axis=1)
+    normalized = np_zeros_like(vectors, dtype=float)
+    valid = norms > 0
+    if valid.any():
+        normalized[valid] = vectors[valid] / norms[valid][:, None]
+    return normalized, valid
+
+
+def _get_normals_for_reconstruction(vtk_obj):
+    """Return normalized point normals when available or computable."""
+    if "Normals" not in vtk_obj.point_data_keys:
+        if isinstance(vtk_obj, (TriSurf, XsPolyLine)):
+            vtk_obj.vtk_set_normals()
+        else:
+            return None
+
+    if "Normals" not in vtk_obj.point_data_keys:
+        return None
+
+    normals = vtk_obj.get_point_data("Normals")
+    normals, valid = _normalize_vectors(normals)
+    if not valid.any():
+        return None
+    return normals
+
+
+def _estimate_reconstruction_spacing(vtk_objects):
+    """Estimate a stable spacing from segment lengths or nearest-neighbour distances."""
+    from numpy import array as np_array
+    from numpy import max as np_max
+    from numpy import median as np_median
+    from numpy import min as np_min
+    from numpy import linalg as np_linalg
+    from scipy.spatial import cKDTree
+
+    spacing_candidates = []
+    all_points = []
+
+    for vtk_obj in vtk_objects:
+        points = np_array(vtk_obj.points, dtype=float) if vtk_obj.points is not None else None
+        if points is None or len(points) == 0:
+            continue
+
+        all_points.append(points)
+
+        if isinstance(vtk_obj, (PolyLine, XsPolyLine)) and len(points) > 1:
+            cells = _get_polyline_segments(vtk_obj)
+            if len(cells) == 0:
+                continue
+            segment_lengths = np_linalg.norm(
+                points[cells[:, 1]] - points[cells[:, 0]], axis=1
+            )
+            spacing_candidates.extend(segment_lengths[segment_lengths > 0])
+        elif len(points) > 1:
+            tree = cKDTree(points)
+            distances, _ = tree.query(points, k=2)
+            nearest = distances[:, 1]
+            spacing_candidates.extend(nearest[nearest > 0])
+
+    if spacing_candidates:
+        return float(np_median(np_array(spacing_candidates, dtype=float)))
+
+    if all_points:
+        stacked_points = all_points[0]
+        if len(all_points) > 1:
+            from numpy import vstack as np_vstack
+
+            stacked_points = np_vstack(all_points)
+        diagonal = np_linalg.norm(
+            np_max(stacked_points, axis=0) - np_min(stacked_points, axis=0)
+        )
+        if diagonal > 0:
+            return float(diagonal / 50.0)
+
+    return 1.0
+
+
+def _get_polyline_segments(vtk_obj):
+    """Return a 2-column array of point-id pairs from vtkLine or vtkPolyLine cells."""
+    from numpy import array as np_array
+    from vtk import vtkIdList
+
+    segment_pairs = []
+    if vtk_obj.cells_number > 0:
+        for cell_id in range(vtk_obj.cells_number):
+            point_ids = vtkIdList()
+            vtk_obj.GetCellPoints(cell_id, point_ids)
+            n_ids = point_ids.GetNumberOfIds()
+            if n_ids < 2:
+                continue
+            for idx in range(n_ids - 1):
+                segment_pairs.append([point_ids.GetId(idx), point_ids.GetId(idx + 1)])
+
+    if segment_pairs:
+        return np_array(segment_pairs, dtype=int)
+
+    if vtk_obj.points_number > 1:
+        return np_array(
+            [[idx, idx + 1] for idx in range(vtk_obj.points_number - 1)], dtype=int
+        )
+
+    return np_array([]).reshape(0, 2)
+
+
+def _sample_polyline_for_reconstruction(vtk_obj, sample_spacing, ribbon_half_width=0.0):
+    """Sample points along a polyline and optionally create a narrow tangent ribbon."""
+    from numpy import array as np_array
+    from numpy import ceil as np_ceil
+    from numpy import cross as np_cross
+    from numpy import linalg as np_linalg
+    from numpy import vstack as np_vstack
+
+    points = np_array(vtk_obj.points, dtype=float) if vtk_obj.points is not None else None
+    if points is None or len(points) == 0:
+        return np_array([]).reshape(0, 3), np_array([]).reshape(0, 3)
+
+    cells = _get_polyline_segments(vtk_obj)
+    if len(cells) == 0:
+        return points.copy(), points.copy()
+
+    normals = _get_normals_for_reconstruction(vtk_obj)
+    core_points = []
+    support_points = []
+
+    for cell in cells:
+        point_0 = points[int(cell[0])]
+        point_1 = points[int(cell[1])]
+        tangent = point_1 - point_0
+        tangent_norm = np_linalg.norm(tangent)
+        if tangent_norm == 0:
+            continue
+
+        tangent_unit = tangent / tangent_norm
+        n_steps = max(1, int(np_ceil(tangent_norm / sample_spacing)))
+
+        for step in range(n_steps + 1):
+            if core_points and step == 0:
+                continue
+
+            weight = step / n_steps
+            sampled_point = (1.0 - weight) * point_0 + weight * point_1
+            core_points.append(sampled_point)
+            support_points.append(sampled_point)
+
+            if normals is None or ribbon_half_width <= 0:
+                continue
+
+            point_normal = (1.0 - weight) * normals[int(cell[0])] + weight * normals[int(cell[1])]
+            point_normal, valid = _normalize_vectors(point_normal)
+            if not valid[0]:
+                continue
+
+            ribbon_direction = np_cross(point_normal[0], tangent_unit)
+            ribbon_norm = np_linalg.norm(ribbon_direction)
+            if ribbon_norm == 0:
+                continue
+
+            ribbon_direction = ribbon_direction / ribbon_norm
+            support_points.append(sampled_point + ribbon_half_width * ribbon_direction)
+            support_points.append(sampled_point - ribbon_half_width * ribbon_direction)
+
+    if not core_points:
+        return np_array([]).reshape(0, 3), np_array([]).reshape(0, 3)
+
+    return np_vstack(core_points), np_vstack(support_points)
+
+
+def _sample_object_for_reconstruction(vtk_obj, sample_spacing, ribbon_half_width):
+    """Return constraint points and support points for surface reconstruction."""
+    from numpy import array as np_array
+
+    if isinstance(vtk_obj, (PolyLine, XsPolyLine)):
+        return _sample_polyline_for_reconstruction(
+            vtk_obj, sample_spacing=sample_spacing, ribbon_half_width=ribbon_half_width
+        )
+
+    points = np_array(vtk_obj.points, dtype=float) if vtk_obj.points is not None else None
+    if points is None or len(points) == 0:
+        return np_array([]).reshape(0, 3), np_array([]).reshape(0, 3)
+    return points.copy(), points.copy()
+
+
+def _trim_reconstructed_surface(surface, constraint_points, trim_distance, keep_largest_patch=True):
+    """Remove parts of the reconstructed mesh that are unsupported by the input data."""
+    from scipy.spatial import cKDTree
+
+    trimmed_surface = pv_PolyData(surface)
+    if trimmed_surface.n_points == 0 or len(constraint_points) == 0:
+        return trimmed_surface
+
+    distances, _ = cKDTree(constraint_points).query(trimmed_surface.points, k=1)
+    valid_points = distances <= trim_distance
+    if valid_points.sum() < 3:
+        return trimmed_surface
+
+    trimmed_surface = trimmed_surface.extract_points(
+        valid_points, adjacent_cells=False, include_cells=True
+    )
+    if trimmed_surface.n_cells == 0:
+        return pv_PolyData(surface)
+
+    trimmed_surface = trimmed_surface.extract_surface().triangulate().clean()
+    if keep_largest_patch and trimmed_surface.n_cells > 0:
+        trimmed_surface = trimmed_surface.connectivity(extraction_mode="largest")
+        trimmed_surface = trimmed_surface.extract_surface().triangulate().clean()
+
+    return trimmed_surface
+
+
+def _orient_polyline_rows_consistently(row_points):
+    """Flip rows when needed so adjacent rows share a consistent left-to-right order."""
+    from numpy import array as np_array
+    from numpy import linalg as np_linalg
+
+    oriented_rows = []
+    previous_row = None
+    for row in row_points:
+        current_row = np_array(row, dtype=float)
+        if previous_row is not None:
+            forward_cost = np_linalg.norm(current_row[0] - previous_row[0]) + np_linalg.norm(
+                current_row[-1] - previous_row[-1]
+            )
+            reverse_cost = np_linalg.norm(current_row[-1] - previous_row[0]) + np_linalg.norm(
+                current_row[0] - previous_row[-1]
+            )
+            if reverse_cost + 1.0e-9 < forward_cost:
+                current_row = current_row[::-1].copy()
+        oriented_rows.append(current_row)
+        previous_row = current_row
+    return oriented_rows
+
+
+def _extract_regularized_slice_stack(vtk_obj):
+    """Extract a structured row/column stack from a regularized multipart interpretation."""
+    from numpy import array as np_array
+
+    if vtk_obj is None or vtk_obj.GetNumberOfCells() < 2:
+        return None, None
+
+    cell_data = vtk_obj.GetCellData()
+    if cell_data is None or not cell_data.HasArray("slice_index"):
+        return None, None
+
+    slice_array = cell_data.GetArray("slice_index")
+    ordered_cell_ids = sorted(
+        range(vtk_obj.GetNumberOfCells()),
+        key=lambda cell_idx: (int(slice_array.GetValue(cell_idx)), cell_idx),
+    )
+
+    slice_indices = []
+    row_points = []
+    point_counts = []
+    for cell_id in ordered_cell_ids:
+        cell = vtk_obj.GetCell(cell_id)
+        if cell is None:
+            continue
+        n_points = cell.GetNumberOfPoints()
+        if n_points < 2:
+            continue
+        points = np_array(
+            [vtk_obj.GetPoint(cell.GetPointId(point_idx)) for point_idx in range(n_points)],
+            dtype=float,
+        )
+        slice_indices.append(int(slice_array.GetValue(cell_id)))
+        row_points.append(points)
+        point_counts.append(n_points)
+
+    if len(row_points) < 2:
+        return None, None
+    if len(set(slice_indices)) != len(slice_indices):
+        return None, None
+    if len(set(point_counts)) != 1:
+        return None, None
+
+    row_points = _orient_polyline_rows_consistently(row_points)
+    return np_array(row_points, dtype=float), {
+        "kind": "regularized_slices",
+        "slice_indices": slice_indices,
+        "row_count": len(row_points),
+        "col_count": int(point_counts[0]),
+    }
+
+
+def _extract_gridded_polyline_stack(vtk_obj):
+    """Extract row polylines from the gridded companion entity built in the interpretation view."""
+    from numpy import array as np_array
+
+    if vtk_obj is None or vtk_obj.GetNumberOfCells() < 4:
+        return None, None
+
+    cell_lengths = []
+    for cell_id in range(vtk_obj.GetNumberOfCells()):
+        cell = vtk_obj.GetCell(cell_id)
+        cell_lengths.append(cell.GetNumberOfPoints() if cell is not None else 0)
+
+    first_length = int(cell_lengths[0]) if cell_lengths else 0
+    if first_length < 2:
+        return None, None
+
+    row_count = 0
+    for cell_length in cell_lengths:
+        if int(cell_length) != first_length:
+            break
+        row_count += 1
+
+    col_count = first_length
+    if row_count < 2 or col_count < 2:
+        return None, None
+    if len(cell_lengths) != row_count + col_count:
+        return None, None
+    if any(int(cell_length) != row_count for cell_length in cell_lengths[row_count:]):
+        return None, None
+    if vtk_obj.GetNumberOfPoints() != row_count * col_count:
+        return None, None
+
+    row_points = []
+    for cell_id in range(row_count):
+        cell = vtk_obj.GetCell(cell_id)
+        if cell is None or cell.GetNumberOfPoints() != col_count:
+            return None, None
+        points = np_array(
+            [vtk_obj.GetPoint(cell.GetPointId(point_idx)) for point_idx in range(col_count)],
+            dtype=float,
+        )
+        row_points.append(points)
+
+    row_points = _orient_polyline_rows_consistently(row_points)
+    return np_array(row_points, dtype=float), {
+        "kind": "gridded_polyline",
+        "row_count": row_count,
+        "col_count": col_count,
+    }
+
+
+def _extract_structured_point_stack(vtk_obj):
+    """Detect and extract a regularized tensor-like point stack from interpretation linework."""
+    stack, info = _extract_regularized_slice_stack(vtk_obj)
+    if stack is not None:
+        return stack, info
+    return _extract_gridded_polyline_stack(vtk_obj)
+
+
+def _build_surface_from_point_stack(point_stack):
+    """Triangulate an ordered row/column stack without extending beyond its footprint."""
+    from numpy import array as np_array
+    from numpy import cross as np_cross
+    from numpy import linalg as np_linalg
+
+    stack = np_array(point_stack, dtype=float)
+    if stack.ndim != 3 or stack.shape[0] < 2 or stack.shape[1] < 2:
+        return None
+
+    row_count, col_count, _ = stack.shape
+    surface = TriSurf()
+    surface.points = stack.reshape((-1, 3))
+
+    def append_triangle_if_valid(point_ids):
+        triangle = surface.points[np_array(point_ids, dtype=int)]
+        area_vector = np_cross(triangle[1] - triangle[0], triangle[2] - triangle[0])
+        if np_linalg.norm(area_vector) <= 1.0e-12:
+            return
+        surface.append_cell(np_array(point_ids, dtype=int))
+
+    for row_idx in range(row_count - 1):
+        for col_idx in range(col_count - 1):
+            top_left = row_idx * col_count + col_idx
+            top_right = top_left + 1
+            bottom_left = (row_idx + 1) * col_count + col_idx
+            bottom_right = bottom_left + 1
+
+            diag_main = np_linalg.norm(surface.points[top_left] - surface.points[bottom_right])
+            diag_cross = np_linalg.norm(surface.points[top_right] - surface.points[bottom_left])
+            if diag_main <= diag_cross:
+                append_triangle_if_valid([top_left, top_right, bottom_right])
+                append_triangle_if_valid([top_left, bottom_right, bottom_left])
+            else:
+                append_triangle_if_valid([top_left, top_right, bottom_left])
+                append_triangle_if_valid([top_right, bottom_right, bottom_left])
+
+    surface.Modified()
+    if surface.points_number == 0 or surface.cells_number == 0:
+        return None
+    surface.vtk_set_normals()
+    return surface
+
+
 @freeze_gui_onoff
 def interpolation_delaunay_2d(self):
     """The vtkDelaunay2D object takes vtkPointSet (or any of its subclasses) as input and
@@ -463,21 +859,96 @@ def interpolation_delaunay_2d(self):
 
 
 @freeze_gui_onoff
-def poisson_interpolation(self):
-    """vtkSurfaceReconstructionFilter can be used to reconstruct surfaces from point clouds. Input is a vtkDataSet
-    defining points assumed to lie on the surface of a 3D object."""
+def regularized_grid_surface_interpolation(self):
+    """Build a surface directly from a regularized interpretation grid."""
     self.print_terminal(
-        "Interpolation from point cloud: build surface from interpolation"
+        "Regularized grid surface: build a footprint-preserving surface from regularized interpretation samples"
     )
     if self.shown_table != "tabGeology":
         self.print_terminal(" -- Only geological objects can be interpolated -- ")
         return
-    # Check if some vtkPolyData is selected
+    if not self.selected_uids:
+        self.print_terminal("No input data selected.")
+        return
+    input_uids = deepcopy(self.selected_uids)
+    if len(input_uids) != 1:
+        self.print_terminal(
+            " -- Select one regularized multipart interpretation or its gridded companion -- "
+        )
+        return
+
+    input_vtk_obj = self.geol_coll.get_uid_vtk_obj(input_uids[0])
+    if not isinstance(input_vtk_obj, (PolyLine, XsPolyLine)):
+        self.print_terminal(" -- Error input type: only PolyLine and XsPolyLine -- ")
+        return
+
+    structured_stack, structured_info = _extract_structured_point_stack(input_vtk_obj)
+    if structured_stack is None:
+        self.print_terminal(
+            " -- Input is not a recognized regularized interpretation grid. "
+            "Use a regularized multipart interpretation or its gridded companion. -- "
+        )
+        return
+
+    surf_dict = deepcopy(self.geol_coll.entity_dict)
+    input_dict = {
+        "name": [
+            "TriSurf name: ",
+            self.geol_coll.get_uid_name(input_uids[0]) + "_structured_surface",
+        ],
+        "role": [
+            "Role: ",
+            self.geol_coll.valid_roles,
+            self.geol_coll.get_uid_role(input_uids[0]),
+        ],
+        "feature": [
+            "Feature: ",
+            self.geol_coll.get_uid_feature(input_uids[0]),
+        ],
+        "scenario": ["Scenario: ", self.geol_coll.get_uid_scenario(input_uids[0])],
+    }
+    surf_dict_updt = multiple_input_dialog(
+        title="Regularized Grid Surface", input_dict=input_dict
+    )
+    if surf_dict_updt is None:
+        return
+    for key in surf_dict_updt:
+        surf_dict[key] = surf_dict_updt[key]
+    surf_dict["topology"] = "TriSurf"
+    surf_dict["vtk_obj"] = TriSurf()
+
+    self.print_terminal(
+        "Detected regularized interpretation grid: "
+        f"{structured_info['row_count']} slices x {structured_info['col_count']} samples. "
+        "Building footprint-preserving surface."
+    )
+    structured_surface = _build_surface_from_point_stack(structured_stack)
+    if structured_surface is None:
+        self.print_terminal(" -- Could not build structured surface from regularized samples -- ")
+        return
+
+    surf_dict["vtk_obj"].ShallowCopy(structured_surface)
+    surf_dict["vtk_obj"].Modified()
+    if surf_dict["vtk_obj"].points_number > 0:
+        self.geol_coll.add_entity_from_dict(surf_dict)
+    else:
+        self.print_terminal(" -- empty object -- ")
+
+
+@freeze_gui_onoff
+def poisson_interpolation(self):
+    """vtkSurfaceReconstructionFilter can be used to reconstruct surfaces from point clouds. Input is a vtkDataSet
+    defining points assumed to lie on the surface of a 3D object."""
+    self.print_terminal(
+        "Poisson interpolation: reconstruct surface from points, lines, or surfaces as an implicit point-cloud surface"
+    )
+    if self.shown_table != "tabGeology":
+        self.print_terminal(" -- Only geological objects can be interpolated -- ")
+        return
     if not self.selected_uids:
         self.print_terminal("No input data selected.")
         return
     else:
-        # Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built
         input_uids = deepcopy(self.selected_uids)
     for uid in input_uids:
         if (
@@ -491,16 +962,17 @@ def poisson_interpolation(self):
         else:
             self.print_terminal(" -- Error input type -- ")
             return
-    # Create deepcopy of the geological entity dictionary.
+
     surf_dict = deepcopy(self.geol_coll.entity_dict)
     input_dict = {
         "name": [
             "TriSurf name: ",
-            self.geol_coll.get_uid_name(input_uids[0]) + "_cloud",
+            self.geol_coll.get_uid_name(input_uids[0]) + "_poisson",
         ],
         "role": [
             "Role: ",
-            self.parent.geol_coll.valid_roles,
+            self.geol_coll.valid_roles,
+            self.geol_coll.get_uid_role(input_uids[0]),
         ],
         "feature": [
             "Feature: ",
@@ -509,71 +981,60 @@ def poisson_interpolation(self):
         "scenario": ["Scenario: ", self.geol_coll.get_uid_scenario(input_uids[0])],
     }
     surf_dict_updt = multiple_input_dialog(
-        title="Surface interpolation from point cloud", input_dict=input_dict
+        title="Poisson Interpolation", input_dict=input_dict
     )
-    # Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits
     if surf_dict_updt is None:
         return
-    # Getting the values that have been typed by the user through the multiple input widget
     for key in surf_dict_updt:
         surf_dict[key] = surf_dict_updt[key]
     surf_dict["topology"] = "TriSurf"
     surf_dict["vtk_obj"] = TriSurf()
-    # Create a new instance of the interpolation class
+
     surf_from_points = vtkSurfaceReconstructionFilter()
     sample_spacing = input_one_value_dialog(
-        title="Surface interpolation from point cloud",
+        title="Poisson Interpolation",
         label="Sample Spacing",
         default_value=-1.0,
     )
-    if sample_spacing is None:
-        pass
-    else:
+    if sample_spacing is not None:
         surf_from_points.SetSampleSpacing(sample_spacing)
     neighborhood_size = input_one_value_dialog(
-        title="Surface interpolation from point cloud",
+        title="Poisson Interpolation",
         label="Neighborhood Size",
         default_value=20,
     )
-    if neighborhood_size is None:
-        pass
-    else:
+    if neighborhood_size is not None:
         surf_from_points.SetNeighborhoodSize(int(neighborhood_size))
-    # Create a vtkAppendPolyData filter to merge all input vtk objects.
+
     vtkappend = vtkAppendPolyData()
     for uid in input_uids:
-        if (
-            self.geol_coll.get_uid_topology(input_uids[0]) == "XsPolyLine"
-            or self.geol_coll.get_uid_topology(input_uids[0]) == "PolyLine"
-            or self.geol_coll.get_uid_topology(input_uids[0]) == "TriSurf"
-        ):
-            # Extract points from vtkpolydata
+        topology = self.geol_coll.get_uid_topology(uid)
+        if topology in ["XsPolyLine", "PolyLine", "TriSurf"]:
             point_coord = self.geol_coll.get_uid_vtk_obj(uid).points
             points = vtkPoints()
-            x = 0
-            for row in point_coord:
+            for point_idx in range(len(point_coord)):
                 points.InsertPoint(
-                    x, point_coord[x, 0], point_coord[x, 1], point_coord[x, 2]
+                    point_idx,
+                    point_coord[point_idx, 0],
+                    point_coord[point_idx, 1],
+                    point_coord[point_idx, 2],
                 )
-                x += 1
             polydata = vtkPolyData()
             polydata.SetPoints(points)
             vtkappend.AddInputData(polydata)
-        elif self.geol_coll.get_uid_topology(input_uids[0]) == "VertexSet":
+        elif topology in ["VertexSet", "XsVertexSet"]:
             vtkappend.AddInputData(self.geol_coll.get_uid_vtk_obj(uid))
     vtkappend.Update()
-    # The created vtkPolyData is used as the input for vtkSurfaceReconstructionFilter
+
     surf_from_points.SetInputDataObject(vtkappend.GetOutput())
-    surf_from_points.Update()  # executes the interpolation. Output is vtkImageData
-    # Contour the grid at zero to extract the surface
+    surf_from_points.Update()
     contour_surface = vtkContourFilter()
     contour_surface.SetInputData(surf_from_points.GetOutput())
     contour_surface.SetValue(0, 0.0)
     contour_surface.Update()
-    # ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning
+
     surf_dict["vtk_obj"].ShallowCopy(contour_surface.GetOutput())
     surf_dict["vtk_obj"].Modified()
-    # Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
     if surf_dict["vtk_obj"].points_number > 0:
         self.geol_coll.add_entity_from_dict(surf_dict)
     else:

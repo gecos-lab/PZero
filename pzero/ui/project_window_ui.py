@@ -133,6 +133,8 @@ class Ui_ProjectWindow(object):
         self.actionDelaunay2D.setObjectName("actionDelaunay2D")
         self.actionPoisson = QAction(ProjectWindow)
         self.actionPoisson.setObjectName("actionPoisson")
+        self.actionRegularizedGridSurface = QAction(ProjectWindow)
+        self.actionRegularizedGridSurface.setObjectName("actionRegularizedGridSurface")
         self.actionLoopStructural = QAction(ProjectWindow)
         self.actionLoopStructural.setObjectName("actionLoopStructural")
         self.actionSurfaceSmoothing = QAction(ProjectWindow)
@@ -427,6 +429,7 @@ class Ui_ProjectWindow(object):
         self.menuEntities.addAction(self.actionShowInfoOnEntities)
         self.menuInterpolation.addAction(self.actionDelaunay2D)
         self.menuInterpolation.addAction(self.actionPoisson)
+        self.menuInterpolation.addAction(self.actionRegularizedGridSurface)
         self.menuInterpolation.addAction(self.actionLoopStructural)
         self.menuInterpolation.addSeparator()
         self.menuInterpolation.addAction(self.actionDecimationPro)
@@ -582,6 +585,9 @@ class Ui_ProjectWindow(object):
         )
         self.actionPoisson.setText(
             QCoreApplication.translate("ProjectWindow", "Poisson", None)
+        )
+        self.actionRegularizedGridSurface.setText(
+            QCoreApplication.translate("ProjectWindow", "Regularized Grid Surface", None)
         )
         self.actionLoopStructural.setText(
             QCoreApplication.translate("ProjectWindow", "LoopStructural Implicit", None)
