@@ -19,6 +19,7 @@ from scipy.optimize import linear_sum_assignment
 # PZero imports
 from .view_map import ViewMap
 from ..entities_factory import Seismics, PolyLine
+from ..properties_manager import get_property_render_settings
 from ..helpers.helper_dialogs import (
     message_dialog,
     multiple_input_dialog,
@@ -743,16 +744,25 @@ class ViewInterpretation(ViewMap):
             self._cached_seismic_uid = self.current_seismic_uid
             self._cached_dims = self._cached_seismic.dimensions
             self._cached_bounds = self._cached_seismic.bounds
-            self._cached_scalar_name = self._get_current_scalar_name(self._cached_seismic)
+            self._refresh_cached_scalar_style()
             self.print_terminal(f"Pre-cached source dims: {self._cached_dims}, bounds: {self._cached_bounds}")
-            
-            # Also cache scalar range for consistent colormap
-            if self._cached_scalar_name:
-                self._cached_scalar_range = self._cached_seismic.get_data_range(self._cached_scalar_name)
-            else:
-                self._cached_scalar_range = None
         except Exception as e:
             self.print_terminal(f"Error pre-populating seismic cache: {e}")
+
+    def _refresh_cached_scalar_style(self):
+        """Refresh cached scalar name/range from the full active seismic volume."""
+        self._cached_scalar_name = self._get_current_scalar_name(self._cached_seismic)
+        if self._cached_scalar_name:
+            settings = get_property_render_settings(
+                parent=self.parent, property_name=self._cached_scalar_name
+            )
+            self._cached_scalar_range = settings.get("clim")
+            if self._cached_scalar_range is None:
+                self._cached_scalar_range = self._cached_seismic.get_data_range(
+                    self._cached_scalar_name
+                )
+        else:
+            self._cached_scalar_range = None
 
     def update_slice(self):
         if not self.current_seismic_uid:
@@ -774,16 +784,12 @@ class ViewInterpretation(ViewMap):
             self._cached_seismic_uid = self.current_seismic_uid
             self._cached_dims = self._cached_seismic.dimensions
             self._cached_bounds = self._cached_seismic.bounds
-            self._cached_scalar_name = self._get_current_scalar_name(self._cached_seismic)
+            self._refresh_cached_scalar_style()
             self.print_terminal(f"Source dims: {self._cached_dims}, bounds: {self._cached_bounds}")
-            # Calculate scalar range from the FULL volume for consistent colormap across all slices
-            # Use get_data_range for the full extent (like mesh slicer does in view_3d)
-            if self._cached_scalar_name:
-                self._cached_scalar_range = self._cached_seismic.get_data_range(self._cached_scalar_name)
-                self.print_terminal(f"Scalar range (full volume): {self._cached_scalar_range}")
-            else:
-                self._cached_scalar_range = None
-        
+            self.print_terminal(f"Scalar range (full volume): {self._cached_scalar_range}")
+        else:
+            self._refresh_cached_scalar_style()
+
         # Always use the cached scalar range from the full volume to ensure consistent colormap
         # This prevents per-slice rescaling which causes intensity changes when scrolling
         if not hasattr(self, '_cached_scalar_range'):
@@ -1141,13 +1147,9 @@ class ViewInterpretation(ViewMap):
     def get_seismic_colormap(self, property_name=None):
         """Get the colormap for the active scalar property from the legend manager."""
         property_name = property_name or getattr(self, "_cached_scalar_name", None) or "intensity"
-        try:
-            if hasattr(self.parent, 'prop_legend_df') and self.parent.prop_legend_df is not None:
-                row = self.parent.prop_legend_df[self.parent.prop_legend_df['property_name'] == property_name]
-                if not row.empty:
-                    return row['colormap'].iloc[0]
-        except:
-            pass
+        settings = get_property_render_settings(parent=self.parent, property_name=property_name)
+        if settings.get("cmap"):
+            return settings["cmap"]
         return 'gray'  # Default
 
     def _get_geol_legend_color(self, uid, default=(1.0, 1.0, 1.0)):
@@ -3044,15 +3046,26 @@ class ViewInterpretation(ViewMap):
 
     def update_slice_colormap(self):
         """Update the slice colormap when legend changes - called by prop_legend_cmap_modified signal."""
-        if self.slice_actor is not None:
-            cmap = self.get_seismic_colormap()
-            # Force full redraw with new colormap
-            self._camera_initialized = True  # Keep camera position
-            # Note: Do NOT reset scalar_range here - we want to keep using the full volume range
-            # for consistent colormap across all slices. The _cached_scalar_range will be used.
-            old_slice_actor = self.slice_actor
-            self.slice_actor = None  # Force full update
-            self.update_slice()
+        if not self.current_seismic_uid:
+            return
+
+        # Keep the current camera/framing, but refresh the full-volume style cache.
+        self._camera_initialized = True
+        if hasattr(self, "_cached_seismic") and self._cached_seismic is not None:
+            self._refresh_cached_scalar_style()
+            self.scalar_range = self._cached_scalar_range
+
+        slice_actor_name = "seismic_slice_actor"
+        try:
+            if self.slice_actor is not None:
+                self.plotter.remove_actor(self.slice_actor)
+            elif slice_actor_name in self.plotter.renderer.actors:
+                self.plotter.remove_actor(slice_actor_name)
+        except Exception:
+            pass
+
+        self.slice_actor = None
+        self.update_slice()
 
     def draw_interpretation_line(self):
         """Draw a line on the current seismic slice. The line will be snapped to the slice plane."""
@@ -7003,7 +7016,16 @@ class ViewInterpretation(ViewMap):
     
     def on_colormap_changed(self, property_name):
         """Called when colormap is changed in the legend manager."""
-        if property_name == 'intensity':
+        active_property = getattr(self, "_cached_scalar_name", None)
+        if not active_property:
+            try:
+                source_vtk = self._get_current_source_vtk()
+                if source_vtk is not None:
+                    active_property = self._get_current_scalar_name(pv.wrap(source_vtk))
+            except Exception:
+                active_property = None
+
+        if property_name is None or active_property is None or property_name == active_property:
             self.update_slice_colormap()
 
     def on_geology_legend_style_changed(self, updated_uids, collection):

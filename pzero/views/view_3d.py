@@ -219,6 +219,66 @@ class View3D(ViewVTK):
             collection_name=collection_name, uid=uid, prop_text=prop_text
         )
 
+    def _get_component_scalar_array(self, dataset=None, property_name=None):
+        if dataset is None or not isinstance(property_name, str):
+            return None
+        if not property_name.endswith("]") or "[" not in property_name:
+            return None
+        try:
+            pos = property_name.rindex("[")
+            base_name = property_name[:pos]
+            component_idx = int(property_name[pos + 1 : -1])
+        except ValueError:
+            return None
+
+        for data_store_name in ("point_data", "cell_data", "field_data"):
+            try:
+                data_store = getattr(dataset, data_store_name)
+                if base_name not in data_store:
+                    continue
+                values = data_store[base_name]
+                if values is None:
+                    return None
+                if getattr(values, "ndim", 1) == 1:
+                    return values if component_idx == 0 else None
+                if values.shape[-1] <= component_idx:
+                    return None
+                return values[..., component_idx].reshape(-1)
+            except Exception:
+                continue
+        return None
+
+    def _resolve_slice_actor_style(self, slice_data=None, prop_text=None, main_uid=None):
+        scalar_array = None
+        cmap = None
+        clim = None
+        color_RGB = None
+
+        if not prop_text or prop_text == "none":
+            color_RGB = self._legend_color_for_uid(main_uid)
+            return scalar_array, cmap, clim, color_RGB
+
+        if prop_text in ["X", "Y", "Z"]:
+            idx = {"X": 0, "Y": 1, "Z": 2}[prop_text]
+            scalar_array = slice_data.points[:, idx]
+        else:
+            component_array = self._get_component_scalar_array(
+                dataset=slice_data, property_name=prop_text
+            )
+            if component_array is not None:
+                scalar_array = component_array
+            elif prop_text in slice_data.array_names:
+                scalar_array = prop_text
+
+        if scalar_array is None:
+            color_RGB = self._legend_color_for_uid(main_uid)
+            return scalar_array, cmap, clim, color_RGB
+
+        settings = self._get_property_render_settings(property_name=prop_text)
+        cmap = settings.get("cmap")
+        clim = settings.get("clim")
+        return scalar_array, cmap, clim, color_RGB
+
     # Called by View3D.toggle_property after main actor's property changes via tree combo
     def on_property_toggled(self, collection_name=None, uid=None, prop_text=None):
         try:
@@ -332,35 +392,9 @@ class View3D(ViewVTK):
                         self.actors_df["uid"] == main_uid, "show_property"
                     ].values[0]
             # Style
-            scalar_array = None
-            cmap = None
-            color_RGB = None
-            if not prop_text or prop_text == "none":
-                color_RGB = self._legend_color_for_uid(main_uid)
-            elif prop_text in ["X", "Y", "Z"]:
-                idx = {"X": 0, "Y": 1, "Z": 2}[prop_text]
-                scalar_array = slice_data.points[:, idx]
-                if (
-                    hasattr(self.parent, "prop_legend_df")
-                    and self.parent.prop_legend_df is not None
-                ):
-                    row = self.parent.prop_legend_df[
-                        self.parent.prop_legend_df["property_name"] == prop_text
-                    ]
-                    if not row.empty:
-                        cmap = row["colormap"].iloc[0]
-            else:
-                if prop_text in slice_data.array_names:
-                    scalar_array = prop_text
-                    if (
-                        hasattr(self.parent, "prop_legend_df")
-                        and self.parent.prop_legend_df is not None
-                    ):
-                        row = self.parent.prop_legend_df[
-                            self.parent.prop_legend_df["property_name"] == prop_text
-                        ]
-                        if not row.empty:
-                            cmap = row["colormap"].iloc[0]
+            scalar_array, cmap, clim, color_RGB = self._resolve_slice_actor_style(
+                slice_data=slice_data, prop_text=prop_text, main_uid=main_uid
+            )
             vis = actor.GetVisibility()
             self.plotter.remove_actor(actor)
             self.slice_actors[slice_uid] = self.plotter.add_mesh(
@@ -368,7 +402,7 @@ class View3D(ViewVTK):
                 name=slice_uid,
                 scalars=scalar_array,
                 cmap=cmap,
-                clim=pv_entity.get_data_range(scalar_array) if scalar_array else None,
+                clim=clim,
                 show_scalar_bar=False,
                 opacity=1.0,
                 interpolate_before_map=True,
@@ -435,35 +469,9 @@ class View3D(ViewVTK):
                     prop_text = self.actors_df.loc[
                         self.actors_df["uid"] == main_uid, "show_property"
                     ].values[0]
-            scalar_array = None
-            cmap = None
-            color_RGB = None
-            if not prop_text or prop_text == "none":
-                color_RGB = self._legend_color_for_uid(main_uid)
-            elif prop_text in ["X", "Y", "Z"]:
-                idx = {"X": 0, "Y": 1, "Z": 2}[prop_text]
-                scalar_array = slice_data.points[:, idx]
-                if (
-                    hasattr(self.parent, "prop_legend_df")
-                    and self.parent.prop_legend_df is not None
-                ):
-                    row = self.parent.prop_legend_df[
-                        self.parent.prop_legend_df["property_name"] == prop_text
-                    ]
-                    if not row.empty:
-                        cmap = row["colormap"].iloc[0]
-            else:
-                if prop_text in slice_data.array_names:
-                    scalar_array = prop_text
-                    if (
-                        hasattr(self.parent, "prop_legend_df")
-                        and self.parent.prop_legend_df is not None
-                    ):
-                        row = self.parent.prop_legend_df[
-                            self.parent.prop_legend_df["property_name"] == prop_text
-                        ]
-                        if not row.empty:
-                            cmap = row["colormap"].iloc[0]
+            scalar_array, cmap, clim, color_RGB = self._resolve_slice_actor_style(
+                slice_data=slice_data, prop_text=prop_text, main_uid=main_uid
+            )
             vis = actor.GetVisibility()
             self.plotter.remove_actor(actor)
             self.slice_actors[slice_uid] = self.plotter.add_mesh(
@@ -471,7 +479,7 @@ class View3D(ViewVTK):
                 name=slice_uid,
                 scalars=scalar_array,
                 cmap=cmap,
-                clim=pv_entity.get_data_range(scalar_array) if scalar_array else None,
+                clim=clim,
                 show_scalar_bar=False,
                 opacity=1.0,
                 interpolate_before_map=True,
@@ -780,10 +788,9 @@ class View3D(ViewVTK):
             default position before any mesh is plotted."""
             camera_position = self.plotter.camera_position
         if show_property is not None and plot_rgb_option is None:
-            show_property_cmap = self.parent.prop_legend_df.loc[
-                self.parent.prop_legend_df["property_name"] == show_property_title,
-                "colormap",
-            ].values[0]
+            show_property_cmap, color_bar_range = self._resolve_scalar_range_and_cmap(
+                property_name=show_property_title, color_bar_range=color_bar_range
+            )
         else:
             show_property_cmap = None
         this_actor = self.plotter.add_points(
@@ -1666,6 +1673,7 @@ class View3D(ViewVTK):
                     # Determine scalars/color based on main entity property for full sync
                     scalar_array = None
                     cmap = None
+                    clim = None
                     color_RGB = None
                     try:
                         main_uid = self.get_entity_uid_by_name(entity_name)
@@ -1679,34 +1687,16 @@ class View3D(ViewVTK):
                             prop_text = self.actors_df.loc[
                                 self.actors_df["uid"] == main_uid, "show_property"
                             ].values[0]
-                        if not prop_text or prop_text == "none":
-                            color_RGB = self._legend_color_for_uid(main_uid)
-                        elif prop_text in ["X", "Y", "Z"]:
-                            idx = {"X": 0, "Y": 1, "Z": 2}[prop_text]
-                            scalar_array = slice_data.points[:, idx]
-                            if (
-                                hasattr(self.parent, "prop_legend_df")
-                                and self.parent.prop_legend_df is not None
-                            ):
-                                row = self.parent.prop_legend_df[
-                                    self.parent.prop_legend_df["property_name"]
-                                    == prop_text
-                                ]
-                                if not row.empty:
-                                    cmap = row["colormap"].iloc[0]
-                        else:
-                            if prop_text in slice_data.array_names:
-                                scalar_array = prop_text
-                                if (
-                                    hasattr(self.parent, "prop_legend_df")
-                                    and self.parent.prop_legend_df is not None
-                                ):
-                                    row = self.parent.prop_legend_df[
-                                        self.parent.prop_legend_df["property_name"]
-                                        == prop_text
-                                    ]
-                                    if not row.empty:
-                                        cmap = row["colormap"].iloc[0]
+                        (
+                            scalar_array,
+                            cmap,
+                            clim,
+                            color_RGB,
+                        ) = self._resolve_slice_actor_style(
+                            slice_data=slice_data,
+                            prop_text=prop_text,
+                            main_uid=main_uid,
+                        )
                     except Exception:
                         pass
 
@@ -1716,11 +1706,7 @@ class View3D(ViewVTK):
                         name=slice_id,
                         scalars=scalar_array,
                         cmap=cmap,
-                        clim=(
-                            entity.get_data_range(scalar_array)
-                            if scalar_array
-                            else None
-                        ),
+                        clim=clim,
                         show_scalar_bar=False,
                         opacity=1.0,
                         interpolate_before_map=True,
@@ -1821,46 +1807,22 @@ class View3D(ViewVTK):
                     if slice_data.n_points <= 0:
                         print(f"Skipping empty slice at position {normalized_pos}")
                         continue
-                    scalar_array = None
-                    cmap = None
-                    color_RGB = None
-                    if not prop_text or prop_text == "none":
-                        color_RGB = self._legend_color_for_uid(main_uid)
-                    elif prop_text in ["X", "Y", "Z"]:
-                        idx = {"X": 0, "Y": 1, "Z": 2}[prop_text]
-                        scalar_array = slice_data.points[:, idx]
-                        if (
-                            hasattr(self.parent, "prop_legend_df")
-                            and self.parent.prop_legend_df is not None
-                        ):
-                            row = self.parent.prop_legend_df[
-                                self.parent.prop_legend_df["property_name"] == prop_text
-                            ]
-                            if not row.empty:
-                                cmap = row["colormap"].iloc[0]
-                    else:
-                        if prop_text in slice_data.array_names:
-                            scalar_array = prop_text
-                            if (
-                                hasattr(self.parent, "prop_legend_df")
-                                and self.parent.prop_legend_df is not None
-                            ):
-                                row = self.parent.prop_legend_df[
-                                    self.parent.prop_legend_df["property_name"]
-                                    == prop_text
-                                ]
-                                if not row.empty:
-                                    cmap = row["colormap"].iloc[0]
+                    (
+                        scalar_array,
+                        cmap,
+                        clim,
+                        color_RGB,
+                    ) = self._resolve_slice_actor_style(
+                        slice_data=slice_data,
+                        prop_text=prop_text,
+                        main_uid=main_uid,
+                    )
                     actor = self.plotter.add_mesh(
                         slice_data,
                         name=slice_id,
                         scalars=scalar_array,
                         cmap=cmap,
-                        clim=(
-                            entity.get_data_range(scalar_array)
-                            if scalar_array
-                            else None
-                        ),
+                        clim=clim,
                         show_scalar_bar=False,
                         opacity=1.0,
                         interpolate_before_map=True,
@@ -2547,39 +2509,16 @@ class View3D(ViewVTK):
                                 self.actors_df["uid"] == main_uid, "show_property"
                             ].values[0]
                         
-                        # Now apply colormap based on current_prop
-                        if not current_prop or current_prop == "none":
-                            # No property - use legend color
-                            color_RGB = self._legend_color_for_uid(main_uid) if main_uid else None
-                        elif current_prop in ["X", "Y", "Z"]:
-                            # Coordinate property - derive from slice geometry
-                            idx = {"X": 0, "Y": 1, "Z": 2}[current_prop]
-                            scalar_array = slice_data.points[:, idx]
-                            if (
-                                hasattr(self.parent, "prop_legend_df")
-                                and self.parent.prop_legend_df is not None
-                            ):
-                                row = self.parent.prop_legend_df[
-                                    self.parent.prop_legend_df["property_name"]
-                                    == current_prop
-                                ]
-                                if not row.empty:
-                                    cmap = row["colormap"].iloc[0]
-                        else:
-                            # Named data property - use from dataset arrays
-                            if current_prop in slice_data.array_names:
-                                scalar_array = current_prop
-                            # Get colormap from prop_legend_df
-                            if (
-                                hasattr(self.parent, "prop_legend_df")
-                                and self.parent.prop_legend_df is not None
-                            ):
-                                row = self.parent.prop_legend_df[
-                                    self.parent.prop_legend_df["property_name"]
-                                    == current_prop
-                                ]
-                                if not row.empty:
-                                    cmap = row["colormap"].iloc[0]
+                        (
+                            scalar_array,
+                            cmap,
+                            clim,
+                            color_RGB,
+                        ) = self._resolve_slice_actor_style(
+                            slice_data=slice_data,
+                            prop_text=current_prop,
+                            main_uid=main_uid,
+                        )
                     except Exception:
                         pass
 
@@ -2593,11 +2532,7 @@ class View3D(ViewVTK):
                         name=slice_uid,
                         scalars=scalar_array,
                         cmap=cmap,
-                        clim=(
-                            pv_entity.get_data_range(scalar_array)
-                            if scalar_array
-                            else None
-                        ),
+                        clim=clim,
                         show_scalar_bar=False,
                         opacity=1.0,
                         interpolate_before_map=True,
@@ -4118,16 +4053,9 @@ class View3D(ViewVTK):
                 print(f"Warning: Slice {slice_uid} is empty, skipping update")
                 continue
 
-            scalar_array = property_name
-            cmap = None
-            try:
-                prop_row = self.parent.prop_legend_df[
-                    self.parent.prop_legend_df["property_name"] == property_name
-                ]
-                if not prop_row.empty:
-                    cmap = prop_row["colormap"].iloc[0]
-            except Exception:
-                pass
+            scalar_array, cmap, clim, color_RGB = self._resolve_slice_actor_style(
+                slice_data=slice_data, prop_text=property_name, main_uid=None
+            )
 
             self.plotter.remove_actor(actor)
             self.slice_actors[slice_uid] = self.plotter.add_mesh(
@@ -4135,10 +4063,11 @@ class View3D(ViewVTK):
                 name=slice_uid,
                 scalars=scalar_array,
                 cmap=cmap,
-                clim=pv_entity.get_data_range(scalar_array) if scalar_array else None,
+                clim=clim,
                 show_scalar_bar=False,
                 opacity=1.0,
                 interpolate_before_map=True,
+                color=color_RGB,
             )
             self.slice_actors[slice_uid].SetVisibility(visible)
 
@@ -4301,6 +4230,7 @@ class View3D(ViewVTK):
                             # Mirror the main entity's current property choice for re-sliced view
                             scalar_array = None
                             cmap = None
+                            clim = None
                             color_RGB = None
                             try:
                                 main_uid = self.get_entity_uid_by_name(
@@ -4312,40 +4242,16 @@ class View3D(ViewVTK):
                                         self.actors_df["uid"] == main_uid,
                                         "show_property",
                                     ].values[0]
-                                if not current_prop or current_prop == "none":
-                                    color_RGB = (
-                                        self._legend_color_for_uid(main_uid)
-                                        if main_uid
-                                        else None
-                                    )
-                                elif current_prop in ["X", "Y", "Z"]:
-                                    idx = {"X": 0, "Y": 1, "Z": 2}[current_prop]
-                                    scalar_array = slice_data.points[:, idx]
-                                    if (
-                                        hasattr(self.parent, "prop_legend_df")
-                                        and self.parent.prop_legend_df is not None
-                                    ):
-                                        row = self.parent.prop_legend_df[
-                                            self.parent.prop_legend_df["property_name"]
-                                            == current_prop
-                                        ]
-                                        if not row.empty:
-                                            cmap = row["colormap"].iloc[0]
-                                else:
-                                    if current_prop in slice_data.array_names:
-                                        scalar_array = current_prop
-                                        if (
-                                            hasattr(self.parent, "prop_legend_df")
-                                            and self.parent.prop_legend_df is not None
-                                        ):
-                                            row = self.parent.prop_legend_df[
-                                                self.parent.prop_legend_df[
-                                                    "property_name"
-                                                ]
-                                                == current_prop
-                                            ]
-                                            if not row.empty:
-                                                cmap = row["colormap"].iloc[0]
+                                (
+                                    scalar_array,
+                                    cmap,
+                                    clim,
+                                    color_RGB,
+                                ) = self._resolve_slice_actor_style(
+                                    slice_data=slice_data,
+                                    prop_text=current_prop,
+                                    main_uid=main_uid,
+                                )
                             except Exception:
                                 pass
                             # Build uid consistently
@@ -4360,11 +4266,7 @@ class View3D(ViewVTK):
                                 name=slice_uid,
                                 scalars=scalar_array,
                                 cmap=cmap,
-                                clim=(
-                                    pv_entity.get_data_range(scalar_array)
-                                    if scalar_array
-                                    else None
-                                ),
+                                clim=clim,
                                 show_scalar_bar=False,
                                 opacity=1.0,
                                 interpolate_before_map=True,

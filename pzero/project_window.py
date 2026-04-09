@@ -100,7 +100,7 @@ from .helpers.helper_functions import freeze_gui_onoff
 from .legend_manager import Legend
 from .orientation_analysis import set_normals
 from .point_clouds import decimate_pc
-from .properties_manager import PropertiesCMaps
+from .properties_manager import PropertiesCMaps, ensure_property_legend_schema
 from .three_d_surfaces import (
     interpolation_delaunay_2d,
     poisson_interpolation,
@@ -1210,7 +1210,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # PropertiesCMaps table widget self.prop_legend (a Qt QTableWidget that is internally connected to its data source),
         # and update the widget.
         # ____________________________________________________________________________________ UPDATE THIS TO ALLOW SORTING BY PROPERTY NAME
-        self.prop_legend_df = pd_DataFrame(PropertiesCMaps.prop_cmap_dict)
+        self.prop_legend_df = ensure_property_legend_schema(
+            pd_DataFrame(PropertiesCMaps.prop_cmap_dict)
+        )
         self.prop_legend = PropertiesCMaps()
         self.prop_legend.update_widget(parent=self)
 
@@ -1866,7 +1868,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         dtype=PropertiesCMaps.prop_cmap_dict_types,
                     )
                     if not new_prop_legend_df.empty:
-                        self.prop_legend_df = new_prop_legend_df
+                        self.prop_legend_df = ensure_property_legend_schema(
+                            new_prop_legend_df
+                        )
                 else:
                     self.prop_legend.update_widget(parent=self)
 
