@@ -2694,6 +2694,260 @@ class ViewInterpretation(ViewMap):
             return sampled[:, 0]
         return sampled
 
+    def _project_regularized_stack_to_slice_planes(
+        self, point_stack=None, cells=None, axis=None, reference_stack=None
+    ):
+        """Project each regularized slice row back to its source slice plane."""
+        if point_stack is None:
+            return None
+
+        stack = np.asarray(point_stack, dtype=float).copy()
+        if stack.ndim != 3 or stack.shape[0] == 0:
+            return stack
+
+        axis = axis or self.current_axis
+        affine = self._get_seismic_axis_vectors()
+        normal_axis, _in_plane_axes = self._get_slice_plane_axes(axis=axis)
+
+        for row_idx in range(stack.shape[0]):
+            slice_idx = None
+            if cells is not None and row_idx < len(cells):
+                try:
+                    slice_idx = int(cells[row_idx]["slice_idx"])
+                except Exception:
+                    slice_idx = None
+
+            if affine is not None and slice_idx is not None:
+                plane_info = self._get_slice_plane_from_affine(
+                    slice_idx=slice_idx,
+                    affine=affine,
+                    axis=axis,
+                )
+                if plane_info is not None:
+                    center, normal, _row_vec, _col_vec, _dims = plane_info
+                    try:
+                        stack[row_idx, :, :] = self._project_points_to_plane(
+                            stack[row_idx, :, :], center, normal
+                        )
+                        continue
+                    except Exception:
+                        pass
+
+            if reference_stack is not None and row_idx < len(reference_stack):
+                try:
+                    target_coord = float(
+                        np.mean(np.asarray(reference_stack[row_idx], dtype=float)[:, normal_axis])
+                    )
+                    stack[row_idx, :, normal_axis] = target_coord
+                except Exception:
+                    pass
+
+        return stack
+
+    def _apply_gridded_regularization(
+        self,
+        point_stack=None,
+        cells=None,
+        axis=None,
+        smooth_sigma=1.0,
+        preserve_slice_indices=None,
+    ):
+        """
+        Enforce a smoother tensor-like lattice by regularizing the cross-slice columns
+        after row-wise slice resampling, then projecting every row back to its slice plane.
+        """
+        if point_stack is None:
+            return None
+
+        base_stack = np.asarray(point_stack, dtype=float)
+        if base_stack.ndim != 3 or base_stack.shape[0] < 2 or base_stack.shape[1] < 2:
+            return base_stack
+
+        axis = axis or self.current_axis
+        keep_original = {int(slice_idx) for slice_idx in (preserve_slice_indices or [])}
+        normal_axis, in_plane_axes = self._get_slice_plane_axes(axis=axis)
+        grid_sigma = max(float(smooth_sigma), 0.75)
+
+        gridded_stack = np.asarray(base_stack, dtype=float).copy()
+        row_count, col_count, _coord_count = gridded_stack.shape
+
+        # Regularize the "perpendicular" column curves so adjacent slices share
+        # more consistent correspondences before any surface interpolation.
+        for col_idx in range(col_count):
+            column_curve = gridded_stack[:, col_idx, :]
+            clean_points, source_s, _keep_mask = self._prepare_polyline_sampling(column_curve)
+            if clean_points is None or source_s is None:
+                continue
+
+            target_s = np.linspace(0.0, source_s[-1], row_count)
+            column_uniform = self._sample_polyline_values(
+                clean_points, source_s, target_s
+            )
+            if grid_sigma > 0.0 and row_count > 2:
+                for coord_idx in in_plane_axes:
+                    column_uniform[:, coord_idx] = ndimage.gaussian_filter1d(
+                        column_uniform[:, coord_idx],
+                        sigma=grid_sigma,
+                        axis=0,
+                        mode="nearest",
+                    )
+            if row_count >= 2:
+                column_uniform[0, :] = column_curve[0, :]
+                column_uniform[-1, :] = column_curve[-1, :]
+            gridded_stack[:, col_idx, :] = column_uniform
+
+        # Add a light along-line smoothing pass so the first/last column boundaries
+        # and intermediate rows form cleaner bands for downstream Delaunay meshing.
+        row_sigma = min(max(grid_sigma * 0.35, 0.0), 1.0)
+        if row_sigma > 0.0 and col_count > 2:
+            for row_idx in range(row_count):
+                row_curve = gridded_stack[row_idx, :, :].copy()
+                for coord_idx in in_plane_axes:
+                    gridded_stack[row_idx, :, coord_idx] = ndimage.gaussian_filter1d(
+                        row_curve[:, coord_idx],
+                        sigma=row_sigma,
+                        axis=0,
+                        mode="nearest",
+                    )
+                gridded_stack[row_idx, 0, :] = row_curve[0, :]
+                gridded_stack[row_idx, -1, :] = row_curve[-1, :]
+
+        gridded_stack[:, :, normal_axis] = base_stack[:, :, normal_axis]
+        gridded_stack = self._project_regularized_stack_to_slice_planes(
+            point_stack=gridded_stack,
+            cells=cells,
+            axis=axis,
+            reference_stack=base_stack,
+        )
+
+        # Re-impose uniform row sampling after the column pass so each slice remains
+        # evenly sampled and directly usable as a clean multipart line set.
+        for row_idx in range(row_count):
+            slice_idx = None
+            if cells is not None and row_idx < len(cells):
+                slice_idx = int(cells[row_idx]["slice_idx"])
+            if slice_idx in keep_original:
+                gridded_stack[row_idx, :, :] = base_stack[row_idx, :, :]
+                continue
+
+            clean_points, source_s, _keep_mask = self._prepare_polyline_sampling(
+                gridded_stack[row_idx, :, :]
+            )
+            if clean_points is None or source_s is None:
+                gridded_stack[row_idx, :, :] = base_stack[row_idx, :, :]
+                continue
+
+            target_s = np.linspace(0.0, source_s[-1], col_count)
+            row_uniform = self._sample_polyline_values(clean_points, source_s, target_s)
+            gridded_stack[row_idx, :, :] = row_uniform
+
+        gridded_stack[:, :, normal_axis] = base_stack[:, :, normal_axis]
+        gridded_stack = self._project_regularized_stack_to_slice_planes(
+            point_stack=gridded_stack,
+            cells=cells,
+            axis=axis,
+            reference_stack=base_stack,
+        )
+
+        for row_idx in range(row_count):
+            slice_idx = None
+            if cells is not None and row_idx < len(cells):
+                slice_idx = int(cells[row_idx]["slice_idx"])
+            if slice_idx in keep_original:
+                gridded_stack[row_idx, :, :] = base_stack[row_idx, :, :]
+
+        return gridded_stack
+
+    def _build_grid_polyline_from_stack(self, point_stack=None):
+        """Build a true grid PolyLine containing both row and column polylines."""
+        if point_stack is None:
+            return None
+
+        stack = np.asarray(point_stack, dtype=float)
+        if stack.ndim != 3 or stack.shape[0] < 2 or stack.shape[1] < 2:
+            return None
+
+        from vtk import vtkCellArray, vtkPoints
+
+        row_count, col_count, _coord_count = stack.shape
+        vtk_points = vtkPoints()
+        for row_idx in range(row_count):
+            for col_idx in range(col_count):
+                point = stack[row_idx, col_idx]
+                vtk_points.InsertNextPoint(
+                    float(point[0]), float(point[1]), float(point[2])
+                )
+
+        vtk_lines = vtkCellArray()
+
+        # Row polylines: the regularized parallel slice traces.
+        for row_idx in range(row_count):
+            vtk_lines.InsertNextCell(col_count)
+            for col_idx in range(col_count):
+                vtk_lines.InsertCellPoint(row_idx * col_count + col_idx)
+
+        # Column polylines: perpendicular connectors completing the grid.
+        for col_idx in range(col_count):
+            vtk_lines.InsertNextCell(row_count)
+            for row_idx in range(row_count):
+                vtk_lines.InsertCellPoint(row_idx * col_count + col_idx)
+
+        grid_line = PolyLine()
+        grid_line.SetPoints(vtk_points)
+        grid_line.SetLines(vtk_lines)
+        grid_line.Modified()
+        return grid_line
+
+    def _build_grid_entity_dict_from_source(
+        self, source_uid=None, vtk_obj=None, slice_indices=None, fallback_name="multipart"
+    ):
+        """Clone source metadata for a non-slice-filtered gridded PolyLine entity."""
+        if not source_uid or vtk_obj is None:
+            return None
+
+        entity_dict = deepcopy(self.parent.geol_coll.entity_dict)
+        base_name = self._build_propagated_entity_name(
+            seed_uid=source_uid,
+            slice_indices=[],
+            fallback_name=fallback_name,
+        )
+        try:
+            import re
+
+            base_name = re.sub(
+                r"\s+regularized\s*$", "", str(base_name).strip(), flags=re.IGNORECASE
+            )
+            base_name = re.sub(
+                r"\s+gridded\s*$", "", str(base_name).strip(), flags=re.IGNORECASE
+            )
+        except Exception:
+            pass
+
+        if slice_indices:
+            entity_dict["name"] = (
+                f"{base_name} gridded ({int(slice_indices[0])}-{int(slice_indices[-1])})"
+            )
+        else:
+            entity_dict["name"] = f"{base_name} gridded"
+
+        entity_dict["topology"] = "PolyLine"
+        entity_dict["vtk_obj"] = vtk_obj
+
+        for key, getter_name, default in (
+            ("role", "get_uid_role", "undef"),
+            ("feature", "get_uid_feature", fallback_name),
+            ("scenario", "get_uid_scenario", "undef"),
+            ("parent_uid", "get_uid_x_section", ""),
+        ):
+            try:
+                entity_dict[key] = getattr(self.parent.geol_coll, getter_name)(source_uid)
+            except Exception:
+                entity_dict[key] = default
+
+        entity_dict["properties_names"] = []
+        entity_dict["properties_components"] = []
+        return entity_dict
+
     def _get_multipart_sampling_primary_axis(self, axis=None, entity_kind="horizon"):
         """Return the preferred in-plane ordering axis for multipart regularization."""
         axis = axis or self.current_axis
@@ -2916,6 +3170,7 @@ class ViewInterpretation(ViewMap):
         target_point_count=None,
         smooth_sigma=1.0,
         preserve_slice_indices=None,
+        gridded_resampling=False,
     ):
         """Rebuild multipart geometry with uniform per-slice sampling."""
         cells = self._extract_multipart_regularization_cells(
@@ -2962,6 +3217,15 @@ class ViewInterpretation(ViewMap):
             for row_idx, cell in enumerate(cells):
                 if cell["slice_idx"] in keep_original:
                     smoothed_stack[row_idx, :, :] = resampled_stack[row_idx, :, :]
+
+        if gridded_resampling:
+            smoothed_stack = self._apply_gridded_regularization(
+                point_stack=smoothed_stack,
+                cells=cells,
+                axis=axis,
+                smooth_sigma=smooth_sigma,
+                preserve_slice_indices=preserve_slice_indices,
+            )
 
         from vtk import vtkCellArray, vtkIntArray, vtkPoints
 
@@ -3038,11 +3302,15 @@ class ViewInterpretation(ViewMap):
             "old_median_spacing": float(np.median(old_spacings)) if old_spacings else 0.0,
             "new_points_per_slice": int(target_point_count),
             "smooth_sigma": smooth_sigma,
+            "gridded_resampling": bool(gridded_resampling),
             "merged_part_count": int(
                 sum(max(0, cell.get("parts_merged", 1) - 1) for cell in cells)
             ),
         }
-        return regularized_line, regularized_slices, slice_to_cell_index, stats
+        grid_vtk = None
+        if gridded_resampling:
+            grid_vtk = self._build_grid_polyline_from_stack(point_stack=smoothed_stack)
+        return regularized_line, regularized_slices, slice_to_cell_index, stats, grid_vtk
 
     def _get_selected_multipart_entities_for_edit(self, action_title="Edit Multipart Slices"):
         """Resolve all selected propagated multipart horizons/faults and validate their slice metadata."""
@@ -3153,6 +3421,11 @@ class ViewInterpretation(ViewMap):
                     ["Yes", "No"],
                     "Yes",
                 ],
+                "gridded_resampling": [
+                    "Gridded resampling for Delaunay-ready sampling:",
+                    ["No", "Yes"],
+                    "No",
+                ],
             },
         )
         if settings is None:
@@ -3162,6 +3435,9 @@ class ViewInterpretation(ViewMap):
             points_per_slice = max(2, int(settings["points_per_slice"]))
             smooth_sigma = max(0.0, float(settings["smooth_sigma"]))
             preserve_seed_slice = str(settings["preserve_seed_slice"]).strip().lower() != "no"
+            gridded_resampling = (
+                str(settings.get("gridded_resampling", "No")).strip().lower() == "yes"
+            )
         except Exception:
             message_dialog(
                 title=dialog_title,
@@ -3174,13 +3450,14 @@ class ViewInterpretation(ViewMap):
         if preserve_seed_slice and seed_slice in available_slices:
             preserve_slice_indices.append(int(seed_slice))
 
-        new_vtk, new_slices, slice_to_cell_index, stats = self._build_regularized_multipart_vtk(
+        new_vtk, new_slices, slice_to_cell_index, stats, grid_vtk = self._build_regularized_multipart_vtk(
             vtk_obj=vtk_obj,
             axis=axis,
             entity_kind=entity_kind,
             target_point_count=points_per_slice,
             smooth_sigma=smooth_sigma,
             preserve_slice_indices=preserve_slice_indices,
+            gridded_resampling=gridded_resampling,
         )
         if new_vtk is None or not new_slices:
             message_dialog(
@@ -3188,6 +3465,22 @@ class ViewInterpretation(ViewMap):
                 message="Could not rebuild the selected multipart geometry.",
             )
             return "failed"
+
+        grid_uid = None
+        fallback_name = "fault" if entity_kind == "fault" else "multipart"
+        if gridded_resampling and grid_vtk is not None:
+            grid_entity_dict = self._build_grid_entity_dict_from_source(
+                source_uid=uid,
+                vtk_obj=grid_vtk,
+                slice_indices=new_slices,
+                fallback_name=fallback_name,
+            )
+            if grid_entity_dict is None:
+                message_dialog(
+                    title=dialog_title,
+                    message="Could not build the gridded companion entity.",
+                )
+                return "failed"
 
         write_mode = options_dialog(
             title=dialog_title,
@@ -3205,7 +3498,6 @@ class ViewInterpretation(ViewMap):
         if write_mode == 1:
             import re
 
-            fallback_name = "fault" if entity_kind == "fault" else "multipart"
             new_entity_dict = self._build_multipart_entity_dict_from_source(
                 source_uid=uid,
                 vtk_obj=new_vtk,
@@ -3254,6 +3546,13 @@ class ViewInterpretation(ViewMap):
                 self.update_multipart_fault_visibility(uid)
                 self.update_multipart_fault_visibility(new_uid)
 
+            if gridded_resampling and grid_vtk is not None:
+                grid_uid = self.parent.geol_coll.add_entity_from_dict(grid_entity_dict)
+                try:
+                    self.set_actor_visibility(grid_uid, False)
+                except Exception:
+                    pass
+
             self._mark_slice_visibility_dirty()
             self.plotter.render()
             self.print_terminal(
@@ -3262,7 +3561,9 @@ class ViewInterpretation(ViewMap):
                 f"{int(round(stats['old_median_points']))} -> {stats['new_points_per_slice']} "
                 f"points/slice, merged {stats['merged_part_count']} duplicate slice parts, "
                 f"median spacing {stats['old_median_spacing']:.3f}, "
-                f"smoothing sigma {stats['smooth_sigma']:.2f}."
+                f"smoothing sigma {stats['smooth_sigma']:.2f}, "
+                f"gridded resampling {'on' if stats.get('gridded_resampling') else 'off'}"
+                f"{f', grid entity {grid_uid[:8]}...' if grid_uid else ''}."
             )
             return "done"
 
@@ -3290,6 +3591,13 @@ class ViewInterpretation(ViewMap):
             self.update_multipart_horizon_visibility(uid)
         if uid in getattr(self, "multipart_faults", {}):
             self.update_multipart_fault_visibility(uid)
+
+        if gridded_resampling and grid_vtk is not None:
+            grid_uid = self.parent.geol_coll.add_entity_from_dict(grid_entity_dict)
+            try:
+                self.set_actor_visibility(grid_uid, False)
+            except Exception:
+                pass
         self.plotter.render()
 
         self.print_terminal(
@@ -3297,7 +3605,9 @@ class ViewInterpretation(ViewMap):
             f"{int(round(stats['old_median_points']))} -> {stats['new_points_per_slice']} "
             f"points/slice, merged {stats['merged_part_count']} duplicate slice parts, "
             f"median spacing {stats['old_median_spacing']:.3f}, "
-            f"smoothing sigma {stats['smooth_sigma']:.2f}."
+            f"smoothing sigma {stats['smooth_sigma']:.2f}, "
+            f"gridded resampling {'on' if stats.get('gridded_resampling') else 'off'}"
+            f"{f', grid entity {grid_uid[:8]}...' if grid_uid else ''}."
         )
         return "done"
 
