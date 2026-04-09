@@ -152,6 +152,34 @@ class ViewInterpretation(ViewMap):
         # Image style forces XY view which breaks Inline/Crossline views
         # self.plotter.enable_trackball_style()
 
+    def _resolve_interpretation_actor_uid(self, actor_name=None):
+        """Map slice-filtered actor names back to the real geology uid."""
+        if not actor_name:
+            return None
+        for prefix in ("multipart_slice_", "multipart_fault_slice_"):
+            if actor_name.startswith(prefix):
+                return actor_name[len(prefix) :]
+        return actor_name
+
+    def get_uid_from_actor(self, actor=None):
+        """Resolve picked interpretation actors to their source entity uid."""
+        actor_name = super().get_uid_from_actor(actor=actor)
+        return self._resolve_interpretation_actor_uid(actor_name=actor_name)
+
+    def get_actor_by_uid(self, uid: str = None):
+        """Return the visible actor for a uid, including slice-filtered aliases."""
+        actors = getattr(self.plotter.renderer, "actors", {})
+        for actor_name in (
+            uid,
+            f"multipart_slice_{uid}",
+            f"multipart_fault_slice_{uid}",
+            f"geol_coll_{uid}",
+            f"geo_{uid}",
+        ):
+            if actor_name in actors:
+                return actors[actor_name]
+        return super().get_actor_by_uid(uid)
+
     def showEvent(self, event):
         """Override Qt showEvent to initialize the view when first shown."""
         super().showEvent(event)
@@ -774,6 +802,7 @@ class ViewInterpretation(ViewMap):
                 self.slice_actor.mapper.SetInputData(subset)
                 self.slice_actor.mapper.SetScalarRange(scalar_range if scalar_range else subset.get_data_range())
                 self.slice_actor.mapper.Update()
+                self.slice_actor.SetPickable(False)
             else:
                 # First time: add new slice actor
                 self.slice_actor = self.plotter.add_mesh(
@@ -783,7 +812,7 @@ class ViewInterpretation(ViewMap):
                     clim=scalar_range,
                     cmap=cmap, 
                     show_scalar_bar=False, 
-                    pickable=True, 
+                    pickable=False,
                     lighting=False,
                     reset_camera=False
                 )
