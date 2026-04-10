@@ -353,29 +353,24 @@ def _extract_ordered_boundary_points(boundary_polydata) -> Optional[np.ndarray]:
     
     if not ordered_points_list:
         return all_points  # Fallback to all points if no valid cells
-    
-    # Try to connect polylines into a single ordered boundary
-    # Start with the largest ring (most points)
+
+    # A workflow boundary must be a single ordered loop. If VTK exposes
+    # multiple polylines, use the dominant ring instead of concatenating
+    # unrelated loops into one invalid path.
     ordered_points_list.sort(key=lambda x: len(x), reverse=True)
-    
-    # Concatenate all rings - for complex boundaries with multiple loops,
-    # we include all points to preserve the complete boundary shape
+    primary_ring = ordered_points_list[0]
+
     result_points = []
-    for ring in ordered_points_list:
-        for pt in ring:
-            # Avoid duplicate consecutive points
-            if len(result_points) == 0 or not np.allclose(result_points[-1], pt, atol=1e-10):
-                result_points.append(pt)
-    
+    for pt in primary_ring:
+        if len(result_points) == 0 or not np.allclose(result_points[-1], pt, atol=1e-10):
+            result_points.append(pt)
+
     if len(result_points) < 3:
-        return all_points  # Fallback if we couldn't extract enough points
-    
-    # Close the boundary if needed (first and last points should match for closed boundary)
+        return all_points
+
     result = np.array(result_points, dtype=float)
-    
-    # If the boundary should be closed but isn't, don't force it
-    # Let the calling code handle the boundary as-is
-    
+    if not np.allclose(result[0], result[-1], atol=1e-10):
+        result = np.vstack([result, result[0]])
     return result
 
 

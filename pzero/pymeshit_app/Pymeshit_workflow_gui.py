@@ -223,19 +223,19 @@ class ComputationWorker(QObject):
         # Define eligibility criteria and method mappings for each compute type
         config = {
             'hulls': {
-                'eligibility_func': lambda d: d.get('type') != 'WELL' and not d.get('is_pre_triangulated', False),
+                'eligibility_func': lambda d: d.get('type') != 'WELL' and not self.gui._skip_surface_workflow_for_dataset(d),
                 'compute_method': '_compute_hull_for_dataset',
                 'error_msg': "No datasets loaded.",
                 'skip_msg': "No datasets loaded."
             },
             'segments': {
-                'eligibility_func': lambda d: d.get('type') != 'WELL' and d.get('hull_points') is not None and not d.get('is_pre_triangulated', False),
+                'eligibility_func': lambda d: d.get('type') != 'WELL' and d.get('hull_points') is not None and not self.gui._skip_surface_workflow_for_dataset(d),
                 'compute_method': '_compute_segments_for_dataset',
                 'error_msg': "No datasets have computed hulls.",
                 'skip_msg': "No eligible datasets."
             },
             'triangulations': {
-                'eligibility_func': lambda d: d.get('type') != 'WELL' and d.get('segments') is not None and not d.get('is_pre_triangulated', False),
+                'eligibility_func': lambda d: d.get('type') != 'WELL' and d.get('segments') is not None and not self.gui._skip_surface_workflow_for_dataset(d),
                 'compute_method': '_run_triangulation_for_dataset',
                 'error_msg': "No datasets have computed segments.",
                 'skip_msg': "No eligible datasets."
@@ -3948,6 +3948,14 @@ class MeshItWorkflowGUI(QWidget):
         self.mesh_uniform_checkbox = QCheckBox()
         self.mesh_uniform_checkbox.setChecked(True)
         mg.addRow("Uniform", self.mesh_uniform_checkbox)
+
+        self.mesh_use_edges_checkbox = QCheckBox("Use edges")
+        self.mesh_use_edges_checkbox.setChecked(False)
+        self.mesh_use_edges_checkbox.setToolTip(
+            "Use the selected hull/intersection segments as explicit edge "
+            "constraints for the conforming surface mesh."
+        )
+        mg.addRow("", self.mesh_use_edges_checkbox)
 
         # Per‑surface table
         self.mesh_length_by_surface = {}
@@ -7800,6 +7808,9 @@ class MeshItWorkflowGUI(QWidget):
 
                 raw_hull_points = [Vector3D(p.x, p.y, p.z, point_type=getattr(p, "point_type", "DEFAULT")) for p in temp_surface.convex_hull]
                 scattered_points = [Vector3D(p[0], p[1], p[2]) for p in self.datasets[original_idx]['points']]
+                use_imported_trisurf_boundary = self._dataset_uses_extracted_trisurf_boundary(
+                    self.datasets[original_idx]
+                )
 
                 # Check per-surface hull method - skip 2D refinement for angular_gap surfaces
                 surface_hull_method = self.hull_method_by_surface.get(original_idx, "auto") if hasattr(self, 'hull_method_by_surface') else "auto"
@@ -7818,7 +7829,16 @@ class MeshItWorkflowGUI(QWidget):
                     surface_tri_method = mesh_tri_method
                 surface_tri_method = self._normalize_tri_method(surface_tri_method)
 
-                if use_angular_gap:
+                if use_imported_trisurf_boundary:
+                    logger.info(
+                        "Preserving extracted TriSurf boundary geometry for surface %s during hull refinement.",
+                        original_idx,
+                    )
+                    # The TriSurf hull is already the true imported boundary.
+                    # At this stage it has already been densified by RefineByLength,
+                    # so running interpolation here would warp the outline.
+                    refined_hull_3d = raw_hull_points
+                elif use_angular_gap:
                     # Use 3D hull refinement to preserve angular-gap hull shape
                     logger.info(f"Using 3D hull refinement for surface {original_idx} to preserve angular-gap hull shape.")
                     try:
@@ -8082,6 +8102,8 @@ class MeshItWorkflowGUI(QWidget):
             total += 1
             name = ds.get("name", f"Surface_{s_idx}")
             try:
+                use_edges = self._should_use_edges_for_dataset(ds, "mesh_use_edges_checkbox")
+
                 # Build per-surface config
                 unified_target = float(self.mesh_target_feature_size_input.value())
                 per_surface_target = float(self._get_mesh_target_size_for_surface(s_idx))
@@ -8206,6 +8228,47 @@ class MeshItWorkflowGUI(QWidget):
                     except Exception as e:
                         logger.error(f"Isomap triangulation failed for '{name}': {e}")
                         logger.warning("Falling back to standard triangulation...")
+
+                if use_edges:
+                    plc_xyz = np.array([[p.x, p.y, p.z] for p in pts3d], dtype=float)
+                    all_pts = np.asarray(ds.get("points", []), dtype=float)
+                    if all_pts.ndim != 2 or all_pts.shape[0] == 0:
+                        all_pts = plc_xyz
+                    elif plc_xyz.shape[0] > 0:
+                        all_pts = np.vstack([all_pts, plc_xyz])
+
+                    holes_xyz = None
+                    if holes:
+                        holes_xyz = np.array([[h.x, h.y, h.z] for h in holes], dtype=float)
+
+                    success = self._run_edge_boundary_triangulation(
+                        dataset_index=s_idx,
+                        dataset=ds,
+                        all_pts=all_pts,
+                        boundary_xyz=plc_xyz,
+                        boundary_segs=seg_arr,
+                        gradient=float(self.mesh_gradient_input.value()),
+                        min_angle=cfg["min_angle"],
+                        uniform=self.mesh_uniform_checkbox.isChecked(),
+                        interp_label=cfg["interp"],
+                        smoothing=cfg["smoothing"],
+                        holes_xyz=holes_xyz,
+                        target_size=per_surface_target,
+                        result_field="conforming_mesh",
+                    )
+                    if success:
+                        ok += 1
+                        logger.info(
+                            "✓ Conforming mesh generated for '%s' with edge constraints: %d vertices, %d triangles",
+                            name,
+                            len(ds["conforming_mesh"]["vertices"]),
+                            len(ds["conforming_mesh"]["triangles"]),
+                        )
+                        continue
+                    logger.warning(
+                        "Edge-constrained conforming mesh generation failed for '%s', falling back to the standard workflow.",
+                        name,
+                    )
 
                 surf_data = self._prepare_surface_data_for_triangulation(s_idx, ds, cfg)
                 if not surf_data:
@@ -9642,6 +9705,25 @@ class MeshItWorkflowGUI(QWidget):
             return False
 
         ds = self.datasets[dataset_index]
+        if self._dataset_uses_extracted_trisurf_boundary(ds):
+            formatted_hull = self._format_boundary_points_as_hull(ds.get("imported_boundary_points"))
+            if formatted_hull is None or len(formatted_hull) < 4:
+                logger.warning(
+                    "TriSurf '%s' has no valid imported boundary loop for hull computation.",
+                    ds.get("name"),
+                )
+                return False
+
+            ds["hull_points"] = formatted_hull
+            ds.pop("segments", None)
+            ds.pop("triangulation_result", None)
+            logger.info(
+                "Using extracted TriSurf boundary as hull for '%s' (%d boundary vertices).",
+                ds.get("name"),
+                len(formatted_hull) - 1,
+            )
+            return True
+
         pts = ds.get("points")
         if pts is None or len(pts) < 3:
             logger.warning("Dataset '%s' has < 3 points, skipping hull computation.", ds.get('name'))
@@ -10483,6 +10565,66 @@ segmentation, triangulation, and visualization.
             logger.error(f"Error creating simplified hull: {e}")
             return hull_points  # Return original if simplification fails
 
+    def _dataset_uses_extracted_trisurf_boundary(self, dataset: dict) -> bool:
+        """Return True when a TriSurf should use its imported boundary through the workflow."""
+        boundary_points = dataset.get("imported_boundary_points")
+        return bool(
+            dataset
+            and dataset.get("source_topology") == "TriSurf"
+            and not dataset.get("loaded_as_points", False)
+            and boundary_points is not None
+            and len(boundary_points) >= 3
+        )
+
+    def _skip_surface_workflow_for_dataset(self, dataset: dict) -> bool:
+        """Return True when hull/segment/triangulation steps should be skipped."""
+        return bool(
+            dataset.get("is_pre_triangulated", False)
+            and not self._dataset_uses_extracted_trisurf_boundary(dataset)
+        )
+
+    def _should_use_edges_for_dataset(self, dataset: dict, checkbox_attr: Optional[str] = None) -> bool:
+        """Return True when edge-constrained triangulation should be used."""
+        checkbox_enabled = False
+        if checkbox_attr and hasattr(self, checkbox_attr):
+            checkbox = getattr(self, checkbox_attr, None)
+            checkbox_enabled = bool(checkbox and checkbox.isChecked())
+        return checkbox_enabled or self._dataset_uses_extracted_trisurf_boundary(dataset)
+
+    def _format_boundary_points_as_hull(self, boundary_points) -> Optional[np.ndarray]:
+        """Convert an ordered boundary polyline into the internal hull_points format."""
+        try:
+            boundary = np.asarray(boundary_points, dtype=float)
+            if boundary.ndim != 2 or boundary.shape[0] < 3 or boundary.shape[1] < 3:
+                return None
+
+            deduped = [boundary[0, :3]]
+            for pt in boundary[1:]:
+                xyz = np.asarray(pt[:3], dtype=float)
+                if not np.allclose(deduped[-1], xyz, atol=1e-10):
+                    deduped.append(xyz)
+
+            if len(deduped) < 3:
+                return None
+
+            boundary = np.asarray(deduped, dtype=float)
+            if not np.allclose(boundary[0], boundary[-1], atol=1e-10):
+                boundary = np.vstack([boundary, boundary[0]])
+
+            hull_vector3d = [
+                Vector3D(float(p[0]), float(p[1]), float(p[2]), point_type="DEFAULT")
+                for p in boundary
+            ]
+            hull_vector3d = make_corners_special(hull_vector3d)
+
+            hull_with_types = []
+            for p in hull_vector3d:
+                hull_with_types.append([p.x, p.y, p.z, getattr(p, "point_type", "DEFAULT")])
+            return np.array(hull_with_types, dtype=object)
+        except Exception as exc:
+            logger.error("Failed to format imported boundary as hull: %s", exc, exc_info=True)
+            return None
+
     
 
     def _find_point_at_distance_fast(self, hull_boundary, cumulative_distances, target_distance):
@@ -10910,8 +11052,11 @@ segmentation, triangulation, and visualization.
         uniform: bool,
         interp_label: str,
         smoothing: float,
+        holes_xyz: Optional[np.ndarray] = None,
+        target_size: Optional[float] = None,
+        result_field: str = "triangulation_result",
     ) -> bool:
-        """Triangulate with segmentation edges as explicit PLC boundary constraints."""
+        """Triangulate with explicit PLC edge constraints."""
         try:
             projection_input = np.asarray(all_pts, dtype=float)
             if projection_input.ndim != 2 or projection_input.shape[0] < 3:
@@ -10923,14 +11068,25 @@ segmentation, triangulation, and visualization.
             boundary_uv = (np.asarray(boundary_xyz, dtype=float) - centroid) @ basis.T
             boundary_uv = boundary_uv[:, :2]
 
-            try:
-                target_size = float(self._get_seg_target_length_for_dataset(dataset_index))
+            if target_size is None:
+                try:
+                    target_size = float(self._get_seg_target_length_for_dataset(dataset_index))
+                    if target_size <= 1e-6:
+                        target_size = 1.0
+                except Exception:
+                    target_size = 1.0
+            else:
+                target_size = float(target_size)
                 if target_size <= 1e-6:
                     target_size = 1.0
-            except Exception:
-                target_size = 1.0
 
             interpolation_samples = self._build_edge_triangulation_samples(boundary_xyz, all_pts)
+            holes_uv = np.empty((0, 2), dtype=float)
+            if holes_xyz is not None:
+                holes_xyz = np.asarray(holes_xyz, dtype=float)
+                if holes_xyz.ndim == 2 and holes_xyz.shape[0] > 0:
+                    holes_uv = (holes_xyz - centroid) @ basis.T
+                    holes_uv = holes_uv[:, :2]
             config = {
                 "gradient": gradient,
                 "min_angle": min_angle,
@@ -10943,7 +11099,7 @@ segmentation, triangulation, and visualization.
             vertices_3d, triangles, _ = run_constrained_triangulation_py(
                 boundary_uv,
                 boundary_segs,
-                np.empty((0, 2), dtype=float),
+                holes_uv,
                 projection_params,
                 interpolation_samples,
                 config,
@@ -10952,10 +11108,16 @@ segmentation, triangulation, and visualization.
             if vertices_3d is None or len(vertices_3d) == 0 or triangles is None or len(triangles) == 0:
                 raise RuntimeError("Edge-constrained triangulation returned an empty result")
 
-            dataset["triangulation_result"] = {
-                "vertices": vertices_3d,
-                "triangles": triangles,
-            }
+            if result_field == "triangulation_result":
+                dataset["triangulation_result"] = {
+                    "vertices": vertices_3d,
+                    "triangles": triangles,
+                }
+            else:
+                dataset.setdefault(result_field, {})
+                dataset[result_field]["vertices"] = vertices_3d
+                dataset[result_field]["triangles"] = triangles
+                dataset[result_field]["holes"] = holes_xyz.tolist() if holes_xyz is not None and len(holes_xyz) > 0 else []
             return True
 
         except Exception as exc:
@@ -10976,8 +11138,8 @@ segmentation, triangulation, and visualization.
         dataset = self.datasets[dataset_index]
         dataset_name = dataset.get('name', f"Dataset {dataset_index}")
 
-        # Skip pre-triangulated TriSurf entities (they already have triangulation_result)
-        if dataset.get('is_pre_triangulated', False):
+        # Skip only datasets that truly bypass the surface workflow.
+        if self._skip_surface_workflow_for_dataset(dataset):
             logger.info("Skipping triangulation for pre-triangulated TriSurf '%s'", dataset_name)
             return True  # Return True since triangulation_result already exists
 
@@ -10989,10 +11151,7 @@ segmentation, triangulation, and visualization.
         gradient = self.gradient_input.value()
         min_angle = self.min_angle_input.value()
         uniform = self.uniform_checkbox.isChecked()
-        use_edges = (
-            hasattr(self, "tri_use_edges_checkbox")
-            and self.tri_use_edges_checkbox.isChecked()
-        )
+        use_edges = self._should_use_edges_for_dataset(dataset, "tri_use_edges_checkbox")
         interp_label = self.interp_combo.currentText() if hasattr(self, "interp_combo") else "Thin Plate Spline (TPS)"
         smoothing = float(self.interp_smoothing_input.value()) if hasattr(self, "interp_smoothing_input") else 0.0
 
@@ -12752,7 +12911,8 @@ segmentation, triangulation, and visualization.
                     if extension_factor > 0.0:
                         vertices = extend_surface_points(vertices, extension_factor)
                     
-                    # Create dataset with triangulation already populated
+                    # Preserve the source mesh, but keep the TriSurf in the normal
+                    # hull -> segmentation -> triangulation workflow.
                     dataset_name = self._make_unique_dataset_name(record.name)
                     dataset = {
                         "name": dataset_name,
@@ -12767,11 +12927,10 @@ segmentation, triangulation, and visualization.
                         "source_topology": record.topology,
                         "role": record_role,
                         "loaded_as_points": False,
-                        "triangulation_result": {
+                        "source_triangulation_result": {
                             "vertices": vertices,
                             "triangles": triangles,
                         },
-                        "is_pre_triangulated": True,  # Flag to skip hull/triangulation steps
                     }
                     if extension_factor > 0.0:
                         dataset["extension_factor"] = extension_factor
@@ -12787,14 +12946,17 @@ segmentation, triangulation, and visualization.
                             boundary_points_for_dataset = extend_surface_points(
                                 boundary_points_for_dataset, extension_factor
                             )
-                        # Format hull_points as list of [x, y, z, point_type] arrays
-                        hull_points_list = []
-                        for pt in boundary_points_for_dataset:
-                            hull_points_list.append([float(pt[0]), float(pt[1]), float(pt[2]), "DEFAULT"])
-                        dataset["hull_points"] = np.array(hull_points_list, dtype=object)
+                        dataset["imported_boundary_points"] = np.asarray(
+                            boundary_points_for_dataset, dtype=float
+                        )
+                        dataset["hull_points"] = self._format_boundary_points_as_hull(
+                            dataset["imported_boundary_points"]
+                        )
+                        if dataset["hull_points"] is None:
+                            raise ValueError("Imported TriSurf boundary could not be converted into a hull loop")
                         logger.info(
                             "Extracted %d boundary points for TriSurf %s",
-                            len(boundary_hull), record.name
+                            len(boundary_points_for_dataset), record.name
                         )
                     else:
                         logger.warning(
@@ -12805,18 +12967,23 @@ segmentation, triangulation, and visualization.
                         from scipy.spatial import ConvexHull
                         try:
                             hull = ConvexHull(vertices)
-                            hull_points_list = []
-                            for idx in hull.vertices:
-                                pt = vertices[idx]
-                                hull_points_list.append([float(pt[0]), float(pt[1]), float(pt[2]), "DEFAULT"])
-                            dataset["hull_points"] = np.array(hull_points_list, dtype=object)
+                            dataset["imported_boundary_points"] = vertices[hull.vertices]
+                            dataset["hull_points"] = self._format_boundary_points_as_hull(
+                                dataset["imported_boundary_points"]
+                            )
+                            if dataset["hull_points"] is None:
+                                raise ValueError("Fallback hull could not be converted into a closed loop")
                         except Exception as e:
                             logger.warning(f"Failed to compute fallback convex hull: {e}")
                     
                     self.datasets.append(dataset)
                     loaded += 1
+                    if hasattr(self, "tri_use_edges_checkbox"):
+                        self.tri_use_edges_checkbox.setChecked(True)
+                    if hasattr(self, "mesh_use_edges_checkbox"):
+                        self.mesh_use_edges_checkbox.setChecked(True)
                     logger.info(
-                        "Loaded TriSurf %s: %d vertices, %d triangles",
+                        "Loaded TriSurf %s: %d vertices, %d source triangles; boundary workflow enabled",
                         record.name, len(vertices), len(triangles)
                     )
                     
@@ -12935,13 +13102,8 @@ segmentation, triangulation, and visualization.
             self.current_dataset_index = len(self.datasets) - 1
             self._update_dataset_list()
             self._update_statistics()
-            # Update visualizations - show triangulations if TriSurf entities were loaded
             self._visualize_all_points()
-            # Check if we have any TriSurf entities and visualize them
-            trisurf_datasets = [d for d in self.datasets if d.get('is_pre_triangulated')]
-            if trisurf_datasets:
-                self._visualize_all_triangulations()
-                self._visualize_all_hulls()
+            self._visualize_all_hulls()
 
         return loaded, skipped
 
