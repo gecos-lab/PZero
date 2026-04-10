@@ -3525,10 +3525,148 @@ class View3D(ViewVTK):
         original_ids = np_asarray(boundary.point_data["vtkIdFilter_Ids"], dtype=int)
         return original_ids[line_cells]
 
-    def _select_trisurf_boundary_edge_sets(
-        self, points=None, boundary_edges=None, selection_unit=None, side=None
+    def _order_trisurf_boundary_components(self, boundary_edges=None):
+        """Return ordered boundary point-id sequences for each connected edge component."""
+        if boundary_edges is None or boundary_edges.shape[0] == 0:
+            return []
+
+        adjacency = {}
+        edge_keys = []
+        for edge in boundary_edges:
+            p0 = int(edge[0])
+            p1 = int(edge[1])
+            edge_key = (p0, p1) if p0 <= p1 else (p1, p0)
+            edge_keys.append(edge_key)
+            adjacency.setdefault(p0, []).append(p1)
+            adjacency.setdefault(p1, []).append(p0)
+
+        edge_to_component = {}
+        components = []
+        visited_edges = set()
+        for edge_key in edge_keys:
+            if edge_key in visited_edges:
+                continue
+
+            stack = [edge_key]
+            component_edges = set()
+            component_points = set()
+            while stack:
+                current_edge = stack.pop()
+                if current_edge in visited_edges:
+                    continue
+                visited_edges.add(current_edge)
+                component_edges.add(current_edge)
+                p0, p1 = current_edge
+                component_points.update([p0, p1])
+                for point_id in current_edge:
+                    for neighbor in adjacency.get(point_id, []):
+                        next_edge = (
+                            (point_id, neighbor)
+                            if point_id <= neighbor
+                            else (neighbor, point_id)
+                        )
+                        if next_edge not in visited_edges:
+                            stack.append(next_edge)
+
+            endpoints = [
+                point_id
+                for point_id in component_points
+                if len(adjacency.get(point_id, [])) == 1
+            ]
+            start_point = endpoints[0] if endpoints else min(component_points)
+
+            ordered_points = [start_point]
+            previous_point = None
+            current_point = start_point
+            remaining_edges = set(component_edges)
+            while remaining_edges:
+                next_point = None
+                for neighbor in adjacency.get(current_point, []):
+                    edge_key = (
+                        (current_point, neighbor)
+                        if current_point <= neighbor
+                        else (neighbor, current_point)
+                    )
+                    if edge_key in remaining_edges and neighbor != previous_point:
+                        next_point = neighbor
+                        break
+                if next_point is None:
+                    for neighbor in adjacency.get(current_point, []):
+                        edge_key = (
+                            (current_point, neighbor)
+                            if current_point <= neighbor
+                            else (neighbor, current_point)
+                        )
+                        if edge_key in remaining_edges:
+                            next_point = neighbor
+                            break
+                if next_point is None:
+                    break
+
+                edge_key = (
+                    (current_point, next_point)
+                    if current_point <= next_point
+                    else (next_point, current_point)
+                )
+                remaining_edges.remove(edge_key)
+                ordered_points.append(next_point)
+                previous_point, current_point = current_point, next_point
+                if current_point == start_point:
+                    break
+
+            if len(ordered_points) >= 2:
+                components.append(ordered_points)
+
+        return components
+
+    def _build_trisurf_selection_frame(
+        self, points=None, selection_unit=None, surface_normal=None
     ):
-        """Select whole top/bottom boundary sets for TriSurf extension."""
+        """Build a 2D frame on the surface with U aligned to extension direction in-plane."""
+        if points is None or selection_unit is None:
+            return None, None, None, None
+
+        selection_unit = self._make_unit_vector(selection_unit)
+        if selection_unit is None:
+            return None, None, None, None
+
+        if surface_normal is None:
+            _, surface_normal = best_fitting_plane(points)
+        surface_normal = self._make_unit_vector(surface_normal)
+        if surface_normal is None:
+            return None, None, None, None
+
+        axis_u = selection_unit - np_dot(selection_unit, surface_normal) * surface_normal
+        axis_u = self._make_unit_vector(axis_u)
+        if axis_u is None:
+            for candidate in [
+                np_array([1.0, 0.0, 0.0], dtype=float),
+                np_array([0.0, 1.0, 0.0], dtype=float),
+                np_array([0.0, 0.0, 1.0], dtype=float),
+            ]:
+                projected = candidate - np_dot(candidate, surface_normal) * surface_normal
+                axis_u = self._make_unit_vector(projected)
+                if axis_u is not None:
+                    break
+        if axis_u is None:
+            return None, None, None, None
+
+        axis_v = self._make_unit_vector(np_cross(surface_normal, axis_u))
+        if axis_v is None:
+            return None, None, None, None
+
+        origin = np_mean(points, axis=0)
+        return origin, axis_u, axis_v, surface_normal
+
+    def _select_trisurf_boundary_edge_sets(
+        self,
+        points=None,
+        boundary_edges=None,
+        selection_unit=None,
+        side=None,
+        surface_normal=None,
+    ):
+        """Select top/bottom boundary edge chains from a 2D projected boundary."""
         if (
             points is None
             or boundary_edges is None
@@ -3537,101 +3675,116 @@ class View3D(ViewVTK):
         ):
             return []
 
-        point_scores = np_asarray(points @ selection_unit, dtype=float)
-        edge_mid_scores = (
-            point_scores[boundary_edges[:, 0]] + point_scores[boundary_edges[:, 1]]
-        ) / 2.0
-        edge_vectors = points[boundary_edges[:, 1]] - points[boundary_edges[:, 0]]
-        edge_lengths = np_linalg.norm(edge_vectors, axis=1)
-        valid_length_mask = edge_lengths > 1e-9
-        if not np_any(valid_length_mask):
+        origin, axis_u, axis_v, _ = self._build_trisurf_selection_frame(
+            points=points,
+            selection_unit=selection_unit,
+            surface_normal=surface_normal,
+        )
+        if origin is None or axis_u is None or axis_v is None:
             return []
 
-        edge_parallel = np_ones(boundary_edges.shape[0], dtype=float)
-        edge_parallel[valid_length_mask] = np_abs(
-            np_sum(
-                (edge_vectors[valid_length_mask] / edge_lengths[valid_length_mask][:, None])
-                * selection_unit[None, :],
-                axis=1,
+        point_vectors = np_asarray(points, dtype=float) - origin
+        point_u = np_asarray(point_vectors @ axis_u, dtype=float)
+        point_v = np_asarray(point_vectors @ axis_v, dtype=float)
+        ordered_components = self._order_trisurf_boundary_components(boundary_edges)
+        if not ordered_components:
+            return []
+
+        edge_key_set = {
+            (int(edge[0]), int(edge[1])) if int(edge[0]) <= int(edge[1]) else (int(edge[1]), int(edge[0]))
+            for edge in boundary_edges
+        }
+
+        def ensure_closed_loop(component_point_ids=None):
+            if component_point_ids is None or len(component_point_ids) < 3:
+                return component_point_ids
+            if component_point_ids[0] == component_point_ids[-1]:
+                return component_point_ids
+            edge_key = (
+                (int(component_point_ids[0]), int(component_point_ids[-1]))
+                if int(component_point_ids[0]) <= int(component_point_ids[-1])
+                else (int(component_point_ids[-1]), int(component_point_ids[0]))
             )
-        )
+            if edge_key in edge_key_set:
+                return component_point_ids + [component_point_ids[0]]
+            return component_point_ids
 
-        orientation_limit = 0.6
-        candidate_mask = edge_parallel <= orientation_limit
-        if np_count_nonzero(candidate_mask) < 2:
-            candidate_mask = edge_parallel <= 0.75
-        if np_count_nonzero(candidate_mask) < 2:
-            candidate_mask = np_ones(boundary_edges.shape[0], dtype=bool)
+        def chain_edges(loop_point_ids=None, start_idx=None, end_idx=None, forward=True):
+            if loop_point_ids is None or len(loop_point_ids) < 2:
+                return None
+            n_points = len(loop_point_ids) - 1
+            if n_points < 2:
+                return None
+            edges = []
+            idx = int(start_idx)
+            step = 1 if forward else -1
+            while idx != int(end_idx):
+                next_idx = (idx + step) % n_points
+                p0 = int(loop_point_ids[idx])
+                p1 = int(loop_point_ids[next_idx])
+                edges.append((p0, p1))
+                idx = next_idx
+            if not edges:
+                return None
+            return np_array(edges, dtype=int)
 
-        candidate_edges = boundary_edges[candidate_mask]
-        candidate_scores = edge_mid_scores[candidate_mask]
-        if candidate_edges.shape[0] == 0:
-            return []
-
-        point_to_edge_ids = {}
-        for edge_idx, edge in enumerate(candidate_edges):
-            for point_id in edge:
-                point_to_edge_ids.setdefault(int(point_id), []).append(edge_idx)
-
-        components = []
-        visited = set()
-        for edge_idx in range(candidate_edges.shape[0]):
-            if edge_idx in visited:
-                continue
-            stack = [edge_idx]
-            component = []
-            visited.add(edge_idx)
-            while stack:
-                current = stack.pop()
-                component.append(current)
-                for point_id in candidate_edges[current]:
-                    for neighbor in point_to_edge_ids.get(int(point_id), []):
-                        if neighbor not in visited:
-                            visited.add(neighbor)
-                            stack.append(neighbor)
-            components.append(component)
-
-        if not components:
-            return []
-
-        component_means = np_array(
-            [float(np_mean(candidate_scores[component])) for component in components],
-            dtype=float,
-        )
-        split_threshold = float(
-            (np_max(component_means) + np_min(component_means)) / 2.0
-        )
-
-        def gather_component_edges(select_positive=True):
-            if select_positive:
-                selected_components = [
-                    component
-                    for component, mean_score in zip(components, component_means)
-                    if mean_score >= split_threshold
-                ]
-                if not selected_components:
-                    max_idx = int(np_argmax(component_means))
-                    selected_components = [components[max_idx]]
-            else:
-                selected_components = [
-                    component
-                    for component, mean_score in zip(components, component_means)
-                    if mean_score <= split_threshold
-                ]
-                if not selected_components:
-                    min_idx = int(np_argmin(component_means))
-                    selected_components = [components[min_idx]]
-
-            selected_ids = sorted(
-                {edge_id for component in selected_components for edge_id in component}
-            )
-            return candidate_edges[selected_ids]
+        def score_chain(chain=None):
+            if chain is None or chain.shape[0] == 0:
+                return None
+            mid_u = (point_u[chain[:, 0]] + point_u[chain[:, 1]]) / 2.0
+            return float(np_mean(mid_u))
 
         selected_edge_sets = []
+        positive_candidates = []
+        negative_candidates = []
+        for component_point_ids in ordered_components:
+            loop_point_ids = ensure_closed_loop(component_point_ids)
+            if loop_point_ids is None or len(loop_point_ids) < 4:
+                continue
+
+            loop_v = np_asarray([point_v[int(point_id)] for point_id in loop_point_ids[:-1]])
+            top_idx = int(np_argmax(loop_v))
+            bottom_idx = int(np_argmin(loop_v))
+            if top_idx == bottom_idx:
+                continue
+
+            forward_chain = chain_edges(
+                loop_point_ids=loop_point_ids,
+                start_idx=top_idx,
+                end_idx=bottom_idx,
+                forward=True,
+            )
+            backward_chain = chain_edges(
+                loop_point_ids=loop_point_ids,
+                start_idx=top_idx,
+                end_idx=bottom_idx,
+                forward=False,
+            )
+            if forward_chain is None or backward_chain is None:
+                continue
+
+            forward_score = score_chain(forward_chain)
+            backward_score = score_chain(backward_chain)
+            if forward_score is None or backward_score is None:
+                continue
+
+            if forward_score >= backward_score:
+                positive_candidates.append((forward_chain, forward_score))
+                negative_candidates.append((backward_chain, backward_score))
+            else:
+                positive_candidates.append((backward_chain, backward_score))
+                negative_candidates.append((forward_chain, forward_score))
+
         if side in ["positive", "both"]:
-            selected_edge_sets.append((gather_component_edges(select_positive=True), 1.0))
+            if positive_candidates:
+                selected_edge_sets.append(
+                    (max(positive_candidates, key=lambda item: item[1])[0], 1.0)
+                )
         if side in ["negative", "both"]:
-            selected_edge_sets.append((gather_component_edges(select_positive=False), -1.0))
+            if negative_candidates:
+                selected_edge_sets.append(
+                    (min(negative_candidates, key=lambda item: item[1])[0], -1.0)
+                )
         return selected_edge_sets
 
     def _build_extended_trisurf(
@@ -3675,6 +3828,7 @@ class View3D(ViewVTK):
             boundary_edges=boundary_edges,
             selection_unit=unit_vector,
             side=side,
+            surface_normal=average_normal,
         )
 
         base_cells = cells.tolist()
