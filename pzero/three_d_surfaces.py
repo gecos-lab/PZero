@@ -706,6 +706,163 @@ def _extract_structured_point_stack(vtk_obj):
     return _extract_gridded_polyline_stack(vtk_obj)
 
 
+def _prepare_structured_curve_sampling(points):
+    """Remove duplicate vertices and build cumulative arclength coordinates."""
+    import numpy as np
+
+    clean_points = np.asarray(points, dtype=float)
+    if clean_points.ndim != 2 or clean_points.shape[0] < 2:
+        return None, None
+
+    keep_mask = np.ones(clean_points.shape[0], dtype=bool)
+    if clean_points.shape[0] > 1:
+        seg_lengths = np.linalg.norm(np.diff(clean_points, axis=0), axis=1)
+        keep_mask[1:] = seg_lengths > 1.0e-9
+
+    clean_points = clean_points[keep_mask]
+    if clean_points.shape[0] < 2:
+        return None, None
+
+    seg_lengths = np.linalg.norm(np.diff(clean_points, axis=0), axis=1)
+    source_s = np.concatenate(([0.0], np.cumsum(seg_lengths)))
+    if source_s[-1] <= 0.0:
+        return None, None
+    return clean_points, source_s
+
+
+def _sample_structured_curve_values(values, source_s, target_s):
+    """Interpolate coordinates or vector components along arclength."""
+    import numpy as np
+
+    values = np.asarray(values, dtype=float)
+    squeeze = values.ndim == 1
+    if squeeze:
+        values = values[:, None]
+
+    sampled = np.empty((len(target_s), values.shape[1]), dtype=float)
+    for comp_idx in range(values.shape[1]):
+        sampled[:, comp_idx] = np.interp(target_s, source_s, values[:, comp_idx])
+
+    if squeeze:
+        return sampled[:, 0]
+    return sampled
+
+
+def _resample_structured_curve(points, target_count):
+    """Uniformly resample one structured polyline while preserving its endpoints."""
+    import numpy as np
+
+    target_count = max(2, int(target_count))
+    clean_points, source_s = _prepare_structured_curve_sampling(points)
+    if clean_points is None or source_s is None:
+        return None
+
+    target_s = np.linspace(0.0, source_s[-1], target_count)
+    return _sample_structured_curve_values(clean_points, source_s, target_s)
+
+
+def _resample_point_stack_rows(point_stack, target_col_count):
+    """Resample each row curve to a common number of columns."""
+    import numpy as np
+
+    stack = np.asarray(point_stack, dtype=float)
+    if stack.ndim != 3 or stack.shape[0] < 2 or stack.shape[1] < 2:
+        return None
+
+    resampled_rows = []
+    for row_idx in range(stack.shape[0]):
+        row_curve = _resample_structured_curve(stack[row_idx, :, :], target_col_count)
+        if row_curve is None:
+            return None
+        resampled_rows.append(row_curve)
+
+    return np.asarray(resampled_rows, dtype=float)
+
+
+def _resample_point_stack_columns(point_stack, target_row_count):
+    """Resample each column curve to a common number of rows."""
+    import numpy as np
+
+    stack = np.asarray(point_stack, dtype=float)
+    if stack.ndim != 3 or stack.shape[0] < 2 or stack.shape[1] < 2:
+        return None
+
+    target_row_count = max(2, int(target_row_count))
+    resampled_stack = np.empty(
+        (target_row_count, stack.shape[1], stack.shape[2]), dtype=float
+    )
+    for col_idx in range(stack.shape[1]):
+        column_curve = _resample_structured_curve(stack[:, col_idx, :], target_row_count)
+        if column_curve is None:
+            return None
+        resampled_stack[:, col_idx, :] = column_curve
+
+    return resampled_stack
+
+
+def _densify_structured_point_stack(point_stack, steiner_points=0, max_point_count=400000):
+    """
+    Redistribute a structured grid and optionally insert Steiner points between samples.
+
+    The same densification factor is applied across rows and columns so the generated
+    surface keeps a coherent tensor-like layout.
+    """
+    import numpy as np
+
+    stack = np.asarray(point_stack, dtype=float)
+    if stack.ndim != 3 or stack.shape[0] < 2 or stack.shape[1] < 2:
+        return None, None
+
+    row_count, col_count, _coord_count = stack.shape
+    steiner_points = max(0, int(steiner_points))
+    densify_step = steiner_points + 1
+    target_row_count = (row_count - 1) * densify_step + 1
+    target_col_count = (col_count - 1) * densify_step + 1
+    target_point_count = target_row_count * target_col_count
+
+    info = {
+        "input_row_count": int(row_count),
+        "input_col_count": int(col_count),
+        "target_row_count": int(target_row_count),
+        "target_col_count": int(target_col_count),
+        "target_point_count": int(target_point_count),
+        "steiner_points": int(steiner_points),
+        "redistributed_only": bool(steiner_points == 0),
+        "max_point_count": int(max_point_count),
+    }
+    if (
+        target_point_count > int(max_point_count)
+        and target_point_count > int(row_count * col_count)
+    ):
+        info["limit_exceeded"] = True
+        return None, info
+
+    row_resampled = _resample_point_stack_rows(stack, target_col_count)
+    if row_resampled is None:
+        return None, info
+
+    top_boundary = row_resampled[0, :, :].copy()
+    bottom_boundary = row_resampled[-1, :, :].copy()
+    left_boundary = _resample_structured_curve(row_resampled[:, 0, :], target_row_count)
+    right_boundary = _resample_structured_curve(row_resampled[:, -1, :], target_row_count)
+    if left_boundary is None or right_boundary is None:
+        return None, info
+
+    densified_stack = _resample_point_stack_columns(row_resampled, target_row_count)
+    if densified_stack is None:
+        return None, info
+    densified_stack = _resample_point_stack_rows(densified_stack, target_col_count)
+    if densified_stack is None:
+        return None, info
+
+    densified_stack[0, :, :] = top_boundary
+    densified_stack[-1, :, :] = bottom_boundary
+    densified_stack[:, 0, :] = left_boundary
+    densified_stack[:, -1, :] = right_boundary
+    info["limit_exceeded"] = False
+    return densified_stack, info
+
+
 def _build_surface_from_point_stack(point_stack):
     """Triangulate an ordered row/column stack without extending beyond its footprint."""
     from numpy import array as np_array
@@ -906,23 +1063,46 @@ def regularized_grid_surface_interpolation(self):
             self.geol_coll.get_uid_feature(input_uids[0]),
         ],
         "scenario": ["Scenario: ", self.geol_coll.get_uid_scenario(input_uids[0])],
+        "steiner_points": ["Steiner points between grid samples:", 0],
     }
     surf_dict_updt = multiple_input_dialog(
         title="Regularized Grid Surface", input_dict=input_dict
     )
     if surf_dict_updt is None:
         return
+    try:
+        steiner_points = max(0, int(float(surf_dict_updt.pop("steiner_points", 0))))
+    except Exception:
+        self.print_terminal(" -- Invalid Steiner-point value -- ")
+        return
     for key in surf_dict_updt:
         surf_dict[key] = surf_dict_updt[key]
     surf_dict["topology"] = "TriSurf"
     surf_dict["vtk_obj"] = TriSurf()
 
+    dense_stack, dense_info = _densify_structured_point_stack(
+        structured_stack, steiner_points=steiner_points
+    )
+    if dense_stack is None:
+        if dense_info and dense_info.get("limit_exceeded"):
+            self.print_terminal(
+                " -- Requested structured-grid densification is too large: "
+                f"{dense_info['target_row_count']} x {dense_info['target_col_count']} "
+                f"({dense_info['target_point_count']} points, limit {dense_info['max_point_count']}) -- "
+            )
+        else:
+            self.print_terminal(
+                " -- Could not redistribute the structured grid before triangulation -- "
+            )
+        return
+
     self.print_terminal(
         "Detected regularized interpretation grid: "
         f"{structured_info['row_count']} slices x {structured_info['col_count']} samples. "
-        "Building footprint-preserving surface."
+        f"Redistributing to {dense_info['target_row_count']} x {dense_info['target_col_count']} "
+        f"samples with {dense_info['steiner_points']} Steiner point(s) per grid interval."
     )
-    structured_surface = _build_surface_from_point_stack(structured_stack)
+    structured_surface = _build_surface_from_point_stack(dense_stack)
     if structured_surface is None:
         self.print_terminal(" -- Could not build structured surface from regularized samples -- ")
         return
