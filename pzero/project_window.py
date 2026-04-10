@@ -1293,6 +1293,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.print_terminal("Selected geology object is not a TriSurf.")
             return
 
+        replace_on_off = options_dialog(
+            title="Retriangulate surface",
+            message="Replace Original Entity?",
+            yes_role="Yes",
+            no_role="No",
+            reject_role="Cancel",
+        )
+        if replace_on_off not in (0, 1):
+            return
+
         source_surface = self.geol_coll.get_uid_vtk_obj(uid)
         points = np.asarray(source_surface.points, dtype=float)
         if points.ndim != 2 or points.shape[0] < 3:
@@ -1419,11 +1429,33 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             except Exception:
                 pass
 
-            self.geol_coll.replace_vtk(uid, retriangulated_surface)
-            self.print_terminal(
-                f"Retriangulated '{self.geol_coll.get_uid_name(uid)}' "
-                f"({len(vertices)} vertices, {len(triangles)} triangles)"
-            )
+            if replace_on_off == 0:
+                self.geol_coll.replace_vtk(uid, retriangulated_surface)
+                self.print_terminal(
+                    f"Retriangulated '{self.geol_coll.get_uid_name(uid)}' "
+                    f"({len(vertices)} vertices, {len(triangles)} triangles)"
+                )
+            else:
+                out_dict = deepcopy(self.geol_coll.entity_dict)
+                out_dict["uid"] = ""
+                out_dict["name"] = f"{self.geol_coll.get_uid_name(uid)}_retriangulated"
+                out_dict["topology"] = "TriSurf"
+                out_dict["role"] = self.geol_coll.get_uid_role(uid)
+                out_dict["feature"] = self.geol_coll.get_uid_feature(uid)
+                out_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
+                out_dict["parent_uid"] = self.geol_coll.get_uid_x_section(uid)
+                out_dict["properties_names"] = list(retriangulated_surface.point_data_keys)
+                out_dict["properties_components"] = [
+                    retriangulated_surface.get_point_data_shape(key)[1]
+                    for key in out_dict["properties_names"]
+                ]
+                out_dict["vtk_obj"] = retriangulated_surface
+                new_uid = self.geol_coll.add_entity_from_dict(entity_dict=out_dict)
+                self.print_terminal(
+                    f"Retriangulated '{self.geol_coll.get_uid_name(uid)}' into "
+                    f"'{self.geol_coll.get_uid_name(new_uid)}' "
+                    f"({len(vertices)} vertices, {len(triangles)} triangles)"
+                )
         except ValueError as exc:
             QMessageBox.warning(self, "Invalid input", str(exc))
         except Exception as exc:
