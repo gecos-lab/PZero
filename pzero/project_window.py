@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QComboBox,
     QMenu,
+    QWidget,
 )
 from PySide6.QtGui import QAction, QDesktopServices, QPixmap
 from PySide6.QtCore import Qt, QTimer
@@ -85,6 +86,7 @@ from pzero.imports.pyvista2vtk import pyvista2vtk
 from pzero.imports.segy2vtk import segy2vtk, read_segy_file
 from pzero.imports.shp2vtk import shp2vtk
 from pzero.imports.stl2vtk import vtk2stl, vtk2stl_dilation
+from pzero.imports.table2data import import_tables
 from pzero.imports.well2vtk import well2vtk
 from pzero.imports.xyz2vtk import xyz2vtk
 from pzero.ui.project_window_ui import Ui_ProjectWindow
@@ -128,7 +130,6 @@ from .three_d_surfaces import (
 )
 
 from pzero.views.dock_window import DockWindow
-from pzero.views.table_view_dialog import TableViewDialog
 from .processing.CRS import CRS_list, CRS_transform_selected
 # import json
 from json import dump as json_dump
@@ -192,6 +193,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         super(ProjectWindow, self).__init__(*args, **kwargs)
         """Import GUI from project_window_ui.py"""
         self.setupUi(self)
+        self._install_import_table_action()
         self._install_import_xyz_action()
         self.TextTerminal.setReadOnly(True)
 
@@ -230,6 +232,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportGocad.triggered.connect(self.import_gocad)
         self.actionImportGocadXsection.triggered.connect(self.import_gocad_sections)
         self.actionImportBoundary.triggered.connect(self.import_gocad_boundary)
+        self.actionImportTable.triggered.connect(self.import_tables)
         self.actionImportXYZ.triggered.connect(self.import_XYZ)
         self.actionImportPyVista.triggered.connect(lambda: pyvista2vtk(self=self))
         self.actionImportPC.triggered.connect(self.import_PC)
@@ -307,7 +310,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         self.actionTableView = QAction("Table View", self)
         self.actionTableView.setObjectName("actionTableView")
-        self.actionTableView.triggered.connect(self.open_table_view_dialog)
+        self.actionTableView.triggered.connect(
+            lambda: DockWindow(parent=self, window_type="ViewTable")
+        )
         self.menuWindows.insertAction(self.actionXYPlotView, self.actionTableView)
 
         """File>CRS actions -> slots"""
@@ -413,15 +418,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def open_release_url(self):
         QDesktopServices.openUrl(QUrl("https://github.com/gecos-lab/PZero/releases"))
-
-    def open_table_view_dialog(self):
-        """Open the custom tables dialog."""
-        if getattr(self, "table_view_dialog", None) is None:
-            self.table_view_dialog = TableViewDialog(parent=self)
-        self.table_view_dialog.refresh_table_list()
-        self.table_view_dialog.show()
-        self.table_view_dialog.raise_()
-        self.table_view_dialog.activateWindow()
 
     """Methods used to manage the entities shown in tables."""
 
@@ -1326,10 +1322,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # this is used to delete open windows when the current project is closed (and a new one is opened)
         self.signals.project_close.emit()
 
-        if getattr(self, "table_view_dialog", None) is not None:
-            self.table_view_dialog.close()
-        self.table_view_dialog = None
         self.custom_tables = {}
+        self.custom_table_types = {}
+        self.custom_table_options = {}
 
         # Create the geol_coll GeologicalCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         # and connect the model to GeologyTableView (a Qt QTableView created with QTDesigner and provided by
@@ -1818,6 +1813,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             tables_payload["tables"].append(
                 {
                     "name": table_name,
+                    "table_type": self.custom_table_types.get(table_name, "manual"),
+                    "options": self.custom_table_options.get(table_name, {}),
                     "dataframe": {
                         "columns": exported_df.columns.tolist(),
                         "data": exported_df.values.tolist(),
@@ -1831,6 +1828,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def load_custom_tables(self, in_dir_name: str = None):
         """Load user-defined project tables."""
         self.custom_tables = {}
+        self.custom_table_types = {}
+        self.custom_table_options = {}
         if not in_dir_name:
             return
 
@@ -1853,11 +1852,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             ]
             data = dataframe_payload.get("data", [])
             self.custom_tables[table_name] = pd_DataFrame(data=data, columns=columns)
+            self.custom_table_types[table_name] = table_payload.get(
+                "table_type", "manual"
+            )
+            self.custom_table_options[table_name] = table_payload.get("options", {})
 
         if self.custom_tables:
             self.print_terminal(
                 f"Loaded {len(self.custom_tables)} custom table(s)."
             )
+        self.refresh_custom_colormaps()
 
     def new_project(self):
         """Creates a new empty project, after having cleared all variables."""
@@ -3319,6 +3323,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         self.menuFile.insertAction(self.actionImportPC, self.actionImportXYZ)
 
+    def _install_import_table_action(self):
+        """Add the generic table import action to the File menu."""
+        self.actionImportTable = QAction("Import Tables", self)
+        self.actionImportTable.setObjectName("actionImportTable")
+        self.actionImportTable.setStatusTip(
+            "Import generic text tables into custom project tables"
+        )
+        self.menuFile.insertAction(self.actionImportPC, self.actionImportTable)
+
     def import_XYZ(self):
         """Import multiple generic XYZ point files into a selected collection."""
         self.print_terminal("Importing generic XYZ points")
@@ -3348,6 +3361,28 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             in_file_names=in_file_names,
             collection_name=collection_name,
         )
+
+    def import_tables(self):
+        """Import generic tabular files into custom project tables."""
+        self.print_terminal("Importing generic tables")
+        import_tables(self=self)
+
+    def refresh_table_views(self):
+        """Refresh any open custom table views."""
+        for child in self.findChildren(QWidget):
+            if hasattr(child, "refresh_table_list") and callable(
+                getattr(child, "refresh_table_list")
+            ):
+                try:
+                    child.refresh_table_list()
+                except Exception:
+                    pass
+
+    def refresh_custom_colormaps(self):
+        """Register project colormaps stored as advanced tables and refresh the legend widget."""
+        if hasattr(self, "prop_legend"):
+            PropertiesCMaps.register_custom_colormaps(parent=self)
+            self.prop_legend.update_widget(parent=self)
 
     def import_PC(self):
         """Import point cloud data. File extension dependent (.txt, .xyz, .las) -> Ui_ImportOptionsWindow ui to preview the data (similar to stereonet)"""

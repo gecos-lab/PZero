@@ -11,6 +11,7 @@ from .view_map import ViewMap
 from .view_xsection import ViewXsection
 from .view_stereoplot import ViewStereoplot
 from .view_interpretation import ViewInterpretation
+from .table_view_dialog import ViewTable
 from .abstract_view_vtk import ViewVTK
 from PySide6.QtCore import QTimer
 
@@ -52,6 +53,8 @@ class DockWindow(QDockWidget):
             self.canvas = ViewStereoplot(parent=parent)
         elif window_type == "ViewInterpretation":
             self.canvas = ViewInterpretation(parent=parent)
+        elif window_type == "ViewTable":
+            self.canvas = ViewTable(parent=parent)
         else:
             # Exit doing nothing in case the window type is not supported/recognized.
             print("window type not recognized")
