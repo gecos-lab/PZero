@@ -153,6 +153,44 @@ class ViewInterpretation(ViewMap):
         # Image style forces XY view which breaks Inline/Crossline views
         # self.plotter.enable_trackball_style()
 
+    @staticmethod
+    def _build_control_tooltip(summary, low_text=None, high_text=None):
+        """Build a consistent tooltip for propagation controls."""
+        parts = [summary]
+        if low_text or high_text:
+            parts.append("")
+            if low_text:
+                parts.append(f"Low: {low_text}")
+            if high_text:
+                parts.append(f"High: {high_text}")
+        return "\n".join(parts)
+
+    def _apply_control_tooltip(self, widget, summary, low_text=None, high_text=None):
+        """Apply the same tooltip text to widgets and labels."""
+        if widget is None:
+            return
+        tooltip = self._build_control_tooltip(
+            summary=summary,
+            low_text=low_text,
+            high_text=high_text,
+        )
+        widget.setToolTip(tooltip)
+        try:
+            widget.setWhatsThis(tooltip)
+        except Exception:
+            pass
+
+    def _make_control_label(self, text, summary, low_text=None, high_text=None):
+        """Create a QLabel with the same tooltip used by its paired control."""
+        label = QLabel(text)
+        self._apply_control_tooltip(
+            label,
+            summary=summary,
+            low_text=low_text,
+            high_text=high_text,
+        )
+        return label
+
     def _resolve_interpretation_actor_uid(self, actor_name=None):
         """Map slice-filtered actor names back to the real geology uid."""
         if not actor_name:
@@ -6766,6 +6804,13 @@ class ViewInterpretation(ViewMap):
         combo_horizon.setMinimumWidth(250)
         horizon_layout.addWidget(combo_horizon, 1)
         layout.addLayout(horizon_layout)
+
+        tooltip_hint = QLabel(
+            "Hover an attribute or parameter to see what it does and what Low or High values mean."
+        )
+        tooltip_hint.setStyleSheet("color: gray;")
+        tooltip_hint.setWordWrap(True)
+        layout.addWidget(tooltip_hint)
         
         # === TWO COLUMN LAYOUT ===
         columns_layout = QHBoxLayout()
@@ -6801,6 +6846,26 @@ class ViewInterpretation(ViewMap):
         check_phase = QCheckBox("Phase")
         check_similarity = QCheckBox("Similarity")
         check_dip = QCheckBox("Dip")
+        self._apply_control_tooltip(
+            check_amplitude,
+            "Track the reflector by envelope/reflection strength. Best for bright, continuous horizons.",
+        )
+        self._apply_control_tooltip(
+            check_edge,
+            "Track the reflector boundary by gradient strength. Useful when the event is clearer as an edge than as a peak or trough.",
+        )
+        self._apply_control_tooltip(
+            check_phase,
+            "Track phase continuity. Useful where amplitude is weak but the reflector keeps a stable phase character.",
+        )
+        self._apply_control_tooltip(
+            check_similarity,
+            "Favor lateral coherence from trace to trace. Helps reject noisy or isolated picks.",
+        )
+        self._apply_control_tooltip(
+            check_dip,
+            "Favor dip continuity from slice to slice. Useful for smooth structure; less useful where dip changes abruptly.",
+        )
         attr_layout.addWidget(check_amplitude)
         attr_layout.addWidget(check_edge)
         attr_layout.addWidget(check_phase)
@@ -6822,23 +6887,79 @@ class ViewInterpretation(ViewMap):
         spin_slices = QSpinBox()
         spin_slices.setRange(1, 500)
         spin_slices.setValue(50)
-        params_form.addRow("Slices:", spin_slices)
+        self._apply_control_tooltip(
+            spin_slices,
+            "How many slices to propagate away from the seed.",
+            low_text="Shorter propagation. Faster and safer when you only trust the seed locally.",
+            high_text="Longer propagation. Covers more of the volume, but drift can accumulate farther from the seed.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Slices:",
+                "How many slices to propagate away from the seed.",
+                low_text="Shorter propagation. Faster and safer when you only trust the seed locally.",
+                high_text="Longer propagation. Covers more of the volume, but drift can accumulate farther from the seed.",
+            ),
+            spin_slices,
+        )
         
         spin_search = QSpinBox()
         spin_search.setRange(5, 50)
         spin_search.setValue(15)
-        params_form.addRow("Search window:", spin_search)
+        self._apply_control_tooltip(
+            spin_search,
+            "Vertical search range around the previous depth pick on each new slice.",
+            low_text="Stays close to the previous pick. Better for stable reflectors, but may miss real jumps, drag, or throw.",
+            high_text="Allows larger depth changes. Better for complex structure, but easier to jump to the wrong reflector.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Search window:",
+                "Vertical search range around the previous depth pick on each new slice.",
+                low_text="Stays close to the previous pick. Better for stable reflectors, but may miss real jumps, drag, or throw.",
+                high_text="Allows larger depth changes. Better for complex structure, but easier to jump to the wrong reflector.",
+            ),
+            spin_search,
+        )
         
         spin_smooth = QDoubleSpinBox()
         spin_smooth.setRange(0.0, 10.0)
         spin_smooth.setValue(2.0)
         spin_smooth.setSingleStep(0.5)
-        params_form.addRow("Smoothing:", spin_smooth)
+        self._apply_control_tooltip(
+            spin_smooth,
+            "How strongly the propagated horizon is smoothed along the picked line.",
+            low_text="Preserves local bends and fault-related shape changes, but can look noisy.",
+            high_text="Produces a cleaner line, but can flatten subtle structure or over-smooth real geometry.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Smoothing:",
+                "How strongly the propagated horizon is smoothed along the picked line.",
+                low_text="Preserves local bends and fault-related shape changes, but can look noisy.",
+                high_text="Produces a cleaner line, but can flatten subtle structure or over-smooth real geometry.",
+            ),
+            spin_smooth,
+        )
         
         spin_max_jump = QSpinBox()
         spin_max_jump.setRange(1, 20)
         spin_max_jump.setValue(3)
-        params_form.addRow("Max jump:", spin_max_jump)
+        self._apply_control_tooltip(
+            spin_max_jump,
+            "Maximum allowed sample-to-sample change after smoothing.",
+            low_text="Keeps the horizon very stable and continuous, but may not follow steep or sharply bent events.",
+            high_text="Allows sharper curvature and local offsets, but can admit zig-zagging or unstable picks.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Max jump:",
+                "Maximum allowed sample-to-sample change after smoothing.",
+                low_text="Keeps the horizon very stable and continuous, but may not follow steep or sharply bent events.",
+                high_text="Allows sharper curvature and local offsets, but can admit zig-zagging or unstable picks.",
+            ),
+            spin_max_jump,
+        )
         
         right_widget.addWidget(params_group)
 
@@ -6850,27 +6971,97 @@ class ViewInterpretation(ViewMap):
         spin_fault_snap_weight.setRange(0.0, 10.0)
         spin_fault_snap_weight.setValue(2.0)
         spin_fault_snap_weight.setSingleStep(0.1)
-        fault_form.addRow("Snap weight:", spin_fault_snap_weight)
+        self._apply_control_tooltip(
+            spin_fault_snap_weight,
+            "How strongly a real horizon/fault crossing is pulled toward the mapped fault position.",
+            low_text="Weak attachment. Safer if fault picks are uncertain, but contacts may detach across slices.",
+            high_text="Strong attachment. Better for preserving true crossings, but can over-pull the horizon onto a wrong fault trace.",
+        )
+        fault_form.addRow(
+            self._make_control_label(
+                "Snap weight:",
+                "How strongly a real horizon/fault crossing is pulled toward the mapped fault position.",
+                low_text="Weak attachment. Safer if fault picks are uncertain, but contacts may detach across slices.",
+                high_text="Strong attachment. Better for preserving true crossings, but can over-pull the horizon onto a wrong fault trace.",
+            ),
+            spin_fault_snap_weight,
+        )
 
         spin_fault_attach_depth_tol = QSpinBox()
         spin_fault_attach_depth_tol.setRange(0, 20)
         spin_fault_attach_depth_tol.setValue(2)
-        fault_form.addRow("Depth tol:", spin_fault_attach_depth_tol)
+        self._apply_control_tooltip(
+            spin_fault_attach_depth_tol,
+            "Allowed depth mismatch when following the same crossing onto the next slice.",
+            low_text="Strict depth matching. Prevents false attachments, but may lose real crossings when throw changes quickly.",
+            high_text="Flexible depth matching. Better for variable throw, but can attach to the wrong depth level.",
+        )
+        fault_form.addRow(
+            self._make_control_label(
+                "Depth tol:",
+                "Allowed depth mismatch when following the same crossing onto the next slice.",
+                low_text="Strict depth matching. Prevents false attachments, but may lose real crossings when throw changes quickly.",
+                high_text="Flexible depth matching. Better for variable throw, but can attach to the wrong depth level.",
+            ),
+            spin_fault_attach_depth_tol,
+        )
 
         spin_fault_attach_row_tol = QSpinBox()
         spin_fault_attach_row_tol.setRange(0, 30)
         spin_fault_attach_row_tol.setValue(8)
-        fault_form.addRow("Row tol:", spin_fault_attach_row_tol)
+        self._apply_control_tooltip(
+            spin_fault_attach_row_tol,
+            "How far laterally the current horizon may sit from the predicted crossing before attachment is rejected.",
+            low_text="Strict lateral consistency. Good for clean data, but may miss real crossings in noisy areas.",
+            high_text="Permissive lateral consistency. Better for noisy data, but easier to force a wrong crossing.",
+        )
+        fault_form.addRow(
+            self._make_control_label(
+                "Row tol:",
+                "How far laterally the current horizon may sit from the predicted crossing before attachment is rejected.",
+                low_text="Strict lateral consistency. Good for clean data, but may miss real crossings in noisy areas.",
+                high_text="Permissive lateral consistency. Better for noisy data, but easier to force a wrong crossing.",
+            ),
+            spin_fault_attach_row_tol,
+        )
 
         spin_fault_attach_col_tol = QSpinBox()
         spin_fault_attach_col_tol.setRange(0, 20)
         spin_fault_attach_col_tol.setValue(4)
-        fault_form.addRow("Col tol:", spin_fault_attach_col_tol)
+        self._apply_control_tooltip(
+            spin_fault_attach_col_tol,
+            "How far vertically the current horizon may sit from the predicted crossing before attachment is rejected.",
+            low_text="Strict vertical consistency. Safer for clean horizons, but can miss real crossings with local depth variation.",
+            high_text="More vertical flexibility. Better for drag or rollover near faults, but can lock onto the wrong event.",
+        )
+        fault_form.addRow(
+            self._make_control_label(
+                "Col tol:",
+                "How far vertically the current horizon may sit from the predicted crossing before attachment is rejected.",
+                low_text="Strict vertical consistency. Safer for clean horizons, but can miss real crossings with local depth variation.",
+                high_text="More vertical flexibility. Better for drag or rollover near faults, but can lock onto the wrong event.",
+            ),
+            spin_fault_attach_col_tol,
+        )
 
         spin_fault_attach_blend = QSpinBox()
         spin_fault_attach_blend.setRange(0, 10)
         spin_fault_attach_blend.setValue(3)
-        fault_form.addRow("Blend rows:", spin_fault_attach_blend)
+        self._apply_control_tooltip(
+            spin_fault_attach_blend,
+            "How many neighboring samples are softly blended into the attached crossing point.",
+            low_text="Very localized attachment. Preserves sharp offsets, but may leave a visible kink.",
+            high_text="Broader blending. Produces a smoother contact, but may smear the throw over too wide an area.",
+        )
+        fault_form.addRow(
+            self._make_control_label(
+                "Blend rows:",
+                "How many neighboring samples are softly blended into the attached crossing point.",
+                low_text="Very localized attachment. Preserves sharp offsets, but may leave a visible kink.",
+                high_text="Broader blending. Produces a smoother contact, but may smear the throw over too wide an area.",
+            ),
+            spin_fault_attach_blend,
+        )
 
         right_widget.addWidget(fault_group)
         
@@ -6885,42 +7076,132 @@ class ViewInterpretation(ViewMap):
         spin_smooth_weight.setRange(0.0, 1.0)
         spin_smooth_weight.setValue(0.3)
         spin_smooth_weight.setSingleStep(0.1)
-        weights_grid.addWidget(QLabel("Smooth:"), 0, 0)
+        self._apply_control_tooltip(
+            spin_smooth_weight,
+            "How strongly the tracker prefers continuity with the previous slice.",
+            low_text="Attributes dominate. More flexible, but easier to drift.",
+            high_text="Continuity dominates. More stable, but less able to follow real structural changes.",
+        )
+        weights_grid.addWidget(
+            self._make_control_label(
+                "Smooth:",
+                "How strongly the tracker prefers continuity with the previous slice.",
+                low_text="Attributes dominate. More flexible, but easier to drift.",
+                high_text="Continuity dominates. More stable, but less able to follow real structural changes.",
+            ),
+            0,
+            0,
+        )
         weights_grid.addWidget(spin_smooth_weight, 0, 1)
         
         spin_amp_weight = QDoubleSpinBox()
         spin_amp_weight.setRange(0.0, 1.0)
         spin_amp_weight.setValue(0.3)
         spin_amp_weight.setSingleStep(0.1)
-        weights_grid.addWidget(QLabel("Amp:"), 0, 2)
+        self._apply_control_tooltip(
+            spin_amp_weight,
+            "How much reflection strength influences the pick.",
+            low_text="Amplitude has little effect. Useful if amplitudes are unreliable.",
+            high_text="Strong reflectors dominate. Good for bright horizons, risky if nearby events are brighter.",
+        )
+        weights_grid.addWidget(
+            self._make_control_label(
+                "Amp:",
+                "How much reflection strength influences the pick.",
+                low_text="Amplitude has little effect. Useful if amplitudes are unreliable.",
+                high_text="Strong reflectors dominate. Good for bright horizons, risky if nearby events are brighter.",
+            ),
+            0,
+            2,
+        )
         weights_grid.addWidget(spin_amp_weight, 0, 3)
         
         spin_edge_weight = QDoubleSpinBox()
         spin_edge_weight.setRange(0.0, 1.0)
         spin_edge_weight.setValue(0.2)
         spin_edge_weight.setSingleStep(0.1)
-        weights_grid.addWidget(QLabel("Edge:"), 1, 0)
+        self._apply_control_tooltip(
+            spin_edge_weight,
+            "How much reflector boundary sharpness influences the pick.",
+            low_text="Edge sharpness has little effect.",
+            high_text="Sharp boundaries dominate. Good for crisp events, risky in noisy data or near faults.",
+        )
+        weights_grid.addWidget(
+            self._make_control_label(
+                "Edge:",
+                "How much reflector boundary sharpness influences the pick.",
+                low_text="Edge sharpness has little effect.",
+                high_text="Sharp boundaries dominate. Good for crisp events, risky in noisy data or near faults.",
+            ),
+            1,
+            0,
+        )
         weights_grid.addWidget(spin_edge_weight, 1, 1)
         
         spin_phase_weight = QDoubleSpinBox()
         spin_phase_weight.setRange(0.0, 1.0)
         spin_phase_weight.setValue(0.2)
         spin_phase_weight.setSingleStep(0.1)
-        weights_grid.addWidget(QLabel("Phase:"), 1, 2)
+        self._apply_control_tooltip(
+            spin_phase_weight,
+            "How much phase continuity influences the pick.",
+            low_text="Phase has little effect.",
+            high_text="Phase continuity dominates. Useful for subtle events, but can mislead if phase is unstable.",
+        )
+        weights_grid.addWidget(
+            self._make_control_label(
+                "Phase:",
+                "How much phase continuity influences the pick.",
+                low_text="Phase has little effect.",
+                high_text="Phase continuity dominates. Useful for subtle events, but can mislead if phase is unstable.",
+            ),
+            1,
+            2,
+        )
         weights_grid.addWidget(spin_phase_weight, 1, 3)
         
         spin_sim_weight = QDoubleSpinBox()
         spin_sim_weight.setRange(0.0, 1.0)
         spin_sim_weight.setValue(0.15)
         spin_sim_weight.setSingleStep(0.05)
-        weights_grid.addWidget(QLabel("Sim:"), 2, 0)
+        self._apply_control_tooltip(
+            spin_sim_weight,
+            "How much lateral coherence influences the pick.",
+            low_text="Similarity has little effect.",
+            high_text="Coherence dominates. Good for continuous horizons, but may suppress real local changes.",
+        )
+        weights_grid.addWidget(
+            self._make_control_label(
+                "Sim:",
+                "How much lateral coherence influences the pick.",
+                low_text="Similarity has little effect.",
+                high_text="Coherence dominates. Good for continuous horizons, but may suppress real local changes.",
+            ),
+            2,
+            0,
+        )
         weights_grid.addWidget(spin_sim_weight, 2, 1)
         
         spin_dip_weight = QDoubleSpinBox()
         spin_dip_weight.setRange(0.0, 1.0)
         spin_dip_weight.setValue(0.15)
         spin_dip_weight.setSingleStep(0.05)
-        weights_grid.addWidget(QLabel("Dip:"), 2, 2)
+        self._apply_control_tooltip(
+            spin_dip_weight,
+            "How much dip continuity from the previous slice influences the pick.",
+            low_text="Dip has little effect. Better where dip changes quickly.",
+            high_text="Dip continuity dominates. Better for smooth structure, but can resist real local dip changes.",
+        )
+        weights_grid.addWidget(
+            self._make_control_label(
+                "Dip:",
+                "How much dip continuity from the previous slice influences the pick.",
+                low_text="Dip has little effect. Better where dip changes quickly.",
+                high_text="Dip continuity dominates. Better for smooth structure, but can resist real local dip changes.",
+            ),
+            2,
+            2,
+        )
         weights_grid.addWidget(spin_dip_weight, 2, 3)
         
         right_widget.addWidget(weights_group)
@@ -7553,6 +7834,13 @@ class ViewInterpretation(ViewMap):
         info.setStyleSheet("color: gray; font-style: italic;")
         info.setWordWrap(True)
         layout.addWidget(info)
+
+        tooltip_hint = QLabel(
+            "Hover an attribute or parameter to see what it does and what Low or High values mean."
+        )
+        tooltip_hint.setStyleSheet("color: gray;")
+        tooltip_hint.setWordWrap(True)
+        layout.addWidget(tooltip_hint)
         
         # Seed selection
         seed_layout = QHBoxLayout()
@@ -7596,6 +7884,22 @@ class ViewInterpretation(ViewMap):
         check_discont.setChecked(True)
         check_variance = QCheckBox("Variance")
         check_likelihood = QCheckBox("Likelihood")
+        self._apply_control_tooltip(
+            check_vert_edge,
+            "Track the fault using strong vertical-edge response. This is usually the primary fault indicator.",
+        )
+        self._apply_control_tooltip(
+            check_discont,
+            "Track where reflector continuity breaks across the fault. Useful when the fault appears as a clear discontinuity.",
+        )
+        self._apply_control_tooltip(
+            check_variance,
+            "Track locally chaotic or high-variance zones around the fault damage zone.",
+        )
+        self._apply_control_tooltip(
+            check_likelihood,
+            "Track a combined fault-likelihood attribute built from edge, discontinuity, and variance.",
+        )
         attr_layout.addWidget(check_vert_edge)
         attr_layout.addWidget(check_discont)
         attr_layout.addWidget(check_variance)
@@ -7614,23 +7918,79 @@ class ViewInterpretation(ViewMap):
         spin_slices = QSpinBox()
         spin_slices.setRange(1, 500)
         spin_slices.setValue(50)
-        params_form.addRow("Slices:", spin_slices)
+        self._apply_control_tooltip(
+            spin_slices,
+            "How many slices to propagate the fault away from the seed.",
+            low_text="Shorter propagation. Faster and safer when you only trust the fault locally.",
+            high_text="Longer propagation. Covers more of the volume, but drift can accumulate farther from the seed.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Slices:",
+                "How many slices to propagate the fault away from the seed.",
+                low_text="Shorter propagation. Faster and safer when you only trust the fault locally.",
+                high_text="Longer propagation. Covers more of the volume, but drift can accumulate farther from the seed.",
+            ),
+            spin_slices,
+        )
         
         spin_search = QSpinBox()
         spin_search.setRange(3, 30)
         spin_search.setValue(10)
-        params_form.addRow("Search window:", spin_search)
+        self._apply_control_tooltip(
+            spin_search,
+            "Horizontal search range around the previous fault position for each depth sample.",
+            low_text="Keeps the fault close to the previous slice. Good for stable faults, but may miss real lateral shifts.",
+            high_text="Allows stronger lateral movement. Better for dipping or rapidly shifting faults, but easier to jump to noise.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Search window:",
+                "Horizontal search range around the previous fault position for each depth sample.",
+                low_text="Keeps the fault close to the previous slice. Good for stable faults, but may miss real lateral shifts.",
+                high_text="Allows stronger lateral movement. Better for dipping or rapidly shifting faults, but easier to jump to noise.",
+            ),
+            spin_search,
+        )
         
         spin_smooth = QDoubleSpinBox()
         spin_smooth.setRange(0.0, 5.0)
         spin_smooth.setValue(1.5)
         spin_smooth.setSingleStep(0.5)
-        params_form.addRow("Smoothing:", spin_smooth)
+        self._apply_control_tooltip(
+            spin_smooth,
+            "How strongly the propagated fault trace is smoothed along depth.",
+            low_text="Preserves local bends and irregularities, but can look noisy.",
+            high_text="Produces a cleaner trace, but can wash out real local dip changes or segmentation.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Smoothing:",
+                "How strongly the propagated fault trace is smoothed along depth.",
+                low_text="Preserves local bends and irregularities, but can look noisy.",
+                high_text="Produces a cleaner trace, but can wash out real local dip changes or segmentation.",
+            ),
+            spin_smooth,
+        )
         
         spin_max_jump = QSpinBox()
         spin_max_jump.setRange(1, 10)
         spin_max_jump.setValue(2)
-        params_form.addRow("Max jump:", spin_max_jump)
+        self._apply_control_tooltip(
+            spin_max_jump,
+            "Controls how abruptly the fault trace is allowed to change between neighboring depth samples.",
+            low_text="Keeps the trace coherent and stable, but may underfit sharp bends.",
+            high_text="Allows stronger local shape changes, but can increase zig-zagging and false excursions.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Max jump:",
+                "Controls how abruptly the fault trace is allowed to change between neighboring depth samples.",
+                low_text="Keeps the trace coherent and stable, but may underfit sharp bends.",
+                high_text="Allows stronger local shape changes, but can increase zig-zagging and false excursions.",
+            ),
+            spin_max_jump,
+        )
         
         right.addWidget(params_group)
         right.addStretch()
