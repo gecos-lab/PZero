@@ -15,9 +15,7 @@ import pyvista as pv
 import numpy as np
 from copy import deepcopy
 import heapq
-from math import floor as math_floor, log10 as math_log10
-from re import sub as re_sub, IGNORECASE as re_IGNORECASE
-from traceback import format_exc as traceback_format_exc
+from shapely.geometry import LineString as shp_linestring
 from scipy import ndimage
 from scipy.optimize import linear_sum_assignment
 from pandas import DataFrame as pd_DataFrame
@@ -39,8 +37,8 @@ from ..helpers.helper_dialogs import (
     options_dialog,
     progress_dialog,
 )
-from ..helpers.autotracker import propagate_horizon, propagate_fault
-from ..helpers.helper_widgets import Tracer
+from ..helpers.helper_widgets import Editor, Tracer
+from ..helpers.helper_functions import freeze_gui_off, freeze_gui_on
 
 class ViewInterpretation(ViewMap):
     def add_all_entities(self):
@@ -163,6 +161,72 @@ class ViewInterpretation(ViewMap):
         # Use trackball style instead of image style to allow proper 3D views
         # Image style forces XY view which breaks Inline/Crossline views
         # self.plotter.enable_trackball_style()
+
+    @staticmethod
+    def _build_control_tooltip(summary, low_text=None, high_text=None):
+        """Build a consistent tooltip for propagation controls."""
+        parts = [summary]
+        if low_text or high_text:
+            parts.append("")
+            if low_text:
+                parts.append(f"Low: {low_text}")
+            if high_text:
+                parts.append(f"High: {high_text}")
+        return "\n".join(parts)
+
+    def _apply_control_tooltip(self, widget, summary, low_text=None, high_text=None):
+        """Apply the same tooltip text to widgets and labels."""
+        if widget is None:
+            return
+        tooltip = self._build_control_tooltip(
+            summary=summary,
+            low_text=low_text,
+            high_text=high_text,
+        )
+        widget.setToolTip(tooltip)
+        try:
+            widget.setWhatsThis(tooltip)
+        except Exception:
+            pass
+
+    def _make_control_label(self, text, summary, low_text=None, high_text=None):
+        """Create a QLabel with the same tooltip used by its paired control."""
+        label = QLabel(text)
+        self._apply_control_tooltip(
+            label,
+            summary=summary,
+            low_text=low_text,
+            high_text=high_text,
+        )
+        return label
+
+    def _resolve_interpretation_actor_uid(self, actor_name=None):
+        """Map slice-filtered actor names back to the real geology uid."""
+        if not actor_name:
+            return None
+        for prefix in ("multipart_slice_", "multipart_fault_slice_"):
+            if actor_name.startswith(prefix):
+                return actor_name[len(prefix) :]
+        return actor_name
+
+    def get_uid_from_actor(self, actor=None):
+        """Resolve picked interpretation actors to their source entity uid."""
+        actor_name = super().get_uid_from_actor(actor=actor)
+        return self._resolve_interpretation_actor_uid(actor_name=actor_name)
+
+    def get_actor_by_uid(self, uid: str = None):
+        """Return the visible actor for a uid, including slice-filtered aliases."""
+        actors = getattr(self.plotter.renderer, "actors", {})
+        for actor_name in (
+            uid,
+            f"multipart_slice_{uid}",
+            f"multipart_fault_slice_{uid}",
+            f"geol_coll_{uid}",
+            f"geo_{uid}",
+        ):
+            if actor_name in actors:
+                return actors[actor_name]
+        return super().get_actor_by_uid(uid)
 
     def showEvent(self, event):
         """Override Qt showEvent to initialize the view when first shown."""
@@ -783,6 +847,7 @@ class ViewInterpretation(ViewMap):
                 self.slice_actor.mapper.SetInputData(subset)
                 self.slice_actor.mapper.SetScalarRange(scalar_range if scalar_range else subset.get_data_range())
                 self.slice_actor.mapper.Update()
+                self.slice_actor.SetPickable(False)
             else:
                 # First time: add new slice actor
                 self.slice_actor = self.plotter.add_mesh(
@@ -792,7 +857,7 @@ class ViewInterpretation(ViewMap):
                     clim=scalar_range,
                     cmap=cmap, 
                     show_scalar_bar=False, 
-                    pickable=True, 
+                    pickable=False,
                     lighting=False,
                     reset_camera=False
                 )
@@ -1355,6 +1420,774 @@ class ViewInterpretation(ViewMap):
 
         return False
 
+    def _get_visible_line_actor_for_uid(self, uid=None):
+        """Return the currently visible actor used to display a line uid in this view."""
+        if not uid:
+            return None
+
+        actors = getattr(self.plotter.renderer, "actors", {})
+        for actor_name in (
+            f"multipart_slice_{uid}",
+            f"multipart_fault_slice_{uid}",
+            uid,
+            f"geol_coll_{uid}",
+            f"geo_{uid}",
+        ):
+            actor = actors.get(actor_name)
+            if actor is not None:
+                try:
+                    if actor.GetVisibility():
+                        return actor
+                except Exception:
+                    return actor
+        return None
+
+    def _begin_slice_line_edit_pick_mode(self):
+        """Temporarily make the seismic slice the only pickable actor during line editing."""
+        self._edit_pickable_state = {}
+        for name, actor in self.plotter.renderer.actors.items():
+            try:
+                self._edit_pickable_state[name] = actor.GetPickable()
+                actor.SetPickable(name == "seismic_slice_actor")
+            except Exception:
+                pass
+
+        try:
+            if self.slice_actor is not None:
+                self.slice_actor.SetPickable(True)
+        except Exception:
+            pass
+
+    def _get_plotter_scale_factors(self):
+        """Return the active plotter scale as XYZ factors."""
+        try:
+            scale = self.plotter.scale
+            if scale is not None and len(scale) >= 3:
+                sx = float(scale[0]) if scale[0] not in (None, 0) else 1.0
+                sy = float(scale[1]) if scale[1] not in (None, 0) else 1.0
+                sz = float(scale[2]) if scale[2] not in (None, 0) else 1.0
+                return sx, sy, sz
+        except Exception:
+            pass
+        return 1.0, 1.0, 1.0
+
+    def _build_editor_input_polydata(self, data=None):
+        """Build a temporary polyline in display-space coordinates for the editor widget."""
+        if data is None:
+            return None
+
+        editor_line = PolyLine()
+        try:
+            editor_line.DeepCopy(data)
+        except Exception:
+            return data
+
+        try:
+            pts = np.asarray(editor_line.points, dtype=float).copy()
+        except Exception:
+            return editor_line
+
+        sx, sy, sz = self._get_plotter_scale_factors()
+        pts[:, 0] *= sx
+        pts[:, 1] *= sy
+        pts[:, 2] *= sz
+        editor_line.points = pts
+        editor_line.Modified()
+        return editor_line
+
+    def _end_slice_line_edit_pick_mode(self):
+        """Restore actor pickability after line editing."""
+        saved_state = getattr(self, "_edit_pickable_state", None)
+        if saved_state:
+            for name, pickable in saved_state.items():
+                try:
+                    if name in self.plotter.renderer.actors:
+                        self.plotter.renderer.actors[name].SetPickable(pickable)
+                except Exception:
+                    pass
+        if hasattr(self, "_edit_pickable_state"):
+            try:
+                del self._edit_pickable_state
+            except Exception:
+                pass
+
+    def _prepare_numeric_array_builders(
+        self, source_data=None, skip_names=None, skip_prefixes=None
+    ):
+        """Create writable numeric arrays matching the source VTK data arrays."""
+        if source_data is None:
+            return []
+
+        skip_names = set(skip_names or [])
+        skip_prefixes = tuple(skip_prefixes or ())
+        builders = []
+        for array_idx in range(source_data.GetNumberOfArrays()):
+            source_array = source_data.GetArray(array_idx)
+            if source_array is None:
+                continue
+            array_name = source_array.GetName() or ""
+            if array_name in skip_names:
+                continue
+            if array_name and any(array_name.startswith(prefix) for prefix in skip_prefixes):
+                continue
+
+            target_array = source_array.NewInstance()
+            target_array.SetName(array_name)
+            target_array.SetNumberOfComponents(source_array.GetNumberOfComponents())
+            builders.append((source_array, target_array))
+        return builders
+
+    def _append_numeric_tuple(self, builders=None, source_idx=None, default_idx=None):
+        """Append one tuple to each target numeric array."""
+        for source_array, target_array in builders or []:
+            tuple_idx = None
+            if source_idx is not None and 0 <= source_idx < source_array.GetNumberOfTuples():
+                tuple_idx = source_idx
+            elif default_idx is not None and 0 <= default_idx < source_array.GetNumberOfTuples():
+                tuple_idx = default_idx
+
+            if tuple_idx is None:
+                target_array.InsertNextTuple(
+                    tuple(0.0 for _ in range(source_array.GetNumberOfComponents()))
+                )
+            else:
+                target_array.InsertNextTuple(source_array.GetTuple(tuple_idx))
+
+    def _get_axis_spacing(self, axis=None):
+        """Return the cached spacing for the requested interpretation axis."""
+        axis = axis or self.current_axis
+        dims = getattr(self, "_cached_dims", None)
+        bounds = getattr(self, "_cached_bounds", None)
+        if dims is None or bounds is None:
+            return None
+
+        axis_to_idx = {"Inline": 0, "Crossline": 1, "Z-slice": 2}
+        axis_idx = axis_to_idx.get(axis)
+        if axis_idx is None:
+            return None
+
+        n_points = max(int(dims[axis_idx]) - 1, 1)
+        return float(bounds[axis_idx * 2 + 1] - bounds[axis_idx * 2]) / float(n_points)
+
+    def _world_points_to_slice_uv(self, points=None, slice_idx=None, axis=None, affine=None):
+        """Convert world-space points on one slice plane to continuous in-plane slice coordinates."""
+        if points is None:
+            return None
+
+        pts = np.asarray(points, dtype=float)
+        if pts.ndim != 2 or pts.shape[1] != 3 or pts.shape[0] < 2:
+            return None
+
+        axis = axis or self.current_axis
+        if affine is None:
+            affine = self._get_seismic_axis_vectors()
+
+        if affine is not None:
+            origin, a0, a1, a2, _dims = affine
+            if axis == "Inline":
+                base = origin + int(slice_idx) * a0
+                basis = np.column_stack([a1, a2])
+            elif axis == "Crossline":
+                base = origin + int(slice_idx) * a1
+                basis = np.column_stack([a0, a2])
+            else:
+                base = origin + int(slice_idx) * a2
+                basis = np.column_stack([a0, a1])
+            try:
+                uv, *_ = np.linalg.lstsq(basis, (pts - base).T, rcond=None)
+                return np.asarray(uv.T, dtype=float)
+            except Exception:
+                return None
+
+        bounds = getattr(self, "_cached_bounds", None)
+        dims = getattr(self, "_cached_dims", None)
+        if bounds is None or dims is None:
+            return None
+
+        spacing = [
+            float(bounds[1] - bounds[0]) / max(int(dims[0]) - 1, 1),
+            float(bounds[3] - bounds[2]) / max(int(dims[1]) - 1, 1),
+            float(bounds[5] - bounds[4]) / max(int(dims[2]) - 1, 1),
+        ]
+        if axis == "Inline":
+            return np.column_stack(
+                [
+                    (pts[:, 1] - bounds[2]) / spacing[1] if spacing[1] else 0.0,
+                    (pts[:, 2] - bounds[4]) / spacing[2] if spacing[2] else 0.0,
+                ]
+            )
+        if axis == "Crossline":
+            return np.column_stack(
+                [
+                    (pts[:, 0] - bounds[0]) / spacing[0] if spacing[0] else 0.0,
+                    (pts[:, 2] - bounds[4]) / spacing[2] if spacing[2] else 0.0,
+                ]
+            )
+        return np.column_stack(
+            [
+                (pts[:, 0] - bounds[0]) / spacing[0] if spacing[0] else 0.0,
+                (pts[:, 1] - bounds[2]) / spacing[1] if spacing[1] else 0.0,
+            ]
+        )
+
+    def _slice_uv_to_world_points(self, slice_uv=None, slice_idx=None, axis=None, affine=None):
+        """Convert continuous in-plane slice coordinates back to world-space points."""
+        if slice_uv is None:
+            return None
+
+        uv = np.asarray(slice_uv, dtype=float)
+        if uv.ndim != 2 or uv.shape[1] != 2 or uv.shape[0] < 2:
+            return None
+
+        axis = axis or self.current_axis
+        if affine is None:
+            affine = self._get_seismic_axis_vectors()
+
+        if affine is not None:
+            origin, a0, a1, a2, _dims = affine
+            if axis == "Inline":
+                base = origin + int(slice_idx) * a0
+                basis_row = a1
+                basis_col = a2
+            elif axis == "Crossline":
+                base = origin + int(slice_idx) * a1
+                basis_row = a0
+                basis_col = a2
+            else:
+                base = origin + int(slice_idx) * a2
+                basis_row = a0
+                basis_col = a1
+            pts = (
+                base[None, :]
+                + uv[:, 0:1] * basis_row[None, :]
+                + uv[:, 1:2] * basis_col[None, :]
+            )
+            return np.asarray(pts, dtype=float)
+
+        bounds = getattr(self, "_cached_bounds", None)
+        dims = getattr(self, "_cached_dims", None)
+        if bounds is None or dims is None:
+            return None
+
+        spacing = [
+            float(bounds[1] - bounds[0]) / max(int(dims[0]) - 1, 1),
+            float(bounds[3] - bounds[2]) / max(int(dims[1]) - 1, 1),
+            float(bounds[5] - bounds[4]) / max(int(dims[2]) - 1, 1),
+        ]
+        axis_spacing = self._get_axis_spacing(axis=axis)
+        if axis_spacing is None:
+            return None
+
+        target_coord = {
+            "Inline": float(bounds[0]) + int(slice_idx) * axis_spacing,
+            "Crossline": float(bounds[2]) + int(slice_idx) * axis_spacing,
+            "Z-slice": float(bounds[4]) + int(slice_idx) * axis_spacing,
+        }[axis]
+
+        pts = np.zeros((uv.shape[0], 3), dtype=float)
+        if axis == "Inline":
+            pts[:, 0] = target_coord
+            pts[:, 1] = bounds[2] + uv[:, 0] * spacing[1]
+            pts[:, 2] = bounds[4] + uv[:, 1] * spacing[2]
+        elif axis == "Crossline":
+            pts[:, 0] = bounds[0] + uv[:, 0] * spacing[0]
+            pts[:, 1] = target_coord
+            pts[:, 2] = bounds[4] + uv[:, 1] * spacing[2]
+        else:
+            pts[:, 0] = bounds[0] + uv[:, 0] * spacing[0]
+            pts[:, 1] = bounds[2] + uv[:, 1] * spacing[1]
+            pts[:, 2] = target_coord
+        return pts
+
+    def _build_multipart_vtk_with_replaced_slices(
+        self, vtk_obj=None, edited_points_by_slice=None
+    ):
+        """Return a multipart PolyLine where one or more slices are replaced with edited geometry."""
+        if vtk_obj is None or not edited_points_by_slice:
+            return None, [], {}
+
+        cell_data = vtk_obj.GetCellData()
+        if cell_data is None or not cell_data.HasArray("slice_index"):
+            return None, [], {}
+
+        from vtk import vtkCellArray, vtkIntArray, vtkPoints
+
+        point_data = vtk_obj.GetPointData()
+        field_data = vtk_obj.GetFieldData()
+        cell_slice_array = cell_data.GetArray("slice_index")
+        point_slice_array = (
+            point_data.GetArray("slice_index")
+            if point_data is not None and point_data.HasArray("slice_index")
+            else None
+        )
+
+        clean_replacements = {}
+        for raw_slice_idx, raw_points in dict(edited_points_by_slice).items():
+            try:
+                target_slice_idx = int(raw_slice_idx)
+            except Exception:
+                continue
+            points = np.asarray(raw_points, dtype=float)
+            if points.ndim != 2 or points.shape[0] < 2 or points.shape[1] != 3:
+                continue
+            clean_replacements[target_slice_idx] = points
+
+        if not clean_replacements:
+            return None, [], {}
+
+        reference_by_slice = {}
+        for old_cell_id in range(vtk_obj.GetNumberOfCells()):
+            old_slice_idx = int(cell_slice_array.GetValue(old_cell_id))
+            if old_slice_idx not in clean_replacements or old_slice_idx in reference_by_slice:
+                continue
+            cell = vtk_obj.GetCell(old_cell_id)
+            point_id = None
+            if cell is not None and cell.GetNumberOfPoints() > 0:
+                point_id = cell.GetPointId(0)
+            reference_by_slice[old_slice_idx] = {
+                "cell_id": old_cell_id,
+                "point_id": point_id,
+            }
+
+        if any(slice_idx not in reference_by_slice for slice_idx in clean_replacements):
+            return None, [], {}
+
+        point_builders = self._prepare_numeric_array_builders(
+            source_data=point_data,
+            skip_names={"slice_index"},
+            skip_prefixes=("slices_",),
+        )
+        cell_builders = self._prepare_numeric_array_builders(
+            source_data=cell_data,
+            skip_names={"slice_index"},
+            skip_prefixes=("slices_",),
+        )
+
+        new_points = vtkPoints()
+        new_lines = vtkCellArray()
+        point_slice_values = []
+        cell_slice_values = []
+        inserted_slices = set()
+
+        for old_cell_id in range(vtk_obj.GetNumberOfCells()):
+            old_slice_idx = int(cell_slice_array.GetValue(old_cell_id))
+            if old_slice_idx in clean_replacements:
+                if old_slice_idx in inserted_slices:
+                    continue
+
+                edited_points = clean_replacements[old_slice_idx]
+                reference_ids = reference_by_slice.get(old_slice_idx, {})
+                reference_cell_id = reference_ids.get("cell_id")
+                reference_point_id = reference_ids.get("point_id")
+                start_idx = new_points.GetNumberOfPoints()
+                for point in edited_points:
+                    new_points.InsertNextPoint(float(point[0]), float(point[1]), float(point[2]))
+                    point_slice_values.append(old_slice_idx)
+                    self._append_numeric_tuple(
+                        builders=point_builders,
+                        source_idx=None,
+                        default_idx=reference_point_id,
+                    )
+
+                new_lines.InsertNextCell(int(edited_points.shape[0]))
+                for point_id in range(start_idx, start_idx + int(edited_points.shape[0])):
+                    new_lines.InsertCellPoint(point_id)
+
+                cell_slice_values.append(old_slice_idx)
+                self._append_numeric_tuple(
+                    builders=cell_builders,
+                    source_idx=None,
+                    default_idx=reference_cell_id,
+                )
+                inserted_slices.add(old_slice_idx)
+                continue
+
+            cell = vtk_obj.GetCell(old_cell_id)
+            if cell is None:
+                continue
+
+            n_pts = cell.GetNumberOfPoints()
+            if n_pts < 2:
+                continue
+
+            start_idx = new_points.GetNumberOfPoints()
+            for point_idx in range(n_pts):
+                old_point_id = cell.GetPointId(point_idx)
+                point = vtk_obj.GetPoint(old_point_id)
+                new_points.InsertNextPoint(float(point[0]), float(point[1]), float(point[2]))
+                if point_slice_array is not None:
+                    point_slice_values.append(int(point_slice_array.GetValue(old_point_id)))
+                else:
+                    point_slice_values.append(old_slice_idx)
+                self._append_numeric_tuple(
+                    builders=point_builders,
+                    source_idx=old_point_id,
+                    default_idx=None,
+                )
+
+            new_lines.InsertNextCell(n_pts)
+            for point_id in range(start_idx, start_idx + n_pts):
+                new_lines.InsertCellPoint(point_id)
+
+            cell_slice_values.append(old_slice_idx)
+            self._append_numeric_tuple(
+                builders=cell_builders,
+                source_idx=old_cell_id,
+                default_idx=None,
+            )
+
+        if (
+            inserted_slices != set(clean_replacements.keys())
+            or new_points.GetNumberOfPoints() == 0
+            or new_lines.GetNumberOfCells() == 0
+        ):
+            return None, [], {}
+
+        rebuilt_line = PolyLine()
+        rebuilt_line.SetPoints(new_points)
+        rebuilt_line.SetLines(new_lines)
+
+        for _source_array, target_array in point_builders:
+            rebuilt_line.GetPointData().AddArray(target_array)
+        for _source_array, target_array in cell_builders:
+            rebuilt_line.GetCellData().AddArray(target_array)
+        self._copy_field_data_arrays(
+            source_data=field_data,
+            target_data=rebuilt_line.GetFieldData(),
+        )
+
+        point_slice_out = vtkIntArray()
+        point_slice_out.SetName("slice_index")
+        point_slice_out.SetNumberOfComponents(1)
+        for value in point_slice_values:
+            point_slice_out.InsertNextValue(int(value))
+        rebuilt_line.GetPointData().AddArray(point_slice_out)
+
+        cell_slice_out = vtkIntArray()
+        cell_slice_out.SetName("slice_index")
+        cell_slice_out.SetNumberOfComponents(1)
+        for value in cell_slice_values:
+            cell_slice_out.InsertNextValue(int(value))
+        rebuilt_line.GetCellData().AddArray(cell_slice_out)
+
+        slice_indices = sorted({int(value) for value in cell_slice_values if int(value) >= 0})
+        slice_to_cell_index = {}
+        for new_cell_idx, value in enumerate(cell_slice_values):
+            value = int(value)
+            if value not in slice_to_cell_index:
+                slice_to_cell_index[value] = new_cell_idx
+
+        self._ensure_slice_index_property_metadata(
+            vtk_obj=rebuilt_line,
+            slice_indices=slice_indices,
+        )
+        rebuilt_line.Modified()
+        return rebuilt_line, slice_indices, slice_to_cell_index
+
+    def _build_multipart_vtk_with_replaced_slice(
+        self, vtk_obj=None, slice_idx=None, edited_points=None
+    ):
+        """Return a multipart PolyLine where one slice is replaced with edited geometry."""
+        return self._build_multipart_vtk_with_replaced_slices(
+            vtk_obj=vtk_obj,
+            edited_points_by_slice={slice_idx: edited_points},
+        )
+
+    def _prompt_multipart_edit_propagation_slices(self, selection=None, current_slice_idx=None):
+        """Ask whether the current edit should be copied to additional slices and return matching targets."""
+        if selection is None:
+            return []
+
+        available_slices = sorted({int(idx) for idx in selection.get("available_slices", [])})
+        if not available_slices:
+            return []
+
+        apply_to_range = options_dialog(
+            title="Edit line",
+            message=(
+                "Do you want to apply this edited line to other slices of the same multipart "
+                "entity?"
+            ),
+            yes_role="Yes",
+            no_role="No",
+        )
+        if apply_to_range != 0:
+            return []
+
+        current_slice_idx = int(current_slice_idx)
+        range_in = multiple_input_dialog(
+            title=f"Apply Edit To Slice Range ({available_slices[0]}-{available_slices[-1]})",
+            input_dict={
+                "slice_from": ["Apply from slice:", current_slice_idx],
+                "slice_to": ["Apply to slice:", current_slice_idx],
+            },
+        )
+        if range_in is None:
+            return []
+
+        slice_from = int(range_in["slice_from"])
+        slice_to = int(range_in["slice_to"])
+        if slice_from > slice_to:
+            slice_from, slice_to = slice_to, slice_from
+
+        return [
+            slice_idx
+            for slice_idx in available_slices
+            if slice_from <= slice_idx <= slice_to
+        ]
+
+    def _finalize_standard_line_edit(self, uid=None, editor=None):
+        """Apply a standard line edit result to a single geometry uid."""
+        try:
+            self.plotter.untrack_click_position(side="right")
+        except Exception:
+            pass
+        self._end_slice_line_edit_pick_mode()
+
+        try:
+            traced_pld = (
+                editor.GetContourRepresentation().GetContourRepresentationAsPolyData()
+            )
+        except Exception:
+            traced_pld = None
+
+        try:
+            if editor is not None:
+                editor.EnabledOff()
+        except Exception:
+            pass
+
+        if traced_pld is None or traced_pld.GetNumberOfPoints() < 2:
+            self.clear_selection()
+            freeze_gui_off(self)
+            return
+
+        points = np.array(traced_pld.GetPoints().GetData(), dtype=float)
+        snapped_points = self.snap_points_to_slice(points, points_are_display_coords=True)
+
+        vtk_obj = PolyLine()
+        vtk_obj.points = snapped_points
+        vtk_obj.auto_cells()
+
+        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
+
+        if uid in getattr(self, "interpretation_lines", {}):
+            self._store_single_slice_interpretation_metadata(
+                uid=uid,
+                slice_info=self.interpretation_lines[uid],
+            )
+            self.set_actor_visibility(uid, True)
+
+        self.plotter.render()
+        self.clear_selection()
+        freeze_gui_off(self)
+
+    def _finalize_multipart_line_edit(self, selection=None, editor=None):
+        """Rewrite the active slice of a multipart propagated line after editing."""
+        try:
+            self.plotter.untrack_click_position(side="right")
+        except Exception:
+            pass
+        self._end_slice_line_edit_pick_mode()
+
+        try:
+            traced_pld = (
+                editor.GetContourRepresentation().GetContourRepresentationAsPolyData()
+            )
+        except Exception:
+            traced_pld = None
+
+        try:
+            if editor is not None:
+                editor.EnabledOff()
+        except Exception:
+            pass
+
+        if traced_pld is None or traced_pld.GetNumberOfPoints() < 2 or selection is None:
+            self.clear_selection()
+            freeze_gui_off(self)
+            return
+
+        uid = selection["uid"]
+        entity_kind = selection["entity_kind"]
+        entity_info = selection["entity_info"]
+        slice_idx = int(self.current_slice_index)
+
+        points = np.array(traced_pld.GetPoints().GetData(), dtype=float)
+        snapped_points = self.snap_points_to_slice(points, points_are_display_coords=True)
+        current_vtk = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        replacement_points_by_slice = {slice_idx: snapped_points}
+
+        target_slices = self._prompt_multipart_edit_propagation_slices(
+            selection=selection,
+            current_slice_idx=slice_idx,
+        )
+        target_slices = sorted({int(idx) for idx in target_slices})
+        if target_slices:
+            affine = self._get_seismic_axis_vectors()
+            template_uv = self._world_points_to_slice_uv(
+                points=snapped_points,
+                slice_idx=slice_idx,
+                axis=entity_info.get("axis", self.current_axis),
+                affine=affine,
+            )
+            if template_uv is None:
+                message_dialog(
+                    title="Edit line",
+                    message=(
+                        "The edited line was saved on the current slice, but it could not be "
+                        "projected to the requested slice range."
+                    ),
+                )
+            else:
+                for target_slice_idx in target_slices:
+                    if target_slice_idx == slice_idx:
+                        continue
+                    target_points = self._slice_uv_to_world_points(
+                        slice_uv=template_uv,
+                        slice_idx=target_slice_idx,
+                        axis=entity_info.get("axis", self.current_axis),
+                        affine=affine,
+                    )
+                    if target_points is None:
+                        continue
+                    replacement_points_by_slice[int(target_slice_idx)] = target_points
+
+        new_vtk, slice_indices, _slice_to_cell_index = self._build_multipart_vtk_with_replaced_slices(
+            vtk_obj=current_vtk,
+            edited_points_by_slice=replacement_points_by_slice,
+        )
+        if new_vtk is None:
+            message_dialog(
+                title="Edit line",
+                message="Could not rewrite the edited slice back into the multipart line.",
+            )
+            self.clear_selection()
+            freeze_gui_off(self)
+            return
+
+        self._remove_filtered_actor(f"multipart_slice_{uid}")
+        self._remove_filtered_actor(f"multipart_fault_slice_{uid}")
+        self._remove_raw_actor_for_uid(uid)
+        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=new_vtk)
+        self.scan_and_index_single_horizon(uid)
+
+        seed_slice = entity_info.get("seed_slice")
+        if uid in getattr(self, "multipart_horizons", {}) and seed_slice in slice_indices:
+            self.multipart_horizons[uid]["seed_slice"] = int(seed_slice)
+        if uid in getattr(self, "multipart_faults", {}) and seed_slice in slice_indices:
+            self.multipart_faults[uid]["seed_slice"] = int(seed_slice)
+
+        self._mark_slice_visibility_dirty()
+        if entity_kind == "horizon":
+            self.update_multipart_horizon_visibility(uid)
+        else:
+            self.update_multipart_fault_visibility(uid)
+        self.plotter.render()
+
+        self.print_terminal(
+            f"Edited multipart {entity_kind} {uid[:8]}... on slice {slice_idx}: "
+            f"{len(points)} control points updated."
+        )
+        if len(replacement_points_by_slice) > 1:
+            propagated_slices = sorted(replacement_points_by_slice.keys())
+            self.print_terminal(
+                f"Applied the same edit to slices {propagated_slices[0]}-{propagated_slices[-1]} "
+                f"({len(propagated_slices)} slices total)."
+            )
+        self.clear_selection()
+        freeze_gui_off(self)
+
+    @freeze_gui_on
+    def edit_selected_line(self):
+        """Edit a visible interpretation line or the current slice of a multipart line."""
+        selected_uids = [
+            uid
+            for uid in list(getattr(self.parent, "selected_uids", []) or [])
+            if uid in set(self.parent.geol_coll.get_uids)
+        ]
+        if not selected_uids:
+            self.print_terminal(" -- No input data selected -- ")
+            freeze_gui_off(self)
+            return
+
+        sel_uid = selected_uids[0]
+        selection = self._resolve_multipart_entity_for_edit(
+            uid=sel_uid,
+            action_title="Edit line",
+            show_messages=False,
+        )
+
+        if selection is not None:
+            entity_info = selection["entity_info"]
+            if entity_info.get("seismic_uid") != self.current_seismic_uid or entity_info.get("axis") != self.current_axis:
+                message_dialog(
+                    title="Edit line",
+                    message="Show the propagated line on its matching seismic and axis before editing it.",
+                )
+                freeze_gui_off(self)
+                return
+            if self.current_slice_index not in selection["available_slices"]:
+                message_dialog(
+                    title="Edit line",
+                    message="Move to a slice where the selected propagated line is visible before editing it.",
+                )
+                freeze_gui_off(self)
+                return
+
+            actor = self._get_visible_line_actor_for_uid(sel_uid)
+            if actor is None:
+                message_dialog(
+                    title="Edit line",
+                    message="The selected propagated line is not currently visible in the interpretation view.",
+                )
+                freeze_gui_off(self)
+                return
+
+            data = actor.GetMapper().GetInput()
+            editor_data = self._build_editor_input_polydata(data=data)
+            self._begin_slice_line_edit_pick_mode()
+            editor = Editor(self)
+            editor.EnabledOn()
+            editor.initialize(editor_data, "edit")
+            self.plotter.track_click_position(
+                side="right",
+                callback=lambda event: self._finalize_multipart_line_edit(
+                    selection=selection,
+                    editor=editor,
+                ),
+            )
+            return
+
+        try:
+            topology = self.parent.geol_coll.get_uid_topology(sel_uid)
+        except Exception:
+            topology = None
+        if topology != "PolyLine":
+            self.print_terminal(" -- Selected data is not a line -- ")
+            freeze_gui_off(self)
+            return
+
+        actor = self._get_visible_line_actor_for_uid(sel_uid)
+        if actor is None:
+            self.print_terminal(" -- Selected line is not visible in the current interpretation slice -- ")
+            freeze_gui_off(self)
+            return
+
+        data = actor.GetMapper().GetInput()
+        editor_data = self._build_editor_input_polydata(data=data)
+        self._begin_slice_line_edit_pick_mode()
+        editor = Editor(self)
+        editor.EnabledOn()
+        editor.initialize(editor_data, "edit")
+        self.plotter.track_click_position(
+            side="right",
+            callback=lambda event: self._finalize_standard_line_edit(
+                uid=sel_uid,
+                editor=editor,
+            ),
+        )
+
     def _build_propagated_entity_name(self, seed_uid, slice_indices, fallback_name):
         """
         Build a propagated entity name from the seed interpretation name.
@@ -1855,6 +2688,271 @@ class ViewInterpretation(ViewMap):
             return 1, (0, 2)
         return 2, (0, 1)
 
+    def _resolve_polyline_axis_for_simplify(self, uid=None, vtk_obj=None):
+        """Resolve the slice axis used to simplify interpretation polylines."""
+        if uid in getattr(self, "multipart_horizons", {}):
+            axis = self.multipart_horizons[uid].get("axis")
+            if axis:
+                return axis
+        if uid in getattr(self, "multipart_faults", {}):
+            axis = self.multipart_faults[uid].get("axis")
+            if axis:
+                return axis
+
+        slice_info = self._extract_single_slice_interpretation_metadata(
+            uid=uid, vtk_obj=vtk_obj
+        )
+        if slice_info and slice_info.get("axis"):
+            return slice_info["axis"]
+
+        try:
+            field_data = vtk_obj.GetFieldData() if vtk_obj is not None else None
+            if field_data is not None:
+                for array_name in ("slice_axis", "single_slice_axis"):
+                    if not field_data.HasArray(array_name):
+                        continue
+                    axis_array = field_data.GetAbstractArray(array_name)
+                    if axis_array and axis_array.GetNumberOfValues() > 0:
+                        axis = axis_array.GetValue(0)
+                        if axis:
+                            return axis
+        except Exception:
+            pass
+
+        if vtk_obj is not None:
+            try:
+                bounds = vtk_obj.GetBounds()
+                x_range = abs(bounds[1] - bounds[0])
+                y_range = abs(bounds[3] - bounds[2])
+                z_range = abs(bounds[5] - bounds[4])
+                range_by_axis = {
+                    "Inline": x_range,
+                    "Crossline": y_range,
+                    "Z-slice": z_range,
+                }
+                return min(range_by_axis, key=range_by_axis.get)
+            except Exception:
+                pass
+
+        return self.current_axis
+
+    def _simplify_polyline_cell_points(self, points=None, tolerance=0.1, axis=None):
+        """Simplify one polyline cell in the correct slice plane."""
+        clean_points, _source_s, keep_mask = self._prepare_polyline_sampling(points)
+        if clean_points is None or keep_mask is None:
+            return None
+
+        normal_axis, in_plane_axes = self._get_slice_plane_axes(axis=axis)
+        in_plane_points = clean_points[:, list(in_plane_axes)]
+        if in_plane_points.shape[0] < 2:
+            return None
+
+        simplified_uv = in_plane_points
+        if tolerance > 0.0 and in_plane_points.shape[0] > 2:
+            shp_line_in = shp_linestring(in_plane_points)
+            shp_line_out = shp_line_in.simplify(
+                float(tolerance), preserve_topology=False
+            )
+            if shp_line_out is None or shp_line_out.is_empty:
+                simplified_uv = np.vstack((in_plane_points[0], in_plane_points[-1]))
+            elif hasattr(shp_line_out, "coords"):
+                simplified_uv = np.asarray(shp_line_out.coords, dtype=float)
+            elif hasattr(shp_line_out, "geoms"):
+                candidate_coords = [
+                    np.asarray(geom.coords, dtype=float)
+                    for geom in shp_line_out.geoms
+                    if hasattr(geom, "coords") and len(geom.coords) >= 2
+                ]
+                if candidate_coords:
+                    simplified_uv = max(candidate_coords, key=len)
+
+        if simplified_uv.ndim != 2 or simplified_uv.shape[0] < 2:
+            simplified_uv = np.vstack((in_plane_points[0], in_plane_points[-1]))
+
+        if simplified_uv.shape[0] > 1:
+            keep_out = np.ones(simplified_uv.shape[0], dtype=bool)
+            keep_out[1:] = (
+                np.linalg.norm(np.diff(simplified_uv, axis=0), axis=1) > 1.0e-9
+            )
+            simplified_uv = simplified_uv[keep_out]
+        if simplified_uv.shape[0] < 2:
+            simplified_uv = np.vstack((in_plane_points[0], in_plane_points[-1]))
+
+        source_indices = []
+        search_start = 0
+        for out_uv in simplified_uv:
+            candidate_points = in_plane_points[search_start:]
+            if candidate_points.size == 0:
+                source_idx = in_plane_points.shape[0] - 1
+            else:
+                distances = np.linalg.norm(candidate_points - out_uv, axis=1)
+                source_idx = search_start + int(np.argmin(distances))
+            source_indices.append(source_idx)
+            search_start = min(source_idx, in_plane_points.shape[0] - 1)
+
+        if len(source_indices) < 2:
+            source_indices = [0, in_plane_points.shape[0] - 1]
+            simplified_uv = np.vstack((in_plane_points[0], in_plane_points[-1]))
+
+        simplified_points = np.zeros((simplified_uv.shape[0], 3), dtype=float)
+        simplified_points[:, in_plane_axes[0]] = simplified_uv[:, 0]
+        simplified_points[:, in_plane_axes[1]] = simplified_uv[:, 1]
+        simplified_points[:, normal_axis] = float(
+            np.median(clean_points[:, normal_axis])
+        )
+
+        return {
+            "points": simplified_points,
+            "keep_mask": keep_mask,
+            "source_indices": source_indices,
+        }
+
+    def _build_simplified_polyline_vtk(self, vtk_obj=None, tolerance=0.1, axis=None):
+        """Simplify all cells of a PolyLine while preserving interpretation metadata."""
+        if vtk_obj is None or vtk_obj.GetNumberOfCells() == 0:
+            return None, [], {}, {}
+
+        from vtk import vtkCellArray, vtkIntArray, vtkPoints
+
+        source_point_data = vtk_obj.GetPointData()
+        source_cell_data = vtk_obj.GetCellData()
+        source_field_data = vtk_obj.GetFieldData()
+
+        point_slice_array = (
+            source_point_data.GetArray("slice_index")
+            if source_point_data is not None and source_point_data.HasArray("slice_index")
+            else None
+        )
+        cell_slice_array = (
+            source_cell_data.GetArray("slice_index")
+            if source_cell_data is not None and source_cell_data.HasArray("slice_index")
+            else None
+        )
+
+        new_points = vtkPoints()
+        new_lines = vtkCellArray()
+        selected_point_ids = []
+        selected_cell_ids = []
+        point_slice_values = []
+        cell_slice_values = []
+        old_total_points = 0
+
+        for cell_idx in range(vtk_obj.GetNumberOfCells()):
+            cell = vtk_obj.GetCell(cell_idx)
+            if cell is None:
+                continue
+
+            n_pts = cell.GetNumberOfPoints()
+            if n_pts < 2:
+                continue
+
+            point_ids = [cell.GetPointId(i) for i in range(n_pts)]
+            raw_points = np.array(
+                [vtk_obj.GetPoint(point_id) for point_id in point_ids], dtype=float
+            )
+            old_total_points += int(n_pts)
+
+            simplified = self._simplify_polyline_cell_points(
+                points=raw_points,
+                tolerance=tolerance,
+                axis=axis,
+            )
+            if simplified is None:
+                continue
+
+            clean_point_ids = np.asarray(point_ids, dtype=int)[simplified["keep_mask"]]
+            simplified_points = simplified["points"]
+            source_indices = simplified["source_indices"]
+            if simplified_points.shape[0] < 2 or clean_point_ids.size < 2:
+                continue
+
+            start_idx = new_points.GetNumberOfPoints()
+            for local_idx, point in enumerate(simplified_points):
+                new_points.InsertNextPoint(float(point[0]), float(point[1]), float(point[2]))
+                source_point_id = int(clean_point_ids[source_indices[local_idx]])
+                selected_point_ids.append(source_point_id)
+
+                if point_slice_array is not None:
+                    point_slice_values.append(int(point_slice_array.GetValue(source_point_id)))
+                elif cell_slice_array is not None:
+                    point_slice_values.append(int(cell_slice_array.GetValue(cell_idx)))
+
+            new_lines.InsertNextCell(simplified_points.shape[0])
+            for point_id in range(start_idx, start_idx + simplified_points.shape[0]):
+                new_lines.InsertCellPoint(point_id)
+
+            selected_cell_ids.append(cell_idx)
+            if cell_slice_array is not None:
+                cell_slice_values.append(int(cell_slice_array.GetValue(cell_idx)))
+
+        if new_points.GetNumberOfPoints() == 0 or new_lines.GetNumberOfCells() == 0:
+            return None, [], {}, {}
+
+        simplified_line = PolyLine()
+        simplified_line.SetPoints(new_points)
+        simplified_line.SetLines(new_lines)
+
+        self._copy_selected_numeric_arrays(
+            source_data=source_point_data,
+            target_data=simplified_line.GetPointData(),
+            selected_ids=selected_point_ids,
+            skip_names={"slice_index"},
+            skip_prefixes=("slices_",),
+        )
+        self._copy_selected_numeric_arrays(
+            source_data=source_cell_data,
+            target_data=simplified_line.GetCellData(),
+            selected_ids=selected_cell_ids,
+            skip_names={"slice_index"},
+            skip_prefixes=("slices_",),
+        )
+        self._copy_field_data_arrays(
+            source_data=source_field_data,
+            target_data=simplified_line.GetFieldData(),
+        )
+
+        if point_slice_values:
+            point_slice_out = vtkIntArray()
+            point_slice_out.SetName("slice_index")
+            point_slice_out.SetNumberOfComponents(1)
+            for slice_idx in point_slice_values:
+                point_slice_out.InsertNextValue(int(slice_idx))
+            simplified_line.GetPointData().AddArray(point_slice_out)
+
+        if cell_slice_values:
+            cell_slice_out = vtkIntArray()
+            cell_slice_out.SetName("slice_index")
+            cell_slice_out.SetNumberOfComponents(1)
+            for slice_idx in cell_slice_values:
+                cell_slice_out.InsertNextValue(int(slice_idx))
+            simplified_line.GetCellData().AddArray(cell_slice_out)
+
+        slice_indices = sorted(
+            {
+                int(slice_idx)
+                for slice_idx in (cell_slice_values or point_slice_values)
+                if int(slice_idx) >= 0
+            }
+        )
+        slice_to_cell_index = {}
+        for new_cell_idx, slice_idx in enumerate(cell_slice_values):
+            slice_idx = int(slice_idx)
+            if slice_idx not in slice_to_cell_index:
+                slice_to_cell_index[slice_idx] = new_cell_idx
+
+        if slice_indices:
+            self._ensure_slice_index_property_metadata(
+                vtk_obj=simplified_line, slice_indices=slice_indices
+            )
+        simplified_line.Modified()
+
+        stats = {
+            "old_total_points": int(old_total_points),
+            "new_total_points": int(new_points.GetNumberOfPoints()),
+            "cell_count": int(new_lines.GetNumberOfCells()),
+        }
+        return simplified_line, slice_indices, slice_to_cell_index, stats
+
     def _prepare_polyline_sampling(self, points):
         """Remove duplicate vertices and build cumulative arclength coordinates."""
         clean_points = np.asarray(points, dtype=float)
@@ -1890,6 +2988,260 @@ class ViewInterpretation(ViewMap):
         if squeeze:
             return sampled[:, 0]
         return sampled
+
+    def _project_regularized_stack_to_slice_planes(
+        self, point_stack=None, cells=None, axis=None, reference_stack=None
+    ):
+        """Project each regularized slice row back to its source slice plane."""
+        if point_stack is None:
+            return None
+
+        stack = np.asarray(point_stack, dtype=float).copy()
+        if stack.ndim != 3 or stack.shape[0] == 0:
+            return stack
+
+        axis = axis or self.current_axis
+        affine = self._get_seismic_axis_vectors()
+        normal_axis, _in_plane_axes = self._get_slice_plane_axes(axis=axis)
+
+        for row_idx in range(stack.shape[0]):
+            slice_idx = None
+            if cells is not None and row_idx < len(cells):
+                try:
+                    slice_idx = int(cells[row_idx]["slice_idx"])
+                except Exception:
+                    slice_idx = None
+
+            if affine is not None and slice_idx is not None:
+                plane_info = self._get_slice_plane_from_affine(
+                    slice_idx=slice_idx,
+                    affine=affine,
+                    axis=axis,
+                )
+                if plane_info is not None:
+                    center, normal, _row_vec, _col_vec, _dims = plane_info
+                    try:
+                        stack[row_idx, :, :] = self._project_points_to_plane(
+                            stack[row_idx, :, :], center, normal
+                        )
+                        continue
+                    except Exception:
+                        pass
+
+            if reference_stack is not None and row_idx < len(reference_stack):
+                try:
+                    target_coord = float(
+                        np.mean(np.asarray(reference_stack[row_idx], dtype=float)[:, normal_axis])
+                    )
+                    stack[row_idx, :, normal_axis] = target_coord
+                except Exception:
+                    pass
+
+        return stack
+
+    def _apply_gridded_regularization(
+        self,
+        point_stack=None,
+        cells=None,
+        axis=None,
+        smooth_sigma=1.0,
+        preserve_slice_indices=None,
+    ):
+        """
+        Enforce a smoother tensor-like lattice by regularizing the cross-slice columns
+        after row-wise slice resampling, then projecting every row back to its slice plane.
+        """
+        if point_stack is None:
+            return None
+
+        base_stack = np.asarray(point_stack, dtype=float)
+        if base_stack.ndim != 3 or base_stack.shape[0] < 2 or base_stack.shape[1] < 2:
+            return base_stack
+
+        axis = axis or self.current_axis
+        keep_original = {int(slice_idx) for slice_idx in (preserve_slice_indices or [])}
+        normal_axis, in_plane_axes = self._get_slice_plane_axes(axis=axis)
+        grid_sigma = max(float(smooth_sigma), 0.75)
+
+        gridded_stack = np.asarray(base_stack, dtype=float).copy()
+        row_count, col_count, _coord_count = gridded_stack.shape
+
+        # Regularize the "perpendicular" column curves so adjacent slices share
+        # more consistent correspondences before any surface interpolation.
+        for col_idx in range(col_count):
+            column_curve = gridded_stack[:, col_idx, :]
+            clean_points, source_s, _keep_mask = self._prepare_polyline_sampling(column_curve)
+            if clean_points is None or source_s is None:
+                continue
+
+            target_s = np.linspace(0.0, source_s[-1], row_count)
+            column_uniform = self._sample_polyline_values(
+                clean_points, source_s, target_s
+            )
+            if grid_sigma > 0.0 and row_count > 2:
+                for coord_idx in in_plane_axes:
+                    column_uniform[:, coord_idx] = ndimage.gaussian_filter1d(
+                        column_uniform[:, coord_idx],
+                        sigma=grid_sigma,
+                        axis=0,
+                        mode="nearest",
+                    )
+            if row_count >= 2:
+                column_uniform[0, :] = column_curve[0, :]
+                column_uniform[-1, :] = column_curve[-1, :]
+            gridded_stack[:, col_idx, :] = column_uniform
+
+        # Add a light along-line smoothing pass so the first/last column boundaries
+        # and intermediate rows form cleaner bands for downstream Delaunay meshing.
+        row_sigma = min(max(grid_sigma * 0.35, 0.0), 1.0)
+        if row_sigma > 0.0 and col_count > 2:
+            for row_idx in range(row_count):
+                row_curve = gridded_stack[row_idx, :, :].copy()
+                for coord_idx in in_plane_axes:
+                    gridded_stack[row_idx, :, coord_idx] = ndimage.gaussian_filter1d(
+                        row_curve[:, coord_idx],
+                        sigma=row_sigma,
+                        axis=0,
+                        mode="nearest",
+                    )
+                gridded_stack[row_idx, 0, :] = row_curve[0, :]
+                gridded_stack[row_idx, -1, :] = row_curve[-1, :]
+
+        gridded_stack[:, :, normal_axis] = base_stack[:, :, normal_axis]
+        gridded_stack = self._project_regularized_stack_to_slice_planes(
+            point_stack=gridded_stack,
+            cells=cells,
+            axis=axis,
+            reference_stack=base_stack,
+        )
+
+        # Re-impose uniform row sampling after the column pass so each slice remains
+        # evenly sampled and directly usable as a clean multipart line set.
+        for row_idx in range(row_count):
+            slice_idx = None
+            if cells is not None and row_idx < len(cells):
+                slice_idx = int(cells[row_idx]["slice_idx"])
+            if slice_idx in keep_original:
+                gridded_stack[row_idx, :, :] = base_stack[row_idx, :, :]
+                continue
+
+            clean_points, source_s, _keep_mask = self._prepare_polyline_sampling(
+                gridded_stack[row_idx, :, :]
+            )
+            if clean_points is None or source_s is None:
+                gridded_stack[row_idx, :, :] = base_stack[row_idx, :, :]
+                continue
+
+            target_s = np.linspace(0.0, source_s[-1], col_count)
+            row_uniform = self._sample_polyline_values(clean_points, source_s, target_s)
+            gridded_stack[row_idx, :, :] = row_uniform
+
+        gridded_stack[:, :, normal_axis] = base_stack[:, :, normal_axis]
+        gridded_stack = self._project_regularized_stack_to_slice_planes(
+            point_stack=gridded_stack,
+            cells=cells,
+            axis=axis,
+            reference_stack=base_stack,
+        )
+
+        for row_idx in range(row_count):
+            slice_idx = None
+            if cells is not None and row_idx < len(cells):
+                slice_idx = int(cells[row_idx]["slice_idx"])
+            if slice_idx in keep_original:
+                gridded_stack[row_idx, :, :] = base_stack[row_idx, :, :]
+
+        return gridded_stack
+
+    def _build_grid_polyline_from_stack(self, point_stack=None):
+        """Build a true grid PolyLine containing both row and column polylines."""
+        if point_stack is None:
+            return None
+
+        stack = np.asarray(point_stack, dtype=float)
+        if stack.ndim != 3 or stack.shape[0] < 2 or stack.shape[1] < 2:
+            return None
+
+        from vtk import vtkCellArray, vtkPoints
+
+        row_count, col_count, _coord_count = stack.shape
+        vtk_points = vtkPoints()
+        for row_idx in range(row_count):
+            for col_idx in range(col_count):
+                point = stack[row_idx, col_idx]
+                vtk_points.InsertNextPoint(
+                    float(point[0]), float(point[1]), float(point[2])
+                )
+
+        vtk_lines = vtkCellArray()
+
+        # Row polylines: the regularized parallel slice traces.
+        for row_idx in range(row_count):
+            vtk_lines.InsertNextCell(col_count)
+            for col_idx in range(col_count):
+                vtk_lines.InsertCellPoint(row_idx * col_count + col_idx)
+
+        # Column polylines: perpendicular connectors completing the grid.
+        for col_idx in range(col_count):
+            vtk_lines.InsertNextCell(row_count)
+            for row_idx in range(row_count):
+                vtk_lines.InsertCellPoint(row_idx * col_count + col_idx)
+
+        grid_line = PolyLine()
+        grid_line.SetPoints(vtk_points)
+        grid_line.SetLines(vtk_lines)
+        grid_line.Modified()
+        return grid_line
+
+    def _build_grid_entity_dict_from_source(
+        self, source_uid=None, vtk_obj=None, slice_indices=None, fallback_name="multipart"
+    ):
+        """Clone source metadata for a non-slice-filtered gridded PolyLine entity."""
+        if not source_uid or vtk_obj is None:
+            return None
+
+        entity_dict = deepcopy(self.parent.geol_coll.entity_dict)
+        base_name = self._build_propagated_entity_name(
+            seed_uid=source_uid,
+            slice_indices=[],
+            fallback_name=fallback_name,
+        )
+        try:
+            import re
+
+            base_name = re.sub(
+                r"\s+regularized\s*$", "", str(base_name).strip(), flags=re.IGNORECASE
+            )
+            base_name = re.sub(
+                r"\s+gridded\s*$", "", str(base_name).strip(), flags=re.IGNORECASE
+            )
+        except Exception:
+            pass
+
+        if slice_indices:
+            entity_dict["name"] = (
+                f"{base_name} gridded ({int(slice_indices[0])}-{int(slice_indices[-1])})"
+            )
+        else:
+            entity_dict["name"] = f"{base_name} gridded"
+
+        entity_dict["topology"] = "PolyLine"
+        entity_dict["vtk_obj"] = vtk_obj
+
+        for key, getter_name, default in (
+            ("role", "get_uid_role", "undef"),
+            ("feature", "get_uid_feature", fallback_name),
+            ("scenario", "get_uid_scenario", "undef"),
+            ("parent_uid", "get_uid_x_section", ""),
+        ):
+            try:
+                entity_dict[key] = getattr(self.parent.geol_coll, getter_name)(source_uid)
+            except Exception:
+                entity_dict[key] = default
+
+        entity_dict["properties_names"] = []
+        entity_dict["properties_components"] = []
+        return entity_dict
 
     def _get_multipart_sampling_primary_axis(self, axis=None, entity_kind="horizon"):
         """Return the preferred in-plane ordering axis for multipart regularization."""
@@ -2113,6 +3465,7 @@ class ViewInterpretation(ViewMap):
         target_point_count=None,
         smooth_sigma=1.0,
         preserve_slice_indices=None,
+        gridded_resampling=False,
     ):
         """Rebuild multipart geometry with uniform per-slice sampling."""
         cells = self._extract_multipart_regularization_cells(
@@ -2160,7 +3513,16 @@ class ViewInterpretation(ViewMap):
                 if cell["slice_idx"] in keep_original:
                     smoothed_stack[row_idx, :, :] = resampled_stack[row_idx, :, :]
 
+        if gridded_resampling:
+            smoothed_stack = self._apply_gridded_regularization(
+                point_stack=smoothed_stack,
+                cells=cells,
+                axis=axis,
+                smooth_sigma=smooth_sigma,
+                preserve_slice_indices=preserve_slice_indices,
+            )
 
+        from vtk import vtkCellArray, vtkIntArray, vtkPoints
 
         new_points = vtkPoints()
         new_lines = vtkCellArray()
@@ -2235,38 +3597,111 @@ class ViewInterpretation(ViewMap):
             "old_median_spacing": float(np.median(old_spacings)) if old_spacings else 0.0,
             "new_points_per_slice": int(target_point_count),
             "smooth_sigma": smooth_sigma,
+            "gridded_resampling": bool(gridded_resampling),
             "merged_part_count": int(
                 sum(max(0, cell.get("parts_merged", 1) - 1) for cell in cells)
             ),
         }
-        return regularized_line, regularized_slices, slice_to_cell_index, stats
+        grid_vtk = None
+        if gridded_resampling:
+            grid_vtk = self._build_grid_polyline_from_stack(point_stack=smoothed_stack)
+        return regularized_line, regularized_slices, slice_to_cell_index, stats, grid_vtk
 
-    def regularize_multipart_sampling(self):
-        """Uniformly resample a propagated multipart horizon/fault for downstream modelling."""
-        selection = self._get_selected_multipart_entity_for_edit(
-            action_title="Regularize Multipart Sampling"
-        )
+    def _get_selected_multipart_entities_for_edit(self, action_title="Edit Multipart Slices"):
+        """Resolve all selected propagated multipart horizons/faults and validate their slice metadata."""
+        geol_uids = set(self.parent.geol_coll.get_uids)
+        selected_uids = [
+            uid
+            for uid in list(getattr(self.parent, "selected_uids", []) or [])
+            if uid in geol_uids
+        ]
+        if not selected_uids:
+            message_dialog(
+                title=action_title,
+                message="Select at least one propagated horizon or fault in the geology tree.",
+            )
+            return []
+
+        selections = []
+        skipped_uids = []
+        for uid in selected_uids:
+            selection = self._resolve_multipart_entity_for_edit(
+                uid=uid,
+                action_title=action_title,
+                show_messages=False,
+            )
+            if selection is None:
+                skipped_uids.append(uid)
+                continue
+            selections.append(selection)
+
+        if not selections:
+            message_dialog(
+                title=action_title,
+                message="None of the selected entities is a propagated multipart horizon or fault.",
+            )
+            return []
+
+        if skipped_uids:
+            skipped_labels = []
+            for uid in skipped_uids[:5]:
+                try:
+                    skipped_labels.append(self.parent.geol_coll.get_uid_name(uid))
+                except Exception:
+                    skipped_labels.append(f"{uid[:8]}...")
+            more_count = max(0, len(skipped_uids) - len(skipped_labels))
+            more_suffix = f" and {more_count} more" if more_count else ""
+            self.print_terminal(
+                "Skipped selected geology entities that are not editable multipart horizons/faults: "
+                f"{', '.join(skipped_labels)}{more_suffix}."
+            )
+
+        return selections
+
+    def _describe_multipart_entity_for_dialog(self, selection=None):
+        """Build a compact label for dialog titles when editing multipart entities."""
         if selection is None:
-            return
+            return "multipart entity"
+
+        uid = selection.get("uid")
+        entity_kind = selection.get("entity_kind", "multipart")
+        try:
+            entity_name = str(self.parent.geol_coll.get_uid_name(uid)).strip()
+        except Exception:
+            entity_name = ""
+
+        if entity_name:
+            return f"{entity_kind}: {entity_name}"
+        return f"{entity_kind}: {uid[:8]}..." if uid else entity_kind
+
+    def _regularize_single_multipart_entity(
+        self, selection=None, action_title="Regularize Multipart Sampling"
+    ):
+        """Regularize one propagated multipart horizon/fault and report whether the flow completed."""
+        if selection is None:
+            return "failed"
 
         uid = selection["uid"]
         entity_kind = selection["entity_kind"]
         entity_info = selection["entity_info"]
         vtk_obj = selection["vtk_obj"]
+        available_slices = selection["available_slices"]
         axis = entity_info.get("axis", self.current_axis)
+        entity_label = self._describe_multipart_entity_for_dialog(selection=selection)
+        dialog_title = f"{action_title} - {entity_label}"
 
         defaults = self._estimate_multipart_regularization_defaults(
             vtk_obj=vtk_obj, axis=axis, entity_kind=entity_kind
         )
         if defaults["slice_count"] == 0:
             message_dialog(
-                title="Regularize Multipart Sampling",
+                title=dialog_title,
                 message="The selected multipart entity does not contain valid line geometry.",
             )
-            return
+            return "failed"
 
         settings = multiple_input_dialog(
-            title="Regularize Multipart Sampling",
+            title=f"{dialog_title} ({available_slices[0]}-{available_slices[-1]})",
             input_dict={
                 "points_per_slice": [
                     "Points per slice:",
@@ -2281,44 +3716,69 @@ class ViewInterpretation(ViewMap):
                     ["Yes", "No"],
                     "Yes",
                 ],
+                "gridded_resampling": [
+                    "Gridded resampling for Delaunay-ready sampling:",
+                    ["No", "Yes"],
+                    "No",
+                ],
             },
         )
         if settings is None:
-            return
+            return "cancelled"
 
         try:
             points_per_slice = max(2, int(settings["points_per_slice"]))
             smooth_sigma = max(0.0, float(settings["smooth_sigma"]))
             preserve_seed_slice = str(settings["preserve_seed_slice"]).strip().lower() != "no"
+            gridded_resampling = (
+                str(settings.get("gridded_resampling", "No")).strip().lower() == "yes"
+            )
         except Exception:
             message_dialog(
-                title="Regularize Multipart Sampling",
+                title=dialog_title,
                 message="Invalid resampling parameters.",
             )
-            return
+            return "failed"
 
         preserve_slice_indices = []
         seed_slice = entity_info.get("seed_slice")
-        if preserve_seed_slice and seed_slice in selection["available_slices"]:
+        if preserve_seed_slice and seed_slice in available_slices:
             preserve_slice_indices.append(int(seed_slice))
 
-        new_vtk, new_slices, slice_to_cell_index, stats = self._build_regularized_multipart_vtk(
+        new_vtk, new_slices, slice_to_cell_index, stats, grid_vtk = self._build_regularized_multipart_vtk(
             vtk_obj=vtk_obj,
             axis=axis,
             entity_kind=entity_kind,
             target_point_count=points_per_slice,
             smooth_sigma=smooth_sigma,
             preserve_slice_indices=preserve_slice_indices,
+            gridded_resampling=gridded_resampling,
         )
         if new_vtk is None or not new_slices:
             message_dialog(
-                title="Regularize Multipart Sampling",
+                title=dialog_title,
                 message="Could not rebuild the selected multipart geometry.",
             )
-            return
+            return "failed"
+
+        grid_uid = None
+        fallback_name = "fault" if entity_kind == "fault" else "multipart"
+        if gridded_resampling and grid_vtk is not None:
+            grid_entity_dict = self._build_grid_entity_dict_from_source(
+                source_uid=uid,
+                vtk_obj=grid_vtk,
+                slice_indices=new_slices,
+                fallback_name=fallback_name,
+            )
+            if grid_entity_dict is None:
+                message_dialog(
+                    title=dialog_title,
+                    message="Could not build the gridded companion entity.",
+                )
+                return "failed"
 
         write_mode = options_dialog(
-            title="Regularize Multipart Sampling",
+            title=dialog_title,
             message=(
                 f"Do you want to overwrite the original multipart {entity_kind}, "
                 f"or keep it and add a new regularized entity?"
@@ -2328,10 +3788,11 @@ class ViewInterpretation(ViewMap):
             reject_role="Cancel",
         )
         if write_mode not in (0, 1):
-            return
+            return "cancelled"
 
         if write_mode == 1:
-            fallback_name = "fault" if entity_kind == "fault" else "multipart"
+            import re
+
             new_entity_dict = self._build_multipart_entity_dict_from_source(
                 source_uid=uid,
                 vtk_obj=new_vtk,
@@ -2340,10 +3801,10 @@ class ViewInterpretation(ViewMap):
             )
             if new_entity_dict is None:
                 message_dialog(
-                    title="Regularize Multipart Sampling",
+                    title=dialog_title,
                     message="Could not build the new regularized multipart entity.",
                 )
-                return
+                return "failed"
 
             base_name = self._build_propagated_entity_name(
                 seed_uid=uid,
@@ -2380,6 +3841,13 @@ class ViewInterpretation(ViewMap):
                 self.update_multipart_fault_visibility(uid)
                 self.update_multipart_fault_visibility(new_uid)
 
+            if gridded_resampling and grid_vtk is not None:
+                grid_uid = self.parent.geol_coll.add_entity_from_dict(grid_entity_dict)
+                try:
+                    self.set_actor_visibility(grid_uid, False)
+                except Exception:
+                    pass
+
             self._mark_slice_visibility_dirty()
             self.plotter.render()
             self.print_terminal(
@@ -2388,9 +3856,11 @@ class ViewInterpretation(ViewMap):
                 f"{int(round(stats['old_median_points']))} -> {stats['new_points_per_slice']} "
                 f"points/slice, merged {stats['merged_part_count']} duplicate slice parts, "
                 f"median spacing {stats['old_median_spacing']:.3f}, "
-                f"smoothing sigma {stats['smooth_sigma']:.2f}."
+                f"smoothing sigma {stats['smooth_sigma']:.2f}, "
+                f"gridded resampling {'on' if stats.get('gridded_resampling') else 'off'}"
+                f"{f', grid entity {grid_uid[:8]}...' if grid_uid else ''}."
             )
-            return
+            return "done"
 
         self._remove_filtered_actor(f"multipart_slice_{uid}")
         self._remove_filtered_actor(f"multipart_fault_slice_{uid}")
@@ -2416,6 +3886,13 @@ class ViewInterpretation(ViewMap):
             self.update_multipart_horizon_visibility(uid)
         if uid in getattr(self, "multipart_faults", {}):
             self.update_multipart_fault_visibility(uid)
+
+        if gridded_resampling and grid_vtk is not None:
+            grid_uid = self.parent.geol_coll.add_entity_from_dict(grid_entity_dict)
+            try:
+                self.set_actor_visibility(grid_uid, False)
+            except Exception:
+                pass
         self.plotter.render()
 
         self.print_terminal(
@@ -2423,8 +3900,204 @@ class ViewInterpretation(ViewMap):
             f"{int(round(stats['old_median_points']))} -> {stats['new_points_per_slice']} "
             f"points/slice, merged {stats['merged_part_count']} duplicate slice parts, "
             f"median spacing {stats['old_median_spacing']:.3f}, "
-            f"smoothing sigma {stats['smooth_sigma']:.2f}."
+            f"smoothing sigma {stats['smooth_sigma']:.2f}, "
+            f"gridded resampling {'on' if stats.get('gridded_resampling') else 'off'}"
+            f"{f', grid entity {grid_uid[:8]}...' if grid_uid else ''}."
         )
+        return "done"
+
+    def regularize_multipart_sampling(self):
+        """Uniformly resample selected propagated multipart horizons/faults for downstream modelling."""
+        selections = self._get_selected_multipart_entities_for_edit(
+            action_title="Regularize Multipart Sampling"
+        )
+        if not selections:
+            return
+
+        processed_count = 0
+        total_count = len(selections)
+        for index, selection in enumerate(selections, start=1):
+            action_title = "Regularize Multipart Sampling"
+            if total_count > 1:
+                action_title = f"Regularize Multipart Sampling ({index}/{total_count})"
+
+            status = self._regularize_single_multipart_entity(
+                selection=selection,
+                action_title=action_title,
+            )
+            if status == "cancelled":
+                if total_count > 1 and index < total_count:
+                    self.print_terminal(
+                        f"Stopped multipart regularization after {processed_count} of "
+                        f"{total_count} selected entities."
+                    )
+                return
+            if status == "done":
+                processed_count += 1
+
+    def simplify_selected_lines(self):
+        """Simplify selected interpretation polylines, including multipart entities."""
+        self.print_terminal(
+            "Simplify line. Define tolerance value: small values preserve more vertices."
+        )
+
+        selected_uids = list(getattr(self.parent, "selected_uids", []) or [])
+        if not selected_uids:
+            self.print_terminal(" -- No input data selected -- ")
+            return
+
+        tolerance_p = input_one_value_dialog(
+            parent=self,
+            title="Simplify - Tolerance",
+            label="Insert tolerance parameter",
+            default_value="0.1",
+        )
+        if tolerance_p is None:
+            return
+        if tolerance_p <= 0:
+            tolerance_p = 0.1
+
+        processed_uids = []
+        for uid in selected_uids:
+            if uid not in set(self.parent.geol_coll.get_uids):
+                continue
+
+            try:
+                topology = self.parent.geol_coll.get_uid_topology(uid)
+            except Exception:
+                topology = None
+            if topology != "PolyLine":
+                self.print_terminal(f" -- Selected data is not a line: {uid} -- ")
+                continue
+
+            try:
+                vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            except Exception:
+                vtk_obj = None
+            if vtk_obj is None or vtk_obj.GetNumberOfCells() == 0:
+                self.print_terminal(f" -- Object not valid for {uid} -- ")
+                continue
+
+            self.scan_and_index_single_horizon(uid)
+            axis = self._resolve_polyline_axis_for_simplify(uid=uid, vtk_obj=vtk_obj)
+            new_vtk, slice_indices, slice_to_cell_index, stats = (
+                self._build_simplified_polyline_vtk(
+                    vtk_obj=vtk_obj,
+                    tolerance=tolerance_p,
+                    axis=axis,
+                )
+            )
+            if new_vtk is None or new_vtk.GetNumberOfCells() == 0:
+                self.print_terminal(f" -- Simplification failed for {uid} -- ")
+                continue
+
+            self._remove_filtered_actor(f"multipart_slice_{uid}")
+            self._remove_filtered_actor(f"multipart_fault_slice_{uid}")
+            self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=new_vtk)
+
+            if slice_indices:
+                self._register_multipart_interpretation_entity(
+                    uid=uid,
+                    axis=axis,
+                    slice_indices=slice_indices,
+                    slice_to_cell_index=slice_to_cell_index,
+                )
+            elif uid in getattr(self, "interpretation_lines", {}):
+                self.register_interpretation_line(uid, self.interpretation_lines[uid])
+
+            processed_uids.append(uid)
+            if uid in getattr(self, "multipart_horizons", {}):
+                entity_kind = "multipart horizon"
+            elif uid in getattr(self, "multipart_faults", {}):
+                entity_kind = "multipart fault"
+            else:
+                entity_kind = "line"
+            self.print_terminal(
+                f"Simplified {entity_kind} {uid[:8]}... on {axis}: "
+                f"{stats['old_total_points']} -> {stats['new_total_points']} points "
+                f"across {stats['cell_count']} cell(s)."
+            )
+
+        if not processed_uids:
+            return
+
+        self._mark_slice_visibility_dirty()
+        self.update_interpretation_line_visibility()
+        self.update_all_multipart_horizons_visibility()
+        self.update_all_multipart_faults_visibility()
+        self.plotter.render()
+        self.clear_selection()
+
+    def _resolve_multipart_entity_for_edit(
+        self, uid=None, action_title="Edit Multipart Slices", show_messages=True
+    ):
+        """Resolve one propagated multipart entity and validate its slice metadata."""
+        if uid not in set(self.parent.geol_coll.get_uids):
+            if show_messages:
+                message_dialog(
+                    title=action_title,
+                    message="The selected entity is not present in the geology tree.",
+                )
+            return None
+
+        self.scan_and_index_single_horizon(uid)
+
+        entity_kind = None
+        entity_info = None
+        if uid in getattr(self, "multipart_horizons", {}):
+            entity_kind = "horizon"
+            entity_info = self.multipart_horizons[uid]
+        elif uid in getattr(self, "multipart_faults", {}):
+            entity_kind = "fault"
+            entity_info = self.multipart_faults[uid]
+
+        if entity_info is None:
+            if show_messages:
+                message_dialog(
+                    title=action_title,
+                    message="The selected entity is not a propagated multipart horizon or fault.",
+                )
+            return None
+
+        vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        if vtk_obj is None or vtk_obj.GetNumberOfCells() == 0:
+            if show_messages:
+                message_dialog(
+                    title=action_title,
+                    message="The selected entity has no geometry to edit.",
+                )
+            return None
+
+        cell_data = vtk_obj.GetCellData()
+        if cell_data is None or not cell_data.HasArray("slice_index"):
+            if show_messages:
+                message_dialog(
+                    title=action_title,
+                    message="The selected multipart entity has no slice_index cell data.",
+                )
+            return None
+
+        available_slices = sorted(
+            {int(idx) for idx in entity_info.get("slice_indices", [])}
+            or set(self._extract_slice_indices_from_vtk(vtk_obj))
+        )
+        if not available_slices:
+            if show_messages:
+                message_dialog(
+                    title=action_title,
+                    message="No slice indices were found on the selected entity.",
+                )
+            return None
+
+        return {
+            "uid": uid,
+            "entity_kind": entity_kind,
+            "entity_info": entity_info,
+            "vtk_obj": vtk_obj,
+            "cell_data": cell_data,
+            "slice_array": cell_data.GetArray("slice_index"),
+            "available_slices": available_slices,
+        }
 
     def _get_selected_multipart_entity_for_edit(self, action_title="Edit Multipart Slices"):
         """Resolve the selected propagated multipart entity and validate its slice metadata."""
@@ -2440,61 +4113,11 @@ class ViewInterpretation(ViewMap):
             )
             return None
 
-        uid = selected_uids[0]
-        self.scan_and_index_single_horizon(uid)
-
-        entity_kind = None
-        entity_info = None
-        if uid in getattr(self, "multipart_horizons", {}):
-            entity_kind = "horizon"
-            entity_info = self.multipart_horizons[uid]
-        elif uid in getattr(self, "multipart_faults", {}):
-            entity_kind = "fault"
-            entity_info = self.multipart_faults[uid]
-
-        if entity_info is None:
-            message_dialog(
-                title=action_title,
-                message="The selected entity is not a propagated multipart horizon or fault.",
-            )
-            return None
-
-        vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
-        if vtk_obj is None or vtk_obj.GetNumberOfCells() == 0:
-            message_dialog(
-                title=action_title,
-                message="The selected entity has no geometry to edit.",
-            )
-            return None
-
-        cell_data = vtk_obj.GetCellData()
-        if cell_data is None or not cell_data.HasArray("slice_index"):
-            message_dialog(
-                title=action_title,
-                message="The selected multipart entity has no slice_index cell data.",
-            )
-            return None
-
-        available_slices = sorted(
-            {int(idx) for idx in entity_info.get("slice_indices", [])}
-            or set(self._extract_slice_indices_from_vtk(vtk_obj))
+        return self._resolve_multipart_entity_for_edit(
+            uid=selected_uids[0],
+            action_title=action_title,
+            show_messages=True,
         )
-        if not available_slices:
-            message_dialog(
-                title=action_title,
-                message="No slice indices were found on the selected entity.",
-            )
-            return None
-
-        return {
-            "uid": uid,
-            "entity_kind": entity_kind,
-            "entity_info": entity_info,
-            "vtk_obj": vtk_obj,
-            "cell_data": cell_data,
-            "slice_array": cell_data.GetArray("slice_index"),
-            "available_slices": available_slices,
-        }
 
     def delete_multipart_slices(self):
         """Delete a slice interval from the selected propagated multipart horizon/fault."""
@@ -3183,10 +4806,10 @@ class ViewInterpretation(ViewMap):
         # Debug: print plane bounds to verify it's at the right position
         self.print_terminal(f"Picking plane bounds: {plane.bounds}")
 
-    def snap_points_to_slice(self, points):
+    def snap_points_to_slice(self, points, points_are_display_coords=True):
         """Snap points to the current slice plane based on the current axis and slice position.
-        Points from the tracer are in display coordinates (with VE applied), so we need to
-        convert them back to real world coordinates before storing."""
+        Points from the tracer are typically in display coordinates (with VE applied), so
+        convert them back to real world coordinates before storing when requested."""
         snapped = points.copy()
         
         # Get the current vertical exaggeration from the plotter scale
@@ -3202,9 +4825,9 @@ class ViewInterpretation(ViewMap):
         
         self.print_terminal(f"Snapping with v_exag={v_exag}, axis={self.current_axis}, slice_pos={self.current_slice_position}")
         
-        # Only Z coordinates need to be unscaled (X and Y don't have exaggeration)
-        # The tracer picks in display space which has vertical exaggeration applied to Z
-        if v_exag != 1.0:
+        # Only Z coordinates need to be unscaled when the picked points come from
+        # display-space interactions such as traced contours on the rendered slice.
+        if points_are_display_coords and v_exag != 1.0:
             snapped[:, 2] = snapped[:, 2] / v_exag
             self.print_terminal(f"Unscaled Z by factor {v_exag}")
         
@@ -5430,6 +7053,13 @@ class ViewInterpretation(ViewMap):
         combo_horizon.setMinimumWidth(250)
         horizon_layout.addWidget(combo_horizon, 1)
         layout.addLayout(horizon_layout)
+
+        tooltip_hint = QLabel(
+            "Hover an attribute or parameter to see what it does and what Low or High values mean."
+        )
+        tooltip_hint.setStyleSheet("color: gray;")
+        tooltip_hint.setWordWrap(True)
+        layout.addWidget(tooltip_hint)
         
         # === TWO COLUMN LAYOUT ===
         columns_layout = QHBoxLayout()
@@ -5465,6 +7095,26 @@ class ViewInterpretation(ViewMap):
         check_phase = QCheckBox("Phase")
         check_similarity = QCheckBox("Similarity")
         check_dip = QCheckBox("Dip")
+        self._apply_control_tooltip(
+            check_amplitude,
+            "Track the reflector by envelope/reflection strength. Best for bright, continuous horizons.",
+        )
+        self._apply_control_tooltip(
+            check_edge,
+            "Track the reflector boundary by gradient strength. Useful when the event is clearer as an edge than as a peak or trough.",
+        )
+        self._apply_control_tooltip(
+            check_phase,
+            "Track phase continuity. Useful where amplitude is weak but the reflector keeps a stable phase character.",
+        )
+        self._apply_control_tooltip(
+            check_similarity,
+            "Favor lateral coherence from trace to trace. Helps reject noisy or isolated picks.",
+        )
+        self._apply_control_tooltip(
+            check_dip,
+            "Favor dip continuity from slice to slice. Useful for smooth structure; less useful where dip changes abruptly.",
+        )
         attr_layout.addWidget(check_amplitude)
         attr_layout.addWidget(check_edge)
         attr_layout.addWidget(check_phase)
@@ -5486,23 +7136,79 @@ class ViewInterpretation(ViewMap):
         spin_slices = QSpinBox()
         spin_slices.setRange(1, 500)
         spin_slices.setValue(50)
-        params_form.addRow("Slices:", spin_slices)
+        self._apply_control_tooltip(
+            spin_slices,
+            "How many slices to propagate away from the seed.",
+            low_text="Shorter propagation. Faster and safer when you only trust the seed locally.",
+            high_text="Longer propagation. Covers more of the volume, but drift can accumulate farther from the seed.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Slices:",
+                "How many slices to propagate away from the seed.",
+                low_text="Shorter propagation. Faster and safer when you only trust the seed locally.",
+                high_text="Longer propagation. Covers more of the volume, but drift can accumulate farther from the seed.",
+            ),
+            spin_slices,
+        )
         
         spin_search = QSpinBox()
         spin_search.setRange(5, 50)
         spin_search.setValue(15)
-        params_form.addRow("Search window:", spin_search)
+        self._apply_control_tooltip(
+            spin_search,
+            "Vertical search range around the previous depth pick on each new slice.",
+            low_text="Stays close to the previous pick. Better for stable reflectors, but may miss real jumps, drag, or throw.",
+            high_text="Allows larger depth changes. Better for complex structure, but easier to jump to the wrong reflector.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Search window:",
+                "Vertical search range around the previous depth pick on each new slice.",
+                low_text="Stays close to the previous pick. Better for stable reflectors, but may miss real jumps, drag, or throw.",
+                high_text="Allows larger depth changes. Better for complex structure, but easier to jump to the wrong reflector.",
+            ),
+            spin_search,
+        )
         
         spin_smooth = QDoubleSpinBox()
         spin_smooth.setRange(0.0, 10.0)
         spin_smooth.setValue(2.0)
         spin_smooth.setSingleStep(0.5)
-        params_form.addRow("Smoothing:", spin_smooth)
+        self._apply_control_tooltip(
+            spin_smooth,
+            "How strongly the propagated horizon is smoothed along the picked line.",
+            low_text="Preserves local bends and fault-related shape changes, but can look noisy.",
+            high_text="Produces a cleaner line, but can flatten subtle structure or over-smooth real geometry.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Smoothing:",
+                "How strongly the propagated horizon is smoothed along the picked line.",
+                low_text="Preserves local bends and fault-related shape changes, but can look noisy.",
+                high_text="Produces a cleaner line, but can flatten subtle structure or over-smooth real geometry.",
+            ),
+            spin_smooth,
+        )
         
         spin_max_jump = QSpinBox()
         spin_max_jump.setRange(1, 20)
         spin_max_jump.setValue(3)
-        params_form.addRow("Max jump:", spin_max_jump)
+        self._apply_control_tooltip(
+            spin_max_jump,
+            "Maximum allowed sample-to-sample change after smoothing.",
+            low_text="Keeps the horizon very stable and continuous, but may not follow steep or sharply bent events.",
+            high_text="Allows sharper curvature and local offsets, but can admit zig-zagging or unstable picks.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Max jump:",
+                "Maximum allowed sample-to-sample change after smoothing.",
+                low_text="Keeps the horizon very stable and continuous, but may not follow steep or sharply bent events.",
+                high_text="Allows sharper curvature and local offsets, but can admit zig-zagging or unstable picks.",
+            ),
+            spin_max_jump,
+        )
         
         right_widget.addWidget(params_group)
 
@@ -5514,27 +7220,97 @@ class ViewInterpretation(ViewMap):
         spin_fault_snap_weight.setRange(0.0, 10.0)
         spin_fault_snap_weight.setValue(2.0)
         spin_fault_snap_weight.setSingleStep(0.1)
-        fault_form.addRow("Snap weight:", spin_fault_snap_weight)
+        self._apply_control_tooltip(
+            spin_fault_snap_weight,
+            "How strongly a real horizon/fault crossing is pulled toward the mapped fault position.",
+            low_text="Weak attachment. Safer if fault picks are uncertain, but contacts may detach across slices.",
+            high_text="Strong attachment. Better for preserving true crossings, but can over-pull the horizon onto a wrong fault trace.",
+        )
+        fault_form.addRow(
+            self._make_control_label(
+                "Snap weight:",
+                "How strongly a real horizon/fault crossing is pulled toward the mapped fault position.",
+                low_text="Weak attachment. Safer if fault picks are uncertain, but contacts may detach across slices.",
+                high_text="Strong attachment. Better for preserving true crossings, but can over-pull the horizon onto a wrong fault trace.",
+            ),
+            spin_fault_snap_weight,
+        )
 
         spin_fault_attach_depth_tol = QSpinBox()
         spin_fault_attach_depth_tol.setRange(0, 20)
         spin_fault_attach_depth_tol.setValue(2)
-        fault_form.addRow("Depth tol:", spin_fault_attach_depth_tol)
+        self._apply_control_tooltip(
+            spin_fault_attach_depth_tol,
+            "Allowed depth mismatch when following the same crossing onto the next slice.",
+            low_text="Strict depth matching. Prevents false attachments, but may lose real crossings when throw changes quickly.",
+            high_text="Flexible depth matching. Better for variable throw, but can attach to the wrong depth level.",
+        )
+        fault_form.addRow(
+            self._make_control_label(
+                "Depth tol:",
+                "Allowed depth mismatch when following the same crossing onto the next slice.",
+                low_text="Strict depth matching. Prevents false attachments, but may lose real crossings when throw changes quickly.",
+                high_text="Flexible depth matching. Better for variable throw, but can attach to the wrong depth level.",
+            ),
+            spin_fault_attach_depth_tol,
+        )
 
         spin_fault_attach_row_tol = QSpinBox()
         spin_fault_attach_row_tol.setRange(0, 30)
         spin_fault_attach_row_tol.setValue(8)
-        fault_form.addRow("Row tol:", spin_fault_attach_row_tol)
+        self._apply_control_tooltip(
+            spin_fault_attach_row_tol,
+            "How far laterally the current horizon may sit from the predicted crossing before attachment is rejected.",
+            low_text="Strict lateral consistency. Good for clean data, but may miss real crossings in noisy areas.",
+            high_text="Permissive lateral consistency. Better for noisy data, but easier to force a wrong crossing.",
+        )
+        fault_form.addRow(
+            self._make_control_label(
+                "Row tol:",
+                "How far laterally the current horizon may sit from the predicted crossing before attachment is rejected.",
+                low_text="Strict lateral consistency. Good for clean data, but may miss real crossings in noisy areas.",
+                high_text="Permissive lateral consistency. Better for noisy data, but easier to force a wrong crossing.",
+            ),
+            spin_fault_attach_row_tol,
+        )
 
         spin_fault_attach_col_tol = QSpinBox()
         spin_fault_attach_col_tol.setRange(0, 20)
         spin_fault_attach_col_tol.setValue(4)
-        fault_form.addRow("Col tol:", spin_fault_attach_col_tol)
+        self._apply_control_tooltip(
+            spin_fault_attach_col_tol,
+            "How far vertically the current horizon may sit from the predicted crossing before attachment is rejected.",
+            low_text="Strict vertical consistency. Safer for clean horizons, but can miss real crossings with local depth variation.",
+            high_text="More vertical flexibility. Better for drag or rollover near faults, but can lock onto the wrong event.",
+        )
+        fault_form.addRow(
+            self._make_control_label(
+                "Col tol:",
+                "How far vertically the current horizon may sit from the predicted crossing before attachment is rejected.",
+                low_text="Strict vertical consistency. Safer for clean horizons, but can miss real crossings with local depth variation.",
+                high_text="More vertical flexibility. Better for drag or rollover near faults, but can lock onto the wrong event.",
+            ),
+            spin_fault_attach_col_tol,
+        )
 
         spin_fault_attach_blend = QSpinBox()
         spin_fault_attach_blend.setRange(0, 10)
         spin_fault_attach_blend.setValue(3)
-        fault_form.addRow("Blend rows:", spin_fault_attach_blend)
+        self._apply_control_tooltip(
+            spin_fault_attach_blend,
+            "How many neighboring samples are softly blended into the attached crossing point.",
+            low_text="Very localized attachment. Preserves sharp offsets, but may leave a visible kink.",
+            high_text="Broader blending. Produces a smoother contact, but may smear the throw over too wide an area.",
+        )
+        fault_form.addRow(
+            self._make_control_label(
+                "Blend rows:",
+                "How many neighboring samples are softly blended into the attached crossing point.",
+                low_text="Very localized attachment. Preserves sharp offsets, but may leave a visible kink.",
+                high_text="Broader blending. Produces a smoother contact, but may smear the throw over too wide an area.",
+            ),
+            spin_fault_attach_blend,
+        )
 
         right_widget.addWidget(fault_group)
         
@@ -5549,42 +7325,132 @@ class ViewInterpretation(ViewMap):
         spin_smooth_weight.setRange(0.0, 1.0)
         spin_smooth_weight.setValue(0.3)
         spin_smooth_weight.setSingleStep(0.1)
-        weights_grid.addWidget(QLabel("Smooth:"), 0, 0)
+        self._apply_control_tooltip(
+            spin_smooth_weight,
+            "How strongly the tracker prefers continuity with the previous slice.",
+            low_text="Attributes dominate. More flexible, but easier to drift.",
+            high_text="Continuity dominates. More stable, but less able to follow real structural changes.",
+        )
+        weights_grid.addWidget(
+            self._make_control_label(
+                "Smooth:",
+                "How strongly the tracker prefers continuity with the previous slice.",
+                low_text="Attributes dominate. More flexible, but easier to drift.",
+                high_text="Continuity dominates. More stable, but less able to follow real structural changes.",
+            ),
+            0,
+            0,
+        )
         weights_grid.addWidget(spin_smooth_weight, 0, 1)
         
         spin_amp_weight = QDoubleSpinBox()
         spin_amp_weight.setRange(0.0, 1.0)
         spin_amp_weight.setValue(0.3)
         spin_amp_weight.setSingleStep(0.1)
-        weights_grid.addWidget(QLabel("Amp:"), 0, 2)
+        self._apply_control_tooltip(
+            spin_amp_weight,
+            "How much reflection strength influences the pick.",
+            low_text="Amplitude has little effect. Useful if amplitudes are unreliable.",
+            high_text="Strong reflectors dominate. Good for bright horizons, risky if nearby events are brighter.",
+        )
+        weights_grid.addWidget(
+            self._make_control_label(
+                "Amp:",
+                "How much reflection strength influences the pick.",
+                low_text="Amplitude has little effect. Useful if amplitudes are unreliable.",
+                high_text="Strong reflectors dominate. Good for bright horizons, risky if nearby events are brighter.",
+            ),
+            0,
+            2,
+        )
         weights_grid.addWidget(spin_amp_weight, 0, 3)
         
         spin_edge_weight = QDoubleSpinBox()
         spin_edge_weight.setRange(0.0, 1.0)
         spin_edge_weight.setValue(0.2)
         spin_edge_weight.setSingleStep(0.1)
-        weights_grid.addWidget(QLabel("Edge:"), 1, 0)
+        self._apply_control_tooltip(
+            spin_edge_weight,
+            "How much reflector boundary sharpness influences the pick.",
+            low_text="Edge sharpness has little effect.",
+            high_text="Sharp boundaries dominate. Good for crisp events, risky in noisy data or near faults.",
+        )
+        weights_grid.addWidget(
+            self._make_control_label(
+                "Edge:",
+                "How much reflector boundary sharpness influences the pick.",
+                low_text="Edge sharpness has little effect.",
+                high_text="Sharp boundaries dominate. Good for crisp events, risky in noisy data or near faults.",
+            ),
+            1,
+            0,
+        )
         weights_grid.addWidget(spin_edge_weight, 1, 1)
         
         spin_phase_weight = QDoubleSpinBox()
         spin_phase_weight.setRange(0.0, 1.0)
         spin_phase_weight.setValue(0.2)
         spin_phase_weight.setSingleStep(0.1)
-        weights_grid.addWidget(QLabel("Phase:"), 1, 2)
+        self._apply_control_tooltip(
+            spin_phase_weight,
+            "How much phase continuity influences the pick.",
+            low_text="Phase has little effect.",
+            high_text="Phase continuity dominates. Useful for subtle events, but can mislead if phase is unstable.",
+        )
+        weights_grid.addWidget(
+            self._make_control_label(
+                "Phase:",
+                "How much phase continuity influences the pick.",
+                low_text="Phase has little effect.",
+                high_text="Phase continuity dominates. Useful for subtle events, but can mislead if phase is unstable.",
+            ),
+            1,
+            2,
+        )
         weights_grid.addWidget(spin_phase_weight, 1, 3)
         
         spin_sim_weight = QDoubleSpinBox()
         spin_sim_weight.setRange(0.0, 1.0)
         spin_sim_weight.setValue(0.15)
         spin_sim_weight.setSingleStep(0.05)
-        weights_grid.addWidget(QLabel("Sim:"), 2, 0)
+        self._apply_control_tooltip(
+            spin_sim_weight,
+            "How much lateral coherence influences the pick.",
+            low_text="Similarity has little effect.",
+            high_text="Coherence dominates. Good for continuous horizons, but may suppress real local changes.",
+        )
+        weights_grid.addWidget(
+            self._make_control_label(
+                "Sim:",
+                "How much lateral coherence influences the pick.",
+                low_text="Similarity has little effect.",
+                high_text="Coherence dominates. Good for continuous horizons, but may suppress real local changes.",
+            ),
+            2,
+            0,
+        )
         weights_grid.addWidget(spin_sim_weight, 2, 1)
         
         spin_dip_weight = QDoubleSpinBox()
         spin_dip_weight.setRange(0.0, 1.0)
         spin_dip_weight.setValue(0.15)
         spin_dip_weight.setSingleStep(0.05)
-        weights_grid.addWidget(QLabel("Dip:"), 2, 2)
+        self._apply_control_tooltip(
+            spin_dip_weight,
+            "How much dip continuity from the previous slice influences the pick.",
+            low_text="Dip has little effect. Better where dip changes quickly.",
+            high_text="Dip continuity dominates. Better for smooth structure, but can resist real local dip changes.",
+        )
+        weights_grid.addWidget(
+            self._make_control_label(
+                "Dip:",
+                "How much dip continuity from the previous slice influences the pick.",
+                low_text="Dip has little effect. Better where dip changes quickly.",
+                high_text="Dip continuity dominates. Better for smooth structure, but can resist real local dip changes.",
+            ),
+            2,
+            2,
+        )
         weights_grid.addWidget(spin_dip_weight, 2, 3)
         
         right_widget.addWidget(weights_group)
@@ -6209,6 +8075,13 @@ class ViewInterpretation(ViewMap):
         info.setStyleSheet("color: gray; font-style: italic;")
         info.setWordWrap(True)
         layout.addWidget(info)
+
+        tooltip_hint = QLabel(
+            "Hover an attribute or parameter to see what it does and what Low or High values mean."
+        )
+        tooltip_hint.setStyleSheet("color: gray;")
+        tooltip_hint.setWordWrap(True)
+        layout.addWidget(tooltip_hint)
         
         # Seed selection
         seed_layout = QHBoxLayout()
@@ -6252,6 +8125,22 @@ class ViewInterpretation(ViewMap):
         check_discont.setChecked(True)
         check_variance = QCheckBox("Variance")
         check_likelihood = QCheckBox("Likelihood")
+        self._apply_control_tooltip(
+            check_vert_edge,
+            "Track the fault using strong vertical-edge response. This is usually the primary fault indicator.",
+        )
+        self._apply_control_tooltip(
+            check_discont,
+            "Track where reflector continuity breaks across the fault. Useful when the fault appears as a clear discontinuity.",
+        )
+        self._apply_control_tooltip(
+            check_variance,
+            "Track locally chaotic or high-variance zones around the fault damage zone.",
+        )
+        self._apply_control_tooltip(
+            check_likelihood,
+            "Track a combined fault-likelihood attribute built from edge, discontinuity, and variance.",
+        )
         attr_layout.addWidget(check_vert_edge)
         attr_layout.addWidget(check_discont)
         attr_layout.addWidget(check_variance)
@@ -6270,23 +8159,79 @@ class ViewInterpretation(ViewMap):
         spin_slices = QSpinBox()
         spin_slices.setRange(1, 500)
         spin_slices.setValue(50)
-        params_form.addRow("Slices:", spin_slices)
+        self._apply_control_tooltip(
+            spin_slices,
+            "How many slices to propagate the fault away from the seed.",
+            low_text="Shorter propagation. Faster and safer when you only trust the fault locally.",
+            high_text="Longer propagation. Covers more of the volume, but drift can accumulate farther from the seed.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Slices:",
+                "How many slices to propagate the fault away from the seed.",
+                low_text="Shorter propagation. Faster and safer when you only trust the fault locally.",
+                high_text="Longer propagation. Covers more of the volume, but drift can accumulate farther from the seed.",
+            ),
+            spin_slices,
+        )
         
         spin_search = QSpinBox()
         spin_search.setRange(3, 30)
         spin_search.setValue(10)
-        params_form.addRow("Search window:", spin_search)
+        self._apply_control_tooltip(
+            spin_search,
+            "Horizontal search range around the previous fault position for each depth sample.",
+            low_text="Keeps the fault close to the previous slice. Good for stable faults, but may miss real lateral shifts.",
+            high_text="Allows stronger lateral movement. Better for dipping or rapidly shifting faults, but easier to jump to noise.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Search window:",
+                "Horizontal search range around the previous fault position for each depth sample.",
+                low_text="Keeps the fault close to the previous slice. Good for stable faults, but may miss real lateral shifts.",
+                high_text="Allows stronger lateral movement. Better for dipping or rapidly shifting faults, but easier to jump to noise.",
+            ),
+            spin_search,
+        )
         
         spin_smooth = QDoubleSpinBox()
         spin_smooth.setRange(0.0, 5.0)
         spin_smooth.setValue(1.5)
         spin_smooth.setSingleStep(0.5)
-        params_form.addRow("Smoothing:", spin_smooth)
+        self._apply_control_tooltip(
+            spin_smooth,
+            "How strongly the propagated fault trace is smoothed along depth.",
+            low_text="Preserves local bends and irregularities, but can look noisy.",
+            high_text="Produces a cleaner trace, but can wash out real local dip changes or segmentation.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Smoothing:",
+                "How strongly the propagated fault trace is smoothed along depth.",
+                low_text="Preserves local bends and irregularities, but can look noisy.",
+                high_text="Produces a cleaner trace, but can wash out real local dip changes or segmentation.",
+            ),
+            spin_smooth,
+        )
         
         spin_max_jump = QSpinBox()
         spin_max_jump.setRange(1, 10)
         spin_max_jump.setValue(2)
-        params_form.addRow("Max jump:", spin_max_jump)
+        self._apply_control_tooltip(
+            spin_max_jump,
+            "Controls how abruptly the fault trace is allowed to change between neighboring depth samples.",
+            low_text="Keeps the trace coherent and stable, but may underfit sharp bends.",
+            high_text="Allows stronger local shape changes, but can increase zig-zagging and false excursions.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Max jump:",
+                "Controls how abruptly the fault trace is allowed to change between neighboring depth samples.",
+                low_text="Keeps the trace coherent and stable, but may underfit sharp bends.",
+                high_text="Allows stronger local shape changes, but can increase zig-zagging and false excursions.",
+            ),
+            spin_max_jump,
+        )
         
         right.addWidget(params_group)
         right.addStretch()
@@ -6723,6 +8668,13 @@ class ViewInterpretation(ViewMap):
         self.regularizeMultipartSamplingButton.triggered.connect(
             self.regularize_multipart_sampling
         )
+        self.editLineButton = QAction("Edit line", self)
+        self.editLineButton.triggered.connect(self.edit_selected_line)
+        self.menuModify.addAction(self.editLineButton)
+        self.simplifyLineButton = QAction("Simplify line", self)
+        self.simplifyLineButton.triggered.connect(self.simplify_selected_lines)
+        self.menuModify.addAction(self.simplifyLineButton)
+
         self.menuModify.addAction(self.regularizeMultipartSamplingButton)
 
         self.splitMultipartSlicesButton = QAction("Split Multipart Slices...", self)
