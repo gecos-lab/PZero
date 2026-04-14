@@ -1467,6 +1467,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 prgs_bar.add_one()
             elif self.image_coll.df.loc[
                 self.image_coll.df["uid"] == uid, "topology"
+            ].values[0] in ["Voxet", "XsVoxet"]:
+                im_writer = vtkXMLImageDataWriter()
+                im_writer.SetFileName(out_dir_name + "/" + uid + ".vti")
+                im_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
+                im_writer.Write()
+                prgs_bar.add_one()
+            elif self.image_coll.df.loc[
+                self.image_coll.df["uid"] == uid, "topology"
             ].values[0] in ["Seismics"]:
                 source_file = None
                 if "seismic_source_file" in self.image_coll.df.columns:
@@ -2237,6 +2245,35 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 )
                 for uid in self.image_coll.df["uid"].to_list():
                     if self.image_coll.df.loc[
+                        self.image_coll.df["uid"] == uid, "topology"
+                    ].values[0] in ["Voxet"]:
+                        if not os_path.isfile((in_dir_name + "/" + uid + ".vti")):
+                            print("error: missing image file")
+                            return
+                        vtk_object = Voxet()
+                        im_reader = vtkXMLImageDataReader()
+                        im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
+                        im_reader.Update()
+                        vtk_object.ShallowCopy(im_reader.GetOutput())
+                        vtk_object.Modified()
+                    elif self.image_coll.df.loc[
+                        self.image_coll.df["uid"] == uid, "topology"
+                    ].values[0] in ["XsVoxet"]:
+                        if not os_path.isfile((in_dir_name + "/" + uid + ".vti")):
+                            print("error: missing image file")
+                            return
+                        vtk_object = XsVoxet(
+                            parent=self,
+                            x_section_uid=self.image_coll.df.loc[
+                                self.image_coll.df["uid"] == uid, "parent_uid"
+                            ].values[0],
+                        )
+                        im_reader = vtkXMLImageDataReader()
+                        im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
+                        im_reader.Update()
+                        vtk_object.ShallowCopy(im_reader.GetOutput())
+                        vtk_object.Modified()
+                    elif self.image_coll.df.loc[
                         self.image_coll.df["uid"] == uid, "topology"
                     ].values[0] in ["MapImage", "TSDomImage"]:
                         if not os_path.isfile((in_dir_name + "/" + uid + ".vti")):
