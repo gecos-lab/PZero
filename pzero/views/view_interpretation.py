@@ -21,6 +21,7 @@ import numpy as np
 from copy import deepcopy
 import heapq
 from time import perf_counter
+from uuid import uuid4
 from shapely.geometry import LineString as shp_linestring
 from scipy import ndimage
 from scipy.optimize import linear_sum_assignment
@@ -188,6 +189,8 @@ class ViewInterpretation(ViewMap):
         self._pending_horizon_scan_started_at = None
         self._pending_slice_metadata_uids = set()
         self._pending_horizon_scan_stats = {}
+        self._pending_fast_added_entities = {}
+        self._ignore_next_on_entities_added = set()
 
         # Setup specific UI controls
         self.setup_controls()
@@ -264,6 +267,38 @@ class ViewInterpretation(ViewMap):
             if actor_name in actors:
                 return actors[actor_name]
         return super().get_actor_by_uid(uid)
+
+    def remove_actor_in_view(self, uid=None, redraw=False):
+        """Remove any interpretation actor aliases for a uid without assuming a raw actor exists."""
+        if not uid:
+            return
+
+        for actor_name in (
+            f"multipart_slice_{uid}",
+            f"multipart_fault_slice_{uid}",
+            uid,
+            f"geol_coll_{uid}",
+            f"geo_{uid}",
+        ):
+            try:
+                actors = getattr(self.plotter.renderer, "actors", {})
+                if actor_name in actors:
+                    self.plotter.remove_actor(actors[actor_name])
+            except Exception:
+                try:
+                    self.plotter.remove_actor(actor_name)
+                except Exception:
+                    pass
+
+        if hasattr(self, "_deferred_geol_polyline_actor_uids"):
+            self._deferred_geol_polyline_actor_uids.discard(uid)
+        if hasattr(self, "_pending_deferred_geol_realization"):
+            self._pending_deferred_geol_realization = [
+                pending_uid
+                for pending_uid in self._pending_deferred_geol_realization
+                if pending_uid != uid
+            ]
+        self._invalidate_actor_cache(uid)
 
     def _apply_coplanar_interpretation_offset(self, actor=None, uid=None):
         """Apply a small coincident-topology offset to interpretation line actors."""
@@ -553,6 +588,18 @@ class ViewInterpretation(ViewMap):
 
     def on_entities_added(self, uids, collection):
         """Called when new entities are added to any collection"""
+        try:
+            incoming_uids = list(uids or [])
+        except Exception:
+            incoming_uids = [uids] if uids is not None else []
+        if incoming_uids and getattr(self, "_ignore_next_on_entities_added", None):
+            skipped = set(incoming_uids) & self._ignore_next_on_entities_added
+            if skipped:
+                self._ignore_next_on_entities_added -= skipped
+                incoming_uids = [uid for uid in incoming_uids if uid not in skipped]
+            if not incoming_uids:
+                return
+
         # Skip visual updates if we are batching (e.g. during propagation)
         if hasattr(self, "_is_propagating") and self._is_propagating:
             return
@@ -568,9 +615,9 @@ class ViewInterpretation(ViewMap):
             self.refresh_volume_list()
         # Check if it's the geological collection (where lines live)
         elif collection == self.parent.geol_coll:
-            self.print_terminal(f"New geological entities added: {uids}")
+            self.print_terminal(f"New geological entities added: {incoming_uids}")
             # Display the new entities in this view
-            for uid in uids:
+            for uid in incoming_uids:
                 try:
                     # Check if this is an interpretation line we're tracking
                     if uid in self.interpretation_lines:
@@ -644,6 +691,116 @@ class ViewInterpretation(ViewMap):
                         )
                 except Exception as e:
                     self.print_terminal(f"Error displaying new entity {uid}: {e}")
+
+    def _append_actor_rows_for_uids(self, uids=None, collection_name=None):
+        """Append placeholder actor rows for newly added entities without creating raw actors."""
+        try:
+            uid_list = list(uids or [])
+        except Exception:
+            uid_list = []
+        if not uid_list or not collection_name:
+            return
+
+        existing_uids = set()
+        try:
+            existing_uids = set(self.actors_df["uid"].tolist())
+        except Exception:
+            existing_uids = set()
+
+        rows = []
+        for uid in uid_list:
+            if uid in existing_uids:
+                continue
+            rows.append(
+                {
+                    "uid": uid,
+                    "actor": None,
+                    "show": True,
+                    "collection": collection_name,
+                    "show_property": None,
+                }
+            )
+        if not rows:
+            return
+
+        from pandas import DataFrame as pd_DataFrame
+        from pandas import concat as pd_concat
+
+        self.actors_df = pd_concat(
+            [self.actors_df, pd_DataFrame(rows)],
+            ignore_index=True,
+        )
+
+    def entities_added_update_views(self, updated_uids=None, collection=None):
+        """Avoid generic raw-actor creation for interpretation entities we just created ourselves."""
+        if collection != getattr(self.parent, "geol_coll", None):
+            return super().entities_added_update_views(
+                updated_uids=updated_uids, collection=collection
+            )
+
+        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+        pending_specs = getattr(self, "_pending_fast_added_entities", {})
+        fast_uids = [uid for uid in updated_uids if uid in pending_specs]
+        normal_uids = [uid for uid in updated_uids if uid not in pending_specs]
+
+        if normal_uids:
+            super().entities_added_update_views(
+                updated_uids=normal_uids, collection=collection
+            )
+
+        if not fast_uids:
+            return
+
+        tree = self.tree_from_coll(coll=collection)
+        self._append_actor_rows_for_uids(
+            uids=fast_uids, collection_name=collection.collection_name
+        )
+        if tree is not None:
+            tree.add_items_to_tree(uids_to_add=fast_uids)
+
+        should_render = False
+        for uid in fast_uids:
+            spec = self._pending_fast_added_entities.pop(uid, None)
+            if not spec:
+                continue
+
+            kind = spec.get("kind")
+            if kind == "single_line":
+                slice_info = spec.get("slice_info")
+                if slice_info:
+                    self.register_interpretation_line(uid, slice_info)
+                    should_render = True
+            elif kind in {"multipart_horizon", "multipart_fault"}:
+                self._register_multipart_interpretation_entity(
+                    uid=uid,
+                    axis=spec.get("axis", self.current_axis),
+                    slice_indices=spec.get("slice_indices", []),
+                    slice_to_cell_index=spec.get("slice_to_cell_index", {}),
+                )
+                if "seed_slice" in spec:
+                    if (
+                        kind == "multipart_horizon"
+                        and uid in getattr(self, "multipart_horizons", {})
+                    ):
+                        self.multipart_horizons[uid]["seed_slice"] = spec["seed_slice"]
+                    if (
+                        kind == "multipart_fault"
+                        and uid in getattr(self, "multipart_faults", {})
+                    ):
+                        self.multipart_faults[uid]["seed_slice"] = spec["seed_slice"]
+
+                if kind == "multipart_horizon":
+                    self.update_multipart_horizon_visibility(uid)
+                else:
+                    self.update_multipart_fault_visibility(uid)
+                should_render = True
+
+        self._ignore_next_on_entities_added.update(fast_uids)
+        if should_render:
+            try:
+                self.plotter.render()
+            except Exception:
+                pass
         
     def refresh_volume_list(self, force_reload=False):
         """Refresh the list of available seismic volumes"""
@@ -743,6 +900,10 @@ class ViewInterpretation(ViewMap):
                 del self._cached_scalar_range
             if hasattr(self, "_cached_scalar_name"):
                 del self._cached_scalar_name
+            if hasattr(self, "_cached_volume_data_3d"):
+                del self._cached_volume_data_3d
+            if hasattr(self, "_cached_volume_data_3d_key"):
+                del self._cached_volume_data_3d_key
             if hasattr(self, "_cached_affine"):
                 del self._cached_affine
             if hasattr(self, "_cached_affine_uid"):
@@ -954,6 +1115,86 @@ class ViewInterpretation(ViewMap):
                 )
         else:
             self._cached_scalar_range = None
+        if hasattr(self, "_cached_volume_data_3d_key"):
+            del self._cached_volume_data_3d_key
+        if hasattr(self, "_cached_volume_data_3d"):
+            del self._cached_volume_data_3d
+
+    def _get_cached_volume_data_3d(self, cast_dtype=None):
+        """Return the active source scalar reshaped to a 3D numpy volume."""
+        if not hasattr(self, "_cached_seismic") or self._cached_seismic is None:
+            return None, None
+
+        scalar_name = getattr(self, "_cached_scalar_name", None)
+        if not scalar_name:
+            self._refresh_cached_scalar_style()
+            scalar_name = getattr(self, "_cached_scalar_name", None)
+        if not scalar_name:
+            return None, None
+
+        dtype_key = None
+        if cast_dtype is not None:
+            try:
+                dtype_key = np.dtype(cast_dtype).str
+            except Exception:
+                dtype_key = str(cast_dtype)
+        cache_key = (
+            getattr(self, "_cached_seismic_uid", None),
+            scalar_name,
+            tuple(int(v) for v in getattr(self, "_cached_dims", ())),
+            dtype_key,
+        )
+        if (
+            hasattr(self, "_cached_volume_data_3d_key")
+            and self._cached_volume_data_3d_key == cache_key
+            and hasattr(self, "_cached_volume_data_3d")
+        ):
+            return self._cached_volume_data_3d, scalar_name
+
+        dataset = self._cached_seismic
+        raw_values = None
+        for store_name in ("point_data", "cell_data", "field_data"):
+            try:
+                store = getattr(dataset, store_name)
+                if scalar_name in store:
+                    raw_values = np.asarray(store[scalar_name])
+                    break
+            except Exception:
+                continue
+
+        if raw_values is None:
+            return None, scalar_name
+
+        values = np.asarray(raw_values)
+        if values.ndim > 1:
+            if values.shape[-1] == 1:
+                values = values.reshape(-1)
+            else:
+                values = values[..., 0].reshape(-1)
+        else:
+            values = values.reshape(-1)
+
+        if cast_dtype is not None:
+            values = values.astype(cast_dtype, copy=False)
+
+        dims = tuple(int(v) for v in getattr(self, "_cached_dims", ()))
+        if len(dims) != 3 or any(v <= 0 for v in dims):
+            return None, scalar_name
+
+        n_points = int(np.prod(dims, dtype=np.int64))
+        if values.size == n_points:
+            volume = np.reshape(values, dims, order="F")
+        else:
+            cell_dims = tuple(max(v - 1, 1) for v in dims)
+            n_cells = int(np.prod(cell_dims, dtype=np.int64))
+            if values.size == n_cells:
+                volume = np.reshape(values, cell_dims, order="F")
+            else:
+                return None, scalar_name
+
+        self._cached_volume_data_3d_key = cache_key
+        self._cached_volume_data_3d = volume
+        return volume, scalar_name
 
     def update_slice(self):
         if not self.current_seismic_uid:
@@ -7959,17 +8200,17 @@ class ViewInterpretation(ViewMap):
                 "slice_index": self.current_slice_index,
             }
 
+            new_uid = str(uuid4())
+            line_dict["uid"] = new_uid
+            self._pending_fast_added_entities[new_uid] = {
+                "kind": "single_line",
+                "slice_info": slice_info,
+            }
+
             # Add to geological collection
             new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
             self.print_terminal(
                 f"Created auto-tracked horizon with {n_points} points, uid: {new_uid}"
-            )
-
-            # Track this interpretation line
-            # Track this interpretation line
-            self.register_interpretation_line(new_uid, slice_info)
-            self.print_terminal(
-                f"Registered auto-tracked line {new_uid} for {slice_info['axis']} slice {slice_info['slice_index']}"
             )
             self.print_terminal(
                 f"Registered auto-tracked line {new_uid} for {slice_info['axis']} slice {slice_info['slice_index']}"
@@ -9117,15 +9358,10 @@ class ViewInterpretation(ViewMap):
                 )
 
                 # Add to collection
-                new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
-                self._refresh_properties_legend()
-
-                # Store multipart horizon metadata for visibility management
-                if not hasattr(self, "multipart_horizons"):
-                    self.multipart_horizons = {}
-
-                self.multipart_horizons[new_uid] = {
-                    "seismic_uid": self.current_seismic_uid,
+                new_uid = str(uuid4())
+                line_dict["uid"] = new_uid
+                self._pending_fast_added_entities[new_uid] = {
+                    "kind": "multipart_horizon",
                     "axis": self.current_axis,
                     "slice_indices": list(slice_to_point_range.keys()),
                     "slice_to_cell_index": {
@@ -9133,6 +9369,7 @@ class ViewInterpretation(ViewMap):
                     },
                     "seed_slice": current_idx,
                 }
+                new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
 
                 self.print_terminal(f"=== Propagation Complete ===")
                 self.print_terminal(f"Created multipart horizon: {line_dict['name']}")
@@ -9142,29 +9379,6 @@ class ViewInterpretation(ViewMap):
                 self.print_terminal(
                     f"Slice range: {min(cell_slice_indices)} to {max(cell_slice_indices)}"
                 )
-
-                # Add actor to scene and update visibility
-                self.show_actor_with_property(
-                    uid=new_uid, coll_name="geol_coll", visible=True
-                )
-
-                # CRITICAL: Set thick line width for multipart horizons for better visibility
-                try:
-                    if new_uid in self.plotter.renderer.actors:
-                        actor = self.plotter.renderer.actors[new_uid]
-                        if actor and hasattr(actor, "GetProperty"):
-                            actor.GetProperty().SetLineWidth(
-                                8
-                            )  # Very thick for propagated horizons
-                            self.print_terminal(
-                                f"Set line width to 8 for multipart horizon {new_uid}"
-                            )
-                except Exception as e:
-                    self.print_terminal(f"Could not set line width: {e}")
-
-                self._mark_slice_visibility_dirty()
-                self.update_interpretation_line_visibility()
-                self.update_multipart_horizon_visibility(new_uid)
             else:
                 self.print_terminal(
                     "No valid line segments were created during propagation!"
@@ -9775,15 +9989,10 @@ class ViewInterpretation(ViewMap):
                         self.parent.geol_coll.get_uid_scenario(seed_uid), "undef"
                     )
 
-                    new_uid = self.parent.geol_coll.add_entity_from_dict(fault_dict)
-                    self._refresh_properties_legend()
-
-                    # Store metadata
-                    if not hasattr(self, "multipart_faults"):
-                        self.multipart_faults = {}
-
-                    self.multipart_faults[new_uid] = {
-                        "seismic_uid": self.current_seismic_uid,
+                    new_uid = str(uuid4())
+                    fault_dict["uid"] = new_uid
+                    self._pending_fast_added_entities[new_uid] = {
+                        "kind": "multipart_fault",
                         "axis": self.current_axis,
                         "slice_indices": list(slice_to_point_range.keys()),
                         "slice_to_cell_index": {
@@ -9792,6 +10001,7 @@ class ViewInterpretation(ViewMap):
                         },
                         "seed_slice": current_idx,
                     }
+                    new_uid = self.parent.geol_coll.add_entity_from_dict(fault_dict)
 
                     self.print_terminal(f"=== Fault Propagation Complete ===")
                     self.print_terminal(
@@ -9802,14 +10012,7 @@ class ViewInterpretation(ViewMap):
                     )
                     self.print_terminal(f"Total points: {len(all_points)}")
 
-                    # Initially hide the raw actor - we'll show filtered version
-                    self.set_actor_visibility(new_uid, False)
-
-                    # Update visibility to show only current slice segment
-                    self.update_multipart_fault_visibility(new_uid)
-
-                    # Note: Line width is set in update_multipart_fault_visibility
-                    pass
+                    # Rendering is handled by the fast entity-added path above.
                 else:
                     self.print_terminal("No valid fault segments created!")
 

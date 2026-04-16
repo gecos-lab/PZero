@@ -291,8 +291,15 @@ class ViewVTK(BaseView):
         # plotter.remove_actor can remove a single entity or a list of entities as actors ->
         # here we remove a single entity
         if not self.actors_df.loc[self.actors_df["uid"] == uid].empty:
-            this_actor = self.get_actor_by_uid(uid)
-            success = self.plotter.remove_actor(this_actor)
+            try:
+                this_actor = self.get_actor_by_uid(uid)
+            except Exception:
+                this_actor = None
+            if this_actor is not None:
+                try:
+                    self.plotter.remove_actor(this_actor)
+                except Exception:
+                    pass
 
     def initialize_interactor(self):
         """Add the pyvista interactor object to self.ViewFrameLayout ->
