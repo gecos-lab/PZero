@@ -20,6 +20,7 @@ import pyvista as pv
 import numpy as np
 from copy import deepcopy
 import heapq
+from time import perf_counter
 from shapely.geometry import LineString as shp_linestring
 from scipy import ndimage
 from scipy.optimize import linear_sum_assignment
@@ -48,10 +49,14 @@ class ViewInterpretation(ViewMap):
         from pandas import concat as pd_concat
         from ..helpers.helper_dialogs import progress_dialog
 
+        if not hasattr(self, "_deferred_geol_polyline_actor_uids"):
+            self._deferred_geol_polyline_actor_uids = set()
+
         for collection_name in self.tree_collection_dict.values():
             try:
                 collection = getattr(self.parent, collection_name)
-                uid_list = collection.df.query(self.view_filter)["uid"].tolist()
+                collection_df = collection.df.query(self.view_filter)
+                uid_list = collection_df["uid"].tolist()
                 prgs_bar = progress_dialog(
                     max_value=len(uid_list),
                     title_txt="Opening view",
@@ -59,30 +64,49 @@ class ViewInterpretation(ViewMap):
                     cancel_txt=None,
                     parent=self,
                 )
+                actor_rows = []
+                topology_by_uid = {}
+                if (
+                    collection_name == "geol_coll"
+                    and "topology" in collection_df.columns
+                ):
+                    topology_by_uid = dict(
+                        zip(collection_df["uid"].tolist(), collection_df["topology"].tolist())
+                    )
+
                 for uid in uid_list:
+                    topology = topology_by_uid.get(uid)
                     skip_raw_actor = False
+                    defer_polyline_actor = (
+                        collection_name == "geol_coll" and topology == "PolyLine"
+                    )
+                    if defer_polyline_actor:
+                        self._deferred_geol_polyline_actor_uids.add(uid)
+                        skip_raw_actor = True
+
                     if collection_name == "geol_coll":
-                        try:
-                            vtk_obj = collection.get_uid_vtk_obj(uid)
-                            cell_data = (
-                                vtk_obj.GetCellData() if vtk_obj is not None else None
-                            )
-                            field_data = (
-                                vtk_obj.GetFieldData() if vtk_obj is not None else None
-                            )
-                            skip_raw_actor = bool(
-                                (
-                                    cell_data is not None
-                                    and cell_data.HasArray("slice_index")
+                        if not skip_raw_actor:
+                            try:
+                                vtk_obj = collection.get_uid_vtk_obj(uid)
+                                cell_data = (
+                                    vtk_obj.GetCellData() if vtk_obj is not None else None
                                 )
-                                or (
-                                    field_data is not None
-                                    and field_data.HasArray("single_slice_index")
-                                    and field_data.HasArray("single_slice_axis")
+                                field_data = (
+                                    vtk_obj.GetFieldData() if vtk_obj is not None else None
                                 )
-                            )
-                        except Exception:
-                            skip_raw_actor = False
+                                skip_raw_actor = bool(
+                                    (
+                                        cell_data is not None
+                                        and cell_data.HasArray("slice_index")
+                                    )
+                                    or (
+                                        field_data is not None
+                                        and field_data.HasArray("single_slice_index")
+                                        and field_data.HasArray("single_slice_axis")
+                                    )
+                                )
+                            except Exception:
+                                skip_raw_actor = False
 
                     if skip_raw_actor:
                         this_actor = None
@@ -94,24 +118,21 @@ class ViewInterpretation(ViewMap):
                             visible=True,
                         )
 
-                    self.actors_df = pd_concat(
-                        [
-                            self.actors_df,
-                            pd_DataFrame(
-                                [
-                                    {
-                                        "uid": uid,
-                                        "actor": this_actor,
-                                        "show": True,
-                                        "collection": collection_name,
-                                        "show_property": None,
-                                    }
-                                ]
-                            ),
-                        ],
-                        ignore_index=True,
+                    actor_rows.append(
+                        {
+                            "uid": uid,
+                            "actor": this_actor,
+                            "show": True,
+                            "collection": collection_name,
+                            "show_property": None,
+                        }
                     )
                     prgs_bar.add_one()
+                if actor_rows:
+                    self.actors_df = pd_concat(
+                        [self.actors_df, pd_DataFrame(actor_rows)],
+                        ignore_index=True,
+                    )
             except Exception:
                 self.print_terminal(f"ERROR in add_all_entities: {collection_name}")
                 pass
@@ -160,6 +181,13 @@ class ViewInterpretation(ViewMap):
 
         # Flag to track if initialization has been done
         self._initialized = False
+        self._horizon_scan_generation = 0
+        self._pending_horizon_scan_items = []
+        self._pending_horizon_scan_index = 0
+        self._pending_horizon_scan_processed_count = 0
+        self._pending_horizon_scan_started_at = None
+        self._pending_slice_metadata_uids = set()
+        self._pending_horizon_scan_stats = {}
 
         # Setup specific UI controls
         self.setup_controls()
@@ -237,6 +265,91 @@ class ViewInterpretation(ViewMap):
                 return actors[actor_name]
         return super().get_actor_by_uid(uid)
 
+    def _apply_coplanar_interpretation_offset(self, actor=None, uid=None):
+        """Apply a small coincident-topology offset to interpretation line actors."""
+        if actor is None and uid:
+            try:
+                actor = self.get_actor_by_uid(uid)
+            except Exception:
+                actor = None
+        if actor is None:
+            return
+
+        try:
+            mapper = actor.GetMapper()
+        except Exception:
+            mapper = None
+        if mapper is None:
+            return
+
+        # Keep interpretation lines slightly in front of the slice plane to reduce z-fighting.
+        try:
+            mapper.SetResolveCoincidentTopologyToPolygonOffset()
+        except Exception:
+            try:
+                mapper.SetResolveCoincidentTopology(1)
+            except Exception:
+                pass
+
+        for setter_name, params in (
+            ("SetRelativeCoincidentTopologyLineOffsetParameters", (0.0, -4.0)),
+            ("SetRelativeCoincidentTopologyPolygonOffsetParameters", (0.0, -4.0)),
+            ("SetRelativeCoincidentTopologyPointOffsetParameter", (-4.0,)),
+        ):
+            try:
+                getattr(mapper, setter_name)(*params)
+            except Exception:
+                pass
+
+    def _supported_interpretation_source_topologies(self):
+        """Return volumetric topologies that can drive interpretation slices."""
+        return {"Seismics", "Voxet"}
+
+    def _iter_interpretation_source_candidates(self):
+        """Collect supported volumetric interpretation sources from project collections."""
+        source_specs = (
+            ("image_coll", "Image", {"Seismics", "Voxet"}),
+            ("mesh3d_coll", "Mesh", {"Voxet"}),
+        )
+        candidates = []
+
+        for collection_name, label_prefix, allowed_topologies in source_specs:
+            collection = getattr(self.parent, collection_name, None)
+            if collection is None:
+                continue
+            try:
+                all_uids = collection.get_uids
+            except Exception:
+                continue
+
+            for uid in all_uids:
+                try:
+                    topology = collection.get_uid_topology(uid)
+                except Exception:
+                    continue
+                if topology not in allowed_topologies:
+                    continue
+                try:
+                    name = collection.get_uid_name(uid)
+                except Exception:
+                    name = str(uid)
+                label = f"{label_prefix}: {name}"
+                candidates.append((label, (collection_name, uid, topology)))
+
+        return candidates
+
+    def _apply_source_selection(self, selection):
+        """Normalize combo-box selection payload into the current source state."""
+        if isinstance(selection, tuple) and len(selection) >= 3:
+            self.current_source_collection_name = selection[0]
+            self.current_seismic_uid = selection[1]
+            self.current_source_topology = selection[2]
+            return
+
+        self.current_source_collection_name = "image_coll"
+        self.current_seismic_uid = selection
+        self.current_source_topology = "Seismics" if selection else None
+
     def showEvent(self, event):
         """Override Qt showEvent to initialize the view when first shown."""
         super().showEvent(event)
@@ -247,6 +360,7 @@ class ViewInterpretation(ViewMap):
 
     def _initialize_view(self):
         """Initialize the slice view after window is shown."""
+        init_started_at = perf_counter()
         self.print_terminal("Initializing interpretation view...")
         # Clear any inherited volumetric actors
         self.clear_seismic_volumes()
@@ -256,6 +370,9 @@ class ViewInterpretation(ViewMap):
         # that should trigger volume selection, cache population and horizon indexing.
         self.refresh_volume_list(force_reload=True)
         self._suppress_full_multipart_actors()
+        self.print_terminal(
+            f"Interpretation view init dispatched in {perf_counter() - init_started_at:.2f}s"
+        )
         
     def show_actor_with_property(self, uid=None, coll_name=None, show_property=None, visible=None):
         """Override to prevent showing full seismic volumes and full multipart horizons - we only show slices."""
@@ -539,27 +656,17 @@ class ViewInterpretation(ViewMap):
         self.combo_volume.blockSignals(True)
 
         # Remember current selection if any
-        previous_key = (self.current_source_collection_name, self.current_seismic_uid)
+        previous_selection = (
+            self.current_source_collection_name,
+            self.current_seismic_uid,
+        )
 
         self.combo_volume.clear()
         
-        # Find all Seismics entities in image_coll - use the same approach as mesh slicer
         candidates = []
         try:
-            if hasattr(self.parent, 'image_coll') and self.parent.image_coll is not None:
-                # Get all UIDs from the collection using the property
-                all_uids = self.parent.image_coll.get_uids
-                self.print_terminal(f"image_coll has {len(all_uids)} entities")
-                
-                for uid in all_uids:
-                    topology = self.parent.image_coll.get_uid_topology(uid)
-                    name = self.parent.image_coll.get_uid_name(uid)
-                    if topology == 'Seismics':
-                        candidates.append((name, uid))
-                        
-                self.print_terminal(f"Total Seismics found: {len(candidates)}")
-            else:
-                self.print_terminal("No image_coll found on parent!")
+            candidates = self._iter_interpretation_source_candidates()
+            self.print_terminal(f"Total interpretation sources found: {len(candidates)}")
         except Exception as e:
             self.print_terminal(f"Error getting interpretation sources: {e}")
             import traceback
@@ -572,19 +679,26 @@ class ViewInterpretation(ViewMap):
         if self.combo_volume.count() > 0:
             # Try to restore previous selection, otherwise select first
             selected_index = 0
-            if previous_uid:
+            if previous_selection[1]:
                 for i in range(self.combo_volume.count()):
-                    if self.combo_volume.itemData(i) == previous_uid:
+                    item_data = self.combo_volume.itemData(i)
+                    item_key = None
+                    if isinstance(item_data, tuple) and len(item_data) >= 2:
+                        item_key = (item_data[0], item_data[1])
+                    else:
+                        item_key = ("image_coll", item_data)
+                    if item_key == previous_selection:
                         selected_index = i
                         break
 
             self.combo_volume.setCurrentIndex(selected_index)
-            self.current_seismic_uid = self.combo_volume.currentData()
+            self._apply_source_selection(self.combo_volume.currentData())
             self.combo_volume.blockSignals(False)
-            self.print_terminal(f"Selected volume UID: {self.current_seismic_uid}")
+            self.print_terminal(f"Selected source UID: {self.current_seismic_uid}")
             should_reload = (
                 force_reload
-                or previous_uid != self.current_seismic_uid
+                or previous_selection
+                != (self.current_source_collection_name, self.current_seismic_uid)
                 or not hasattr(self, "_cached_seismic_uid")
                 or self._cached_seismic_uid != self.current_seismic_uid
             )
@@ -597,18 +711,22 @@ class ViewInterpretation(ViewMap):
         else:
             self.combo_volume.blockSignals(False)
             self.current_seismic_uid = None
-            self.print_terminal("No seismic volumes found in image_coll!")
+            self.current_source_collection_name = None
+            self.current_source_topology = None
+            self.print_terminal("No interpretation sources found!")
         
     def on_volume_changed(self, index):
         if index < 0:
             return
         self._apply_source_selection(self.combo_volume.itemData(index))
         if self.current_seismic_uid:
+            change_started_at = perf_counter()
             self.print_terminal(
                 f"Source changed to: {self.combo_volume.currentText()} ({self.current_seismic_uid})"
             )
 
             # Reset indexing on volume change to re-scan for the new volume
+            self._cancel_pending_horizon_scan()
             self._lines_indexed = False
             self.interpretation_lines.clear()
             self.interpretation_lines_by_slice.clear()
@@ -636,10 +754,13 @@ class ViewInterpretation(ViewMap):
 
             self.update_slice_limits()
             self.update_camera_orientation()
-            # Scan for existing horizons compatible with this volume
-            self.scan_and_index_existing_horizons()
-            self._suppress_full_multipart_actors()
             self.update_slice()
+            self.print_terminal(
+                f"Initial slice ready in {perf_counter() - change_started_at:.2f}s"
+            )
+            # Interpretation-only indexing is significantly more expensive than the
+            # shared 3D bootstrap. Run it incrementally so the window stays responsive.
+            self.scan_and_index_existing_horizons()
 
     def on_view_type_changed(self, text):
         self.current_axis = text
@@ -661,6 +782,46 @@ class ViewInterpretation(ViewMap):
         self.slider_slice.blockSignals(False)
         self.current_slice_index = value
         self.update_slice()
+
+    def _get_current_source_vtk(self):
+        """Return the active interpretation source VTK object."""
+        if not self.current_seismic_uid:
+            return None
+
+        collection_name = self.current_source_collection_name or "image_coll"
+        try:
+            collection = getattr(self.parent, collection_name)
+        except Exception:
+            return None
+
+        try:
+            return collection.get_uid_vtk_obj(self.current_seismic_uid)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _get_current_scalar_name(dataset):
+        """Return the preferred scalar name for rendering a source dataset."""
+        if dataset is None:
+            return None
+
+        try:
+            active_name = getattr(dataset, "active_scalars_name", None)
+            if active_name:
+                return active_name
+        except Exception:
+            pass
+
+        try:
+            array_names = list(getattr(dataset, "array_names", []) or [])
+        except Exception:
+            array_names = []
+
+        for preferred_name in ("intensity", "values", "amplitude"):
+            if preferred_name in array_names:
+                return preferred_name
+
+        return array_names[0] if array_names else None
 
     def update_slice_limits(self):
         if not self.current_seismic_uid:
@@ -1429,18 +1590,34 @@ class ViewInterpretation(ViewMap):
             cell_data = vtk_obj.GetCellData()
             if cell_data and cell_data.HasArray("slice_index"):
                 arr = cell_data.GetArray("slice_index")
-                for i in range(arr.GetNumberOfTuples()):
-                    v = int(arr.GetValue(i))
-                    if v >= 0:
-                        out.append(v)
+                try:
+                    from vtkmodules.util.numpy_support import vtk_to_numpy
+
+                    values = vtk_to_numpy(arr).astype(np.int32, copy=False)
+                    values = values[values >= 0]
+                    if values.size:
+                        return np.unique(values).astype(int).tolist()
+                except Exception:
+                    for i in range(arr.GetNumberOfTuples()):
+                        v = int(arr.GetValue(i))
+                        if v >= 0:
+                            out.append(v)
             elif vtk_obj.GetPointData() and vtk_obj.GetPointData().HasArray(
                 "slice_index"
             ):
                 arr = vtk_obj.GetPointData().GetArray("slice_index")
-                for i in range(arr.GetNumberOfTuples()):
-                    v = int(arr.GetValue(i))
-                    if v >= 0:
-                        out.append(v)
+                try:
+                    from vtkmodules.util.numpy_support import vtk_to_numpy
+
+                    values = vtk_to_numpy(arr).astype(np.int32, copy=False)
+                    values = values[values >= 0]
+                    if values.size:
+                        return np.unique(values).astype(int).tolist()
+                except Exception:
+                    for i in range(arr.GetNumberOfTuples()):
+                        v = int(arr.GetValue(i))
+                        if v >= 0:
+                            out.append(v)
         except Exception:
             return []
         return sorted(set(out))
@@ -1456,13 +1633,21 @@ class ViewInterpretation(ViewMap):
             source = point_data.GetArray("slice_index")
             if source is None:
                 return
-            from vtk import vtkIntArray
+            try:
+                from vtkmodules.util.numpy_support import numpy_to_vtk, vtk_to_numpy
 
-            alias = vtkIntArray()
-            alias.SetName(prop_name)
-            alias.SetNumberOfComponents(1)
-            for i in range(source.GetNumberOfTuples()):
-                alias.InsertNextValue(int(source.GetValue(i)))
+                alias = numpy_to_vtk(
+                    vtk_to_numpy(source).astype(np.int32, copy=False), deep=True
+                )
+                alias.SetName(prop_name)
+            except Exception:
+                from vtk import vtkIntArray
+
+                alias = vtkIntArray()
+                alias.SetName(prop_name)
+                alias.SetNumberOfComponents(1)
+                for i in range(source.GetNumberOfTuples()):
+                    alias.InsertNextValue(int(source.GetValue(i)))
             if point_data.HasArray(prop_name):
                 point_data.RemoveArray(prop_name)
             point_data.AddArray(alias)
@@ -1470,7 +1655,12 @@ class ViewInterpretation(ViewMap):
             pass
 
     def _ensure_slice_index_property_metadata(
-        self, entity_dict=None, uid=None, vtk_obj=None, slice_indices=None
+        self,
+        entity_dict=None,
+        uid=None,
+        vtk_obj=None,
+        slice_indices=None,
+        emit_updates=True,
     ):
         """
         Ensure `slice_index` appears in properties metadata when the geometry carries
@@ -1540,14 +1730,61 @@ class ViewInterpretation(ViewMap):
             self.parent.geol_coll.set_uid_properties_components(
                 uid=uid, properties_components=prop_comps
             )
-            try:
-                self.parent.signals.data_keys_added.emit([uid], self.parent.geol_coll)
-            except Exception:
-                pass
-            self._refresh_properties_legend()
+            if emit_updates:
+                try:
+                    self.parent.signals.data_keys_added.emit([uid], self.parent.geol_coll)
+                except Exception:
+                    pass
+                self._refresh_properties_legend()
             return True
 
         return False
+
+    def _extract_polyline_cells_numpy(self, vtk_obj=None):
+        """Return point coordinates and per-cell point ids for a PolyLine-like dataset."""
+        if vtk_obj is None or vtk_obj.GetNumberOfCells() <= 0 or vtk_obj.GetNumberOfPoints() <= 0:
+            return None, None, None
+
+        try:
+            from vtkmodules.util.numpy_support import vtk_to_numpy
+
+            vtk_points = vtk_obj.GetPoints()
+            if vtk_points is None or vtk_points.GetData() is None:
+                return None, None, None
+            points = vtk_to_numpy(vtk_points.GetData()).reshape(-1, 3)
+
+            cell_container = None
+            if hasattr(vtk_obj, "GetLines"):
+                lines = vtk_obj.GetLines()
+                if lines is not None and lines.GetNumberOfCells() > 0 and lines.GetData() is not None:
+                    cell_container = lines
+            if cell_container is None and hasattr(vtk_obj, "GetPolys"):
+                polys = vtk_obj.GetPolys()
+                if polys is not None and polys.GetNumberOfCells() > 0 and polys.GetData() is not None:
+                    cell_container = polys
+            if cell_container is None:
+                return points, None, None
+
+            flat = vtk_to_numpy(cell_container.GetData()).astype(np.int64, copy=False)
+            if flat.size == 0:
+                return points, None, None
+
+            starts = []
+            sizes = []
+            cursor = 0
+            flat_size = int(flat.size)
+            while cursor < flat_size:
+                cell_size = int(flat[cursor])
+                next_cursor = cursor + cell_size + 1
+                if cell_size <= 0 or next_cursor > flat_size:
+                    return points, None, None
+                starts.append(cursor + 1)
+                sizes.append(cell_size)
+                cursor = next_cursor
+
+            return points, flat, (np.asarray(starts, dtype=np.int64), np.asarray(sizes, dtype=np.int64))
+        except Exception:
+            return None, None, None
 
     def _get_visible_line_actor_for_uid(self, uid=None):
         """Return the currently visible actor used to display a line uid in this view."""
@@ -5250,6 +5487,7 @@ class ViewInterpretation(ViewMap):
 
             # SHOW
             for uid in to_show:
+                self._ensure_geology_actor_realized(uid=uid, visible=True)
                 self.set_actor_visibility(uid, True)
 
             # Update state
@@ -5286,6 +5524,289 @@ class ViewInterpretation(ViewMap):
         if actor:
             actor.SetVisibility(visible)
 
+    def _ensure_geology_actor_realized(self, uid=None, visible=None):
+        """Create a deferred geology actor on demand and keep actors_df in sync."""
+        if not uid:
+            return None
+
+        actors = getattr(self.plotter.renderer, "actors", {})
+        for actor_name in (uid, f"geol_coll_{uid}", f"geo_{uid}"):
+            actor = actors.get(actor_name)
+            if actor is not None:
+                if visible is not None:
+                    actor.SetVisibility(visible)
+                if not hasattr(self, "_actor_cache"):
+                    self._actor_cache = {}
+                self._actor_cache[uid] = actor
+                return actor
+
+        actor_row = self._actors_df_row_safe(uid=uid)
+        if actor_row.empty:
+            return None
+        if actor_row["collection"].to_list()[0] != "geol_coll":
+            return None
+
+        show_property = actor_row["show_property"].to_list()[0]
+        if show_property == "none":
+            show_property = None
+        actor = self.show_actor_with_property(
+            uid=uid,
+            coll_name="geol_coll",
+            show_property=show_property,
+            visible=visible if visible is not None else self._is_uid_enabled_in_tree(uid),
+        )
+        self.actors_df.loc[self.actors_df["uid"] == uid, "actor"] = actor
+        if hasattr(self, "_deferred_geol_polyline_actor_uids"):
+            self._deferred_geol_polyline_actor_uids.discard(uid)
+        self._invalidate_actor_cache(uid)
+        return actor
+
+    def _schedule_deferred_geology_actor_realization(self):
+        """Realize deferred non-slice-filtered geology actors in small batches."""
+        pending_uids = [
+            uid
+            for uid in list(getattr(self, "_deferred_geol_polyline_actor_uids", set()))
+            if uid not in getattr(self, "interpretation_lines", {})
+            and uid not in getattr(self, "multipart_horizons", {})
+            and uid not in getattr(self, "multipart_faults", {})
+            and self._is_uid_enabled_in_tree(uid)
+        ]
+        self._pending_deferred_geol_realization = pending_uids
+        if not pending_uids:
+            return
+        if getattr(self, "_deferred_geol_realization_active", False):
+            return
+        self._deferred_geol_realization_active = True
+        QTimer.singleShot(0, self._realize_deferred_geology_actor_batch)
+
+    def _realize_deferred_geology_actor_batch(self, batch_size=50):
+        """Create a small batch of deferred geology polyline actors."""
+        pending_uids = list(getattr(self, "_pending_deferred_geol_realization", []))
+        if not pending_uids:
+            self._deferred_geol_realization_active = False
+            return
+
+        batch = pending_uids[:batch_size]
+        self._pending_deferred_geol_realization = pending_uids[batch_size:]
+
+        for uid in batch:
+            if uid in getattr(self, "interpretation_lines", {}):
+                continue
+            if uid in getattr(self, "multipart_horizons", {}):
+                continue
+            if uid in getattr(self, "multipart_faults", {}):
+                continue
+            if not self._is_uid_enabled_in_tree(uid):
+                continue
+            self._ensure_geology_actor_realized(uid=uid, visible=True)
+
+        if self.plotter is not None:
+            try:
+                self.plotter.render()
+            except Exception:
+                pass
+
+        if self._pending_deferred_geol_realization:
+            QTimer.singleShot(0, self._realize_deferred_geology_actor_batch)
+        else:
+            self._deferred_geol_realization_active = False
+
+    def _cancel_pending_horizon_scan(self):
+        """Invalidate any queued horizon scan batches for a previous source."""
+        self._horizon_scan_generation += 1
+        self._pending_horizon_scan_items = []
+        self._pending_horizon_scan_index = 0
+        self._pending_horizon_scan_processed_count = 0
+        self._pending_horizon_scan_started_at = None
+        self._pending_slice_metadata_uids = set()
+        self._pending_horizon_scan_stats = {}
+
+    def _prepare_horizon_scan_items(self):
+        """Collect candidate geology polylines for slice-aware indexing."""
+        geol_df = self.parent.geol_coll.df
+        if "topology" in geol_df.columns:
+            candidate_df = geol_df.loc[geol_df["topology"] == "PolyLine", ["uid", "vtk_obj"]]
+        else:
+            candidate_df = geol_df.loc[:, ["uid", "vtk_obj"]]
+        if candidate_df.empty:
+            return []
+        candidate_uids = candidate_df["uid"].to_numpy(copy=False)
+        candidate_vtks = candidate_df["vtk_obj"].to_numpy(copy=False)
+        return list(zip(candidate_uids.tolist(), candidate_vtks.tolist()))
+
+    def _scan_and_index_horizon_batch_items(self, batch_items):
+        """Classify one batch of geology polylines for the active interpretation source."""
+        count = 0
+        bounds_uids = []
+        bounds_list = []
+        fallback_items = []
+        stats = getattr(self, "_pending_horizon_scan_stats", {})
+        stats.setdefault("explicit_count", 0)
+        stats.setdefault("explicit_time", 0.0)
+        stats.setdefault("slice_index_count", 0)
+        stats.setdefault("slice_index_time", 0.0)
+        stats.setdefault("bounds_count", 0)
+        stats.setdefault("bounds_time", 0.0)
+        stats.setdefault("fallback_count", 0)
+        stats.setdefault("fallback_time", 0.0)
+
+        for uid, vtk_obj in batch_items:
+            if uid in self.interpretation_lines:
+                continue
+            if vtk_obj is None or vtk_obj.GetNumberOfPoints() == 0:
+                continue
+
+            t0 = perf_counter()
+            explicit_slice_info = self._extract_single_slice_interpretation_metadata(
+                uid=uid, vtk_obj=vtk_obj
+            )
+            stats["explicit_time"] += perf_counter() - t0
+            if explicit_slice_info is not None:
+                stats["explicit_count"] += 1
+                self.register_interpretation_line(uid, explicit_slice_info)
+                self.set_actor_visibility(uid, False)
+                count += 1
+                continue
+
+            t0 = perf_counter()
+            slice_index_registered = self._register_multipart_from_slice_index(
+                uid=uid, vtk_obj=vtk_obj, emit_updates=False
+            )
+            stats["slice_index_time"] += perf_counter() - t0
+            if slice_index_registered:
+                stats["slice_index_count"] += 1
+                count += 1
+                continue
+
+            try:
+                bounds = vtk_obj.GetBounds()
+            except Exception:
+                continue
+
+            bounds_uids.append(uid)
+            bounds_list.append(bounds)
+            fallback_items.append((uid, vtk_obj))
+            count += 1
+
+        registered_from_bounds = set()
+        if bounds_list:
+            t0 = perf_counter()
+            registered_from_bounds = self._register_single_slice_lines_from_bounds(
+                uids=bounds_uids,
+                bounds_array=np.asarray(bounds_list, dtype=float),
+            )
+            stats["bounds_time"] += perf_counter() - t0
+            stats["bounds_count"] += len(registered_from_bounds)
+
+        for uid, vtk_obj in fallback_items:
+            if uid in registered_from_bounds:
+                continue
+            t0 = perf_counter()
+            if self._try_register_multipart_from_geometry(
+                uid=uid,
+                vtk_obj=vtk_obj,
+                seismic_bounds=self._cached_bounds,
+                seismic_dims=self._cached_dims,
+            ):
+                stats["fallback_time"] += perf_counter() - t0
+                stats["fallback_count"] += 1
+                if self._ensure_slice_index_property_metadata(
+                    uid=uid, vtk_obj=vtk_obj, emit_updates=False
+                ):
+                    self._pending_slice_metadata_uids.add(uid)
+            else:
+                stats["fallback_time"] += perf_counter() - t0
+
+        return count
+
+    def _finish_pending_horizon_scan(self, generation):
+        """Finalize a completed incremental horizon scan."""
+        if generation != self._horizon_scan_generation:
+            return
+
+        elapsed = 0.0
+        if self._pending_horizon_scan_started_at is not None:
+            elapsed = perf_counter() - self._pending_horizon_scan_started_at
+
+        self._lines_indexed = True
+        pending_metadata_uids = sorted(self._pending_slice_metadata_uids)
+        if pending_metadata_uids:
+            try:
+                self.parent.signals.data_keys_added.emit(
+                    pending_metadata_uids, self.parent.geol_coll
+                )
+            except Exception:
+                pass
+            self._refresh_properties_legend()
+            self._pending_slice_metadata_uids.clear()
+        stats = getattr(self, "_pending_horizon_scan_stats", {})
+        self.print_terminal(
+            "Indexing complete. "
+            f"Processed {self._pending_horizon_scan_processed_count} potential horizons in {elapsed:.2f}s."
+        )
+        if stats:
+            self.print_terminal(
+                "Indexing stats: "
+                f"explicit={stats.get('explicit_count', 0)} in {stats.get('explicit_time', 0.0):.2f}s, "
+                f"slice_index={stats.get('slice_index_count', 0)} in {stats.get('slice_index_time', 0.0):.2f}s, "
+                f"bounds={stats.get('bounds_count', 0)} in {stats.get('bounds_time', 0.0):.2f}s, "
+                f"fallback={stats.get('fallback_count', 0)} in {stats.get('fallback_time', 0.0):.2f}s"
+            )
+
+        self.update_interpretation_line_visibility()
+        self.update_all_multipart_horizons_visibility()
+        self.update_all_multipart_faults_visibility()
+        self._suppress_full_multipart_actors()
+        self._schedule_deferred_geology_actor_realization()
+
+        try:
+            self.plotter.render()
+        except Exception:
+            pass
+
+    def _run_pending_horizon_scan_batch(self, generation, batch_size=250):
+        """Process one non-blocking horizon scan batch and reschedule the next one."""
+        if generation != self._horizon_scan_generation:
+            return
+        if self.current_seismic_uid is None:
+            return
+
+        items = self._pending_horizon_scan_items
+        start = self._pending_horizon_scan_index
+        if start >= len(items):
+            self._finish_pending_horizon_scan(generation)
+            return
+
+        stop = min(start + batch_size, len(items))
+        batch_items = items[start:stop]
+        self._pending_horizon_scan_index = stop
+        self._pending_horizon_scan_processed_count += self._scan_and_index_horizon_batch_items(
+            batch_items
+        )
+
+        if stop >= len(items):
+            self._finish_pending_horizon_scan(generation)
+            return
+
+        if (
+            self._pending_horizon_scan_processed_count > 0
+            and self._pending_horizon_scan_processed_count % (batch_size * 4) == 0
+        ):
+            self.update_interpretation_line_visibility()
+            self.update_all_multipart_horizons_visibility()
+            self.update_all_multipart_faults_visibility()
+            try:
+                self.plotter.render()
+            except Exception:
+                pass
+
+        QTimer.singleShot(
+            0,
+            lambda gen=generation: self._run_pending_horizon_scan_batch(
+                gen, batch_size=batch_size
+            ),
+        )
+
     def register_interpretation_line(self, uid, slice_info):
         """Register a line in both the main dict and the spatial index."""
         self.interpretation_lines[uid] = slice_info
@@ -5311,6 +5832,8 @@ class ViewInterpretation(ViewMap):
             and self._is_uid_enabled_in_tree(uid)
         )
 
+        if matches_current:
+            self._ensure_geology_actor_realized(uid=uid, visible=True)
         self.set_actor_visibility(uid, matches_current)
         self._apply_coplanar_interpretation_offset(uid=uid)
 
@@ -5415,14 +5938,20 @@ class ViewInterpretation(ViewMap):
                     continue
 
                 slice_array = vtk_obj.GetCellData().GetArray("slice_index")
-                n_cells = vtk_obj.GetNumberOfCells()
+                try:
+                    from vtkmodules.util.numpy_support import vtk_to_numpy
 
-                # Find cells that match the current slice index
-                matching_cell_ids = []
-                for i in range(n_cells):
-                    cell_slice_idx = int(slice_array.GetValue(i))
-                    if cell_slice_idx == self.current_slice_index:
-                        matching_cell_ids.append(i)
+                    slice_values = vtk_to_numpy(slice_array)
+                    matching_cell_ids = np.flatnonzero(
+                        slice_values == self.current_slice_index
+                    ).astype(int).tolist()
+                except Exception:
+                    n_cells = vtk_obj.GetNumberOfCells()
+                    matching_cell_ids = []
+                    for i in range(n_cells):
+                        cell_slice_idx = int(slice_array.GetValue(i))
+                        if cell_slice_idx == self.current_slice_index:
+                            matching_cell_ids.append(i)
 
                 if len(matching_cell_ids) == 0:
                     self.set_actor_visibility(horizon_uid, False)
@@ -5555,14 +6084,20 @@ class ViewInterpretation(ViewMap):
 
             # Extract cells matching current slice using direct iteration
             slice_array = vtk_obj.GetCellData().GetArray("slice_index")
-            n_cells = vtk_obj.GetNumberOfCells()
+            try:
+                from vtkmodules.util.numpy_support import vtk_to_numpy
 
-            # Find cells that match the current slice index
-            matching_cell_ids = []
-            for i in range(n_cells):
-                cell_slice_idx = int(slice_array.GetValue(i))
-                if cell_slice_idx == self.current_slice_index:
-                    matching_cell_ids.append(i)
+                slice_values = vtk_to_numpy(slice_array)
+                matching_cell_ids = np.flatnonzero(
+                    slice_values == self.current_slice_index
+                ).astype(int).tolist()
+            except Exception:
+                n_cells = vtk_obj.GetNumberOfCells()
+                matching_cell_ids = []
+                for i in range(n_cells):
+                    cell_slice_idx = int(slice_array.GetValue(i))
+                    if cell_slice_idx == self.current_slice_index:
+                        matching_cell_ids.append(i)
 
             if len(matching_cell_ids) == 0:
                 self.set_actor_visibility(fault_uid, False)
@@ -5606,6 +6141,178 @@ class ViewInterpretation(ViewMap):
         for uid in list(self.multipart_faults.keys()):
             self.update_multipart_fault_visibility(uid)
 
+    def _register_multipart_from_slice_index(self, uid=None, vtk_obj=None, emit_updates=True):
+        """Fast path for multipart lines already carrying `slice_index` cell data."""
+        if uid is None or vtk_obj is None:
+            return False
+
+        try:
+            cell_data = vtk_obj.GetCellData()
+            if cell_data is None or not cell_data.HasArray("slice_index"):
+                return False
+
+            slice_array = cell_data.GetArray("slice_index")
+            if slice_array is None or slice_array.GetNumberOfTuples() <= 0:
+                return False
+
+            try:
+                from vtkmodules.util.numpy_support import vtk_to_numpy
+
+                slice_values = vtk_to_numpy(slice_array).astype(np.int32, copy=False)
+            except Exception:
+                slice_values = np.array(
+                    [int(slice_array.GetValue(i)) for i in range(slice_array.GetNumberOfTuples())],
+                    dtype=np.int32,
+                )
+
+            valid_mask = slice_values >= 0
+            if not np.any(valid_mask):
+                return False
+
+            valid_indices = np.flatnonzero(valid_mask)
+            valid_slices = slice_values[valid_mask]
+            unique_slices, first_positions = np.unique(valid_slices, return_index=True)
+            first_cell_ids = valid_indices[first_positions]
+            order = np.argsort(first_cell_ids)
+            ordered_slices = unique_slices[order]
+            ordered_cells = first_cell_ids[order]
+
+            axis = None
+            field_data = vtk_obj.GetFieldData()
+            if field_data and field_data.HasArray("slice_axis"):
+                axis_array = field_data.GetAbstractArray("slice_axis")
+                if axis_array and axis_array.GetNumberOfValues() > 0:
+                    axis = axis_array.GetValue(0)
+
+            if axis is None and vtk_obj.GetNumberOfCells() > 0:
+                first_cell = vtk_obj.GetCell(0)
+                if first_cell is not None:
+                    pts = first_cell.GetPoints()
+                    if pts is not None:
+                        sample_count = min(pts.GetNumberOfPoints(), 50)
+                        if sample_count > 0:
+                            sample = np.array(
+                                [pts.GetPoint(i) for i in range(sample_count)], dtype=float
+                            )
+                            spreads = np.ptp(sample, axis=0)
+                            total_spread = float(np.sum(spreads))
+                            smallest_idx = int(np.argmin(spreads))
+                            sorted_idx = np.argsort(spreads)
+                            second_spread = (
+                                spreads[sorted_idx[1]] if len(sorted_idx) > 1 else np.inf
+                            )
+                            if total_spread <= 0:
+                                axis = self.current_axis
+                            elif (
+                                spreads[smallest_idx] < 0.01 * total_spread
+                                or spreads[smallest_idx] < second_spread * 0.1
+                            ):
+                                axis = ("Inline", "Crossline", "Z-slice")[smallest_idx]
+                            else:
+                                axis = self.current_axis
+
+            if axis is None:
+                axis = self.current_axis
+
+            if self._ensure_slice_index_property_metadata(
+                uid=uid, vtk_obj=vtk_obj, emit_updates=emit_updates
+            ) and not emit_updates:
+                self._pending_slice_metadata_uids.add(uid)
+            self._register_multipart_interpretation_entity(
+                uid=uid,
+                axis=axis,
+                slice_indices=ordered_slices.astype(int).tolist(),
+                slice_to_cell_index={
+                    int(slice_idx): int(cell_id)
+                    for slice_idx, cell_id in zip(ordered_slices, ordered_cells)
+                },
+            )
+            self.set_actor_visibility(uid, False)
+            try:
+                if uid in self.plotter.renderer.actors:
+                    self.plotter.remove_actor(uid)
+            except Exception:
+                pass
+            return True
+        except Exception:
+            return False
+
+    def _register_single_slice_lines_from_bounds(self, uids=None, bounds_array=None):
+        """Vectorized single-slice classification using per-line bounds."""
+        if not uids or bounds_array is None or len(bounds_array) == 0:
+            return set()
+        if not hasattr(self, "_cached_bounds") or not self._cached_bounds:
+            return set()
+
+        seismic_bounds = np.asarray(self._cached_bounds, dtype=float)
+        seismic_dims = np.asarray(self._cached_dims, dtype=int)
+        spacing = np.array(
+            [
+                (seismic_bounds[1] - seismic_bounds[0]) / max(seismic_dims[0] - 1, 1),
+                (seismic_bounds[3] - seismic_bounds[2]) / max(seismic_dims[1] - 1, 1),
+                (seismic_bounds[5] - seismic_bounds[4]) / max(seismic_dims[2] - 1, 1),
+            ],
+            dtype=float,
+        )
+        tol = np.maximum(np.abs(spacing) * 0.35, 1e-3)
+        mins = bounds_array[:, [0, 2, 4]]
+        maxs = bounds_array[:, [1, 3, 5]]
+        centers = 0.5 * (mins + maxs)
+        spans = np.abs(maxs - mins)
+        available = np.ones(len(uids), dtype=bool)
+        registered = set()
+        min_span_guard = 1e-9
+
+        axis_defs = (
+            ("Inline", 0, seismic_bounds[0], spacing[0], int(seismic_dims[0]), (1, 2)),
+            ("Crossline", 1, seismic_bounds[2], spacing[1], int(seismic_dims[1]), (0, 2)),
+            ("Z-slice", 2, seismic_bounds[4], spacing[2], int(seismic_dims[2]), (0, 1)),
+        )
+
+        for axis_name, axis_idx, origin, axis_spacing, dim_n, other_axes in axis_defs:
+            if axis_spacing <= 0 or dim_n <= 0:
+                continue
+            dominant_span = np.maximum(
+                np.maximum(spans[:, other_axes[0]], spans[:, other_axes[1]]),
+                min_span_guard,
+            )
+            flat_mask = (
+                available
+                & (spans[:, axis_idx] < tol[axis_idx])
+                & (spans[:, axis_idx] < 0.1 * dominant_span)
+            )
+            if not np.any(flat_mask):
+                continue
+
+            flat_indices = np.flatnonzero(flat_mask)
+            idx_float = (centers[flat_indices, axis_idx] - origin) / axis_spacing
+            idx_round = np.rint(idx_float).astype(np.int32)
+            valid_mask = (
+                (np.abs(idx_float - idx_round) < 0.1)
+                & (idx_round >= 0)
+                & (idx_round < dim_n)
+            )
+            if not np.any(valid_mask):
+                continue
+
+            valid_indices = flat_indices[valid_mask]
+            valid_round = idx_round[valid_mask]
+            for arr_idx, slice_idx in zip(valid_indices, valid_round):
+                uid = uids[arr_idx]
+                self.register_interpretation_line(
+                    uid,
+                    {
+                        "seismic_uid": self.current_seismic_uid,
+                        "axis": axis_name,
+                        "slice_index": int(slice_idx),
+                    },
+                )
+                self.set_actor_visibility(uid, False)
+                registered.add(uid)
+            available[valid_indices] = False
+
+        return registered
+
     def scan_and_index_existing_horizons(self):
         """
         Scan all PolyLines in the project. If they align spatially with the current seismic volume,
@@ -5618,36 +6325,25 @@ class ViewInterpretation(ViewMap):
         self.print_terminal(
             "Scanning existing horizons to index for efficient slicing..."
         )
-
-        count = 0
         try:
-            geol_df = self.parent.geol_coll.df
-            if "topology" in geol_df.columns:
-                candidate_uids = geol_df.loc[
-                    geol_df["topology"] == "PolyLine", "uid"
-                ].tolist()
-            else:
-                candidate_uids = self.parent.geol_coll.get_uids
-
-            for uid in candidate_uids:
-                if uid in self.interpretation_lines:
-                    continue
-                self.scan_and_index_single_horizon(uid)
-                count += 1
-
+            scan_items = self._prepare_horizon_scan_items()
+            if not scan_items:
+                self._lines_indexed = True
+                return
+            self._cancel_pending_horizon_scan()
+            generation = self._horizon_scan_generation
+            self._pending_horizon_scan_items = scan_items
+            self._pending_horizon_scan_index = 0
+            self._pending_horizon_scan_processed_count = 0
+            self._pending_horizon_scan_started_at = perf_counter()
+            QTimer.singleShot(
+                0, lambda gen=generation: self._run_pending_horizon_scan_batch(gen)
+            )
         except Exception as e:
             self.print_terminal(f"Error scanning horizons: {e}")
             import traceback
 
             self.print_terminal(traceback.format_exc())
-
-        self._lines_indexed = True
-        self.print_terminal(f"Indexing complete. Processed {count} potential horizons.")
-
-        # Update visibility for both regular interpretation lines and multipart horizons/faults
-        self.update_interpretation_line_visibility()
-        self.update_all_multipart_horizons_visibility()
-        self.update_all_multipart_faults_visibility()
 
     def scan_and_index_single_horizon(self, uid):
         """Check if a single horizon fits the current seismic grid and index it."""
@@ -5666,107 +6362,7 @@ class ViewInterpretation(ViewMap):
 
             # First check if this is a multipart horizon (has slice_index cell data)
             # This is more efficient than checking geometry, and handles propagated horizons
-            cell_data = vtk_obj.GetCellData()
-            if cell_data and cell_data.HasArray("slice_index"):
-                self._ensure_slice_index_property_metadata(uid=uid, vtk_obj=vtk_obj)
-                # This is a multipart horizon! Reconstruct its metadata
-                slice_array = cell_data.GetArray("slice_index")
-                n_cells = vtk_obj.GetNumberOfCells()
-
-                # Extract unique slice indices and build mapping
-                slice_indices = []
-                slice_to_cell_index = {}
-                for i in range(n_cells):
-                    slice_idx = int(slice_array.GetValue(i))
-                    if slice_idx not in slice_to_cell_index:
-                        slice_indices.append(slice_idx)
-                        slice_to_cell_index[slice_idx] = i
-
-                # First, try to get the axis from stored field data (preferred method)
-                axis = None
-                field_data = vtk_obj.GetFieldData()
-                if field_data and field_data.HasArray("slice_axis"):
-                    axis_array = field_data.GetAbstractArray("slice_axis")
-                    if axis_array and axis_array.GetNumberOfValues() > 0:
-                        axis = axis_array.GetValue(0)
-                        self.print_terminal(f"  Recovered axis from field data: {axis}")
-
-                # Fall back to geometry detection if no stored axis
-                if axis is None:
-                    # Determine axis by checking the geometry of the first cell's points
-                    # Get first cell points to detect which plane it lies in
-                    first_cell = vtk_obj.GetCell(0)
-                    n_pts = first_cell.GetNumberOfPoints()
-                    if n_pts > 0:
-                        # Sample more points for better accuracy
-                        pts = [
-                            first_cell.GetPoints().GetPoint(i)
-                            for i in range(min(n_pts, 50))
-                        ]
-                        xs = [p[0] for p in pts]
-                        ys = [p[1] for p in pts]
-                        zs = [p[2] for p in pts]
-
-                        x_range = max(xs) - min(xs)
-                        y_range = max(ys) - min(ys)
-                        z_range = max(zs) - min(zs)
-
-                        # Determine which axis has minimal variation (that's the slice axis)
-                        # Use a more robust comparison: check which dimension has the smallest range
-                        # relative to the total span, or is essentially zero
-                        ranges = [
-                            ("Inline", x_range),
-                            ("Crossline", y_range),
-                            ("Z-slice", z_range),
-                        ]
-
-                        # Sort by range to find the smallest
-                        ranges.sort(key=lambda r: r[1])
-                        smallest_axis, smallest_range = ranges[0]
-                        second_axis, second_range = ranges[1]
-
-                        # The axis with smallest range is the slice axis, but only if it's
-                        # significantly smaller than the others (at least 10x smaller, or near zero)
-                        total_range = x_range + y_range + z_range
-                        if total_range > 0:
-                            if (
-                                smallest_range < 0.01 * total_range
-                                or smallest_range < second_range * 0.1
-                            ):
-                                axis = smallest_axis
-                            else:
-                                # Default to current axis if detection is ambiguous
-                                axis = self.current_axis
-                        else:
-                            axis = self.current_axis
-
-                        self.print_terminal(
-                            f"  Detected axis from geometry: {axis} (ranges: X={x_range:.2f}, Y={y_range:.2f}, Z={z_range:.2f})"
-                        )
-
-                # If axis is still None (no field data and geometry detection failed), default to current axis
-                if axis is None:
-                    axis = self.current_axis
-                    self.print_terminal(f"  Using current axis as fallback: {axis}")
-
-                entity_kind = self._register_multipart_interpretation_entity(
-                    uid=uid,
-                    axis=axis,
-                    slice_indices=slice_indices,
-                    slice_to_cell_index=slice_to_cell_index,
-                )
-
-                self.print_terminal(
-                    f"Registered multipart {entity_kind} {uid}: {len(slice_indices)} slices on {axis}"
-                )
-                # IMPORTANT: Hide the full horizon actor - we will only show filtered slices
-                self.set_actor_visibility(uid, False)
-                # Also try to remove it from renderer completely to prevent it showing
-                try:
-                    if uid in self.plotter.renderer.actors:
-                        self.plotter.remove_actor(uid)
-                except:
-                    pass
+            if self._register_multipart_from_slice_index(uid=uid, vtk_obj=vtk_obj):
                 return
 
             # Not a multipart horizon - check if it's a single-slice interpretation line
@@ -5793,91 +6389,10 @@ class ViewInterpretation(ViewMap):
                 self._ensure_slice_index_property_metadata(uid=uid, vtk_obj=vtk_obj)
                 return
 
-            # Calculate spacing on the fly (assuming regular grid)
-            dx = (seismic_bounds[1] - seismic_bounds[0]) / max(seismic_dims[0] - 1, 1)
-            dy = (seismic_bounds[3] - seismic_bounds[2]) / max(seismic_dims[1] - 1, 1)
-            dz = (seismic_bounds[5] - seismic_bounds[4]) / max(seismic_dims[2] - 1, 1)
-
-            # Spacing-aware tolerance for "flatness" to handle operations introducing
-            # small numerical offsets along the nominal slice axis.
-            tol_x = max(abs(dx) * 0.35, 1e-3)
-            tol_y = max(abs(dy) * 0.35, 1e-3)
-            tol_z = max(abs(dz) * 0.35, 1e-3)
-            x_range = abs(bounds[1] - bounds[0])
-            y_range = abs(bounds[3] - bounds[2])
-            z_range = abs(bounds[5] - bounds[4])
-            min_span_guard = 1e-9
-
-            # Check for Inline (YZ plane, X is constant)
-            if x_range < tol_x and x_range < 0.1 * max(
-                y_range, z_range, min_span_guard
+            if uid in self._register_single_slice_lines_from_bounds(
+                uids=[uid], bounds_array=np.asarray([bounds], dtype=float)
             ):
-                # Calculate which slice index this corresponds to
-                # x = bounds[0] (or center)
-                x_pos = (bounds[0] + bounds[1]) / 2.0
-
-                # Inverse mapping: index = (pos - origin) / spacing
-                # Should match world_to_slice_coords logic
-                if dx > 0:
-                    idx_float = (x_pos - seismic_bounds[0]) / dx
-                    idx = int(round(idx_float))
-
-                    # Verify it's actually close to an integer index
-                    if abs(idx_float - idx) < 0.1:
-                        if 0 <= idx < seismic_dims[0]:
-                            self.register_interpretation_line(
-                                uid,
-                                {
-                                    "seismic_uid": self.current_seismic_uid,
-                                    "axis": "Inline",
-                                    "slice_index": idx,
-                                },
-                            )
-                            # Initially hide it (visibility update will show it if it matches current)
-                            self.set_actor_visibility(uid, False)
-                            return
-
-            # Check for Crossline (XZ plane, Y is constant)
-            if y_range < tol_y and y_range < 0.1 * max(
-                x_range, z_range, min_span_guard
-            ):
-                y_pos = (bounds[2] + bounds[3]) / 2.0
-                if dy > 0:
-                    idx_float = (y_pos - seismic_bounds[2]) / dy
-                    idx = int(round(idx_float))
-                    if abs(idx_float - idx) < 0.1:
-                        if 0 <= idx < seismic_dims[1]:
-                            self.register_interpretation_line(
-                                uid,
-                                {
-                                    "seismic_uid": self.current_seismic_uid,
-                                    "axis": "Crossline",
-                                    "slice_index": idx,
-                                },
-                            )
-                            self.set_actor_visibility(uid, False)
-                            return
-
-            # Check for Z-slice (XY plane, Z is constant)
-            if z_range < tol_z and z_range < 0.1 * max(
-                x_range, y_range, min_span_guard
-            ):
-                z_pos = (bounds[4] + bounds[5]) / 2.0
-                if dz > 0:
-                    idx_float = (z_pos - seismic_bounds[4]) / dz
-                    idx = int(round(idx_float))
-                    if abs(idx_float - idx) < 0.1:
-                        if 0 <= idx < seismic_dims[2]:
-                            self.register_interpretation_line(
-                                uid,
-                                {
-                                    "seismic_uid": self.current_seismic_uid,
-                                    "axis": "Z-slice",
-                                    "slice_index": idx,
-                                },
-                            )
-                            self.set_actor_visibility(uid, False)
-                            return
+                return
 
         except Exception as e:
             # self.print_terminal(f"Debug: failed to scan {uid}: {e}")
@@ -5895,6 +6410,13 @@ class ViewInterpretation(ViewMap):
             if n_cells < 2:
                 return False
 
+            points, cell_flat, cell_meta = self._extract_polyline_cells_numpy(vtk_obj)
+            if points is None or cell_flat is None or cell_meta is None:
+                return False
+            cell_starts, cell_sizes = cell_meta
+            if cell_starts.size < 2:
+                return False
+
             dx = (seismic_bounds[1] - seismic_bounds[0]) / max(seismic_dims[0] - 1, 1)
             dy = (seismic_bounds[3] - seismic_bounds[2]) / max(seismic_dims[1] - 1, 1)
             dz = (seismic_bounds[5] - seismic_bounds[4]) / max(seismic_dims[2] - 1, 1)
@@ -5909,21 +6431,17 @@ class ViewInterpretation(ViewMap):
                 if abs(spacing) <= 0:
                     continue
 
-                per_cell = {}
+                per_cell = np.full(cell_starts.size, -1, dtype=np.int32)
                 spreads = []
                 frac_err = []
-                for cell_id in range(n_cells):
-                    cell = vtk_obj.GetCell(cell_id)
-                    pts = cell.GetPoints() if cell is not None else None
-                    if pts is None:
-                        continue
-                    n_pts = pts.GetNumberOfPoints()
-                    if n_pts < 2:
+                for cell_id, (start, cell_size) in enumerate(zip(cell_starts, cell_sizes)):
+                    if cell_size < 2:
                         continue
 
-                    coords = [pts.GetPoint(i)[coord_idx] for i in range(n_pts)]
-                    c_min = min(coords)
-                    c_max = max(coords)
+                    point_ids = cell_flat[start : start + cell_size]
+                    coords = points[point_ids, coord_idx]
+                    c_min = float(coords.min())
+                    c_max = float(coords.max())
                     c_avg = (c_min + c_max) * 0.5
                     idx_float = (c_avg - origin) / spacing
                     idx_round = int(round(idx_float))
@@ -5934,10 +6452,11 @@ class ViewInterpretation(ViewMap):
                     spreads.append(abs(c_max - c_min) / max(abs(spacing), 1e-12))
                     frac_err.append(abs(idx_float - idx_round))
 
-                if not per_cell:
+                valid_mask = per_cell >= 0
+                if not np.any(valid_mask):
                     continue
 
-                unique_slices = sorted(set(per_cell.values()))
+                unique_slices = np.unique(per_cell[valid_mask]).astype(np.int32)
                 if len(unique_slices) < 2:
                     continue
 
@@ -5962,35 +6481,29 @@ class ViewInterpretation(ViewMap):
 
             axis_name, per_cell, unique_slices, _ = best
 
-            from vtk import vtkIntArray, vtkStringArray
+            from vtk import vtkStringArray
+            from vtkmodules.util.numpy_support import numpy_to_vtk
 
-            # Build cell-level slice_index array.
-            cell_slice_arr = vtkIntArray()
+            cell_slice_arr = numpy_to_vtk(per_cell.astype(np.int32, copy=False), deep=True)
             cell_slice_arr.SetName("slice_index")
-            cell_slice_arr.SetNumberOfComponents(1)
-            for cell_id in range(n_cells):
-                cell_slice_arr.InsertNextValue(int(per_cell.get(cell_id, -1)))
             cell_data = vtk_obj.GetCellData()
             if cell_data and cell_data.HasArray("slice_index"):
                 cell_data.RemoveArray("slice_index")
             vtk_obj.GetCellData().AddArray(cell_slice_arr)
 
-            # Build point-level slice_index array (best effort from first owning cell).
             n_points = vtk_obj.GetNumberOfPoints()
-            point_slice = [-1] * n_points
-            for cell_id, sidx in per_cell.items():
-                cell = vtk_obj.GetCell(cell_id)
-                if cell is None:
-                    continue
-                for j in range(cell.GetNumberOfPoints()):
-                    pid = cell.GetPointId(j)
-                    if 0 <= pid < n_points and point_slice[pid] < 0:
-                        point_slice[pid] = int(sidx)
-            point_slice_arr = vtkIntArray()
+            point_slice = np.full(n_points, -1, dtype=np.int32)
+            valid_cell_ids = np.flatnonzero(per_cell >= 0)
+            for cell_id in valid_cell_ids:
+                point_ids = cell_flat[
+                    cell_starts[cell_id] : cell_starts[cell_id] + cell_sizes[cell_id]
+                ]
+                unassigned = point_slice[point_ids] < 0
+                if np.any(unassigned):
+                    point_slice[point_ids[unassigned]] = per_cell[cell_id]
+
+            point_slice_arr = numpy_to_vtk(point_slice, deep=True)
             point_slice_arr.SetName("slice_index")
-            point_slice_arr.SetNumberOfComponents(1)
-            for sidx in point_slice:
-                point_slice_arr.InsertNextValue(int(sidx))
             point_data = vtk_obj.GetPointData()
             if point_data and point_data.HasArray("slice_index"):
                 point_data.RemoveArray("slice_index")
@@ -6007,15 +6520,17 @@ class ViewInterpretation(ViewMap):
             vtk_obj.GetFieldData().AddArray(axis_arr)
             vtk_obj.Modified()
 
+            slice_to_cell_index = {}
+            for cell_id in valid_cell_ids:
+                slice_idx = int(per_cell[cell_id])
+                if slice_idx not in slice_to_cell_index:
+                    slice_to_cell_index[slice_idx] = int(cell_id)
+
             self._register_multipart_interpretation_entity(
                 uid=uid,
                 axis=axis_name,
-                slice_indices=unique_slices,
-                slice_to_cell_index={sidx: cid for cid, sidx in per_cell.items()},
-            )
-
-            self.print_terminal(
-                f"Recovered multipart slice metadata for {uid[:8]}... ({axis_name}, {len(unique_slices)} slices)"
+                slice_indices=unique_slices.tolist(),
+                slice_to_cell_index=slice_to_cell_index,
             )
             self.set_actor_visibility(uid, False)
             return True
@@ -6180,6 +6695,8 @@ class ViewInterpretation(ViewMap):
                 self.scan_and_index_single_horizon(uid)
                 self.set_actor_visibility(uid, False)
                 continue
+            if actor_row["collection"].to_list()[0] == "geol_coll":
+                self._ensure_geology_actor_realized(uid=uid, visible=True)
             self.set_actor_visible(uid=uid, visible=True)
 
         for uid in turn_off_uids:
@@ -6195,7 +6712,10 @@ class ViewInterpretation(ViewMap):
                 if hasattr(self, "vis_lines_on_display"):
                     self.vis_lines_on_display.discard(uid)
                 continue
-            self.set_actor_visible(uid=uid, visible=False)
+            try:
+                self.set_actor_visible(uid=uid, visible=False)
+            except Exception:
+                pass
 
         if not slice_filtered_uids:
             return
@@ -9822,8 +10342,10 @@ class ViewInterpretation(ViewMap):
     def clear_seismic_volumes(self):
         """Remove any full structured-source actors from the plotter."""
         try:
-            for source_info in self._iter_interpretation_sources():
-                uid = source_info.get("uid")
+            for _label, source_info in self._iter_interpretation_source_candidates():
+                uid = source_info[1] if isinstance(source_info, tuple) and len(source_info) >= 2 else None
+                if not uid:
+                    continue
                 if uid in self.plotter.renderer.actors:
                     self.plotter.remove_actor(uid)
                     self.print_terminal(f"Cleared full source volume: {uid}")
