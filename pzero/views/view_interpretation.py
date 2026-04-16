@@ -1836,15 +1836,157 @@ class ViewInterpretation(ViewMap):
             else:
                 target_array.InsertNextTuple(source_array.GetTuple(tuple_idx))
 
-    def _build_multipart_vtk_with_replaced_slice(
-        self, vtk_obj=None, slice_idx=None, edited_points=None
-    ):
-        """Return a multipart PolyLine where one slice is replaced with edited geometry."""
-        if vtk_obj is None or edited_points is None:
-            return None, [], {}
+    def _get_axis_spacing(self, axis=None):
+        """Return the cached spacing for the requested interpretation axis."""
+        axis = axis or self.current_axis
+        dims = getattr(self, "_cached_dims", None)
+        bounds = getattr(self, "_cached_bounds", None)
+        if dims is None or bounds is None:
+            return None
 
-        edited_points = np.asarray(edited_points, dtype=float)
-        if edited_points.ndim != 2 or edited_points.shape[0] < 2:
+        axis_to_idx = {"Inline": 0, "Crossline": 1, "Z-slice": 2}
+        axis_idx = axis_to_idx.get(axis)
+        if axis_idx is None:
+            return None
+
+        n_points = max(int(dims[axis_idx]) - 1, 1)
+        return float(bounds[axis_idx * 2 + 1] - bounds[axis_idx * 2]) / float(n_points)
+
+    def _world_points_to_slice_uv(self, points=None, slice_idx=None, axis=None, affine=None):
+        """Convert world-space points on one slice plane to continuous in-plane slice coordinates."""
+        if points is None:
+            return None
+
+        pts = np.asarray(points, dtype=float)
+        if pts.ndim != 2 or pts.shape[1] != 3 or pts.shape[0] < 2:
+            return None
+
+        axis = axis or self.current_axis
+        if affine is None:
+            affine = self._get_seismic_axis_vectors()
+
+        if affine is not None:
+            origin, a0, a1, a2, _dims = affine
+            if axis == "Inline":
+                base = origin + int(slice_idx) * a0
+                basis = np.column_stack([a1, a2])
+            elif axis == "Crossline":
+                base = origin + int(slice_idx) * a1
+                basis = np.column_stack([a0, a2])
+            else:
+                base = origin + int(slice_idx) * a2
+                basis = np.column_stack([a0, a1])
+            try:
+                uv, *_ = np.linalg.lstsq(basis, (pts - base).T, rcond=None)
+                return np.asarray(uv.T, dtype=float)
+            except Exception:
+                return None
+
+        bounds = getattr(self, "_cached_bounds", None)
+        dims = getattr(self, "_cached_dims", None)
+        if bounds is None or dims is None:
+            return None
+
+        spacing = [
+            float(bounds[1] - bounds[0]) / max(int(dims[0]) - 1, 1),
+            float(bounds[3] - bounds[2]) / max(int(dims[1]) - 1, 1),
+            float(bounds[5] - bounds[4]) / max(int(dims[2]) - 1, 1),
+        ]
+        if axis == "Inline":
+            return np.column_stack(
+                [
+                    (pts[:, 1] - bounds[2]) / spacing[1] if spacing[1] else 0.0,
+                    (pts[:, 2] - bounds[4]) / spacing[2] if spacing[2] else 0.0,
+                ]
+            )
+        if axis == "Crossline":
+            return np.column_stack(
+                [
+                    (pts[:, 0] - bounds[0]) / spacing[0] if spacing[0] else 0.0,
+                    (pts[:, 2] - bounds[4]) / spacing[2] if spacing[2] else 0.0,
+                ]
+            )
+        return np.column_stack(
+            [
+                (pts[:, 0] - bounds[0]) / spacing[0] if spacing[0] else 0.0,
+                (pts[:, 1] - bounds[2]) / spacing[1] if spacing[1] else 0.0,
+            ]
+        )
+
+    def _slice_uv_to_world_points(self, slice_uv=None, slice_idx=None, axis=None, affine=None):
+        """Convert continuous in-plane slice coordinates back to world-space points."""
+        if slice_uv is None:
+            return None
+
+        uv = np.asarray(slice_uv, dtype=float)
+        if uv.ndim != 2 or uv.shape[1] != 2 or uv.shape[0] < 2:
+            return None
+
+        axis = axis or self.current_axis
+        if affine is None:
+            affine = self._get_seismic_axis_vectors()
+
+        if affine is not None:
+            origin, a0, a1, a2, _dims = affine
+            if axis == "Inline":
+                base = origin + int(slice_idx) * a0
+                basis_row = a1
+                basis_col = a2
+            elif axis == "Crossline":
+                base = origin + int(slice_idx) * a1
+                basis_row = a0
+                basis_col = a2
+            else:
+                base = origin + int(slice_idx) * a2
+                basis_row = a0
+                basis_col = a1
+            pts = (
+                base[None, :]
+                + uv[:, 0:1] * basis_row[None, :]
+                + uv[:, 1:2] * basis_col[None, :]
+            )
+            return np.asarray(pts, dtype=float)
+
+        bounds = getattr(self, "_cached_bounds", None)
+        dims = getattr(self, "_cached_dims", None)
+        if bounds is None or dims is None:
+            return None
+
+        spacing = [
+            float(bounds[1] - bounds[0]) / max(int(dims[0]) - 1, 1),
+            float(bounds[3] - bounds[2]) / max(int(dims[1]) - 1, 1),
+            float(bounds[5] - bounds[4]) / max(int(dims[2]) - 1, 1),
+        ]
+        axis_spacing = self._get_axis_spacing(axis=axis)
+        if axis_spacing is None:
+            return None
+
+        target_coord = {
+            "Inline": float(bounds[0]) + int(slice_idx) * axis_spacing,
+            "Crossline": float(bounds[2]) + int(slice_idx) * axis_spacing,
+            "Z-slice": float(bounds[4]) + int(slice_idx) * axis_spacing,
+        }[axis]
+
+        pts = np.zeros((uv.shape[0], 3), dtype=float)
+        if axis == "Inline":
+            pts[:, 0] = target_coord
+            pts[:, 1] = bounds[2] + uv[:, 0] * spacing[1]
+            pts[:, 2] = bounds[4] + uv[:, 1] * spacing[2]
+        elif axis == "Crossline":
+            pts[:, 0] = bounds[0] + uv[:, 0] * spacing[0]
+            pts[:, 1] = target_coord
+            pts[:, 2] = bounds[4] + uv[:, 1] * spacing[2]
+        else:
+            pts[:, 0] = bounds[0] + uv[:, 0] * spacing[0]
+            pts[:, 1] = bounds[2] + uv[:, 1] * spacing[1]
+            pts[:, 2] = target_coord
+        return pts
+
+    def _build_multipart_vtk_with_replaced_slices(
+        self, vtk_obj=None, edited_points_by_slice=None
+    ):
+        """Return a multipart PolyLine where one or more slices are replaced with edited geometry."""
+        if vtk_obj is None or not edited_points_by_slice:
             return None, [], {}
 
         cell_data = vtk_obj.GetCellData()
@@ -1862,18 +2004,35 @@ class ViewInterpretation(ViewMap):
             else None
         )
 
-        reference_cell_id = None
-        reference_point_id = None
-        for old_cell_id in range(vtk_obj.GetNumberOfCells()):
-            if int(cell_slice_array.GetValue(old_cell_id)) != int(slice_idx):
+        clean_replacements = {}
+        for raw_slice_idx, raw_points in dict(edited_points_by_slice).items():
+            try:
+                target_slice_idx = int(raw_slice_idx)
+            except Exception:
                 continue
-            reference_cell_id = old_cell_id
-            cell = vtk_obj.GetCell(old_cell_id)
-            if cell is not None and cell.GetNumberOfPoints() > 0:
-                reference_point_id = cell.GetPointId(0)
-            break
+            points = np.asarray(raw_points, dtype=float)
+            if points.ndim != 2 or points.shape[0] < 2 or points.shape[1] != 3:
+                continue
+            clean_replacements[target_slice_idx] = points
 
-        if reference_cell_id is None:
+        if not clean_replacements:
+            return None, [], {}
+
+        reference_by_slice = {}
+        for old_cell_id in range(vtk_obj.GetNumberOfCells()):
+            old_slice_idx = int(cell_slice_array.GetValue(old_cell_id))
+            if old_slice_idx not in clean_replacements or old_slice_idx in reference_by_slice:
+                continue
+            cell = vtk_obj.GetCell(old_cell_id)
+            point_id = None
+            if cell is not None and cell.GetNumberOfPoints() > 0:
+                point_id = cell.GetPointId(0)
+            reference_by_slice[old_slice_idx] = {
+                "cell_id": old_cell_id,
+                "point_id": point_id,
+            }
+
+        if any(slice_idx not in reference_by_slice for slice_idx in clean_replacements):
             return None, [], {}
 
         point_builders = self._prepare_numeric_array_builders(
@@ -1891,20 +2050,24 @@ class ViewInterpretation(ViewMap):
         new_lines = vtkCellArray()
         point_slice_values = []
         cell_slice_values = []
-        edited_inserted = False
+        inserted_slices = set()
 
         for old_cell_id in range(vtk_obj.GetNumberOfCells()):
             old_slice_idx = int(cell_slice_array.GetValue(old_cell_id))
-            if old_slice_idx == int(slice_idx):
-                if edited_inserted:
+            if old_slice_idx in clean_replacements:
+                if old_slice_idx in inserted_slices:
                     continue
 
+                edited_points = clean_replacements[old_slice_idx]
+                reference_ids = reference_by_slice.get(old_slice_idx, {})
+                reference_cell_id = reference_ids.get("cell_id")
+                reference_point_id = reference_ids.get("point_id")
                 start_idx = new_points.GetNumberOfPoints()
                 for point in edited_points:
                     new_points.InsertNextPoint(
                         float(point[0]), float(point[1]), float(point[2])
                     )
-                    point_slice_values.append(int(slice_idx))
+                    point_slice_values.append(old_slice_idx)
                     self._append_numeric_tuple(
                         builders=point_builders,
                         source_idx=None,
@@ -1917,13 +2080,13 @@ class ViewInterpretation(ViewMap):
                 ):
                     new_lines.InsertCellPoint(point_id)
 
-                cell_slice_values.append(int(slice_idx))
+                cell_slice_values.append(old_slice_idx)
                 self._append_numeric_tuple(
                     builders=cell_builders,
                     source_idx=None,
                     default_idx=reference_cell_id,
                 )
-                edited_inserted = True
+                inserted_slices.add(old_slice_idx)
                 continue
 
             cell = vtk_obj.GetCell(old_cell_id)
@@ -1950,7 +2113,7 @@ class ViewInterpretation(ViewMap):
                 self._append_numeric_tuple(
                     builders=point_builders,
                     source_idx=old_point_id,
-                    default_idx=reference_point_id,
+                    default_idx=None,
                 )
 
             new_lines.InsertNextCell(n_pts)
@@ -1961,11 +2124,11 @@ class ViewInterpretation(ViewMap):
             self._append_numeric_tuple(
                 builders=cell_builders,
                 source_idx=old_cell_id,
-                default_idx=reference_cell_id,
+                default_idx=None,
             )
 
         if (
-            not edited_inserted
+            inserted_slices != set(clean_replacements.keys())
             or new_points.GetNumberOfPoints() == 0
             or new_lines.GetNumberOfCells() == 0
         ):
@@ -2013,6 +2176,58 @@ class ViewInterpretation(ViewMap):
         )
         rebuilt_line.Modified()
         return rebuilt_line, slice_indices, slice_to_cell_index
+
+    def _build_multipart_vtk_with_replaced_slice(
+        self, vtk_obj=None, slice_idx=None, edited_points=None
+    ):
+        """Return a multipart PolyLine where one slice is replaced with edited geometry."""
+        return self._build_multipart_vtk_with_replaced_slices(
+            vtk_obj=vtk_obj,
+            edited_points_by_slice={slice_idx: edited_points},
+        )
+
+    def _prompt_multipart_edit_propagation_slices(self, selection=None, current_slice_idx=None):
+        """Ask whether the current edit should be copied to additional slices and return matching targets."""
+        if selection is None:
+            return []
+
+        available_slices = sorted({int(idx) for idx in selection.get("available_slices", [])})
+        if not available_slices:
+            return []
+
+        apply_to_range = options_dialog(
+            title="Edit line",
+            message=(
+                "Do you want to apply this edited line to other slices of the same multipart "
+                "entity?"
+            ),
+            yes_role="Yes",
+            no_role="No",
+        )
+        if apply_to_range != 0:
+            return []
+
+        current_slice_idx = int(current_slice_idx)
+        range_in = multiple_input_dialog(
+            title=f"Apply Edit To Slice Range ({available_slices[0]}-{available_slices[-1]})",
+            input_dict={
+                "slice_from": ["Apply from slice:", current_slice_idx],
+                "slice_to": ["Apply to slice:", current_slice_idx],
+            },
+        )
+        if range_in is None:
+            return []
+
+        slice_from = int(range_in["slice_from"])
+        slice_to = int(range_in["slice_to"])
+        if slice_from > slice_to:
+            slice_from, slice_to = slice_to, slice_from
+
+        return [
+            slice_idx
+            for slice_idx in available_slices
+            if slice_from <= slice_idx <= slice_to
+        ]
 
     def _finalize_standard_line_edit(self, uid=None, editor=None):
         """Apply a standard line edit result to a single geometry uid."""
@@ -2102,12 +2317,46 @@ class ViewInterpretation(ViewMap):
             points, points_are_display_coords=True
         )
         current_vtk = self.parent.geol_coll.get_uid_vtk_obj(uid)
-        new_vtk, slice_indices, _slice_to_cell_index = (
-            self._build_multipart_vtk_with_replaced_slice(
-                vtk_obj=current_vtk,
+        replacement_points_by_slice = {slice_idx: snapped_points}
+
+        target_slices = self._prompt_multipart_edit_propagation_slices(
+            selection=selection,
+            current_slice_idx=slice_idx,
+        )
+        target_slices = sorted({int(idx) for idx in target_slices})
+        if target_slices:
+            affine = self._get_seismic_axis_vectors()
+            template_uv = self._world_points_to_slice_uv(
+                points=snapped_points,
                 slice_idx=slice_idx,
-                edited_points=snapped_points,
+                axis=entity_info.get("axis", self.current_axis),
+                affine=affine,
             )
+            if template_uv is None:
+                message_dialog(
+                    title="Edit line",
+                    message=(
+                        "The edited line was saved on the current slice, but it could not be "
+                        "projected to the requested slice range."
+                    ),
+                )
+            else:
+                for target_slice_idx in target_slices:
+                    if target_slice_idx == slice_idx:
+                        continue
+                    target_points = self._slice_uv_to_world_points(
+                        slice_uv=template_uv,
+                        slice_idx=target_slice_idx,
+                        axis=entity_info.get("axis", self.current_axis),
+                        affine=affine,
+                    )
+                    if target_points is None:
+                        continue
+                    replacement_points_by_slice[int(target_slice_idx)] = target_points
+
+        new_vtk, slice_indices, _slice_to_cell_index = self._build_multipart_vtk_with_replaced_slices(
+            vtk_obj=current_vtk,
+            edited_points_by_slice=replacement_points_by_slice,
         )
         if new_vtk is None:
             message_dialog(
@@ -2144,6 +2393,12 @@ class ViewInterpretation(ViewMap):
             f"Edited multipart {entity_kind} {uid[:8]}... on slice {slice_idx}: "
             f"{len(points)} control points updated."
         )
+        if len(replacement_points_by_slice) > 1:
+            propagated_slices = sorted(replacement_points_by_slice.keys())
+            self.print_terminal(
+                f"Applied the same edit to slices {propagated_slices[0]}-{propagated_slices[-1]} "
+                f"({len(propagated_slices)} slices total)."
+            )
         self.clear_selection()
         freeze_gui_off(self)
 
