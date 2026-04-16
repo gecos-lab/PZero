@@ -252,69 +252,12 @@ class ViewInterpretation(ViewMap):
         self.clear_seismic_volumes()
         # Reset initialization flag used for indexing
         self._lines_indexed = False
-        # Refresh volume list and create initial slice
-        self.refresh_volume_list()
-
-        # Scan and index existing horizons if we have a volume selected
-        # Note: on_volume_changed (triggered by refresh_volume_list) already handles this,
-        # but we call it again here as a safety net for edge cases
-        if self.current_seismic_uid:
-            # Ensure cache is populated before scanning
-            self._populate_seismic_cache()
-            self.scan_and_index_existing_horizons()
-            self._suppress_full_multipart_actors()
-
-    def _apply_coplanar_interpretation_offset(self, actor=None, uid=None):
-        """
-        Bias interpretation actors in front of coplanar seismic slices.
-
-        Structured seismic slices and interpretation polylines often lie on the exact
-        same plane, so the depth buffer can draw the line behind the slice unless the
-        mapper resolves coincident topology explicitly.
-        """
-        if actor is None and uid:
-            try:
-                actor = self.get_actor_by_uid(uid)
-            except Exception:
-                actor = None
-
-        if actor is None or not hasattr(actor, "GetMapper"):
-            return False
-
-        mapper = actor.GetMapper()
-        if mapper is None:
-            return False
-
-        try:
-            mapper.SetResolveCoincidentTopologyToPolygonOffset()
-        except Exception:
-            pass
-
-        for setter_name in (
-            "SetRelativeCoincidentTopologyLineOffsetParameters",
-            "SetRelativeCoincidentTopologyPolygonOffsetParameters",
-        ):
-            if hasattr(mapper, setter_name):
-                try:
-                    getattr(mapper, setter_name)(-1.0, -1.0)
-                except Exception:
-                    pass
-
-        try:
-            mapper.Modified()
-        except Exception:
-            pass
-
-        try:
-            actor.Modified()
-        except Exception:
-            pass
-
-        return True
-
-    def show_actor_with_property(
-        self, uid=None, coll_name=None, show_property=None, visible=None
-    ):
+        # Refresh once after the widget is shown. This is the only first-load path
+        # that should trigger volume selection, cache population and horizon indexing.
+        self.refresh_volume_list(force_reload=True)
+        self._suppress_full_multipart_actors()
+        
+    def show_actor_with_property(self, uid=None, coll_name=None, show_property=None, visible=None):
         """Override to prevent showing full seismic volumes and full multipart horizons - we only show slices."""
         # Check if this is a volumetric source that we're slicing
         if coll_name in {"image_coll", "mesh3d_coll"} and uid:
@@ -465,9 +408,6 @@ class ViewInterpretation(ViewMap):
         # Spacer to push checks to left? Or just let them flow.
         bot_layout.addStretch()
 
-        # Auto-refresh volume list on startup
-        self.refresh_volume_list()
-
         # Add to main layout
         # Using a QDockWidget for controls to ensure it doesn't interfere with the render window
         from PySide6.QtWidgets import QDockWidget
@@ -587,108 +527,9 @@ class ViewInterpretation(ViewMap):
                         )
                 except Exception as e:
                     self.print_terminal(f"Error displaying new entity {uid}: {e}")
-
-    def _supported_interpretation_source_topologies(self):
-        """Return the volumetric topologies supported by the interpretation view."""
-        return {"Seismics", "Voxet", "XsVoxet", "Image3D"}
-
-    def _iter_interpretation_sources(self):
-        """Collect structured volumetric sources from image and mesh collections."""
-        supported = self._supported_interpretation_source_topologies()
-        candidates = []
-        for coll_name, label in (("image_coll", "Image"), ("mesh3d_coll", "Mesh")):
-            collection = getattr(self.parent, coll_name, None)
-            if collection is None:
-                continue
-            try:
-                all_uids = collection.get_uids
-            except Exception:
-                continue
-            for uid in all_uids:
-                try:
-                    topology = collection.get_uid_topology(uid)
-                    if topology not in supported:
-                        continue
-                    name = collection.get_uid_name(uid)
-                    candidates.append(
-                        {
-                            "label": f"{label}: {name} [{topology}]",
-                            "uid": uid,
-                            "collection": coll_name,
-                            "topology": topology,
-                        }
-                    )
-                except Exception:
-                    continue
-        return candidates
-
-    def _apply_source_selection(self, source_info=None):
-        """Update active source metadata from combo-box item data."""
-        if not source_info:
-            self.current_seismic_uid = None
-            self.current_source_collection_name = None
-            self.current_source_topology = None
-            return
-
-        if isinstance(source_info, dict):
-            self.current_seismic_uid = source_info.get("uid")
-            self.current_source_collection_name = source_info.get("collection")
-            self.current_source_topology = source_info.get("topology")
-            return
-
-        self.current_seismic_uid = source_info
-        self.current_source_collection_name = "image_coll"
-        self.current_source_topology = "Seismics"
-
-    def _get_current_source_collection(self):
-        """Return the collection owning the current interpretation source."""
-        coll_name = getattr(self, "current_source_collection_name", None)
-        return getattr(self.parent, coll_name, None) if coll_name else None
-
-    def _get_current_source_vtk(self):
-        """Return the VTK dataset of the current interpretation source."""
-        if not self.current_seismic_uid:
-            return None
-        collection = self._get_current_source_collection()
-        if collection is None:
-            return None
-        try:
-            return collection.get_uid_vtk_obj(self.current_seismic_uid)
-        except Exception:
-            return None
-
-    def _get_current_scalar_name(self, dataset=None):
-        """Return the preferred scalar array for the active structured volume."""
-        dataset = dataset or getattr(self, "_cached_seismic", None)
-        if dataset is None:
-            return None
-        if "intensity" in dataset.array_names:
-            return "intensity"
-        for name in dataset.array_names:
-            try:
-                arr = np.asarray(dataset[name])
-                if arr.ndim == 1:
-                    return name
-            except Exception:
-                continue
-        return dataset.array_names[0] if dataset.array_names else None
-
-    def _get_cached_volume_data_3d(self, cast_dtype=None):
-        """Return cached scalar data reshaped to the active volume dimensions."""
-        if not hasattr(self, "_cached_seismic") or self._cached_seismic is None:
-            return None, None
-        scalar_name = self._get_current_scalar_name(self._cached_seismic)
-        if not scalar_name:
-            return None, None
-        data = np.asarray(self._cached_seismic[scalar_name]).reshape(
-            self._cached_dims, order="F"
-        )
-        if cast_dtype is not None:
-            data = data.astype(cast_dtype)
-        return data, scalar_name
-
-    def refresh_volume_list(self):
-        """Refresh the list of available structured interpretation sources."""
+        
+    def refresh_volume_list(self, force_reload=False):
+        """Refresh the list of available seismic volumes"""
         # Guard: Check if combo_volume exists (may not during early initialization)
         if not hasattr(self, "combo_volume") or self.combo_volume is None:
             self.print_terminal("refresh_volume_list: combo_volume not yet initialized")
@@ -701,50 +542,63 @@ class ViewInterpretation(ViewMap):
         previous_key = (self.current_source_collection_name, self.current_seismic_uid)
 
         self.combo_volume.clear()
-
+        
+        # Find all Seismics entities in image_coll - use the same approach as mesh slicer
+        candidates = []
         try:
-            candidates = self._iter_interpretation_sources()
-            self.print_terminal(f"Total structured sources found: {len(candidates)}")
+            if hasattr(self.parent, 'image_coll') and self.parent.image_coll is not None:
+                # Get all UIDs from the collection using the property
+                all_uids = self.parent.image_coll.get_uids
+                self.print_terminal(f"image_coll has {len(all_uids)} entities")
+                
+                for uid in all_uids:
+                    topology = self.parent.image_coll.get_uid_topology(uid)
+                    name = self.parent.image_coll.get_uid_name(uid)
+                    if topology == 'Seismics':
+                        candidates.append((name, uid))
+                        
+                self.print_terminal(f"Total Seismics found: {len(candidates)}")
+            else:
+                self.print_terminal("No image_coll found on parent!")
         except Exception as e:
             self.print_terminal(f"Error getting interpretation sources: {e}")
             import traceback
 
             self.print_terminal(traceback.format_exc())
-            candidates = []
-
-        for source_info in candidates:
-            self.combo_volume.addItem(source_info["label"], source_info)
-
-        self.combo_volume.blockSignals(False)
+                    
+        for name, uid in candidates:
+            self.combo_volume.addItem(name, uid)
 
         if self.combo_volume.count() > 0:
             # Try to restore previous selection, otherwise select first
-            restored = False
-            if previous_key[1]:
+            selected_index = 0
+            if previous_uid:
                 for i in range(self.combo_volume.count()):
-                    data = self.combo_volume.itemData(i)
-                    if not isinstance(data, dict):
-                        continue
-                    if (data.get("collection"), data.get("uid")) == previous_key:
-                        self.combo_volume.setCurrentIndex(i)
-                        restored = True
+                    if self.combo_volume.itemData(i) == previous_uid:
+                        selected_index = i
                         break
 
-            if not restored:
-                self.combo_volume.setCurrentIndex(0)
-
-            self._apply_source_selection(self.combo_volume.currentData())
-            self.print_terminal(
-                f"Selected source UID: {self.current_seismic_uid} "
-                f"({self.current_source_topology} from {self.current_source_collection_name})"
+            self.combo_volume.setCurrentIndex(selected_index)
+            self.current_seismic_uid = self.combo_volume.currentData()
+            self.combo_volume.blockSignals(False)
+            self.print_terminal(f"Selected volume UID: {self.current_seismic_uid}")
+            should_reload = (
+                force_reload
+                or previous_uid != self.current_seismic_uid
+                or not hasattr(self, "_cached_seismic_uid")
+                or self._cached_seismic_uid != self.current_seismic_uid
             )
-            self.update_slice_limits()
-            self.update_camera_orientation()
-            self.update_slice()
+            if should_reload:
+                self.on_volume_changed(selected_index)
+            else:
+                self.update_slice_limits()
+                self.update_camera_orientation()
+                self.update_slice()
         else:
-            self._apply_source_selection(None)
-            self.print_terminal("No structured interpretation sources found.")
-
+            self.combo_volume.blockSignals(False)
+            self.current_seismic_uid = None
+            self.print_terminal("No seismic volumes found in image_coll!")
+        
     def on_volume_changed(self, index):
         if index < 0:
             return
@@ -5767,21 +5621,17 @@ class ViewInterpretation(ViewMap):
 
         count = 0
         try:
-            # Get all geological entities
-            all_uids = self.parent.geol_coll.get_uids
+            geol_df = self.parent.geol_coll.df
+            if "topology" in geol_df.columns:
+                candidate_uids = geol_df.loc[
+                    geol_df["topology"] == "PolyLine", "uid"
+                ].tolist()
+            else:
+                candidate_uids = self.parent.geol_coll.get_uids
 
-            # We will batch-hide everything first to ensure clean state?
-            # Or just let update_interpretation_line_visibility handle it.
-            # Only process PolyLines
-
-            for uid in all_uids:
+            for uid in candidate_uids:
                 if uid in self.interpretation_lines:
                     continue
-
-                # Check topology
-                if self.parent.geol_coll.get_uid_topology(uid) != "PolyLine":
-                    continue
-
                 self.scan_and_index_single_horizon(uid)
                 count += 1
 
@@ -9953,9 +9803,9 @@ class ViewInterpretation(ViewMap):
         super().show_qt_canvas()
         # Clear any full seismic volume actors that might have been inherited
         self.clear_seismic_volumes()
-        # Refresh volume list to detect any seismics (combo_volume now exists)
-        # This will call update_slice() at line 271 which creates and displays the slice
-        self.refresh_volume_list()
+        # Avoid repeating the expensive first-load path if showEvent will handle it.
+        if getattr(self, "_initialized", False):
+            self.refresh_volume_list(force_reload=False)
         # Ensure plotter updates immediately
         if self.plotter:
             self.plotter.render()
