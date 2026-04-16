@@ -264,6 +264,54 @@ class ViewInterpretation(ViewMap):
             self.scan_and_index_existing_horizons()
             self._suppress_full_multipart_actors()
 
+    def _apply_coplanar_interpretation_offset(self, actor=None, uid=None):
+        """
+        Bias interpretation actors in front of coplanar seismic slices.
+
+        Structured seismic slices and interpretation polylines often lie on the exact
+        same plane, so the depth buffer can draw the line behind the slice unless the
+        mapper resolves coincident topology explicitly.
+        """
+        if actor is None and uid:
+            try:
+                actor = self.get_actor_by_uid(uid)
+            except Exception:
+                actor = None
+
+        if actor is None or not hasattr(actor, "GetMapper"):
+            return False
+
+        mapper = actor.GetMapper()
+        if mapper is None:
+            return False
+
+        try:
+            mapper.SetResolveCoincidentTopologyToPolygonOffset()
+        except Exception:
+            pass
+
+        for setter_name in (
+            "SetRelativeCoincidentTopologyLineOffsetParameters",
+            "SetRelativeCoincidentTopologyPolygonOffsetParameters",
+        ):
+            if hasattr(mapper, setter_name):
+                try:
+                    getattr(mapper, setter_name)(-1.0, -1.0)
+                except Exception:
+                    pass
+
+        try:
+            mapper.Modified()
+        except Exception:
+            pass
+
+        try:
+            actor.Modified()
+        except Exception:
+            pass
+
+        return True
+
     def show_actor_with_property(
         self, uid=None, coll_name=None, show_property=None, visible=None
     ):
@@ -316,35 +364,27 @@ class ViewInterpretation(ViewMap):
                 return
 
         # For all other entities, use normal display
-        super().show_actor_with_property(
+        this_actor = super().show_actor_with_property(
             uid=uid, coll_name=coll_name, show_property=show_property, visible=visible
         )
 
-        # After showing, increase line width for interpretation lines
+        # Interpretation lines sit on the same plane as the active seismic slice.
+        # Apply a mapper offset so they do not z-fight and disappear behind the slice.
         if coll_name == "geol_coll" and uid:
             try:
-                # Check if this is an interpretation line (not multipart - those are handled above)
                 is_interp_line = (
                     uid in self.interpretation_lines
                     if hasattr(self, "interpretation_lines")
                     else False
                 )
-
                 if is_interp_line:
-                    # Get the actor and increase line width significantly for better visibility
-                    if uid in self.plotter.renderer.actors:
-                        actor = self.plotter.renderer.actors[uid]
-                        if actor and hasattr(actor, "GetProperty"):
-                            # # Use thicker lines for multipart horizons (6) vs regular interpretation lines (4)
-                            # line_width = 6 if is_multipart else 4
-                            # actor.GetProperty().SetLineWidth(line_width)
-                            actor.SetMapper(
-                                actor.GetMapper().SetRelativeCoincidentTopologyPolygonOffsetParameters(
-                                    -1, -1
-                                )
-                            )
-            except:
+                    self._apply_coplanar_interpretation_offset(
+                        actor=this_actor, uid=uid
+                    )
+            except Exception:
                 pass
+
+        return this_actor
 
     def set_orientation_widget(self):
         """Override ViewMap's North Arrow with a Seismic Axes widget."""
@@ -4758,6 +4798,11 @@ class ViewInterpretation(ViewMap):
                     except:
                         pass
                 delattr(self, "_saved_pickable_state")
+            try:
+                if "picking_plane" in self.plotter.renderer.actors:
+                    self.plotter.remove_actor("picking_plane")
+            except Exception:
+                pass
 
             tracer.EnabledOff()
             self.enable_actions()
@@ -4816,25 +4861,30 @@ class ViewInterpretation(ViewMap):
         line_dict["vtk_obj"] = PolyLine()
         self._set_entity_parent_to_current_seismic(line_dict)
 
-        # Store pickability state of all actors, then make only the slice pickable
+        # Store pickability state of all actors, then make only a lightweight picking
+        # plane pickable. Picking directly on dense VTI slice geometry is much slower.
         self._saved_pickable_state = {}
         for name, actor in self.plotter.renderer.actors.items():
             try:
                 self._saved_pickable_state[name] = actor.GetPickable()
-                if name != "seismic_slice_actor":
-                    actor.SetPickable(False)
+                actor.SetPickable(False)
             except:
                 pass
 
-        # Ensure the slice actor is pickable
-        if self.slice_actor:
-            try:
+        self.add_picking_plane()
+        try:
+            if "picking_plane" in self.plotter.renderer.actors:
+                self.plotter.renderer.actors["picking_plane"].SetPickable(True)
+                self.print_terminal(
+                    "Picking plane is now the only pickable object for tracing"
+                )
+            elif self.slice_actor:
                 self.slice_actor.SetPickable(True)
                 self.print_terminal(
-                    "Slice actor is now the only pickable object for tracing"
+                    "Falling back to slice actor picking because the picking plane was not created"
                 )
-            except Exception as e:
-                self.print_terminal(f"Could not set slice pickable: {e}")
+        except Exception as e:
+            self.print_terminal(f"Could not configure tracing picker: {e}")
 
         tracer = Tracer(self)
         tracer.EnabledOn()
@@ -5153,6 +5203,7 @@ class ViewInterpretation(ViewMap):
         )
 
         self.set_actor_visibility(uid, matches_current)
+        self._apply_coplanar_interpretation_offset(uid=uid)
 
         # Keep the visibility tracking set in sync
         if hasattr(self, "vis_lines_on_display"):
@@ -5287,7 +5338,7 @@ class ViewInterpretation(ViewMap):
                     style = self._get_geol_legend_style(horizon_uid)
 
                     # Add new filtered actor
-                    self.plotter.add_mesh(
+                    filtered_actor = self.plotter.add_mesh(
                         pv.wrap(filtered_polydata),
                         name=actor_name,
                         color=style["color"],
@@ -5297,6 +5348,7 @@ class ViewInterpretation(ViewMap):
                         pickable=True,
                         reset_camera=False,
                     )
+                    self._apply_coplanar_interpretation_offset(actor=filtered_actor)
 
                     # Hide the full multipart actor (we're showing the filtered version)
                     self.set_actor_visibility(horizon_uid, False)
@@ -5423,7 +5475,7 @@ class ViewInterpretation(ViewMap):
                 style = self._get_geol_legend_style(fault_uid)
 
                 # Add filtered actor
-                self.plotter.add_mesh(
+                filtered_actor = self.plotter.add_mesh(
                     pv.wrap(filtered_polydata),
                     name=actor_name,
                     color=style["color"],
@@ -5433,6 +5485,7 @@ class ViewInterpretation(ViewMap):
                     pickable=True,
                     reset_camera=False,
                 )
+                self._apply_coplanar_interpretation_offset(actor=filtered_actor)
             else:
                 self.set_actor_visibility(fault_uid, False)
 
@@ -6498,16 +6551,28 @@ class ViewInterpretation(ViewMap):
             f"Cost map range after forbidden zones: {cost_map.min():.3f} to {cost_map.max():.3f}"
         )
 
-        # Make only the seismic slice pickable
+        # Make only a lightweight picking plane pickable. Dense VTI slices are slow
+        # to pick directly during waypoint placement.
         self._saved_pickable_states = {}
         for name, actor in self.plotter.renderer.actors.items():
             try:
                 self._saved_pickable_states[name] = actor.GetPickable()
-                actor.SetPickable(name == "seismic_slice_actor")
-                if name == "seismic_slice_actor":
-                    self.print_terminal(f"Made {name} PICKABLE")
+                actor.SetPickable(False)
             except Exception:
                 pass
+
+        self.add_picking_plane()
+        try:
+            if "picking_plane" in self.plotter.renderer.actors:
+                self.plotter.renderer.actors["picking_plane"].SetPickable(True)
+                self.print_terminal("Made picking_plane PICKABLE")
+            elif self.slice_actor is not None:
+                self.slice_actor.SetPickable(True)
+                self.print_terminal(
+                    "Picking plane unavailable, falling back to seismic_slice_actor picking"
+                )
+        except Exception as e:
+            self.print_terminal(f"Could not configure semi-auto picker: {e}")
 
         # Store for callbacks
         self._autotrack_cost_map = cost_map
@@ -7093,7 +7158,7 @@ class ViewInterpretation(ViewMap):
             # Create a simple line between the two points for visual feedback
             line = pv.Line(p0, p1)
             preview_name = f"autotrack_preview_{len(self._autotrack_preview_actors)}"
-            self.plotter.add_mesh(
+            preview_actor = self.plotter.add_mesh(
                 line,
                 color="red",
                 line_width=6,
@@ -7101,7 +7166,9 @@ class ViewInterpretation(ViewMap):
                 pickable=False,
                 reset_camera=False,
                 lighting=False,
+                render_lines_as_tubes=True,
             )
+            self._apply_coplanar_interpretation_offset(actor=preview_actor)
             self._autotrack_preview_actors.append(preview_name)
             self.plotter.update()
             self.plotter.render()
@@ -7314,6 +7381,12 @@ class ViewInterpretation(ViewMap):
                 except:
                     pass
             self._autotrack_preview_actors = []
+
+        try:
+            if "picking_plane" in self.plotter.renderer.actors:
+                self.plotter.remove_actor("picking_plane")
+        except Exception:
+            pass
 
         # Restore pickable states for all actors
         if hasattr(self, "_saved_pickable_states"):
