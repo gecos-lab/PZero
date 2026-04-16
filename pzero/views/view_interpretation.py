@@ -234,17 +234,10 @@ class ViewInterpretation(ViewMap):
         self.clear_seismic_volumes()
         # Reset initialization flag used for indexing
         self._lines_indexed = False
-        #Refresh volume list and create initial slice
-        self.refresh_volume_list()
-        
-        # Scan and index existing horizons if we have a volume selected
-        # Note: on_volume_changed (triggered by refresh_volume_list) already handles this,
-        # but we call it again here as a safety net for edge cases
-        if self.current_seismic_uid:
-            # Ensure cache is populated before scanning
-            self._populate_seismic_cache()
-            self.scan_and_index_existing_horizons()
-            self._suppress_full_multipart_actors()
+        # Refresh once after the widget is shown. This is the only first-load path
+        # that should trigger volume selection, cache population and horizon indexing.
+        self.refresh_volume_list(force_reload=True)
+        self._suppress_full_multipart_actors()
         
     def show_actor_with_property(self, uid=None, coll_name=None, show_property=None, visible=None):
         """Override to prevent showing full seismic volumes and full multipart horizons - we only show slices."""
@@ -392,9 +385,6 @@ class ViewInterpretation(ViewMap):
         # Spacer to push checks to left? Or just let them flow.
         bot_layout.addStretch()
 
-        # Auto-refresh volume list on startup
-        self.refresh_volume_list()
-        
         # Add to main layout
         # Using a QDockWidget for controls to ensure it doesn't interfere with the render window
         from PySide6.QtWidgets import QDockWidget
@@ -489,7 +479,7 @@ class ViewInterpretation(ViewMap):
                 except Exception as e:
                     self.print_terminal(f"Error displaying new entity {uid}: {e}")
         
-    def refresh_volume_list(self):
+    def refresh_volume_list(self, force_reload=False):
         """Refresh the list of available seismic volumes"""
         # Guard: Check if combo_volume exists (may not during early initialization)
         if not hasattr(self, 'combo_volume') or self.combo_volume is None:
@@ -510,16 +500,13 @@ class ViewInterpretation(ViewMap):
             if hasattr(self.parent, 'image_coll') and self.parent.image_coll is not None:
                 # Get all UIDs from the collection using the property
                 all_uids = self.parent.image_coll.get_uids
-                self.print_terminal(f"image_coll has {len(all_uids)} entities (UIDs)")
+                self.print_terminal(f"image_coll has {len(all_uids)} entities")
                 
                 for uid in all_uids:
                     topology = self.parent.image_coll.get_uid_topology(uid)
                     name = self.parent.image_coll.get_uid_name(uid)
-                    self.print_terminal(f"  Entity: {name}, topology: {topology}, uid: {uid}")
-                    
                     if topology == 'Seismics':
                         candidates.append((name, uid))
-                        self.print_terminal(f"  -> Found Seismics: {name} ({uid})")
                         
                 self.print_terminal(f"Total Seismics found: {len(candidates)}")
             else:
@@ -531,28 +518,34 @@ class ViewInterpretation(ViewMap):
                     
         for name, uid in candidates:
             self.combo_volume.addItem(name, uid)
-            
-        self.combo_volume.blockSignals(False)
-        
+
         if self.combo_volume.count() > 0:
             # Try to restore previous selection, otherwise select first
-            restored = False
+            selected_index = 0
             if previous_uid:
                 for i in range(self.combo_volume.count()):
                     if self.combo_volume.itemData(i) == previous_uid:
-                        self.combo_volume.setCurrentIndex(i)
-                        restored = True
+                        selected_index = i
                         break
-            
-            if not restored:
-                self.combo_volume.setCurrentIndex(0)
-            
+
+            self.combo_volume.setCurrentIndex(selected_index)
             self.current_seismic_uid = self.combo_volume.currentData()
+            self.combo_volume.blockSignals(False)
             self.print_terminal(f"Selected volume UID: {self.current_seismic_uid}")
-            self.update_slice_limits()
-            self.update_camera_orientation()
-            self.update_slice()
+            should_reload = (
+                force_reload
+                or previous_uid != self.current_seismic_uid
+                or not hasattr(self, "_cached_seismic_uid")
+                or self._cached_seismic_uid != self.current_seismic_uid
+            )
+            if should_reload:
+                self.on_volume_changed(selected_index)
+            else:
+                self.update_slice_limits()
+                self.update_camera_orientation()
+                self.update_slice()
         else:
+            self.combo_volume.blockSignals(False)
             self.current_seismic_uid = None
             self.print_terminal("No seismic volumes found in image_coll!")
         
@@ -5277,21 +5270,17 @@ class ViewInterpretation(ViewMap):
         
         count = 0
         try:
-            # Get all geological entities
-            all_uids = self.parent.geol_coll.get_uids
-            
-            # We will batch-hide everything first to ensure clean state? 
-            # Or just let update_interpretation_line_visibility handle it.
-            # Only process PolyLines
-            
-            for uid in all_uids:
+            geol_df = self.parent.geol_coll.df
+            if "topology" in geol_df.columns:
+                candidate_uids = geol_df.loc[
+                    geol_df["topology"] == "PolyLine", "uid"
+                ].tolist()
+            else:
+                candidate_uids = self.parent.geol_coll.get_uids
+
+            for uid in candidate_uids:
                 if uid in self.interpretation_lines:
                     continue
-                
-                # Check topology
-                if self.parent.geol_coll.get_uid_topology(uid) != 'PolyLine':
-                    continue
-                
                 self.scan_and_index_single_horizon(uid)
                 count += 1
                 
@@ -9084,9 +9073,9 @@ class ViewInterpretation(ViewMap):
         super().show_qt_canvas()
         # Clear any full seismic volume actors that might have been inherited
         self.clear_seismic_volumes()
-        # Refresh volume list to detect any seismics (combo_volume now exists)
-        # This will call update_slice() at line 271 which creates and displays the slice
-        self.refresh_volume_list()
+        # Avoid repeating the expensive first-load path if showEvent will handle it.
+        if getattr(self, "_initialized", False):
+            self.refresh_volume_list(force_reload=False)
         # Ensure plotter updates immediately
         if self.plotter:
             self.plotter.render()
