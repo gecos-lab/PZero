@@ -201,6 +201,38 @@ def extend_polyline_points(
 
     return extended
 
+
+def _constraint_point_xyz(point) -> Optional[np.ndarray]:
+    """Return an XYZ numpy array for list-like or Vector3D-like constraint points."""
+    try:
+        if isinstance(point, np.ndarray):
+            if point.size >= 3:
+                return np.array([float(point[0]), float(point[1]), float(point[2])], dtype=float)
+            return None
+        if isinstance(point, (list, tuple)) and len(point) >= 3:
+            return np.array([float(point[0]), float(point[1]), float(point[2])], dtype=float)
+        if hasattr(point, "x") and hasattr(point, "y") and hasattr(point, "z"):
+            return np.array([float(point.x), float(point.y), float(point.z)], dtype=float)
+    except Exception:
+        return None
+    return None
+
+
+def _constraint_point_type(point) -> str:
+    """Return the point type string stored on a constraint point."""
+    if hasattr(point, "point_type") and getattr(point, "point_type", None):
+        return str(point.point_type)
+    if hasattr(point, "type") and getattr(point, "type", None):
+        return str(point.type)
+    try:
+        if isinstance(point, np.ndarray) and point.size > 3:
+            return str(point[3])
+        if isinstance(point, (list, tuple)) and len(point) > 3:
+            return str(point[3])
+    except Exception:
+        pass
+    return "DEFAULT"
+
 # Worker class for background computations
 class ComputationWorker(QObject):
     dataset_finished = Signal(int, str, bool) # index, name, success
@@ -704,6 +736,505 @@ class ExodusExportOptionsDialog(QDialog):
                 well_id = int(id_item.text())
                 result[well_id] = export_item.text().strip()
         return result
+
+
+class AdvancedConstraintSelectionDialog(QDialog):
+    """Dedicated 3D tool for manually connecting missed hull/intersection snaps."""
+
+    def __init__(self, gui, initial_surface_idx: Optional[int] = None, parent=None):
+        super().__init__(parent or gui)
+        self.gui = gui
+        self._current_surface_idx: Optional[int] = None
+        self._point_records: List[Dict[str, Any]] = []
+        self._selected_records: List[Dict[str, Any]] = []
+        self._pick_tolerance = 1.0
+        self._selection_overlay_actors: List[Any] = []
+        self._last_pick_was_shift_click = False
+
+        self.setWindowTitle("Advanced Constraint Selection")
+        self.setModal(True)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
+
+        self._build_ui()
+        self.setMinimumSize(980, 720)
+        self.resize(1180, 820)
+        self._populate_surface_combo(initial_surface_idx)
+
+    def _build_ui(self) -> None:
+        from pyvistaqt import QtInteractor
+
+        layout = QVBoxLayout(self)
+
+        controls = QHBoxLayout()
+        controls.addWidget(QLabel("Surface:"))
+        self.surface_combo = QComboBox()
+        self.surface_combo.currentIndexChanged.connect(self._on_surface_changed)
+        controls.addWidget(self.surface_combo, 1)
+        layout.addLayout(controls)
+
+        info = QLabel(
+            "Hold Shift and left-click two points in the 3D view, then press Connect. "
+            "Hull + intersection snaps the hull point onto the intersection point. "
+            "Intersection + intersection snaps the first selected intersection point onto the second."
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        self.selection_status_label = QLabel("No points selected.")
+        self.selection_status_label.setWordWrap(True)
+        layout.addWidget(self.selection_status_label)
+
+        self.plot_frame = QFrame()
+        self.plot_frame.setFrameShape(QFrame.StyledPanel)
+        self.plot_frame.setMinimumHeight(460)
+        self.plot_frame.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.plot_layout = QVBoxLayout(self.plot_frame)
+        self.plot_layout.setContentsMargins(0, 0, 0, 0)
+        self.plotter = QtInteractor(self.plot_frame)
+        self.plotter.interactor.setMinimumSize(QSize(820, 460))
+        self.plotter.interactor.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.plotter.interactor.setFocusPolicy(Qt.StrongFocus)
+        self.plotter.interactor.installEventFilter(self)
+        self.plot_layout.addWidget(self.plotter.interactor)
+        self.plotter.set_background("white")
+        layout.addWidget(self.plot_frame, 1)
+
+        buttons = QHBoxLayout()
+        self.connect_btn = QPushButton("Connect")
+        self.connect_btn.setEnabled(False)
+        self.connect_btn.clicked.connect(self._connect_selected_points)
+        buttons.addWidget(self.connect_btn)
+
+        self.clear_btn = QPushButton("Clear Selection")
+        self.clear_btn.clicked.connect(self._clear_selection)
+        buttons.addWidget(self.clear_btn)
+
+        self.reset_camera_btn = QPushButton("Reset Camera")
+        self.reset_camera_btn.clicked.connect(self._reset_camera)
+        buttons.addWidget(self.reset_camera_btn)
+
+        buttons.addStretch()
+
+        self.close_btn = QPushButton("Close")
+        self.close_btn.clicked.connect(self.accept)
+        buttons.addWidget(self.close_btn)
+        layout.addLayout(buttons)
+
+    def eventFilter(self, obj, event):
+        from PySide6.QtCore import QEvent
+
+        if obj is getattr(getattr(self, "plotter", None), "interactor", None):
+            if event.type() == QEvent.MouseButtonPress and hasattr(event, "button"):
+                if event.button() == Qt.LeftButton:
+                    self._last_pick_was_shift_click = bool(event.modifiers() & Qt.ShiftModifier)
+            elif event.type() == QEvent.KeyPress:
+                self._last_pick_was_shift_click = bool(QApplication.keyboardModifiers() & Qt.ShiftModifier)
+            elif event.type() == QEvent.KeyRelease:
+                self._last_pick_was_shift_click = bool(QApplication.keyboardModifiers() & Qt.ShiftModifier)
+        return super().eventFilter(obj, event)
+
+    def _cleanup_plotter(self) -> None:
+        """Safely detach the dialog-local QtInteractor to avoid Win32 OpenGL context churn."""
+        plotter = getattr(self, "plotter", None)
+        if plotter is None:
+            return
+
+        try:
+            plotter.disable_picking()
+        except Exception:
+            pass
+
+        interactor = getattr(plotter, "interactor", None)
+        if interactor is not None:
+            try:
+                interactor.removeEventFilter(self)
+            except Exception:
+                pass
+            try:
+                parent = interactor.parent()
+                if parent is not None and parent.layout() is not None:
+                    parent.layout().removeWidget(interactor)
+            except Exception:
+                pass
+            try:
+                interactor.hide()
+            except Exception:
+                pass
+            try:
+                interactor.setEnabled(False)
+            except Exception:
+                pass
+            try:
+                interactor.setParent(None)
+            except Exception:
+                pass
+            try:
+                interactor.deleteLater()
+            except Exception:
+                pass
+
+        self.plotter = None
+
+    def closeEvent(self, event):
+        self._cleanup_plotter()
+        super().closeEvent(event)
+
+    def _populate_surface_combo(self, initial_surface_idx: Optional[int]) -> None:
+        items = self.gui._get_advanced_selection_surface_items()
+        self.surface_combo.blockSignals(True)
+        self.surface_combo.clear()
+        for surface_idx, surface_name in items:
+            self.surface_combo.addItem(surface_name, surface_idx)
+        self.surface_combo.blockSignals(False)
+
+        if not items:
+            self.plotter.clear()
+            self.plotter.add_text("No refined surface constraints are available.", position="upper_edge", color="black")
+            self.plotter.render()
+            return
+
+        target_index = 0
+        if initial_surface_idx is not None:
+            combo_index = self.surface_combo.findData(initial_surface_idx)
+            if combo_index >= 0:
+                target_index = combo_index
+
+        self.surface_combo.setCurrentIndex(target_index)
+        self._on_surface_changed(target_index)
+
+    def _on_surface_changed(self, index: int) -> None:
+        surface_idx = self.surface_combo.itemData(index)
+        if surface_idx is None:
+            self._current_surface_idx = None
+            self._point_records = []
+            self._draw_surface_geometry()
+            return
+        self._current_surface_idx = int(surface_idx)
+        self._selected_records = []
+        self._point_records = self._build_point_records(self._current_surface_idx)
+        self._update_pick_tolerance()
+        self._draw_surface_geometry()
+        self._update_selection_status()
+
+    def _build_point_records(self, surface_idx: int) -> List[Dict[str, Any]]:
+        geometry = self.gui._get_surface_constraint_geometry_for_advanced_selection(surface_idx)
+        records: List[Dict[str, Any]] = []
+
+        for point_idx, point in enumerate(geometry.get("hull_points", [])):
+            xyz = _constraint_point_xyz(point)
+            if xyz is None:
+                continue
+            records.append({
+                "uid": f"hull:{point_idx}",
+                "kind": "hull",
+                "coords": xyz,
+                "surface_idx": surface_idx,
+                "point_idx": point_idx,
+                "point_type": _constraint_point_type(point),
+                "label": f"Hull {point_idx}",
+            })
+
+        for line_data in geometry.get("intersections", []):
+            line_id = int(line_data.get("line_id", 0))
+            for point_idx, point in enumerate(line_data.get("points", [])):
+                xyz = _constraint_point_xyz(point)
+                if xyz is None:
+                    continue
+                records.append({
+                    "uid": f"intersection:{line_id}:{point_idx}",
+                    "kind": "intersection",
+                    "coords": xyz,
+                    "surface_idx": surface_idx,
+                    "line_id": line_id,
+                    "point_idx": point_idx,
+                    "point_type": _constraint_point_type(point),
+                    "label": f"Line {line_id} P{point_idx}",
+                })
+
+        return records
+
+    def _update_pick_tolerance(self) -> None:
+        if not self._point_records:
+            self._pick_tolerance = 1.0
+            return
+
+        points = np.array([record["coords"] for record in self._point_records], dtype=float)
+        bounds_min = np.min(points, axis=0)
+        bounds_max = np.max(points, axis=0)
+        diag = float(np.linalg.norm(bounds_max - bounds_min))
+        base_tol = max(1e-6, diag * 0.02)
+
+        sample = points
+        if len(sample) > 250:
+            sample_idx = np.linspace(0, len(sample) - 1, 250, dtype=int)
+            sample = sample[sample_idx]
+
+        spacing = base_tol
+        if len(sample) > 1:
+            try:
+                dist_matrix = squareform(pdist(sample))
+                np.fill_diagonal(dist_matrix, np.inf)
+                nearest = np.min(dist_matrix, axis=1)
+                nearest = nearest[np.isfinite(nearest) & (nearest > 0.0)]
+                if nearest.size > 0:
+                    spacing = float(np.median(nearest))
+            except Exception:
+                spacing = base_tol
+
+        self._pick_tolerance = max(1e-6, min(max(base_tol, spacing * 1.5), max(diag * 0.08, 1.0)))
+
+    def _draw_surface_geometry(self) -> None:
+        self.plotter.clear()
+        self.plotter.set_background("white")
+        self._clear_selection_overlay(render=False)
+
+        if self._current_surface_idx is None:
+            self.plotter.add_text("Select a surface to inspect its constraints.", position="upper_edge", color="black")
+            self.plotter.render()
+            return
+
+        geometry = self.gui._get_surface_constraint_geometry_for_advanced_selection(self._current_surface_idx)
+        plotter_has_geometry = False
+
+        hull_xyz = [xyz for xyz in (_constraint_point_xyz(point) for point in geometry.get("hull_points", [])) if xyz is not None]
+        if len(hull_xyz) >= 2:
+            hull_pts = np.array(hull_xyz, dtype=float)
+            n_pts = len(hull_pts)
+            hull_lines = np.array([[2, i, (i + 1) % n_pts] for i in range(n_pts)], dtype=np.int64).ravel()
+            hull_poly = pv.PolyData(hull_pts)
+            hull_poly.lines = hull_lines
+            self.plotter.add_mesh(
+                hull_poly,
+                color="#2E8B57",
+                line_width=4.0,
+                render_lines_as_tubes=True,
+                name="advanced_hull_line",
+            )
+            self.plotter.add_points(
+                hull_pts,
+                color="#2E8B57",
+                point_size=16,
+                render_points_as_spheres=True,
+                pickable=True,
+                name="advanced_hull_points",
+            )
+            plotter_has_geometry = True
+
+        intersection_xyz = []
+        for line_data in geometry.get("intersections", []):
+            line_xyz = [xyz for xyz in (_constraint_point_xyz(point) for point in line_data.get("points", [])) if xyz is not None]
+            if len(line_xyz) >= 2:
+                line_pts = np.array(line_xyz, dtype=float)
+                line_cells = np.array([[2, i, i + 1] for i in range(len(line_pts) - 1)], dtype=np.int64).ravel()
+                line_poly = pv.PolyData(line_pts)
+                line_poly.lines = line_cells
+                self.plotter.add_mesh(
+                    line_poly,
+                    color="#D2691E",
+                    line_width=4.0,
+                    render_lines_as_tubes=True,
+                    name=f"advanced_line_{line_data.get('line_id', 0)}",
+                )
+                plotter_has_geometry = True
+            intersection_xyz.extend(line_xyz)
+
+        if intersection_xyz:
+            self.plotter.add_points(
+                np.array(intersection_xyz, dtype=float),
+                color="#D2691E",
+                point_size=16,
+                render_points_as_spheres=True,
+                pickable=True,
+                name="advanced_intersection_points",
+            )
+            plotter_has_geometry = True
+
+        if plotter_has_geometry:
+            self.plotter.add_text(
+                "Green: hull points   Orange: intersection points",
+                position="upper_edge",
+                color="black",
+            )
+            self.plotter.add_axes()
+            self.plotter.reset_camera()
+            self._enable_point_picking()
+            self._update_selection_overlay()
+        else:
+            self.plotter.add_text("No hull or intersection geometry was found for this surface.", position="upper_edge", color="black")
+
+        self.plotter.render()
+
+    def _enable_point_picking(self) -> None:
+        try:
+            self.plotter.disable_picking()
+        except Exception:
+            pass
+
+        try:
+            self.plotter.enable_point_picking(
+                callback=self._on_point_picked,
+                show_message=False,
+                use_picker=True,
+                picker="point",
+                tolerance=0.025,
+                show_point=False,
+                left_clicking=True,
+            )
+        except Exception as exc:
+            logger.warning("Advanced constraint point picking could not be enabled: %s", exc)
+
+    def _on_point_picked(self, *args) -> None:
+        point = args[0] if args else None
+        if point is None:
+            return
+
+        if not self._last_pick_was_shift_click:
+            self.selection_status_label.setText(
+                "Hold Shift and left-click hull/intersection points to select them."
+            )
+            return
+
+        record = self._find_nearest_record(point)
+        if record is None:
+            self.selection_status_label.setText("No nearby constraint point was found. Try clicking closer to a point marker.")
+            return
+
+        existing_idx = next((idx for idx, current in enumerate(self._selected_records) if current["uid"] == record["uid"]), None)
+        if existing_idx is not None:
+            self._selected_records.pop(existing_idx)
+        else:
+            if len(self._selected_records) == 2:
+                self._selected_records.pop(0)
+            self._selected_records.append(record)
+
+        self._update_selection_status()
+        self._update_selection_overlay()
+
+    def _find_nearest_record(self, picked_point) -> Optional[Dict[str, Any]]:
+        if not self._point_records:
+            return None
+
+        picked_xyz = _constraint_point_xyz(picked_point)
+        if picked_xyz is None:
+            return None
+
+        best_record = None
+        best_distance = float("inf")
+        for record in self._point_records:
+            distance = float(np.linalg.norm(record["coords"] - picked_xyz))
+            if distance < best_distance:
+                best_distance = distance
+                best_record = record
+
+        if best_record is None:
+            return None
+        if best_distance > self._pick_tolerance:
+            logger.debug("Advanced selection pick rejected: d=%.6g tol=%.6g", best_distance, self._pick_tolerance)
+            return None
+        return best_record
+
+    def _update_selection_status(self) -> None:
+        if not self._selected_records:
+            self.selection_status_label.setText("No points selected.")
+        else:
+            lines = []
+            for idx, record in enumerate(self._selected_records, start=1):
+                lines.append(
+                    f"{idx}. {record['label']} [{record['kind']}] "
+                    f"type={record.get('point_type', 'DEFAULT')}"
+                )
+            selected_kinds = [record["kind"] for record in self._selected_records]
+            status_text = "Selected points: " + " | ".join(lines)
+            if len(self._selected_records) == 2:
+                if set(selected_kinds) == {"hull", "intersection"}:
+                    status_text += " | Connect will snap the hull point onto the intersection point."
+                elif selected_kinds == ["intersection", "intersection"]:
+                    if self._selected_records[0].get("line_id") == self._selected_records[1].get("line_id"):
+                        status_text += " | Pick points on two different intersection lines."
+                    else:
+                        status_text += " | Connect will snap the first selected intersection point onto the second."
+                elif set(selected_kinds) == {"intersection"}:
+                    if self._selected_records[0].get("line_id") == self._selected_records[1].get("line_id"):
+                        status_text += " | Pick points on two different intersection lines."
+                    else:
+                        status_text += " | Connect will snap the first selected intersection point onto the second."
+            self.selection_status_label.setText(status_text)
+
+        selected_kinds = [record["kind"] for record in self._selected_records]
+        can_connect = False
+        if len(self._selected_records) == 2:
+            unique_kinds = set(selected_kinds)
+            if unique_kinds == {"hull", "intersection"}:
+                can_connect = True
+            elif unique_kinds == {"intersection"}:
+                can_connect = self._selected_records[0].get("line_id") != self._selected_records[1].get("line_id")
+        self.connect_btn.setEnabled(can_connect)
+
+    def _clear_selection_overlay(self, render: bool = True) -> None:
+        for actor in self._selection_overlay_actors:
+            try:
+                self.plotter.remove_actor(actor)
+            except Exception:
+                pass
+        self._selection_overlay_actors = []
+        if render:
+            self.plotter.render()
+
+    def _update_selection_overlay(self) -> None:
+        self._clear_selection_overlay(render=False)
+
+        colors = ["#FFD54F", "#E91E63"]
+        for idx, record in enumerate(self._selected_records):
+            actor = self.plotter.add_points(
+                np.array([record["coords"]], dtype=float),
+                color=colors[min(idx, len(colors) - 1)],
+                point_size=24,
+                render_points_as_spheres=True,
+                pickable=False,
+                name=f"advanced_selected_{idx}",
+            )
+            self._selection_overlay_actors.append(actor)
+
+        self.plotter.render()
+
+    def _clear_selection(self) -> None:
+        self._selected_records = []
+        self._update_selection_status()
+        self._update_selection_overlay()
+
+    def _reset_camera(self) -> None:
+        try:
+            self.plotter.reset_camera()
+            self.plotter.render()
+        except Exception:
+            pass
+
+    def _connect_selected_points(self) -> None:
+        if self._current_surface_idx is None:
+            return
+        if len(self._selected_records) != 2:
+            QMessageBox.information(
+                self,
+                "Select Two Points",
+                "Select one hull point and one intersection point, or two intersection points, before connecting.",
+            )
+            return
+
+        ok, message = self.gui._connect_advanced_selection_points(
+            self._current_surface_idx,
+            self._selected_records[0],
+            self._selected_records[1],
+        )
+        if not ok:
+            QMessageBox.warning(self, "Connect Failed", message)
+            return
+
+        self._selected_records = []
+        self._point_records = self._build_point_records(self._current_surface_idx)
+        self._update_pick_tolerance()
+        self._draw_surface_geometry()
+        self._update_selection_status()
+        self.selection_status_label.setText(message)
 
 class _StatusBarShim:
     """Helper class to mimic QMainWindow.statusBar() for QWidget."""
@@ -3999,6 +4530,15 @@ class MeshItWorkflowGUI(QWidget):
         self.mouse_selection_enabled_btn.setCheckable(True)
         self.mouse_selection_enabled_btn.toggled.connect(self._on_mouse_selection_toggled)
         toolbar.addWidget(self.mouse_selection_enabled_btn)
+
+        self.advanced_selection_btn = QPushButton("Advanced Selection")
+        self.advanced_selection_btn.setToolTip(
+            "Open a dedicated 3D window to manually connect missed hull/intersection or intersection/intersection snaps."
+        )
+        self.advanced_selection_btn.setEnabled(False)
+        self.advanced_selection_btn.clicked.connect(self._open_advanced_constraint_selection)
+        toolbar.addWidget(self.advanced_selection_btn)
+
         toolbar.addStretch()
         center_layout.addLayout(toolbar)
 
@@ -4233,6 +4773,7 @@ class MeshItWorkflowGUI(QWidget):
                 self.mouse_selection_enabled_btn.setEnabled(True)
             elif hasattr(self, 'mouse_selection_enabled_btn'):
                 self.mouse_selection_enabled_btn.setEnabled(index == 2)
+            self._update_advanced_selection_button_state()
 
     def _clear_refine_tab_plotters(self):
         """Clear all refine tab plotters safely"""
@@ -6275,6 +6816,438 @@ class MeshItWorkflowGUI(QWidget):
                     else:
                         item.setExpanded(False)
 
+    def _get_advanced_selection_surface_items(self) -> List[Tuple[int, str]]:
+        """Return surfaces that currently have refined hull/intersection constraints."""
+        items = []
+        refined_map = getattr(self, "refined_intersections_for_visualization", {}) or {}
+        for surface_idx, dataset in enumerate(self.datasets):
+            ds_type = str(dataset.get("type", "")).upper()
+            if ds_type in ("WELL", "POLYLINE"):
+                continue
+            has_hull = dataset.get("hull_points") is not None and len(dataset.get("hull_points")) > 0
+            has_intersections = bool(refined_map.get(surface_idx, []))
+            if has_hull or has_intersections:
+                items.append((surface_idx, dataset.get("name", f"Surface_{surface_idx}")))
+        return items
+
+    def _get_surface_constraint_geometry_for_advanced_selection(self, surface_idx: int) -> Dict[str, Any]:
+        """Collect hull and refined intersection geometry for one surface."""
+        if surface_idx < 0 or surface_idx >= len(self.datasets):
+            return {"hull_points": [], "intersections": []}
+
+        dataset = self.datasets[surface_idx]
+        hull_points = []
+        raw_hull_points = dataset.get("hull_points")
+        if raw_hull_points is None:
+            raw_hull_points = []
+        for point in raw_hull_points:
+            if _constraint_point_xyz(point) is not None:
+                hull_points.append(point)
+
+        intersections = []
+        for line_id, line_data in enumerate((getattr(self, "refined_intersections_for_visualization", {}) or {}).get(surface_idx, [])):
+            raw_points = []
+            line_points = line_data.get("points")
+            if line_points is None:
+                line_points = []
+            for point in line_points:
+                if _constraint_point_xyz(point) is not None:
+                    raw_points.append(point)
+            if raw_points:
+                intersections.append({
+                    "line_id": line_id,
+                    "points": raw_points,
+                    "dataset_id1": line_data.get("dataset_id1"),
+                    "dataset_id2": line_data.get("dataset_id2"),
+                    "is_polyline_mesh": bool(line_data.get("is_polyline_mesh", False)),
+                })
+
+        return {"hull_points": hull_points, "intersections": intersections}
+
+    def _update_advanced_selection_button_state(self) -> None:
+        """Enable the advanced selection tool only when the Segments view has data."""
+        if not hasattr(self, "advanced_selection_btn"):
+            return
+        has_surfaces = bool(self._get_advanced_selection_surface_items())
+        is_segments_view = getattr(self, "current_refine_view", 0) == 2
+        self.advanced_selection_btn.setEnabled(is_segments_view and has_surfaces)
+
+    def _open_advanced_constraint_selection(self) -> None:
+        """Launch the dedicated 3D tool for manual constraint snapping fixes."""
+        surface_items = self._get_advanced_selection_surface_items()
+        if not surface_items:
+            QMessageBox.information(
+                self,
+                "No Constraints",
+                "Run refinement first so hull and intersection constraints are available for advanced selection.",
+            )
+            return
+
+        initial_surface_idx = surface_items[0][0]
+        current_filter = self.refine_surface_selector.currentText() if hasattr(self, "refine_surface_selector") else "All Surfaces"
+        for surface_idx, surface_name in surface_items:
+            if surface_name == current_filter:
+                initial_surface_idx = surface_idx
+                break
+
+        dialog = AdvancedConstraintSelectionDialog(self, initial_surface_idx=initial_surface_idx)
+        dialog.exec()
+
+    def _refresh_after_advanced_constraint_edit(self, surface_idx: int) -> None:
+        """Rebuild refine-mesh state after a manual hull/intersection connection."""
+        selected_filter = "All Surfaces"
+        if hasattr(self, "refine_surface_selector") and self.refine_surface_selector:
+            selected_filter = self.refine_surface_selector.currentText()
+
+        try:
+            self.consolidate_points_for_triangulation()
+        except Exception as exc:
+            logger.warning("Failed to refresh consolidated triangulation points after manual connection: %s", exc)
+
+        self._populate_refine_constraint_tree()
+        self._populate_surface_selector()
+
+        if hasattr(self, "refine_surface_selector") and self.refine_surface_selector:
+            restore_index = self.refine_surface_selector.findText(selected_filter)
+            if restore_index < 0 and 0 <= surface_idx < len(self.datasets):
+                restore_index = self.refine_surface_selector.findText(
+                    self.datasets[surface_idx].get("name", f"Surface_{surface_idx}")
+                )
+            if restore_index >= 0:
+                self.refine_surface_selector.setCurrentIndex(restore_index)
+
+        self._update_advanced_selection_button_state()
+        self._update_refined_visualization()
+
+    def _constraint_rows_from_points(self, points) -> List[List[Any]]:
+        """Return mutable `[x, y, z, type]` rows for hull/intersection point collections."""
+        rows: List[List[Any]] = []
+        if points is None:
+            return rows
+
+        for point in points:
+            if hasattr(point, "tolist"):
+                row = list(point.tolist())
+            elif isinstance(point, (list, tuple)):
+                row = list(point)
+            else:
+                xyz = _constraint_point_xyz(point)
+                row = xyz.tolist() if xyz is not None else [0.0, 0.0, 0.0]
+            while len(row) < 4:
+                row.append("DEFAULT")
+            rows.append(row)
+        return rows
+
+    def _match_polyline_orientation(
+        self,
+        candidate_points,
+        reference_rows: List[List[Any]],
+        tol: float = 1e-6,
+    ) -> Tuple[Optional[str], List[List[Any]]]:
+        """Return whether a candidate polyline matches a reference in forward or reverse order."""
+        candidate_rows = self._constraint_rows_from_points(candidate_points)
+        if len(candidate_rows) != len(reference_rows):
+            return None, candidate_rows
+
+        candidate_xyz = [np.array(row[:3], dtype=float) for row in candidate_rows]
+        reference_xyz = [np.array(row[:3], dtype=float) for row in reference_rows]
+
+        if all(np.linalg.norm(cand - ref) <= tol for cand, ref in zip(candidate_xyz, reference_xyz)):
+            return "forward", candidate_rows
+        if all(np.linalg.norm(cand - ref) <= tol for cand, ref in zip(candidate_xyz, reversed(reference_xyz))):
+            return "reverse", candidate_rows
+        return None, candidate_rows
+
+    def _update_matching_intersection_points(
+        self,
+        reference_line_data: Dict[str, Any],
+        reference_rows: List[List[Any]],
+        source_point_idx: int,
+        target_xyz: np.ndarray,
+    ) -> int:
+        """Update the selected source intersection point in every mirrored intersection container."""
+        dataset_ids = tuple(
+            sorted(
+                ds_idx
+                for ds_idx in (
+                    reference_line_data.get("dataset_id1"),
+                    reference_line_data.get("dataset_id2"),
+                )
+                if isinstance(ds_idx, int)
+            )
+        )
+        if len(dataset_ids) != 2:
+            return 0
+
+        updated = 0
+        target_xyz = np.array(target_xyz, dtype=float)
+
+        def maybe_update(entry: Dict[str, Any]) -> None:
+            nonlocal updated
+
+            if not isinstance(entry, dict):
+                return
+
+            entry_pair = tuple(
+                sorted(
+                    ds_idx
+                    for ds_idx in (entry.get("dataset_id1"), entry.get("dataset_id2"))
+                    if isinstance(ds_idx, int)
+                )
+            )
+            if entry_pair != dataset_ids:
+                return
+
+            orientation, rows = self._match_polyline_orientation(entry.get("points", []), reference_rows)
+            if orientation is None or not rows:
+                return
+
+            mapped_idx = int(source_point_idx)
+            if orientation == "reverse":
+                mapped_idx = len(rows) - 1 - mapped_idx
+            if mapped_idx < 0 or mapped_idx >= len(rows):
+                return
+
+            rows[mapped_idx][0] = float(target_xyz[0])
+            rows[mapped_idx][1] = float(target_xyz[1])
+            rows[mapped_idx][2] = float(target_xyz[2])
+            entry["points"] = rows
+            updated += 1
+
+        ds_key = min(dataset_ids)
+        for entry in getattr(self, "datasets_intersections", {}).get(ds_key, []):
+            maybe_update(entry)
+
+        refined_map = getattr(self, "refined_intersections_for_visualization", {}) or {}
+        for surface_id in dataset_ids:
+            for entry in refined_map.get(surface_id, []):
+                maybe_update(entry)
+
+        return updated
+
+    def _update_matching_stored_constraint_points(
+        self,
+        reference_line_data: Dict[str, Any],
+        reference_rows: List[List[Any]],
+        source_point_idx: int,
+        target_xyz: np.ndarray,
+    ) -> int:
+        """Keep stored per-surface intersection constraints in sync with manual advanced edits."""
+        dataset_ids = tuple(
+            sorted(
+                ds_idx
+                for ds_idx in (
+                    reference_line_data.get("dataset_id1"),
+                    reference_line_data.get("dataset_id2"),
+                )
+                if isinstance(ds_idx, int)
+            )
+        )
+        if len(dataset_ids) != 2:
+            return 0
+
+        updated = 0
+        target_xyz = np.array(target_xyz, dtype=float)
+
+        for surface_id in dataset_ids:
+            if surface_id < 0 or surface_id >= len(self.datasets):
+                continue
+
+            other_surface_id = dataset_ids[1] if surface_id == dataset_ids[0] else dataset_ids[0]
+            constraints = self.datasets[surface_id].get("stored_constraints") or []
+            for constraint in constraints:
+                if constraint.get("type") != "intersection_line":
+                    continue
+                if constraint.get("other_surface_id") != other_surface_id:
+                    continue
+
+                orientation, rows = self._match_polyline_orientation(constraint.get("points", []), reference_rows)
+                if orientation is None or not rows:
+                    continue
+
+                mapped_idx = int(source_point_idx)
+                if orientation == "reverse":
+                    mapped_idx = len(rows) - 1 - mapped_idx
+                if mapped_idx < 0 or mapped_idx >= len(rows):
+                    continue
+
+                rows[mapped_idx][0] = float(target_xyz[0])
+                rows[mapped_idx][1] = float(target_xyz[1])
+                rows[mapped_idx][2] = float(target_xyz[2])
+                constraint["points"] = rows
+                self.datasets[surface_id]["needs_constraint_update"] = True
+                updated += 1
+
+        return updated
+
+    def _connect_hull_point_to_intersection(
+        self,
+        surface_idx: int,
+        hull_record: Dict[str, Any],
+        line_record: Dict[str, Any],
+    ) -> Tuple[bool, str]:
+        """Snap a selected hull point onto a selected intersection point."""
+        hull_idx = hull_record.get("point_idx")
+        if hull_idx is None:
+            return False, "The selected hull point is missing an index."
+
+        hull_points = self.datasets[surface_idx].get("hull_points")
+        if hull_points is None or hull_idx >= len(hull_points):
+            return False, "The selected hull point is no longer available."
+
+        source_xyz = _constraint_point_xyz(hull_points[hull_idx])
+        target_xyz = np.array(line_record.get("coords", []), dtype=float)
+        if source_xyz is None or target_xyz.size != 3:
+            return False, "Could not resolve the selected point coordinates."
+
+        hull_rows = self._constraint_rows_from_points(hull_points)
+
+        hull_xyz = np.array(
+            [np.array([float(row[0]), float(row[1]), float(row[2])], dtype=float) for row in hull_rows],
+            dtype=float,
+        )
+        diag = float(np.linalg.norm(np.max(hull_xyz, axis=0) - np.min(hull_xyz, axis=0))) if len(hull_xyz) > 0 else 0.0
+        duplicate_tol = max(1e-8, diag * 1e-9, 1e-6)
+
+        updated = 0
+        for idx, row in enumerate(hull_rows):
+            current_xyz = np.array([float(row[0]), float(row[1]), float(row[2])], dtype=float)
+            if idx == int(hull_idx) or np.linalg.norm(current_xyz - source_xyz) <= duplicate_tol:
+                row[0] = float(target_xyz[0])
+                row[1] = float(target_xyz[1])
+                row[2] = float(target_xyz[2])
+                row[3] = "COMMON_INTERSECTION_CONVEXHULL_POINT"
+                updated += 1
+
+        if updated == 0:
+            return False, "No hull point was updated."
+
+        cleaned_rows: List[List[Any]] = []
+        for row in hull_rows:
+            if not cleaned_rows:
+                cleaned_rows.append(row)
+                continue
+            prev = np.array(cleaned_rows[-1][:3], dtype=float)
+            curr = np.array(row[:3], dtype=float)
+            if np.linalg.norm(prev - curr) <= duplicate_tol:
+                if str(row[3]).upper() != "DEFAULT":
+                    cleaned_rows[-1][3] = row[3]
+                continue
+            cleaned_rows.append(row)
+
+        if len(cleaned_rows) > 2:
+            first_xyz = np.array(cleaned_rows[0][:3], dtype=float)
+            last_xyz = np.array(cleaned_rows[-1][:3], dtype=float)
+            if np.linalg.norm(first_xyz - last_xyz) <= duplicate_tol:
+                if str(cleaned_rows[-1][3]).upper() != "DEFAULT":
+                    cleaned_rows[0][3] = cleaned_rows[-1][3]
+                cleaned_rows.pop()
+
+        self.datasets[surface_idx]["hull_points"] = np.array(cleaned_rows, dtype=object)
+        self.datasets[surface_idx].pop("conforming_mesh", None)
+
+        self._refresh_after_advanced_constraint_edit(surface_idx)
+
+        surface_name = self.datasets[surface_idx].get("name", f"Surface_{surface_idx}")
+        message = (
+            f"Connected hull point {int(hull_idx)} on '{surface_name}' "
+            f"to line point {line_record.get('label', '')}."
+        )
+        logger.info(message)
+        self.statusBar().showMessage(message, 5000)
+        return True, message
+
+    def _connect_intersection_point_to_intersection(
+        self,
+        surface_idx: int,
+        source_record: Dict[str, Any],
+        target_record: Dict[str, Any],
+    ) -> Tuple[bool, str]:
+        """Snap the first selected intersection point onto the second selected intersection point."""
+        source_line_id = source_record.get("line_id")
+        source_point_idx = source_record.get("point_idx")
+        target_line_id = target_record.get("line_id")
+        if source_line_id is None or source_point_idx is None or target_line_id is None:
+            return False, "The selected intersection point is missing line metadata."
+        if int(source_line_id) == int(target_line_id):
+            return False, "Select points from two different intersection lines."
+
+        refined_map = getattr(self, "refined_intersections_for_visualization", {}) or {}
+        surface_lines = refined_map.get(surface_idx, [])
+        if int(source_line_id) < 0 or int(source_line_id) >= len(surface_lines):
+            return False, "The selected source intersection line is no longer available."
+
+        source_line_data = surface_lines[int(source_line_id)]
+        source_points = source_line_data.get("points") or []
+        if int(source_point_idx) < 0 or int(source_point_idx) >= len(source_points):
+            return False, "The selected source intersection point is no longer available."
+
+        source_xyz = _constraint_point_xyz(source_points[int(source_point_idx)])
+        target_xyz = np.array(target_record.get("coords", []), dtype=float)
+        if source_xyz is None or target_xyz.size != 3:
+            return False, "Could not resolve the selected intersection point coordinates."
+
+        source_reference_rows = self._constraint_rows_from_points(source_points)
+        updated_entries = self._update_matching_intersection_points(
+            source_line_data,
+            source_reference_rows,
+            int(source_point_idx),
+            target_xyz,
+        )
+        self._update_matching_stored_constraint_points(
+            source_line_data,
+            source_reference_rows,
+            int(source_point_idx),
+            target_xyz,
+        )
+
+        if updated_entries == 0:
+            return False, "No intersection point was updated."
+
+        affected_surface_ids = {
+            ds_idx
+            for ds_idx in (
+                surface_idx,
+                source_line_data.get("dataset_id1"),
+                source_line_data.get("dataset_id2"),
+            )
+            if isinstance(ds_idx, int) and 0 <= ds_idx < len(self.datasets)
+        }
+        for ds_idx in affected_surface_ids:
+            self.datasets[ds_idx].pop("conforming_mesh", None)
+
+        self._refresh_after_advanced_constraint_edit(surface_idx)
+
+        surface_name = self.datasets[surface_idx].get("name", f"Surface_{surface_idx}")
+        message = (
+            f"Snapped intersection point {source_record.get('label', '')} "
+            f"onto {target_record.get('label', '')} on '{surface_name}'."
+        )
+        logger.info(message)
+        self.statusBar().showMessage(message, 5000)
+        return True, message
+
+    def _connect_advanced_selection_points(
+        self,
+        surface_idx: int,
+        first_record: Dict[str, Any],
+        second_record: Dict[str, Any],
+    ) -> Tuple[bool, str]:
+        """Apply a manual advanced-selection snap and rebuild refine state."""
+        if surface_idx < 0 or surface_idx >= len(self.datasets):
+            return False, "Invalid surface selection."
+
+        selected_kinds = {first_record.get("kind"), second_record.get("kind")}
+        if selected_kinds == {"hull", "intersection"}:
+            hull_record = first_record if first_record.get("kind") == "hull" else second_record
+            line_record = second_record if first_record.get("kind") == "hull" else first_record
+            return self._connect_hull_point_to_intersection(surface_idx, hull_record, line_record)
+
+        if selected_kinds == {"intersection"}:
+            return self._connect_intersection_point_to_intersection(surface_idx, first_record, second_record)
+
+        return False, "Select one hull point and one intersection point, or two intersection points."
+
     def _populate_surface_selector(self):
         """
         Populates the filter dropdown with surfaces and wells.
@@ -6324,6 +7297,7 @@ class MeshItWorkflowGUI(QWidget):
                 
         logger.info(f"Populated filter selector with {self.refine_surface_selector.count()} items: "
                      f"{[self.refine_surface_selector.itemText(i) for i in range(self.refine_surface_selector.count())]}")
+        self._update_advanced_selection_button_state()
 
     def _on_target_size_changed(self, value):
         """Provide immediate feedback when target size changes."""
@@ -14008,7 +14982,7 @@ segmentation, triangulation, and visualization.
             lines = np.asarray(cat["lines"], dtype=np.int64)
             poly = pv.PolyData(pts); poly.lines = lines
             plotter.add_mesh(poly, color=color, line_width=lw,
-                            render_lines_as_tubes=True, pickable=False, smooth_shading=False)
+                            render_lines_as_tubes=False, pickable=False, smooth_shading=False)
 
         # Clear per-segment refs in batched mode
         self.constraint_segment_actor_refs = {}
@@ -14256,7 +15230,7 @@ segmentation, triangulation, and visualization.
                 rgb, lw, pattern = self._segment_vis_props(surf_idx, seg_uid)
                 actor = plotter.add_mesh(
                     poly, color=rgb, line_width=lw, pickable=True,
-                    render_lines_as_tubes=True, smooth_shading=False,
+                    render_lines_as_tubes=False, smooth_shading=False,
                 )
                 try:
                     prop = actor.GetProperty()
