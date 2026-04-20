@@ -4,7 +4,10 @@ import numpy as np
 import logging
 import tetgen
 import pyvista as pv
+import os
+from datetime import datetime
 from typing import Dict, List, Tuple, Optional, Any, Union
+from collections import defaultdict
 from Pymeshit.intersection_utils import Vector3D
 from scipy.spatial import cKDTree
 logger = logging.getLogger("MeshIt-Workflow")
@@ -67,6 +70,572 @@ class TetrahedralMeshGenerator:
         self.plc_edge_markers = None
         self.plc_holes = None  # Store hole points
         self.region_attribute_map = {}
+        self.plc_marker_surface_map = {}
+        self.plc_edge_surface_map = {}
+        self.plc_edge_marker_map = {}
+        self.plc_edge_facet_count = {}
+        self._tetgen_failure_diagnostics_logged = False
+
+    def _surface_name(self, surface_idx: Optional[int]) -> str:
+        """Return a stable human-readable surface label for logging."""
+        if surface_idx is None or surface_idx < 0 or surface_idx >= len(self.datasets):
+            return f"Surface_{surface_idx}"
+        return self.datasets[surface_idx].get("name", f"Surface_{surface_idx}")
+
+    def _marker_to_surface_idx(self, marker: Any) -> Optional[int]:
+        """Map a TetGen facet marker back to the originating dataset surface index."""
+        try:
+            marker_i = int(marker)
+        except Exception:
+            return None
+
+        if marker_i >= 1000:
+            surface_idx = marker_i - 1000
+        elif marker_i > 0:
+            surface_idx = marker_i - 1
+        else:
+            return None
+
+        if 0 <= surface_idx < len(self.datasets):
+            return surface_idx
+        return None
+
+    def _surface_kind_label(self, surface_idx: Optional[int]) -> str:
+        """Return the configured TetGen role of a surface."""
+        if surface_idx is None:
+            return "unknown"
+        if surface_idx in self.fault_surface_indices:
+            return "fault"
+        if surface_idx in self.border_surface_indices:
+            return "border"
+        if surface_idx in self.unit_surface_indices:
+            return "unit"
+        return "surface"
+
+    def _get_surface_mesh_arrays(self, surface_idx: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Return `(vertices, triangles)` for a surface mesh used in TetGen diagnostics."""
+        mesh_data = self.surface_data.get(surface_idx) or self.datasets[surface_idx].get("conforming_mesh") or {}
+        vertices = np.asarray(mesh_data.get("vertices", []), dtype=float)
+        triangles = np.asarray(mesh_data.get("triangles", []), dtype=int)
+
+        if vertices.ndim != 2 or vertices.shape[0] == 0:
+            return np.empty((0, 3), dtype=float), np.empty((0, 3), dtype=int)
+        if triangles.ndim != 2 or triangles.shape[0] == 0:
+            return vertices, np.empty((0, 3), dtype=int)
+
+        return vertices, triangles[:, :3]
+
+    def _summarize_surface_topology(self, surface_idx: int) -> Dict[str, int]:
+        """Summarize local manifold issues on one conforming surface mesh."""
+        vertices, triangles = self._get_surface_mesh_arrays(surface_idx)
+        edge_count: Dict[Tuple[int, int], int] = defaultdict(int)
+        triangle_keys = set()
+        duplicate_triangles = 0
+
+        for tri in triangles:
+            try:
+                tri_idx = [int(tri[0]), int(tri[1]), int(tri[2])]
+            except Exception:
+                continue
+            if len(set(tri_idx)) != 3:
+                duplicate_triangles += 1
+                continue
+
+            tri_key = tuple(sorted(tri_idx))
+            if tri_key in triangle_keys:
+                duplicate_triangles += 1
+            triangle_keys.add(tri_key)
+
+            for i in range(3):
+                edge = tuple(sorted((tri_idx[i], tri_idx[(i + 1) % 3])))
+                edge_count[edge] += 1
+
+        return {
+            "vertices": int(len(vertices)),
+            "triangles": int(len(triangles)),
+            "duplicate_triangles": int(duplicate_triangles),
+            "non_manifold_edges": int(sum(1 for count in edge_count.values() if count > 2)),
+            "boundary_edges": int(sum(1 for count in edge_count.values() if count == 1)),
+        }
+
+    def _surface_intersection_partners(self, surface_idx: int) -> List[int]:
+        """Return other surfaces that this surface is explicitly constrained against."""
+        partners = set()
+        if surface_idx < 0 or surface_idx >= len(self.datasets):
+            return []
+
+        for constraint in self.datasets[surface_idx].get("stored_constraints", []):
+            if constraint.get("type") != "intersection_line":
+                continue
+            other_surface = constraint.get("other_surface_id")
+            if isinstance(other_surface, int) and 0 <= other_surface < len(self.datasets):
+                partners.add(other_surface)
+
+        return sorted(partners)
+
+    def _build_plc_debug_maps(self) -> None:
+        """Build PLC edge/facet ownership maps used by TetGen failure diagnostics."""
+        marker_surface_map: Dict[int, int] = {}
+        edge_surface_map: Dict[Tuple[int, int], set] = defaultdict(set)
+        edge_marker_map: Dict[Tuple[int, int], set] = defaultdict(set)
+        edge_facet_count: Dict[Tuple[int, int], int] = defaultdict(int)
+
+        if self.plc_facets is None or self.plc_facet_markers is None:
+            self.plc_marker_surface_map = {}
+            self.plc_edge_surface_map = {}
+            self.plc_edge_marker_map = {}
+            self.plc_edge_facet_count = {}
+            return
+
+        for tri, marker in zip(np.asarray(self.plc_facets), np.asarray(self.plc_facet_markers)):
+            try:
+                tri_idx = [int(tri[0]), int(tri[1]), int(tri[2])]
+                marker_i = int(marker)
+            except Exception:
+                continue
+
+            surface_idx = self._marker_to_surface_idx(marker_i)
+            if surface_idx is not None:
+                marker_surface_map[marker_i] = surface_idx
+
+            for i in range(3):
+                edge = tuple(sorted((tri_idx[i], tri_idx[(i + 1) % 3])))
+                edge_facet_count[edge] += 1
+                edge_marker_map[edge].add(marker_i)
+                if surface_idx is not None:
+                    edge_surface_map[edge].add(surface_idx)
+
+        self.plc_marker_surface_map = marker_surface_map
+        self.plc_edge_surface_map = {edge: tuple(sorted(owners)) for edge, owners in edge_surface_map.items()}
+        self.plc_edge_marker_map = {edge: tuple(sorted(markers)) for edge, markers in edge_marker_map.items()}
+        self.plc_edge_facet_count = dict(edge_facet_count)
+
+    def _format_plc_edge_coords(self, edge: Tuple[int, int]) -> str:
+        """Format one PLC edge by coordinate for concise diagnostics."""
+        if self.plc_vertices is None:
+            return str(edge)
+        try:
+            p0 = np.asarray(self.plc_vertices[int(edge[0])], dtype=float)
+            p1 = np.asarray(self.plc_vertices[int(edge[1])], dtype=float)
+            return (
+                f"({p0[0]:.2f}, {p0[1]:.2f}, {p0[2]:.2f}) -> "
+                f"({p1[0]:.2f}, {p1[1]:.2f}, {p1[2]:.2f})"
+            )
+        except Exception:
+            return str(edge)
+
+    def _count_shared_plc_edges(self, surface_a: int, surface_b: int) -> Tuple[int, Optional[Tuple[int, int]]]:
+        """Count PLC edges that are shared by two surfaces and return one example edge."""
+        count = 0
+        sample_edge = None
+        for edge, owners in self.plc_edge_surface_map.items():
+            if surface_a in owners and surface_b in owners:
+                count += 1
+                if sample_edge is None:
+                    sample_edge = edge
+        return count, sample_edge
+
+    def _parse_tetgen_skipped_faces(
+        self,
+        face_path: str = "tetgen-tmpfile_skipped.face",
+        node_path: str = "tetgen-tmpfile_skipped.node",
+    ) -> Dict[str, Any]:
+        """Parse TetGen skipped-face output to recover failing surfaces and markers."""
+        result: Dict[str, Any] = {
+            "entries": [],
+            "surface_counts": {},
+            "surface_markers": {},
+        }
+
+        if not os.path.exists(face_path):
+            return result
+
+        node_coords: Dict[int, Tuple[float, float, float]] = {}
+        if os.path.exists(node_path):
+            try:
+                with open(node_path, "r", encoding="utf-8", errors="ignore") as handle:
+                    lines = [line.strip() for line in handle if line.strip() and not line.lstrip().startswith("#")]
+                for line in lines[1:]:
+                    parts = line.split()
+                    if len(parts) < 4:
+                        continue
+                    node_coords[int(parts[0])] = (float(parts[1]), float(parts[2]), float(parts[3]))
+            except Exception as exc:
+                logger.warning("Failed to parse TetGen skipped node file '%s': %s", node_path, exc)
+
+        surface_counts: Dict[int, int] = defaultdict(int)
+        surface_markers: Dict[int, set] = defaultdict(set)
+
+        try:
+            with open(face_path, "r", encoding="utf-8", errors="ignore") as handle:
+                lines = [line.strip() for line in handle if line.strip() and not line.lstrip().startswith("#")]
+        except Exception as exc:
+            logger.warning("Failed to parse TetGen skipped face file '%s': %s", face_path, exc)
+            return result
+
+        has_marker = 0
+        if lines:
+            header = lines[0].split()
+            if len(header) > 1:
+                try:
+                    has_marker = int(header[1])
+                except Exception:
+                    has_marker = 0
+
+        for line in lines[1:]:
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+
+            try:
+                face_id = int(parts[0])
+                nodes = (int(parts[1]), int(parts[2]), int(parts[3]))
+                marker = int(parts[4]) if has_marker and len(parts) > 4 else 0
+            except Exception:
+                continue
+
+            surface_idx = self._marker_to_surface_idx(marker)
+            coords = [node_coords.get(node_id) for node_id in nodes if node_id in node_coords]
+            entry = {
+                "face_id": face_id,
+                "nodes": nodes,
+                "marker": marker,
+                "surface_idx": surface_idx,
+                "surface_name": self._surface_name(surface_idx) if surface_idx is not None else f"marker_{marker}",
+                "coords": coords,
+            }
+            result["entries"].append(entry)
+
+            if surface_idx is not None:
+                surface_counts[surface_idx] += 1
+                surface_markers[surface_idx].add(marker)
+
+        result["surface_counts"] = dict(surface_counts)
+        result["surface_markers"] = {
+            surface_idx: tuple(sorted(markers)) for surface_idx, markers in surface_markers.items()
+        }
+        return result
+
+    def _build_surface_polydata(self, surface_idx: int) -> Optional[pv.PolyData]:
+        """Build a PyVista mesh for one surface for collision diagnostics."""
+        vertices, triangles = self._get_surface_mesh_arrays(surface_idx)
+        if len(vertices) == 0 or len(triangles) == 0:
+            return None
+
+        try:
+            faces = np.hstack(
+                (
+                    np.full((len(triangles), 1), 3, dtype=np.int64),
+                    np.asarray(triangles, dtype=np.int64),
+                )
+            ).ravel()
+            return pv.PolyData(np.asarray(vertices, dtype=float), faces)
+        except Exception as exc:
+            logger.debug("Failed to build surface PolyData for '%s': %s", self._surface_name(surface_idx), exc)
+            return None
+
+    def _infer_problem_surface_pairs(self, surface_indices: List[int]) -> List[Dict[str, Any]]:
+        """Infer likely bad surface intersections from PLC sharing and mesh collisions."""
+        if len(surface_indices) < 2:
+            return []
+
+        surface_meshes = {}
+        for surface_idx in surface_indices:
+            mesh = self._build_surface_polydata(surface_idx)
+            if mesh is not None and mesh.n_cells > 0:
+                surface_meshes[surface_idx] = mesh
+
+        pair_summaries: List[Dict[str, Any]] = []
+        ordered_indices = sorted(surface_indices)
+        for idx, surface_a in enumerate(ordered_indices):
+            for surface_b in ordered_indices[idx + 1:]:
+                collision_contacts = 0
+                mesh_a = surface_meshes.get(surface_a)
+                mesh_b = surface_meshes.get(surface_b)
+                if mesh_a is not None and mesh_b is not None:
+                    try:
+                        _, collision_contacts = mesh_a.collision(
+                            mesh_b,
+                            contact_mode=0,
+                            box_tolerance=1e-6,
+                            cell_tolerance=0.0,
+                        )
+                    except Exception as exc:
+                        logger.debug(
+                            "Collision diagnostics failed for '%s' <-> '%s': %s",
+                            self._surface_name(surface_a),
+                            self._surface_name(surface_b),
+                            exc,
+                        )
+
+                shared_plc_edges, sample_edge = self._count_shared_plc_edges(surface_a, surface_b)
+                has_stored_intersection = (
+                    surface_b in self._surface_intersection_partners(surface_a)
+                    or surface_a in self._surface_intersection_partners(surface_b)
+                )
+
+                if collision_contacts <= 0 and shared_plc_edges <= 0 and not has_stored_intersection:
+                    continue
+
+                pair_summaries.append(
+                    {
+                        "surface_a": surface_a,
+                        "surface_b": surface_b,
+                        "collision_contacts": int(collision_contacts),
+                        "shared_plc_edges": int(shared_plc_edges),
+                        "has_stored_intersection": bool(has_stored_intersection),
+                        "sample_edge": sample_edge,
+                    }
+                )
+
+        return sorted(
+            pair_summaries,
+            key=lambda item: (
+                item["collision_contacts"],
+                item["shared_plc_edges"],
+                int(item["has_stored_intersection"]),
+            ),
+            reverse=True,
+        )
+
+    def _collect_non_manifold_plc_edges(
+        self,
+        only_surfaces: Optional[set] = None,
+    ) -> List[Dict[str, Any]]:
+        """Collect PLC edges shared by more than two facets."""
+        issues: List[Dict[str, Any]] = []
+        for edge, facet_count in self.plc_edge_facet_count.items():
+            if facet_count <= 2:
+                continue
+
+            owner_surfaces = tuple(self.plc_edge_surface_map.get(edge, ()))
+            if only_surfaces and owner_surfaces and not any(surface in only_surfaces for surface in owner_surfaces):
+                continue
+
+            issues.append(
+                {
+                    "edge": edge,
+                    "facet_count": int(facet_count),
+                    "surface_indices": owner_surfaces,
+                    "markers": tuple(self.plc_edge_marker_map.get(edge, ())),
+                }
+            )
+
+        return sorted(issues, key=lambda item: item["facet_count"], reverse=True)
+
+    def _build_tetgen_failure_report(
+        self,
+        phase: str,
+        tetgen_switches: str,
+        error: Exception,
+    ) -> str:
+        """Build a plain-text TetGen failure report for debugging problematic surfaces."""
+        self._build_plc_debug_maps()
+
+        skipped_info = self._parse_tetgen_skipped_faces()
+        problematic_surfaces = sorted(skipped_info.get("surface_counts", {}).keys())
+        non_manifold_edges = self._collect_non_manifold_plc_edges(
+            set(problematic_surfaces) if problematic_surfaces else None
+        )
+        pair_summaries = self._infer_problem_surface_pairs(problematic_surfaces) if problematic_surfaces else []
+
+        lines: List[str] = []
+        lines.append("TetGen Failure Report")
+        lines.append("====================")
+        lines.append(f"Generated: {datetime.now().isoformat(timespec='seconds')}")
+        lines.append(f"Phase: {phase}")
+        lines.append(f"Switches: {tetgen_switches}")
+        lines.append(f"Error: {error}")
+        lines.append("")
+
+        if skipped_info.get("entries"):
+            lines.append(
+                f"Skipped facets: {len(skipped_info['entries'])} facet(s) were skipped by TetGen due to self-intersections."
+            )
+        else:
+            lines.append("Skipped facets: no skipped-face file was available.")
+        lines.append("")
+
+        if problematic_surfaces:
+            lines.append("Problematic surfaces")
+            lines.append("--------------------")
+            for surface_idx in problematic_surfaces:
+                counts = skipped_info["surface_counts"].get(surface_idx, 0)
+                markers = skipped_info["surface_markers"].get(surface_idx, ())
+                topology = self._summarize_surface_topology(surface_idx)
+                partners = self._surface_intersection_partners(surface_idx)
+                partner_names = [self._surface_name(idx) for idx in partners]
+
+                reasons = [f"{counts} skipped facet(s)"]
+                if topology["non_manifold_edges"] > 0:
+                    reasons.append(f"{topology['non_manifold_edges']} non-manifold edge(s)")
+                if topology["duplicate_triangles"] > 0:
+                    reasons.append(f"{topology['duplicate_triangles']} duplicate triangle(s)")
+
+                lines.append(
+                    f"- {self._surface_name(surface_idx)} [idx={surface_idx}, kind={self._surface_kind_label(surface_idx)}, markers={list(markers)}]"
+                )
+                lines.append(f"  Reason: {', '.join(reasons)}")
+                lines.append(
+                    f"  Mesh summary: triangles={topology['triangles']}, vertices={topology['vertices']}, boundary_edges={topology['boundary_edges']}"
+                )
+                lines.append(
+                    f"  Stored intersections: {', '.join(partner_names) if partner_names else 'none'}"
+                )
+            lines.append("")
+
+        if pair_summaries:
+            lines.append("Likely problematic surface intersections")
+            lines.append("---------------------------------------")
+            for summary in pair_summaries[:20]:
+                sample_edge = summary.get("sample_edge")
+                sample_edge_text = (
+                    self._format_plc_edge_coords(sample_edge) if sample_edge is not None else "n/a"
+                )
+                lines.append(
+                    f"- {self._surface_name(summary['surface_a'])} [idx={summary['surface_a']}] <-> "
+                    f"{self._surface_name(summary['surface_b'])} [idx={summary['surface_b']}]: "
+                    f"collision_contacts={summary['collision_contacts']}, "
+                    f"shared_plc_edges={summary['shared_plc_edges']}, "
+                    f"stored_intersection={summary['has_stored_intersection']}, "
+                    f"sample_shared_edge={sample_edge_text}"
+                )
+            lines.append("")
+
+        if non_manifold_edges:
+            lines.append("PLC non-manifold edges")
+            lines.append("----------------------")
+            for issue in non_manifold_edges[:20]:
+                owner_names = ", ".join(self._surface_name(idx) for idx in issue["surface_indices"]) or "unknown"
+                lines.append(
+                    f"- {self._format_plc_edge_coords(issue['edge'])}: "
+                    f"facet_count={issue['facet_count']}, "
+                    f"surfaces=[{owner_names}], markers={list(issue['markers'])}"
+                )
+            lines.append("")
+
+        if skipped_info.get("entries"):
+            lines.append("Skipped facets detail")
+            lines.append("--------------------")
+            for entry in skipped_info["entries"]:
+                coord_text = (
+                    "; ".join(f"({pt[0]:.3f}, {pt[1]:.3f}, {pt[2]:.3f})" for pt in entry["coords"])
+                    if entry.get("coords")
+                    else "n/a"
+                )
+                lines.append(
+                    f"- face_id={entry['face_id']}, marker={entry['marker']}, "
+                    f"surface={entry['surface_name']}, nodes={list(entry['nodes'])}, coords={coord_text}"
+                )
+            lines.append("")
+
+        if not problematic_surfaces and not non_manifold_edges and not skipped_info.get("entries"):
+            lines.append("No surface-specific diagnosis could be recovered from TetGen artifacts.")
+            lines.append("")
+
+        lines.append("Generated files")
+        lines.append("---------------")
+        lines.append("- debug_plc.vtm: PLC geometry with marker_id and surface_id cell data.")
+        lines.append("- tetgen-tmpfile_skipped.face / tetgen-tmpfile_skipped.node: raw TetGen skipped-facet artifacts.")
+        return "\n".join(lines) + "\n"
+
+    def _write_tetgen_failure_report(
+        self,
+        phase: str,
+        tetgen_switches: str,
+        error: Exception,
+        report_path: str = "tetgen_failure_report.txt",
+    ) -> None:
+        """Write a plain-text TetGen failure report to disk."""
+        try:
+            report_text = self._build_tetgen_failure_report(phase, tetgen_switches, error)
+            with open(report_path, "w", encoding="utf-8") as handle:
+                handle.write(report_text)
+            logger.error("TetGen failure report saved as %s", report_path)
+        except Exception as exc:
+            logger.error("Failed to write TetGen failure report '%s': %s", report_path, exc)
+
+    def _log_tetgen_failure_diagnostics(self, phase: str, tetgen_switches: str, error: Exception) -> None:
+        """Emit a high-signal TetGen failure summary with surface and intersection names."""
+        if self._tetgen_failure_diagnostics_logged:
+            return
+        self._tetgen_failure_diagnostics_logged = True
+
+        self._build_plc_debug_maps()
+
+        logger.error(
+            "TetGen diagnostics after %s with switches '%s': %s",
+            phase,
+            tetgen_switches,
+            error,
+        )
+        self._write_tetgen_failure_report(phase, tetgen_switches, error)
+
+        skipped_info = self._parse_tetgen_skipped_faces()
+        problematic_surfaces = sorted(skipped_info.get("surface_counts", {}).keys())
+
+        if skipped_info.get("entries"):
+            logger.error(
+                "TetGen skipped %d surface facet(s) due to self-intersections.",
+                len(skipped_info["entries"]),
+            )
+            for surface_idx in problematic_surfaces:
+                counts = skipped_info["surface_counts"].get(surface_idx, 0)
+                markers = skipped_info["surface_markers"].get(surface_idx, ())
+                topology = self._summarize_surface_topology(surface_idx)
+                partners = self._surface_intersection_partners(surface_idx)
+                partner_names = ", ".join(self._surface_name(idx) for idx in partners[:4]) if partners else "none"
+
+                logger.error(
+                    "  Problem surface '%s' [idx=%d, kind=%s, marker(s)=%s]: skipped_facets=%d, triangles=%d, non_manifold_edges=%d, duplicate_triangles=%d, stored_intersections=%s",
+                    self._surface_name(surface_idx),
+                    surface_idx,
+                    self._surface_kind_label(surface_idx),
+                    list(markers),
+                    counts,
+                    topology["triangles"],
+                    topology["non_manifold_edges"],
+                    topology["duplicate_triangles"],
+                    partner_names,
+                )
+        else:
+            logger.error("TetGen did not leave a skipped-face file. Falling back to PLC topology diagnostics only.")
+
+        non_manifold_edges = self._collect_non_manifold_plc_edges(set(problematic_surfaces) if problematic_surfaces else None)
+        if non_manifold_edges:
+            logger.error("Detected %d PLC non-manifold edge(s) shared by more than two facets.", len(non_manifold_edges))
+            for issue in non_manifold_edges[:10]:
+                owner_names = ", ".join(self._surface_name(idx) for idx in issue["surface_indices"]) or "unknown"
+                logger.error(
+                    "  PLC edge %s is shared by %d facets across surfaces [%s] (markers=%s)",
+                    self._format_plc_edge_coords(issue["edge"]),
+                    issue["facet_count"],
+                    owner_names,
+                    list(issue["markers"]),
+                )
+
+        if problematic_surfaces:
+            pair_summaries = self._infer_problem_surface_pairs(problematic_surfaces)
+            if pair_summaries:
+                logger.error("Likely problematic surface intersections:")
+                for summary in pair_summaries[:10]:
+                    sample_edge = summary.get("sample_edge")
+                    sample_edge_text = self._format_plc_edge_coords(sample_edge) if sample_edge is not None else "n/a"
+                    logger.error(
+                        "  '%s' [idx=%d] <-> '%s' [idx=%d]: collision_contacts=%d, shared_plc_edges=%d, stored_intersection=%s, sample_shared_edge=%s",
+                        self._surface_name(summary["surface_a"]),
+                        summary["surface_a"],
+                        self._surface_name(summary["surface_b"]),
+                        summary["surface_b"],
+                        summary["collision_contacts"],
+                        summary["shared_plc_edges"],
+                        summary["has_stored_intersection"],
+                        sample_edge_text,
+                    )
+            else:
+                logger.error(
+                    "No cross-surface collision pair was inferred from the problematic surfaces; the issue may be inside individual surface triangulations."
+                )
 
 
     def generate_tetrahedral_mesh(self, tetgen_switches: str = "pq1.414aAY") -> Optional[pv.UnstructuredGrid]:
@@ -218,6 +787,7 @@ class TetrahedralMeshGenerator:
                         logger.info("✓ TetGen succeeded with geometric detection")
                     except Exception as e2:
                         logger.error(f"TetGen with detection also failed: {e2}")
+                        self._log_tetgen_failure_diagnostics("initial TetGen attempt", detection_switches, e2)
                         raise e  # Re-raise original error for fallback handling
                 else:
                     raise e  # Re-raise non-intersection errors
@@ -584,6 +1154,7 @@ class TetrahedralMeshGenerator:
         # Map: facet marker -> dataset surface index (only for faults)
         self.fault_surface_markers = fault_marker_map
         self.plc_holes = np.asarray(global_holes, dtype=np.float64) if global_holes else np.empty((0, 3), dtype=np.float64)
+        self._build_plc_debug_maps()
 
         logger.info(f"Final PLC built: {len(self.plc_vertices)} vertices, {len(self.plc_facets)} facets, {len(self.plc_edge_constraints)} edge constraints"
                     + (f", {len(global_holes)} holes" if len(global_holes) > 0 else ""))
@@ -1156,16 +1727,33 @@ class TetrahedralMeshGenerator:
                 else:
                     logger.warning(f"Fallback switches '{switches}' produced no tetrahedra.")
             except Exception as e:
+                if (
+                    not self._tetgen_failure_diagnostics_logged
+                    and ("self-intersection" in str(e).lower() or "manifold" in str(e).lower())
+                ):
+                    self._log_tetgen_failure_diagnostics("fallback TetGen attempt", switches, e)
                 logger.warning(f"Fallback switches '{switches}' also failed: {e}")
         
         logger.error("All TetGen strategies failed. The input PLC has severe geometric issues.")
+        if not self._tetgen_failure_diagnostics_logged:
+            self._write_tetgen_failure_report(
+                "final fallback summary",
+                "all fallback strategies",
+                RuntimeError("All TetGen strategies failed. The input PLC has severe geometric issues."),
+            )
         return None
     
     def _export_plc_for_debugging(self):
         try:
             logger.info("Exporting PLC to debug_plc.vtm for inspection...")
             mesh = pv.PolyData(self.plc_vertices, faces=np.hstack((np.full((len(self.plc_facets), 1), 3), self.plc_facets)))
-            mesh.cell_data['surface_id'] = self.plc_facet_markers
+            mesh.cell_data['marker_id'] = self.plc_facet_markers
+            dataset_idx = np.array(
+                [self._marker_to_surface_idx(marker) if self._marker_to_surface_idx(marker) is not None else -1
+                 for marker in self.plc_facet_markers],
+                dtype=np.int32,
+            )
+            mesh.cell_data['surface_id'] = dataset_idx
             
             multi_block = pv.MultiBlock()
             multi_block.append(mesh, "Facets")
@@ -1175,6 +1763,8 @@ class TetrahedralMeshGenerator:
                 for edge in self.plc_edge_constraints:
                     lines.extend([2, edge[0], edge[1]])
                 edge_mesh = pv.PolyData(self.plc_vertices, lines=np.array(lines))
+                if self.plc_edge_markers is not None and len(self.plc_edge_markers) == len(self.plc_edge_constraints):
+                    edge_mesh.cell_data['edge_marker'] = np.asarray(self.plc_edge_markers, dtype=np.int32)
                 multi_block.append(edge_mesh, "Constraints")
 
             multi_block.save("debug_plc.vtm")

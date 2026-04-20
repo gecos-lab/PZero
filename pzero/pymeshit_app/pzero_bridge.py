@@ -20,6 +20,8 @@ class PZeroEntityRecord:
     topology: str
     point_count: int
     role: str = ""
+    feature: str = ""
+    scenario: str = ""
     face_id: Optional[int] = None  # For boundary faces: 0=bottom, 1=top, 2=front, 3=back, 4=left, 5=right
 
 
@@ -81,6 +83,8 @@ class PZeroPymeshitBridge:
 
             topology_column = "topology" if "topology" in collection.df.columns else None
             role_column = "role" if "role" in collection.df.columns else None
+            feature_column = "feature" if "feature" in collection.df.columns else None
+            scenario_column = "scenario" if "scenario" in collection.df.columns else None
             name_column = "name" if "name" in collection.df.columns else None
 
             for _, row in collection.df.iterrows():
@@ -103,7 +107,9 @@ class PZeroPymeshitBridge:
                             uid=uid,
                             name=f"{base_name} - {face_name}",
                             topology="BORDER",  # Mark as BORDER for PyMeshIt
-                            role=str(row.get(role_column, "")) if role_column else "",
+                            role=_collection_value_as_text(row.get(role_column, "")) if role_column else "",
+                            feature=_collection_value_as_text(row.get(feature_column, "")) if feature_column else "",
+                            scenario=_collection_value_as_text(row.get(scenario_column, "")) if scenario_column else "",
                             point_count=4,  # Each face has 4 points
                             face_id=face_id,
                         )
@@ -115,7 +121,9 @@ class PZeroPymeshitBridge:
                         uid=uid,
                         name=str(row.get(name_column, uid)) if name_column else str(uid),
                         topology=str(row.get(topology_column, "")) if topology_column else "",
-                        role=str(row.get(role_column, "")) if role_column else "",
+                        role=_collection_value_as_text(row.get(role_column, "")) if role_column else "",
+                        feature=_collection_value_as_text(row.get(feature_column, "")) if feature_column else "",
+                        scenario=_collection_value_as_text(row.get(scenario_column, "")) if scenario_column else "",
                         point_count=point_count,
                     )
                     records.append(record)
@@ -276,6 +284,18 @@ def _count_points(vtk_obj) -> int:
         return int(vtk_obj.GetNumberOfPoints())
     except Exception:
         return 0
+
+
+def _collection_value_as_text(value) -> str:
+    """Normalize optional collection metadata values to clean strings."""
+    if value is None:
+        return ""
+    try:
+        if isinstance(value, (float, np.floating)) and np.isnan(value):
+            return ""
+    except Exception:
+        pass
+    return str(value)
 
 
 def _vtk_dataset_to_points(vtk_obj) -> Optional[np.ndarray]:

@@ -4198,6 +4198,17 @@ class MeshItWorkflowGUI(QWidget):
         export_btn.clicked.connect(self.export_results) # Added for completeness
         control_layout.addWidget(export_btn) # Added for completeness
 
+        self.tri_export_to_pzero_btn = QPushButton("Export to PZero")
+        self.tri_export_to_pzero_btn.clicked.connect(self._export_to_pzero)
+        self.tri_export_to_pzero_btn.setEnabled(False)
+        self.tri_export_to_pzero_btn.setToolTip(
+            "Export available PyMeshIt results to PZero:\n"
+            "• Triangulated surfaces -> Geology collection (geol_coll)\n"
+            "• Wells -> Well collection (well_coll)\n"
+            "• Tetrahedral mesh -> 3D Mesh collection (mesh3d_coll) if available"
+        )
+        control_layout.addWidget(self.tri_export_to_pzero_btn)
+
         # High-quality figure export button
         self.tri_export_figure_btn = QPushButton("Export Figure")
         self.tri_export_figure_btn.clicked.connect(lambda: self._show_generic_figure_export_dialog('triangulation'))
@@ -13900,6 +13911,8 @@ segmentation, triangulation, and visualization.
                         "uid": record.uid,
                         "source_topology": record.topology,
                         "role": record_role,
+                        "feature": getattr(record, "feature", ""),
+                        "scenario": getattr(record, "scenario", ""),
                         "loaded_as_points": False,
                         "source_triangulation_result": {
                             "vertices": vertices,
@@ -13988,6 +14001,8 @@ segmentation, triangulation, and visualization.
                         "uid": record.uid,
                         "source_topology": record.topology,
                         "role": record_role,
+                        "feature": getattr(record, "feature", ""),
+                        "scenario": getattr(record, "scenario", ""),
                         "loaded_as_points": True,
                     }
                     if extension_factor > 0.0:
@@ -14040,6 +14055,8 @@ segmentation, triangulation, and visualization.
                         "uid": record.uid,
                         "source_topology": record.topology,
                         "role": record_role,
+                        "feature": getattr(record, "feature", ""),
+                        "scenario": getattr(record, "scenario", ""),
                         "loaded_as_points": bool(load_as_points),
                     }
                     if extension_factor > 0.0:
@@ -19478,6 +19495,8 @@ segmentation, triangulation, and visualization.
         has_exportable_content = has_mesh or has_surfaces
         if hasattr(self, 'export_to_pzero_btn'):
             self.export_to_pzero_btn.setEnabled(has_exportable_content and has_bridge)
+        if hasattr(self, 'tri_export_to_pzero_btn'):
+            self.tri_export_to_pzero_btn.setEnabled(has_exportable_content and has_bridge)
         if hasattr(self, 'generate_stats_btn'):
             self.generate_stats_btn.setEnabled(has_mesh)
 
@@ -27144,11 +27163,21 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
 class PZeroEntitySelectionDialog(QDialog):
     """Dialog that lets the user pick PZero entities to import."""
 
+    COL_COLLECTION = 0
+    COL_NAME = 1
+    COL_TYPE = 2
+    COL_ROLE = 3
+    COL_FEATURE = 4
+    COL_SCENARIO = 5
+    COL_POINTS = 6
+    COL_AS_POINTS = 7
+    COL_EXTEND = 8
+
     def __init__(self, parent, entity_records, bridge=None):
         super().__init__(parent)
         self._pzero_bridge = bridge
         self.setWindowTitle("Load From PZero")
-        self.resize(600, 480)
+        self.resize(980, 520)
 
         layout = QVBoxLayout(self)
         layout.addWidget(
@@ -27156,9 +27185,19 @@ class PZeroEntitySelectionDialog(QDialog):
         )
 
         self.tree = QTreeWidget()
-        self.tree.setColumnCount(6)
+        self.tree.setColumnCount(9)
         self.tree.setHeaderLabels(
-            ["Collection", "Name", "Type", "Points", "Load as Points", "Extend Factor"]
+            [
+                "Collection",
+                "Name",
+                "Type",
+                "Role",
+                "Feature",
+                "Scenario",
+                "Points",
+                "Load as Points",
+                "Extend Factor",
+            ]
         )
         self.tree.setAlternatingRowColors(True)
         layout.addWidget(self.tree, 1)
@@ -27168,7 +27207,7 @@ class PZeroEntitySelectionDialog(QDialog):
             grouped.setdefault(record.collection_label, []).append(record)
 
         for collection_label, records in grouped.items():
-            parent_item = QTreeWidgetItem([collection_label, "", "", "", ""])
+            parent_item = QTreeWidgetItem([collection_label, "", "", "", "", "", "", "", ""])
             parent_item.setFirstColumnSpanned(True)
             parent_item.setFlags(Qt.ItemIsEnabled)
             self.tree.addTopLevelItem(parent_item)
@@ -27181,6 +27220,9 @@ class PZeroEntitySelectionDialog(QDialog):
                         "",
                         record.name,
                         record.topology or "-",
+                        getattr(record, "role", "") or "-",
+                        getattr(record, "feature", "") or "-",
+                        getattr(record, "scenario", "") or "-",
                         str(record.point_count),
                         "",  # "Load as Points" column - will be set below
                         "",  # Extend factor column - widget added later
@@ -27199,16 +27241,16 @@ class PZeroEntitySelectionDialog(QDialog):
                 
                 # Add "Load as Points" checkbox widget where supported
                 if supports_as_points:
-                    # Clear any text in column 4 to ensure checkbox is visible
-                    child.setText(4, "")
+                    # Clear any text in the widget column to ensure checkbox is visible
+                    child.setText(self.COL_AS_POINTS, "")
                     checkbox = QCheckBox(self.tree)  # Parent to tree widget
                     checkbox.setChecked(False)
                     checkbox.setToolTip(self._as_points_tooltip(record))
                     # Ensure checkbox is visible
                     checkbox.show()
-                    self.tree.setItemWidget(child, 4, checkbox)
+                    self.tree.setItemWidget(child, self.COL_AS_POINTS, checkbox)
                 else:
-                    child.setText(4, "-")
+                    child.setText(self.COL_AS_POINTS, "-")
 
                 if supports_extension:
                     spinbox = QDoubleSpinBox(self.tree)
@@ -27230,23 +27272,25 @@ class PZeroEntitySelectionDialog(QDialog):
                         )
                     spinbox.setKeyboardTracking(False)
                     spinbox.show()
-                    self.tree.setItemWidget(child, 5, spinbox)
+                    self.tree.setItemWidget(child, self.COL_EXTEND, spinbox)
                 else:
-                    child.setText(5, "-")
+                    child.setText(self.COL_EXTEND, "-")
 
             parent_item.setExpanded(True)
 
         header = self.tree.header()
-        # Set resize modes: Stretch for most columns, but Fixed/Interactive for checkbox column
-        for i in range(6):
-            if i == 4:  # "Load as Points" column
+        # Set resize modes: metadata columns size to contents, controls fixed, names stretch.
+        for i in range(self.tree.columnCount()):
+            if i == self.COL_AS_POINTS:
                 header.setSectionResizeMode(i, QHeaderView.Fixed)
-                self.tree.setColumnWidth(i, 120)  # Set explicit width for checkbox column
-            elif i == 5:  # Geometry extension column
+                self.tree.setColumnWidth(i, 120)
+            elif i == self.COL_EXTEND:
                 header.setSectionResizeMode(i, QHeaderView.Fixed)
                 self.tree.setColumnWidth(i, 130)
-            else:
+            elif i in (self.COL_COLLECTION, self.COL_NAME):
                 header.setSectionResizeMode(i, QHeaderView.Stretch)
+            else:
+                header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
 
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
@@ -27285,14 +27329,14 @@ class PZeroEntitySelectionDialog(QDialog):
                 child = parent.child(child_index)
                 if child.checkState(0) == Qt.Checked:
                     record = child.data(0, Qt.UserRole)
-                    # Check if "Load as Points" checkbox widget is checked (column 4)
-                    checkbox_widget = self.tree.itemWidget(child, 4)
+                    # Check if "Load as Points" checkbox widget is checked.
+                    checkbox_widget = self.tree.itemWidget(child, self.COL_AS_POINTS)
                     load_as_points = (
                         checkbox_widget is not None 
                         and isinstance(checkbox_widget, QCheckBox)
                         and checkbox_widget.isChecked()
                     )
-                    extension_widget = self.tree.itemWidget(child, 5)
+                    extension_widget = self.tree.itemWidget(child, self.COL_EXTEND)
                     extension_factor = 0.0
                     if (
                         extension_widget is not None
