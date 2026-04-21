@@ -1861,6 +1861,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.print_terminal(
                 f"Loaded {len(self.custom_tables)} custom table(s)."
             )
+        self.sync_structural_topology_tables_from_legend()
         self.refresh_custom_colormaps()
 
     def new_project(self):
@@ -3377,6 +3378,121 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     child.refresh_table_list()
                 except Exception:
                     pass
+
+    def get_structural_topology_legend_units(self):
+        """Return STm-ready units derived from the geological legend."""
+        legend_df = getattr(self.geol_coll, "legend_df", pd_DataFrame())
+        if legend_df is None or legend_df.empty:
+            return []
+
+        units_map = {}
+        for _, row in legend_df.iterrows():
+            feature_name = str(row.get("feature", "")).strip()
+            role_name = str(row.get("role", "")).strip()
+            unit_name = f"{feature_name}_{role_name}".strip("_")
+            if not unit_name or unit_name in units_map:
+                continue
+            units_map[unit_name] = {
+                "Name": unit_name,
+                "Unit": "NonVolumetric",
+                "Representative Surfaces": "No",
+                "Structural Polarity": row.get("time", 0.0),
+                "Domain_1": "",
+                "feature": feature_name,
+                "role": role_name,
+            }
+
+        return sorted(
+            units_map.values(),
+            key=lambda unit_info: str(unit_info.get("Name", "")).casefold(),
+        )
+
+    def sync_structural_topology_table_to_legend(self, table_name=None):
+        """Push structural polarity values from one STm table into the geology legend."""
+        if not table_name:
+            return
+        if self.custom_table_types.get(table_name) != "stm":
+            return
+
+        legend_df = getattr(self.geol_coll, "legend_df", pd_DataFrame())
+        table_df = self.custom_tables.get(table_name, pd_DataFrame())
+        if (
+            legend_df is None
+            or legend_df.empty
+            or table_df is None
+            or table_df.empty
+            or "Name" not in table_df.columns
+            or "Structural Polarity" not in table_df.columns
+        ):
+            return
+
+        legend_names = (
+            legend_df["feature"].astype(str).str.strip()
+            + "_"
+            + legend_df["role"].astype(str).str.strip()
+        )
+        legend_updated = False
+        for _, row in table_df.iterrows():
+            stm_name = str(row.get("Name", "")).strip()
+            if not stm_name:
+                continue
+            try:
+                polarity_value = float(row.get("Structural Polarity", ""))
+            except (TypeError, ValueError):
+                continue
+
+            mask = legend_names == stm_name
+            if not mask.any():
+                continue
+            self.geol_coll.legend_df.loc[mask, "time"] = polarity_value
+            legend_updated = True
+
+        if legend_updated:
+            self.geol_coll.legend_df.sort_values(
+                by="time", ascending=True, inplace=True
+            )
+            if hasattr(self, "legend"):
+                self.legend.update_widget(parent=self)
+
+    def sync_structural_topology_tables_from_legend(self):
+        """Refresh all STm table polarities from the geology legend."""
+        legend_units = self.get_structural_topology_legend_units()
+        if not legend_units:
+            return
+
+        polarity_map = {
+            unit_info["Name"]: unit_info.get("Structural Polarity", "")
+            for unit_info in legend_units
+        }
+        tables_updated = False
+
+        for table_name, table_df in self.custom_tables.items():
+            if self.custom_table_types.get(table_name) != "stm":
+                continue
+            if table_df is None:
+                continue
+
+            if "Domain" in table_df.columns and "Domain_1" not in table_df.columns:
+                table_df.rename(columns={"Domain": "Domain_1"}, inplace=True)
+            if "Name" not in table_df.columns:
+                table_df["Name"] = ""
+            if "Unit" not in table_df.columns:
+                table_df["Unit"] = "NonVolumetric"
+            if "Representative Surfaces" not in table_df.columns:
+                table_df["Representative Surfaces"] = "No"
+            if "Structural Polarity" not in table_df.columns:
+                table_df["Structural Polarity"] = ""
+            if not any(str(column).startswith("Domain") for column in table_df.columns):
+                table_df["Domain_1"] = ""
+
+            for row_idx in range(table_df.shape[0]):
+                stm_name = str(table_df.at[row_idx, "Name"]).strip()
+                if stm_name in polarity_map:
+                    table_df.at[row_idx, "Structural Polarity"] = polarity_map[stm_name]
+            tables_updated = True
+
+        if tables_updated:
+            self.refresh_table_views()
 
     def refresh_custom_colormaps(self):
         """Register project colormaps stored as advanced tables and refresh the legend widget."""

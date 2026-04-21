@@ -32,6 +32,17 @@ TEXT_TABLE_FILTER = (
 )
 SPECIAL_ASSIGNMENTS = ["As is", "User defined", "N.a."]
 COLORMAP_ASSIGNMENTS = ["value", "color_R", "color_G", "color_B"]
+STRUCTURAL_TOPOLOGY_TABLE_TYPE = "stm"
+STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS = ["Name", "Unit", "Structural Polarity"]
+STRUCTURAL_TOPOLOGY_OPTIONAL_COLUMNS = ["Representative Surfaces"]
+
+
+def _normalise_stm_representative_value(raw_value):
+    """Return the canonical Representative Surfaces value."""
+    value = str(raw_value or "").strip().casefold()
+    if value in {"yes", "1"}:
+        return "Yes"
+    return "No"
 
 
 def _count_file_lines(file_path):
@@ -127,14 +138,24 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             4, QFormLayout.ItemRole.FieldRole, self.ImportAsColormapCheckBox
         )
 
+        self.ImportAsSTmCheckBox = QCheckBox(self.OptionsFrame)
+        self.ImportAsSTmCheckBox.setText("Import as STm")
+        self.ImportAsSTmCheckBox.setChecked(False)
+        self.formLayout.setWidget(
+            5, QFormLayout.ItemRole.LabelRole, QLabel("STm type")
+        )
+        self.formLayout.setWidget(
+            5, QFormLayout.ItemRole.FieldRole, self.ImportAsSTmCheckBox
+        )
+
         self.ColormapModeComboBox = QComboBox(self.OptionsFrame)
         self.ColormapModeComboBox.addItems(["Continuous", "Exact intervals"])
         self.ColormapModeComboBox.setEnabled(False)
         self.formLayout.setWidget(
-            5, QFormLayout.ItemRole.LabelRole, QLabel("Colormap mode")
+            6, QFormLayout.ItemRole.LabelRole, QLabel("Colormap mode")
         )
         self.formLayout.setWidget(
-            5, QFormLayout.ItemRole.FieldRole, self.ColormapModeComboBox
+            6, QFormLayout.ItemRole.FieldRole, self.ColormapModeComboBox
         )
 
         self.StartRowspinBox.setValue(0)
@@ -147,6 +168,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         self.SeparatorcomboBox.currentTextChanged.connect(self._refresh_preview)
         self.HasHeaderCheckBox.toggled.connect(self._refresh_preview)
         self.ImportAsColormapCheckBox.toggled.connect(self._on_import_as_colormap_toggled)
+        self.ImportAsSTmCheckBox.toggled.connect(self._on_import_as_stm_toggled)
         self.ColormapModeComboBox.currentTextChanged.connect(
             self._on_colormap_mode_changed
         )
@@ -158,11 +180,39 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         """Return the assignment options available in the current import mode."""
         if self.ImportAsColormapCheckBox.isChecked():
             return ["As is"] + COLORMAP_ASSIGNMENTS + ["User defined", "N.a."]
+        if self.ImportAsSTmCheckBox.isChecked():
+            return [
+                "As is",
+                "Name",
+                "Unit",
+                "Representative Surfaces",
+                "Structural Polarity",
+                "Domain",
+                "User defined",
+                "N.a.",
+            ]
         return list(SPECIAL_ASSIGNMENTS)
 
     def _on_import_as_colormap_toggled(self, checked):
         """Switch between manual-table and colormap import modes."""
+        if checked and self.ImportAsSTmCheckBox.isChecked():
+            self.ImportAsSTmCheckBox.blockSignals(True)
+            self.ImportAsSTmCheckBox.setChecked(False)
+            self.ImportAsSTmCheckBox.blockSignals(False)
         self.ColormapModeComboBox.setEnabled(bool(checked))
+        if self.input_data_df is None:
+            return
+        self._auto_assign_columns()
+        self._assign_data_table()
+        self._update_preview_model()
+
+    def _on_import_as_stm_toggled(self, checked):
+        """Switch between manual-table and STm import modes."""
+        if checked and self.ImportAsColormapCheckBox.isChecked():
+            self.ImportAsColormapCheckBox.blockSignals(True)
+            self.ImportAsColormapCheckBox.setChecked(False)
+            self.ImportAsColormapCheckBox.blockSignals(False)
+        self.ColormapModeComboBox.setEnabled(self.ImportAsColormapCheckBox.isChecked())
         if self.input_data_df is None:
             return
         self._auto_assign_columns()
@@ -292,15 +342,37 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         """Assign default mappings for the current import mode."""
         column_names = list(self.input_data_df.columns)
 
-        if not self.ImportAsColormapCheckBox.isChecked():
+        if not self.ImportAsColormapCheckBox.isChecked() and not self.ImportAsSTmCheckBox.isChecked():
             self.rename_dict = {idx: "As is" for idx in range(len(column_names))}
             return
 
+        if self.ImportAsColormapCheckBox.isChecked():
+            target_assignments = COLORMAP_ASSIGNMENTS
+        else:
+            target_assignments = (
+                STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS
+                + STRUCTURAL_TOPOLOGY_OPTIONAL_COLUMNS
+            )
+
         self.rename_dict = {}
-        remaining_targets = {target.casefold(): target for target in COLORMAP_ASSIGNMENTS}
+        remaining_targets = {
+            target.casefold(): target for target in target_assignments
+        }
         for idx, column_name in enumerate(column_names):
-            matched_target = remaining_targets.pop(str(column_name).casefold(), None)
-            self.rename_dict[idx] = matched_target if matched_target else "N.a."
+            column_name_txt = str(column_name)
+            matched_target = remaining_targets.pop(column_name_txt.casefold(), None)
+            if self.ImportAsSTmCheckBox.isChecked():
+                if column_name_txt == "Domain":
+                    self.rename_dict[idx] = "Domain_1"
+                    continue
+                if column_name_txt.startswith("Domain_"):
+                    suffix = column_name_txt.split("_", 1)[1]
+                    if suffix.isdigit() and int(suffix) > 0:
+                        self.rename_dict[idx] = column_name_txt
+                        continue
+            self.rename_dict[idx] = matched_target if matched_target else (
+                "As is" if self.ImportAsSTmCheckBox.isChecked() else "N.a."
+            )
 
     def _assign_data_table(self):
         """Populate the assignment table."""
@@ -338,7 +410,14 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             self.AssignTable.setCellWidget(row_idx, 2, custom_line)
 
             current_value = self.rename_dict.get(row_idx, "As is")
-            if current_value in self._available_assignments():
+            if (
+                self.ImportAsSTmCheckBox.isChecked()
+                and str(current_value).startswith("Domain_")
+            ):
+                attr_combo.setCurrentText("Domain")
+                custom_line.setEnabled(True)
+                custom_line.setText(str(current_value).split("_", 1)[1])
+            elif current_value in self._available_assignments():
                 attr_combo.setCurrentText(current_value)
             else:
                 attr_combo.setCurrentText("User defined")
@@ -369,6 +448,11 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             if not custom_line.text().strip():
                 custom_line.setText(source_column)
             self.rename_dict[row_idx] = custom_line.text().strip()
+        elif selected_value == "Domain":
+            custom_line.setEnabled(True)
+            if not custom_line.text().strip():
+                custom_line.setText("1")
+            self.rename_dict[row_idx] = f"Domain_{custom_line.text().strip()}"
         else:
             custom_line.clear()
             custom_line.setEnabled(False)
@@ -383,6 +467,19 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
 
         custom_line = self.AssignTable.cellWidget(row_idx, 2)
         combo = self.AssignTable.cellWidget(row_idx, 1)
+        if combo.currentText() == "Domain":
+            order_value = str(custom_line.text() or "").strip()
+            try:
+                order_number = int(order_value)
+                if order_number <= 0:
+                    raise ValueError()
+            except ValueError:
+                order_number = 1
+            custom_line.setText(str(order_number))
+            self.rename_dict[row_idx] = f"Domain_{order_number}"
+            self._update_preview_model()
+            return
+
         if combo.currentText() != "User defined":
             return
 
@@ -423,8 +520,24 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
                 )
                 if custom_line is not None:
                     custom_line.setText(final_name)
-            else:
+            elif selection == "Domain":
+                order_value = _finalise_field_name(
+                    custom_line.text() if custom_line else "",
+                    "1",
+                )
+                try:
+                    order_number = int(order_value)
+                    if order_number <= 0:
+                        raise ValueError()
+                except ValueError:
+                    raise ValueError("domain order must be a positive integer")
+                final_name = f"Domain_{order_number}"
+                if custom_line is not None:
+                    custom_line.setText(str(order_number))
+            elif selection == "As is":
                 final_name = source_name
+            else:
+                final_name = selection
 
             if final_name in final_names:
                 raise ValueError(f"duplicate mapped name '{final_name}'")
@@ -466,6 +579,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             return
 
         import_as_colormap = self.ImportAsColormapCheckBox.isChecked()
+        import_as_stm = self.ImportAsSTmCheckBox.isChecked()
         if import_as_colormap:
             mapped_names = {spec["final_name"] for spec in column_specs}
             required_names = set(PropertiesCMaps.custom_colormap_columns)
@@ -475,6 +589,17 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
                     "Invalid colormap mapping",
                     "A colormap import requires exactly these fields: "
                     "value, color_R, color_G, color_B.",
+                )
+                return
+        if import_as_stm:
+            mapped_names = {spec["final_name"] for spec in column_specs}
+            required_names = set(STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS)
+            if not required_names.issubset(mapped_names):
+                QMessageBox.warning(
+                    self,
+                    "Invalid STm mapping",
+                    "An STm import requires at least these fields: "
+                    "Name, Unit, Structural Polarity.",
                 )
                 return
 
@@ -496,6 +621,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             "end_row": end_row,
             "column_specs": column_specs,
             "import_as_colormap": import_as_colormap,
+            "import_as_stm": import_as_stm,
             "colormap_mode": (
                 "discrete"
                 if self.ColormapModeComboBox.currentText() == "Exact intervals"
@@ -575,6 +701,65 @@ def _read_table_dataframe(file_path, import_config):
     return input_df
 
 
+def _normalise_stm_dataframe(input_df):
+    """Ensure imported STm tables always expose the expected core columns."""
+    def domain_sort_key(column_name):
+        text = str(column_name)
+        if text == "Domain":
+            return 1
+        if text.startswith("Domain_"):
+            try:
+                return int(text.split("_", 1)[1])
+            except ValueError:
+                return 9999
+        return 9999
+
+    output_df = input_df.copy()
+    if "Domain" in output_df.columns and "Domain_1" not in output_df.columns:
+        output_df.rename(columns={"Domain": "Domain_1"}, inplace=True)
+    for required_column in STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS:
+        if required_column not in output_df.columns:
+            output_df[required_column] = ""
+    if "Representative Surfaces" not in output_df.columns:
+        output_df["Representative Surfaces"] = "No"
+    else:
+        output_df["Representative Surfaces"] = output_df[
+            "Representative Surfaces"
+        ].apply(_normalise_stm_representative_value)
+    if not any(str(column).startswith("Domain") for column in output_df.columns):
+        output_df["Domain_1"] = ""
+
+    ordered_columns = [
+        column_name
+        for column_name in [
+            "Name",
+            "Unit",
+            "Representative Surfaces",
+            "Structural Polarity",
+        ]
+        if column_name in output_df.columns
+    ]
+    ordered_columns.extend(
+        sorted(
+            [
+                column_name
+                for column_name in output_df.columns
+                if str(column_name).startswith("Domain")
+                and column_name not in ordered_columns
+            ],
+            key=domain_sort_key,
+        )
+    )
+    ordered_columns.extend(
+        [
+            column_name
+            for column_name in output_df.columns
+            if column_name not in ordered_columns
+        ]
+    )
+    return output_df[ordered_columns]
+
+
 def import_tables(self=None, in_file_names=None):
     """Import one or more text tables into project custom tables."""
     if self is None:
@@ -610,6 +795,8 @@ def import_tables(self=None, in_file_names=None):
                 existing_names=set(self.custom_tables.keys()),
                 base_name=base_name,
             )
+            if import_config.get("import_as_stm", False):
+                imported_df = _normalise_stm_dataframe(imported_df)
             self.custom_tables[table_name] = imported_df
             if import_config.get("import_as_colormap", False):
                 self.custom_table_types[table_name] = (
@@ -618,6 +805,9 @@ def import_tables(self=None, in_file_names=None):
                 self.custom_table_options[table_name] = {
                     "mode": import_config.get("colormap_mode", "continuous")
                 }
+            elif import_config.get("import_as_stm", False):
+                self.custom_table_types[table_name] = STRUCTURAL_TOPOLOGY_TABLE_TYPE
+                self.custom_table_options[table_name] = {}
             else:
                 self.custom_table_types[table_name] = "manual"
                 self.custom_table_options[table_name] = {}
@@ -627,6 +817,8 @@ def import_tables(self=None, in_file_names=None):
 
     if hasattr(self, "refresh_table_views"):
         self.refresh_table_views()
+    if hasattr(self, "sync_structural_topology_tables_from_legend"):
+        self.sync_structural_topology_tables_from_legend()
     if hasattr(self, "refresh_custom_colormaps"):
         self.refresh_custom_colormaps()
 

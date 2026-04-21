@@ -856,6 +856,8 @@ class Legend(QObject):
         ] = time
         # Order geological legend entities with descending time values
         parent.geol_coll.legend_df.sort_values(by="time", ascending=True, inplace=True)
+        if hasattr(parent, "sync_structural_topology_tables_from_legend"):
+            parent.sync_structural_topology_tables_from_legend()
         # THE FOLLOWING MUST BE CHANGED IN A SORT COMMAND
         # UPDATE AT THE MOMENT DOES NOT WORK PROPERLY
         # parent.LegendTreeWidget.setSortingEnabled(True)
