@@ -113,6 +113,50 @@ def structural_topology_color(raw_key):
     return QColor.fromHsv(hue, 80, 245)
 
 
+class ZoomableGraphicsView(QGraphicsView):
+    """Graphics view with bounded zoom support."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._zoom_factor = 1.15
+        self._min_scale = 0.2
+        self._max_scale = 8.0
+        self._current_scale = 1.0
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
+
+    def _apply_zoom(self, factor: float):
+        new_scale = self._current_scale * factor
+        if new_scale < self._min_scale or new_scale > self._max_scale:
+            return
+        self.scale(factor, factor)
+        self._current_scale = new_scale
+
+    def zoom_in(self):
+        self._apply_zoom(self._zoom_factor)
+
+    def zoom_out(self):
+        self._apply_zoom(1.0 / self._zoom_factor)
+
+    def fit_scene(self, scene_rect):
+        self.resetTransform()
+        self._current_scale = 1.0
+        self.fitInView(scene_rect, Qt.KeepAspectRatio)
+        scale_from_transform = float(self.transform().m11())
+        if scale_from_transform > 0:
+            self._current_scale = scale_from_transform
+
+    def wheelEvent(self, event):
+        if event.modifiers() & Qt.ControlModifier:
+            if event.angleDelta().y() > 0:
+                self.zoom_in()
+            else:
+                self.zoom_out()
+            event.accept()
+            return
+        super().wheelEvent(event)
+
+
 class STmBuildDialog(QDialog):
     """Preview dialog that builds an STm graph from the current table."""
 
@@ -131,6 +175,7 @@ class STmBuildDialog(QDialog):
         self.dataframe_provider = dataframe_provider
         self.setWindowTitle(f"Build STm - {self.table_name}")
         self.resize(1120, 860)
+        self._fit_on_next_rebuild = True
 
         layout = QVBoxLayout(self)
         info_label = QLabel(
@@ -139,7 +184,7 @@ class STmBuildDialog(QDialog):
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
 
-        self.graphics_view = QGraphicsView(self)
+        self.graphics_view = ZoomableGraphicsView(self)
         self.graphics_view.setRenderHint(QPainter.Antialiasing, True)
         self.graphics_view.setRenderHint(QPainter.TextAntialiasing, True)
         self.graphics_view.setDragMode(QGraphicsView.ScrollHandDrag)
@@ -152,6 +197,20 @@ class STmBuildDialog(QDialog):
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.clicked.connect(self.rebuild_scene)
         buttons_layout.addWidget(self.refresh_button)
+        zoom_out_button = QPushButton("-")
+        zoom_out_button.setToolTip("Zoom out")
+        zoom_out_button.clicked.connect(self.graphics_view.zoom_out)
+        buttons_layout.addWidget(zoom_out_button)
+        zoom_in_button = QPushButton("+")
+        zoom_in_button.setToolTip("Zoom in")
+        zoom_in_button.clicked.connect(self.graphics_view.zoom_in)
+        buttons_layout.addWidget(zoom_in_button)
+        reset_zoom_button = QPushButton("Reset zoom")
+        reset_zoom_button.setToolTip("Fit scene to view")
+        reset_zoom_button.clicked.connect(self.reset_zoom_to_fit)
+        buttons_layout.addWidget(reset_zoom_button)
+        zoom_hint_label = QLabel("Ctrl + mouse wheel to zoom")
+        buttons_layout.addWidget(zoom_hint_label)
         buttons_layout.addStretch(1)
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.accept)
@@ -172,7 +231,15 @@ class STmBuildDialog(QDialog):
         self._draw_scene(dataframe)
         scene_rect = self.scene.itemsBoundingRect().adjusted(-80, -80, 80, 80)
         self.scene.setSceneRect(scene_rect)
-        self.graphics_view.fitInView(scene_rect, Qt.KeepAspectRatio)
+        if self._fit_on_next_rebuild:
+            self.graphics_view.fit_scene(scene_rect)
+            self._fit_on_next_rebuild = False
+
+    def reset_zoom_to_fit(self):
+        """Reset user zoom and fit the full scene in view."""
+        scene_rect = self.scene.itemsBoundingRect().adjusted(-80, -80, 80, 80)
+        self.scene.setSceneRect(scene_rect)
+        self.graphics_view.fit_scene(scene_rect)
 
     def _draw_scene(self, dataframe):
         """Populate the scene with STm nodes and the automatically-derived links."""
@@ -352,8 +419,8 @@ class STmBuildDialog(QDialog):
 
         rect_pen = QPen(outline_color or QColor(30, 30, 30))
         rect_pen.setWidth(3)
-        rect_item = self.scene.addRoundedRect(
-            rect_x, rect_y, rect_width, rect_height, 26, 26, rect_pen, QBrush(fill_color)
+        rect_item = self.scene.addRect(
+            rect_x, rect_y, rect_width, rect_height, rect_pen, QBrush(fill_color)
         )
         rect_item.setZValue(0)
 
@@ -400,13 +467,11 @@ class STmBuildDialog(QDialog):
             domain_pen = QPen(domain_color)
             domain_pen.setWidth(3)
             domain_pen.setStyle(Qt.DashLine)
-            domain_rect = self.scene.addRoundedRect(
+            domain_rect = self.scene.addRect(
                 left,
                 top,
                 right - left,
                 bottom - top,
-                24,
-                24,
                 domain_pen,
                 QBrush(Qt.NoBrush),
             )
