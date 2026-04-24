@@ -2937,6 +2937,21 @@ class View3D(ViewVTK):
         # Add to menu
         self.menuMeshTools.addAction(self.actionMeshSlicer)
 
+        # Fix Geometry: repair / simplify / flatten a TriSurf before remeshing
+        # (e.g. in PyMeshIT). The action lives under the standard Modify menu.
+        self.actionFixGeometry = QAction("Fix Geometry", self)
+        self.actionFixGeometry.triggered.connect(self.show_fix_geometry_dialog)
+        if hasattr(self, "menuModify"):
+            self.menuModify.addAction(self.actionFixGeometry)
+        else:
+            self.menuMeshTools.addAction(self.actionFixGeometry)
+
+    def show_fix_geometry_dialog(self):
+        """Open the interactive Fix Geometry dialog for the current 3D view."""
+        from ..helpers.fix_geometry import open_fix_geometry_dialog
+
+        open_fix_geometry_dialog(self)
+
     def toggle_mesh_manipulation(
         self,
         enabled,
