@@ -2,8 +2,8 @@
 Interactive `Fix Geometry` tool for TriSurf entities.
 
 Provides a dialog that lets the user clean, decimate, smooth, flatten,
-refine (subdivide), and fill holes in a triangulated surface, with live
-3D preview inside the current PZero 3D view.
+refine (subdivide), fill holes, and clip a triangulated surface, with
+live 3D preview inside the current PZero 3D view.
 
 The goal is to produce a TriSurf whose geometry is numerically well
 conditioned for downstream re-meshing in PyMeshIT (i.e. no duplicated
@@ -90,6 +90,15 @@ def _bbox_diagonal(poly: pv.PolyData) -> float:
         np.sqrt((xmax - xmin) ** 2 + (ymax - ymin) ** 2 + (zmax - zmin) ** 2)
     )
     return diag if diag > 0.0 else 1.0
+
+
+def _unit_vector(vec: np.ndarray) -> Optional[np.ndarray]:
+    """Return `vec` normalized, or `None` if its norm is too small."""
+    arr = np.asarray(vec, dtype=float)
+    norm = float(np.linalg.norm(arr))
+    if norm <= 1e-12:
+        return None
+    return arr / norm
 
 
 def _to_pyvista_triangles(vtk_trisurf) -> pv.PolyData:
@@ -190,6 +199,163 @@ def _project_to_plane(points: np.ndarray, blend: float) -> np.ndarray:
     return points + blend * (projected - points)
 
 
+def _fallback_in_plane_axis(
+    normal: np.ndarray, preferred: Tuple[float, float, float]
+) -> np.ndarray:
+    """Return a stable in-plane axis as close as possible to `preferred`."""
+    refs = [np.asarray(preferred, dtype=float)]
+    refs.extend(
+        [
+            np.array([1.0, 0.0, 0.0]),
+            np.array([0.0, 1.0, 0.0]),
+            np.array([0.0, 0.0, 1.0]),
+        ]
+    )
+    for ref in refs:
+        tangent = ref - np.dot(ref, normal) * normal
+        axis = _unit_vector(tangent)
+        if axis is not None:
+            return axis
+    return np.array([1.0, 0.0, 0.0], dtype=float)
+
+
+def _surface_local_frame(
+    points: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Build a stable local `(u, v, n)` frame for a near-planar TriSurf.
+
+    `u` follows the dominant in-plane geometric axis, while its sign and
+    `v`'s sign are oriented as consistently as possible with world-space
+    references so that `left/right/up/down` feel stable across previews.
+    """
+    center, normal = best_fitting_plane(points)
+    normal = _unit_vector(normal)
+    if normal is None:
+        normal = np.array([0.0, 0.0, 1.0], dtype=float)
+
+    centered = np.asarray(points, dtype=float) - center
+    planar = centered - np.outer(np.dot(centered, normal), normal)
+
+    u_axis = None
+    try:
+        _, _, vh = np.linalg.svd(planar, full_matrices=False)
+        if vh.size:
+            candidate = vh[0]
+            candidate = candidate - np.dot(candidate, normal) * normal
+            u_axis = _unit_vector(candidate)
+    except Exception:
+        u_axis = None
+    if u_axis is None:
+        u_axis = _fallback_in_plane_axis(normal, (1.0, 0.0, 0.0))
+
+    u_ref = _fallback_in_plane_axis(normal, (1.0, 0.0, 0.0))
+    if float(np.dot(u_axis, u_ref)) < 0.0:
+        u_axis = -u_axis
+
+    v_axis = _unit_vector(np.cross(normal, u_axis))
+    if v_axis is None:
+        v_axis = _fallback_in_plane_axis(normal, (0.0, 0.0, 1.0))
+
+    v_ref = _fallback_in_plane_axis(normal, (0.0, 0.0, 1.0))
+    if float(np.dot(v_axis, v_ref)) < 0.0:
+        v_axis = -v_axis
+
+    local_points = np.column_stack(
+        [
+            np.dot(centered, u_axis),
+            np.dot(centered, v_axis),
+            np.dot(centered, normal),
+        ]
+    )
+    return center, u_axis, v_axis, normal, local_points
+
+
+def _apply_side_clip(
+    mesh: pv.PolyData, params: Dict[str, object]
+) -> pv.PolyData:
+    """Clip `mesh` from one local side using a planar trim.
+
+    The clip plane is defined in the surface local frame, so `left`,
+    `right`, `up`, and `down` follow the current TriSurf orientation
+    instead of the global XYZ axes.
+    """
+    if mesh is None or mesh.n_points < 3 or mesh.n_cells == 0:
+        return mesh
+
+    clip_enabled = bool(params.get("clip_enabled", False))
+    if not clip_enabled:
+        return mesh
+
+    clip_side = str(params.get("clip_side", "left")).lower()
+    clip_mode = str(params.get("clip_mode", "length")).lower()
+    clip_length = max(float(params.get("clip_length", 0.0)), 0.0)
+    clip_extent = max(float(params.get("clip_extent", 0.0)), 0.0)
+    if clip_length <= 0.0 and clip_extent <= 0.0:
+        return mesh
+
+    center, u_axis, v_axis, normal, local_points = _surface_local_frame(
+        np.asarray(mesh.points)
+    )
+    u_min, u_max = float(local_points[:, 0].min()), float(local_points[:, 0].max())
+    v_min, v_max = float(local_points[:, 1].min()), float(local_points[:, 1].max())
+    u_span = u_max - u_min
+    v_span = v_max - v_min
+
+    if clip_side in ("left", "right"):
+        side_span = u_span
+        axis_normal = (1.0, 0.0, 0.0)
+    else:
+        side_span = v_span
+        axis_normal = (0.0, 1.0, 0.0)
+    if side_span <= 1e-12:
+        return mesh
+
+    if clip_mode == "extent":
+        trim = clip_extent * side_span
+    else:
+        trim = clip_length
+    trim = min(max(trim, 0.0), max(side_span - 1e-9, 0.0))
+    if trim <= 0.0:
+        return mesh
+
+    local_mesh = mesh.copy(deep=True)
+    local_mesh.points = local_points
+
+    if clip_side == "left":
+        origin = (u_min + trim, 0.0, 0.0)
+        invert = False
+    elif clip_side == "right":
+        origin = (u_max - trim, 0.0, 0.0)
+        invert = True
+    elif clip_side == "down":
+        origin = (0.0, v_min + trim, 0.0)
+        invert = False
+    else:  # "up"
+        origin = (0.0, v_max - trim, 0.0)
+        invert = True
+
+    clipped = local_mesh.clip(normal=axis_normal, origin=origin, invert=invert)
+    clipped = clipped.clean(
+        tolerance=0.0,
+        absolute=True,
+        lines_to_points=False,
+        polys_to_lines=False,
+        strips_to_polys=False,
+    ).triangulate()
+    if clipped.n_points == 0 or clipped.n_cells == 0:
+        return clipped
+
+    basis = np.column_stack((u_axis, v_axis, normal))
+    clipped.points = np.asarray(clipped.points) @ basis.T + center
+    return clipped.clean(
+        tolerance=0.0,
+        absolute=True,
+        lines_to_points=False,
+        polys_to_lines=False,
+        strips_to_polys=False,
+    ).triangulate()
+
+
 def _apply_fix_pipeline(
     source: pv.PolyData, params: Dict[str, object]
 ) -> pv.PolyData:
@@ -198,7 +364,7 @@ def _apply_fix_pipeline(
     The pipeline order matters: clean first to remove duplicates and
     degenerate triangles, then topology-changing steps (fill holes,
     decimation, subdivision), then geometry-only steps (smoothing,
-    planar projection) which do not modify the connectivity.
+    planar projection), and finally optional side clipping.
     """
     mesh = source.triangulate()
 
@@ -305,8 +471,17 @@ def _apply_fix_pipeline(
         new_pts = _project_to_plane(pts, planarity)
         mesh.points = new_pts
 
+    # 8. Trim one side with a local planar clip.
+    mesh = _apply_side_clip(mesh, params)
+
     # Always end with a triangulated, compacted mesh.
-    mesh = mesh.triangulate()
+    mesh = mesh.clean(
+        tolerance=0.0,
+        absolute=True,
+        lines_to_points=False,
+        polys_to_lines=False,
+        strips_to_polys=False,
+    ).triangulate()
     return mesh
 
 
@@ -426,6 +601,7 @@ class FixGeometryDialog(QDialog):
         params_layout.addWidget(self._build_smooth_group())
         params_layout.addWidget(self._build_convex_group())
         params_layout.addWidget(self._build_planar_group())
+        params_layout.addWidget(self._build_clip_group())
         params_layout.addStretch(1)
 
         root.addWidget(scroll, 1)
@@ -670,6 +846,63 @@ class FixGeometryDialog(QDialog):
 
         return group
 
+    def _build_clip_group(self) -> QGroupBox:
+        group = QGroupBox("7. Side clip trim")
+        form = QFormLayout(group)
+
+        self.clip_enable = QCheckBox("Enable side clipping")
+        self.clip_enable.setChecked(False)
+        self.clip_enable.setToolTip(
+            "Trim the selected TriSurf with a planar clip aligned to the\n"
+            "surface local frame. The new border is cleaned and retriangulated."
+        )
+        self.clip_enable.toggled.connect(self._schedule_preview)
+        form.addRow(self.clip_enable)
+
+        self.clip_side_combo = QComboBox()
+        self.clip_side_combo.addItems(["left", "right", "down", "up"])
+        self.clip_side_combo.setToolTip(
+            "Choose which local side of the TriSurf is trimmed.\n"
+            "The local frame is inferred from the surface geometry."
+        )
+        self.clip_side_combo.currentIndexChanged.connect(self._schedule_preview)
+        form.addRow("Side:", self.clip_side_combo)
+
+        self.clip_mode_combo = QComboBox()
+        self.clip_mode_combo.addItems(["length", "extent"])
+        self.clip_mode_combo.setToolTip(
+            "length: clip inward by an absolute distance.\n"
+            "extent: clip inward by a fraction of the side span."
+        )
+        self.clip_mode_combo.currentIndexChanged.connect(self._schedule_preview)
+        form.addRow("Measure:", self.clip_mode_combo)
+
+        self.clip_length_spin = QDoubleSpinBox()
+        self.clip_length_spin.setDecimals(4)
+        self.clip_length_spin.setRange(0.0, 1.0e9)
+        self.clip_length_spin.setSingleStep(1.0)
+        self.clip_length_spin.setValue(0.0)
+        self.clip_length_spin.setToolTip(
+            "Absolute inward trim distance in project units.\n"
+            "Used when Measure = length."
+        )
+        self.clip_length_spin.valueChanged.connect(self._schedule_preview)
+        form.addRow("Length:", self.clip_length_spin)
+
+        self.clip_extent_spin = QDoubleSpinBox()
+        self.clip_extent_spin.setDecimals(3)
+        self.clip_extent_spin.setRange(0.0, 1.0)
+        self.clip_extent_spin.setSingleStep(0.05)
+        self.clip_extent_spin.setValue(0.0)
+        self.clip_extent_spin.setToolTip(
+            "Relative inward trim amount in [0, 1].\n"
+            "Used when Measure = extent."
+        )
+        self.clip_extent_spin.valueChanged.connect(self._schedule_preview)
+        form.addRow("Extent (rel):", self.clip_extent_spin)
+
+        return group
+
     # ------------------------------------------------------------ data model ---
 
     def _populate_candidates(self) -> None:
@@ -753,6 +986,11 @@ class FixGeometryDialog(QDialog):
             "smooth_edge_angle": 15.0,
             "convex_blend": self.convex_blend_spin.value(),
             "planarity_blend": self.planarity_spin.value(),
+            "clip_enabled": self.clip_enable.isChecked(),
+            "clip_side": self.clip_side_combo.currentText(),
+            "clip_mode": self.clip_mode_combo.currentText(),
+            "clip_length": self.clip_length_spin.value(),
+            "clip_extent": self.clip_extent_spin.value(),
         }
 
     def _reset_parameters(self) -> None:
@@ -774,6 +1012,11 @@ class FixGeometryDialog(QDialog):
         self.smooth_feature_angle.setValue(45.0)
         self.convex_blend_spin.setValue(0.0)
         self.planarity_spin.setValue(0.0)
+        self.clip_enable.setChecked(False)
+        self.clip_side_combo.setCurrentText("left")
+        self.clip_mode_combo.setCurrentText("length")
+        self.clip_length_spin.setValue(0.0)
+        self.clip_extent_spin.setValue(0.0)
         self._schedule_preview()
 
     # ------------------------------------------------------------- preview ---
