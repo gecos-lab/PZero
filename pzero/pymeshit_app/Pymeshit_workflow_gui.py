@@ -14043,6 +14043,175 @@ segmentation, triangulation, and visualization.
             self._refresh_hull_per_surface_table()
         if hasattr(self, '_refresh_tri_per_surface_table'):
             self._refresh_tri_per_surface_table()
+
+    @staticmethod
+    def _shift_index_after_dataset_remove(value, removed_index: int):
+        """Return a dataset index shifted after removing one dataset, or None if removed."""
+        try:
+            idx = int(value)
+        except (TypeError, ValueError):
+            return value
+        if idx == removed_index:
+            return None
+        if idx > removed_index:
+            return idx - 1
+        return idx
+
+    def _shift_indexed_dict_after_dataset_remove(self, attr_name: str, removed_index: int) -> None:
+        mapping = getattr(self, attr_name, None)
+        if not isinstance(mapping, dict):
+            return
+
+        shifted = {}
+        for key, value in mapping.items():
+            new_key = self._shift_index_after_dataset_remove(key, removed_index)
+            if new_key is None:
+                continue
+            shifted[new_key] = value
+        setattr(self, attr_name, shifted)
+
+    def _shift_indexed_set_after_dataset_remove(self, attr_name: str, removed_index: int) -> None:
+        values = getattr(self, attr_name, None)
+        if not isinstance(values, set):
+            return
+
+        shifted = set()
+        for value in values:
+            new_value = self._shift_index_after_dataset_remove(value, removed_index)
+            if new_value is not None:
+                shifted.add(new_value)
+        setattr(self, attr_name, shifted)
+
+    def _shift_constraint_reference_after_dataset_remove(
+        self,
+        entry: Dict[str, Any],
+        key: str,
+        removed_index: int,
+    ) -> bool:
+        if key not in entry:
+            return True
+        shifted = self._shift_index_after_dataset_remove(entry.get(key), removed_index)
+        if shifted is None:
+            return False
+        entry[key] = shifted
+        return True
+
+    def _reindex_dataset_dependent_state_after_remove(self, removed_index: int) -> None:
+        """Drop or shift cached state that is keyed by dataset index."""
+        for attr_name in (
+            "seg_length_by_surface",
+            "mesh_length_by_surface",
+            "hull_method_by_surface",
+            "tri_method_by_surface",
+            "well_length_by_index",
+            "conforming_mesh_data",
+            "refine_constraint_data",
+            "refine_selected_constraint_segments",
+        ):
+            self._shift_indexed_dict_after_dataset_remove(attr_name, removed_index)
+
+        self._shift_indexed_set_after_dataset_remove("selected_conforming_surfaces", removed_index)
+
+        for dataset in self.datasets:
+            constraints = dataset.get("stored_constraints")
+            if not isinstance(constraints, list):
+                continue
+            kept_constraints = []
+            for constraint in constraints:
+                if not isinstance(constraint, dict):
+                    kept_constraints.append(constraint)
+                    continue
+                if not self._shift_constraint_reference_after_dataset_remove(
+                    constraint, "other_surface_id", removed_index
+                ):
+                    continue
+                kept_constraints.append(constraint)
+            dataset["stored_constraints"] = kept_constraints
+            dataset.pop("conforming_mesh", None)
+
+        for attr_name in ("datasets_intersections", "refined_intersections_for_visualization"):
+            mapping = getattr(self, attr_name, None)
+            if not isinstance(mapping, dict):
+                continue
+
+            shifted_mapping = {}
+            for key, intersections in mapping.items():
+                new_key = self._shift_index_after_dataset_remove(key, removed_index)
+                if new_key is None:
+                    continue
+
+                shifted_intersections = []
+                for entry in intersections or []:
+                    if not isinstance(entry, dict):
+                        shifted_intersections.append(entry)
+                        continue
+                    if not self._shift_constraint_reference_after_dataset_remove(entry, "dataset_id1", removed_index):
+                        continue
+                    if not self._shift_constraint_reference_after_dataset_remove(entry, "dataset_id2", removed_index):
+                        continue
+                    shifted_intersections.append(entry)
+
+                if shifted_intersections:
+                    shifted_mapping[new_key] = shifted_intersections
+
+            setattr(self, attr_name, shifted_mapping)
+
+        self.hull_points = None
+        self.tetrahedral_mesh = None
+        if hasattr(self, "tetra_stats_label"):
+            self.tetra_stats_label.setText("No tetrahedral mesh generated yet.")
+
+    def _fast_update_dataset_table_after_remove(self, removed_index: int) -> None:
+        """Update only the loaded-dataset rows after one deletion."""
+        if hasattr(self, "dataset_table"):
+            try:
+                self.dataset_table.remove_loaded_dataset_at_index(
+                    removed_index,
+                    self.datasets,
+                    self.current_dataset_index,
+                )
+                return
+            except Exception as exc:
+                logger.debug("Fast dataset-table removal failed, falling back to full refresh: %s", exc)
+
+        if hasattr(self, "dataset_list_widget") and hasattr(self.dataset_list_widget, "takeItem"):
+            try:
+                self.dataset_list_widget.takeItem(removed_index)
+                if 0 <= self.current_dataset_index < self.dataset_list_widget.count():
+                    self.dataset_list_widget.setCurrentRow(self.current_dataset_index)
+                return
+            except Exception as exc:
+                logger.debug("Fast dataset-list removal failed, falling back to full refresh: %s", exc)
+
+        self._update_dataset_list()
+
+    def _remove_dataset_fast(self, dataset_index: int) -> None:
+        """Remove one dataset without rebuilding all tab tables or redrawing all views."""
+        removed_name = self.datasets[dataset_index].get("name", f"Dataset {dataset_index}")
+        self.datasets.pop(dataset_index)
+        self._reindex_dataset_dependent_state_after_remove(dataset_index)
+
+        if not self.datasets:
+            self.current_dataset_index = -1
+        elif self.current_dataset_index == dataset_index:
+            self.current_dataset_index = min(dataset_index, len(self.datasets) - 1)
+        elif self.current_dataset_index > dataset_index:
+            self.current_dataset_index -= 1
+        elif self.current_dataset_index >= len(self.datasets):
+            self.current_dataset_index = len(self.datasets) - 1
+
+        self._fast_update_dataset_table_after_remove(dataset_index)
+        self._update_statistics()
+
+        if hasattr(self, "_populate_surface_selector"):
+            self._populate_surface_selector()
+        if hasattr(self, "_update_advanced_selection_button_state"):
+            self._update_advanced_selection_button_state()
+        if hasattr(self, "_update_export_to_pzero_button_state"):
+            self._update_export_to_pzero_button_state()
+
+        self.statusBar().showMessage(f"Removed dataset '{removed_name}'")
+
     def _rename_dataset(self, dataset_index):
         """Rename a dataset"""
         if not (0 <= dataset_index < len(self.datasets)):
@@ -14135,15 +14304,7 @@ segmentation, triangulation, and visualization.
         )
         
         if confirm == QMessageBox.Yes:
-            # Remove dataset
-            self.datasets.pop(dataset_index)
-            
-            # Update dataset list
-            self._update_dataset_list()
-            
-            # Update statistics and visualization
-            self._update_statistics()
-            self._update_visualization()
+            self._remove_dataset_fast(dataset_index)
     
     def clear_all_datasets(self):
         """Clear all loaded datasets"""
@@ -27961,6 +28122,61 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         # Add loaded datasets
         for i, dataset in enumerate(datasets):
             self.add_loaded_dataset(dataset, i)
+
+    def remove_loaded_dataset_at_index(
+        self,
+        removed_index: int,
+        datasets: list,
+        selected_index: int,
+    ) -> None:
+        """Fast in-place removal for one loaded dataset row."""
+        self.blockSignals(True)
+        try:
+            for row in range(self.topLevelItemCount() - 1, -1, -1):
+                item = self.topLevelItem(row)
+                if item.data(0, Qt.UserRole + 2) != "loaded":
+                    continue
+                item_dataset_index = item.data(0, Qt.UserRole)
+                if item_dataset_index == removed_index:
+                    self.takeTopLevelItem(row)
+                    break
+
+            for row in range(self.topLevelItemCount()):
+                item = self.topLevelItem(row)
+                if item.data(0, Qt.UserRole + 2) != "loaded":
+                    continue
+
+                item_dataset_index = item.data(0, Qt.UserRole)
+                if not isinstance(item_dataset_index, int):
+                    continue
+                if item_dataset_index <= removed_index:
+                    continue
+
+                new_index = item_dataset_index - 1
+                item.setData(0, Qt.UserRole, new_index)
+                if 0 <= new_index < len(datasets):
+                    dataset = datasets[new_index]
+                    visibility = "[x]" if dataset.get('visible', True) else "[ ]"
+                    item.setText(self.COL_NAME, f"{visibility} {dataset['name']}")
+                    item.setText(self.COL_TYPE, dataset.get('type', '-'))
+                    item.setData(0, Qt.UserRole + 1, dataset.get('uid', f"loaded_{new_index}"))
+                    item.setForeground(self.COL_NAME, QColor(dataset.get('color', '#000000')))
+                    ext_factor = dataset.get('extension_factor', dataset.get('surface_extension_factor', 0.0))
+                    item.setText(self.COL_EXTEND, f"{ext_factor:.2f}")
+                    item.setText(self.COL_AS_POINTS, "Yes" if dataset.get("loaded_as_points", False) else "-")
+
+            self.clearSelection()
+            if 0 <= selected_index < len(datasets):
+                for row in range(self.topLevelItemCount()):
+                    item = self.topLevelItem(row)
+                    if (
+                        item.data(0, Qt.UserRole + 2) == "loaded"
+                        and item.data(0, Qt.UserRole) == selected_index
+                    ):
+                        self.setCurrentItem(item)
+                        break
+        finally:
+            self.blockSignals(False)
     
     def get_selected_dataset_index(self) -> int:
         """Get the index of the selected loaded dataset, or -1."""
