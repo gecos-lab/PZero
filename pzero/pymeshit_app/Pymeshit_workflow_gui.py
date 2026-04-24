@@ -753,6 +753,8 @@ class AdvancedConstraintSelectionDialog(QDialog):
         self._camera_initialized_for_surface = False
         self._auto_tolerance_user_edited = False
         self._undo_snapshot: Optional[Dict[str, Any]] = None
+        self._plotter_cleaned = False
+        self._closing = False
 
         self.setWindowTitle("Advanced Constraint Selection")
         self.setModal(True)
@@ -872,8 +874,38 @@ class AdvancedConstraintSelectionDialog(QDialog):
                 self._last_pick_was_shift_click = bool(QApplication.keyboardModifiers() & Qt.ShiftModifier)
         return super().eventFilter(obj, event)
 
+    def _plotter_is_available(self) -> bool:
+        if self._closing or self._plotter_cleaned:
+            return False
+        plotter = getattr(self, "plotter", None)
+        if plotter is None:
+            return False
+        interactor = getattr(plotter, "interactor", None)
+        if interactor is None:
+            return False
+        try:
+            interactor.isVisible()
+        except Exception:
+            return False
+        return True
+
+    def _safe_render(self) -> None:
+        if not self._plotter_is_available():
+            return
+        try:
+            self.plotter.render()
+        except RuntimeError:
+            return
+        except Exception as exc:
+            logger.debug("Advanced selection render skipped: %s", exc)
+
     def _cleanup_plotter(self) -> None:
         """Safely detach the dialog-local QtInteractor to avoid Win32 OpenGL context churn."""
+        if self._plotter_cleaned:
+            return
+
+        self._closing = True
+        self._plotter_cleaned = True
         plotter = getattr(self, "plotter", None)
         if plotter is None:
             return
@@ -890,6 +922,24 @@ class AdvancedConstraintSelectionDialog(QDialog):
             except Exception:
                 pass
             try:
+                interactor.setUpdatesEnabled(False)
+            except Exception:
+                pass
+            try:
+                interactor.setEnabled(False)
+            except Exception:
+                pass
+
+        try:
+            if hasattr(plotter, "close"):
+                plotter.close()
+        except RuntimeError:
+            pass
+        except Exception as exc:
+            logger.debug("Advanced selection plotter close skipped: %s", exc)
+
+        if interactor is not None:
+            try:
                 parent = interactor.parent()
                 if parent is not None and parent.layout() is not None:
                     parent.layout().removeWidget(interactor)
@@ -897,10 +947,6 @@ class AdvancedConstraintSelectionDialog(QDialog):
                 pass
             try:
                 interactor.hide()
-            except Exception:
-                pass
-            try:
-                interactor.setEnabled(False)
             except Exception:
                 pass
             try:
@@ -913,6 +959,10 @@ class AdvancedConstraintSelectionDialog(QDialog):
                 pass
 
         self.plotter = None
+
+    def done(self, result):
+        self._cleanup_plotter()
+        super().done(result)
 
     def closeEvent(self, event):
         self._cleanup_plotter()
@@ -929,7 +979,7 @@ class AdvancedConstraintSelectionDialog(QDialog):
         if not items:
             self.plotter.clear()
             self.plotter.add_text("No refined surface constraints are available.", position="upper_edge", color="black")
-            self.plotter.render()
+            self._safe_render()
             return
 
         target_index = 0
@@ -1042,6 +1092,8 @@ class AdvancedConstraintSelectionDialog(QDialog):
         self._pick_tolerance = max(1e-6, min(max(base_tol, spacing * 1.5), max(diag * 0.08, 1.0)))
 
     def _capture_camera_position(self):
+        if not self._plotter_is_available():
+            return None
         try:
             camera_position = self.plotter.camera_position
             return tuple(tuple(component) for component in camera_position)
@@ -1049,7 +1101,7 @@ class AdvancedConstraintSelectionDialog(QDialog):
             return None
 
     def _restore_camera_position(self, camera_position) -> None:
-        if camera_position is None:
+        if camera_position is None or not self._plotter_is_available():
             return
         try:
             self.plotter.camera_position = camera_position
@@ -1057,6 +1109,8 @@ class AdvancedConstraintSelectionDialog(QDialog):
             pass
 
     def _draw_surface_geometry(self, preserve_camera: bool = True) -> None:
+        if not self._plotter_is_available():
+            return
         camera_position = self._capture_camera_position() if preserve_camera else None
         self.plotter.clear()
         self.plotter.set_background("white")
@@ -1065,7 +1119,7 @@ class AdvancedConstraintSelectionDialog(QDialog):
 
         if self._current_surface_idx is None:
             self.plotter.add_text("Select a surface to inspect its constraints.", position="upper_edge", color="black")
-            self.plotter.render()
+            self._safe_render()
             return
 
         geometry = self.gui._get_surface_constraint_geometry_for_advanced_selection(self._current_surface_idx)
@@ -1141,7 +1195,7 @@ class AdvancedConstraintSelectionDialog(QDialog):
         else:
             self.plotter.add_text("No hull or intersection geometry was found for this surface.", position="upper_edge", color="black")
 
-        self.plotter.render()
+        self._safe_render()
 
     def _enable_point_picking(self) -> None:
         try:
@@ -1190,7 +1244,7 @@ class AdvancedConstraintSelectionDialog(QDialog):
         camera_position = self._capture_camera_position()
         self._update_selection_overlay()
         self._restore_camera_position(camera_position)
-        self.plotter.render()
+        self._safe_render()
 
     def _find_nearest_record(self, picked_point) -> Optional[Dict[str, Any]]:
         if not self._point_records:
@@ -1260,9 +1314,11 @@ class AdvancedConstraintSelectionDialog(QDialog):
                 pass
         self._selection_overlay_actors = []
         if render:
-            self.plotter.render()
+            self._safe_render()
 
     def _update_selection_overlay(self) -> None:
+        if not self._plotter_is_available():
+            return
         camera_position = self._capture_camera_position()
         self._clear_selection_overlay(render=False)
 
@@ -1279,7 +1335,7 @@ class AdvancedConstraintSelectionDialog(QDialog):
             self._selection_overlay_actors.append(actor)
 
         self._restore_camera_position(camera_position)
-        self.plotter.render()
+        self._safe_render()
 
     def _clear_selection(self) -> None:
         self._selected_records = []
@@ -1323,13 +1379,13 @@ class AdvancedConstraintSelectionDialog(QDialog):
         self._update_selection_status()
         self.selection_status_label.setText(message)
         self._clear_undo_snapshot()
-        self.plotter.render()
+        self._safe_render()
 
     def _reset_camera(self) -> None:
         try:
             self.plotter.reset_camera()
             self._camera_initialized_for_surface = True
-            self.plotter.render()
+            self._safe_render()
         except Exception:
             pass
 
@@ -1680,7 +1736,7 @@ class AdvancedConstraintSelectionDialog(QDialog):
             if failed_count:
                 status += f" {failed_count} candidate(s) failed."
         self.selection_status_label.setText(status)
-        self.plotter.render()
+        self._safe_render()
 
     def _connect_selected_points(self) -> None:
         if self._current_surface_idx is None:
@@ -7377,7 +7433,15 @@ class MeshItWorkflowGUI(QWidget):
                 break
 
         dialog = AdvancedConstraintSelectionDialog(self, initial_surface_idx=initial_surface_idx)
-        dialog.exec()
+        self._advanced_selection_dialog_active = True
+        try:
+            dialog.exec()
+        finally:
+            self._advanced_selection_dialog_active = False
+            try:
+                self._update_refined_visualization()
+            except Exception as exc:
+                logger.debug("Deferred refined visualization update failed: %s", exc)
 
     def _refresh_after_advanced_constraint_edit(self, surface_idx: int) -> None:
         """Rebuild refine-mesh state after a manual hull/intersection connection."""
@@ -7403,7 +7467,8 @@ class MeshItWorkflowGUI(QWidget):
                 self.refine_surface_selector.setCurrentIndex(restore_index)
 
         self._update_advanced_selection_button_state()
-        self._update_refined_visualization()
+        if not getattr(self, "_advanced_selection_dialog_active", False):
+            self._update_refined_visualization()
 
     def _capture_advanced_constraint_edit_snapshot(self, surface_idx: int) -> Dict[str, Any]:
         """Capture mutable advanced-selection constraint state for one-step undo."""
