@@ -750,6 +750,9 @@ class AdvancedConstraintSelectionDialog(QDialog):
         self._pick_tolerance = 1.0
         self._selection_overlay_actors: List[Any] = []
         self._last_pick_was_shift_click = False
+        self._camera_initialized_for_surface = False
+        self._auto_tolerance_user_edited = False
+        self._undo_snapshot: Optional[Dict[str, Any]] = None
 
         self.setWindowTitle("Advanced Constraint Selection")
         self.setModal(True)
@@ -797,9 +800,39 @@ class AdvancedConstraintSelectionDialog(QDialog):
         self.plotter.interactor.installEventFilter(self)
         self.plot_layout.addWidget(self.plotter.interactor)
         self.plotter.set_background("white")
+        self.gui._apply_vertical_exaggeration_to_plotter(self.plotter)
         layout.addWidget(self.plot_frame, 1)
 
         buttons = QHBoxLayout()
+        buttons.addWidget(QLabel("Auto tolerance:"))
+        self.auto_tolerance_input = QDoubleSpinBox()
+        self.auto_tolerance_input.setRange(1e-6, 1e12)
+        self.auto_tolerance_input.setDecimals(6)
+        self.auto_tolerance_input.setSingleStep(1.0)
+        self.auto_tolerance_input.setValue(1.0)
+        self.auto_tolerance_input.setToolTip(
+            "Maximum model-space gap for automatically snapping hull/intersection "
+            "and cross-line intersection points."
+        )
+        self.auto_tolerance_input.valueChanged.connect(self._on_auto_tolerance_changed)
+        buttons.addWidget(self.auto_tolerance_input)
+
+        buttons.addWidget(QLabel("Snap:"))
+        self.auto_snap_mode_combo = QComboBox()
+        self.auto_snap_mode_combo.addItem("All", "all")
+        self.auto_snap_mode_combo.addItem("Hull-Intersection", "hull_intersection")
+        self.auto_snap_mode_combo.addItem("Intersection-Intersection", "intersection_intersection")
+        self.auto_snap_mode_combo.addItem("Hull-Hull", "hull_hull")
+        self.auto_snap_mode_combo.setToolTip("Limit Auto Connect to one snap type.")
+        buttons.addWidget(self.auto_snap_mode_combo)
+
+        self.auto_connect_btn = QPushButton("Auto Connect")
+        self.auto_connect_btn.setToolTip(
+            "Find disconnected point pairs within the tolerance and connect them automatically."
+        )
+        self.auto_connect_btn.clicked.connect(self._auto_connect_close_points)
+        buttons.addWidget(self.auto_connect_btn)
+
         self.connect_btn = QPushButton("Connect")
         self.connect_btn.setEnabled(False)
         self.connect_btn.clicked.connect(self._connect_selected_points)
@@ -808,6 +841,12 @@ class AdvancedConstraintSelectionDialog(QDialog):
         self.clear_btn = QPushButton("Clear Selection")
         self.clear_btn.clicked.connect(self._clear_selection)
         buttons.addWidget(self.clear_btn)
+
+        self.undo_selection_btn = QPushButton("Undo Selection")
+        self.undo_selection_btn.setEnabled(False)
+        self.undo_selection_btn.setToolTip("Undo the last manual or automatic connection made in this dialog.")
+        self.undo_selection_btn.clicked.connect(self._undo_last_selection)
+        buttons.addWidget(self.undo_selection_btn)
 
         self.reset_camera_btn = QPushButton("Reset Camera")
         self.reset_camera_btn.clicked.connect(self._reset_camera)
@@ -907,14 +946,29 @@ class AdvancedConstraintSelectionDialog(QDialog):
         if surface_idx is None:
             self._current_surface_idx = None
             self._point_records = []
-            self._draw_surface_geometry()
+            self._camera_initialized_for_surface = False
+            self._clear_undo_snapshot()
+            self._draw_surface_geometry(preserve_camera=False)
             return
         self._current_surface_idx = int(surface_idx)
         self._selected_records = []
         self._point_records = self._build_point_records(self._current_surface_idx)
         self._update_pick_tolerance()
-        self._draw_surface_geometry()
+        self._sync_auto_tolerance_default()
+        self._camera_initialized_for_surface = False
+        self._clear_undo_snapshot()
+        self._draw_surface_geometry(preserve_camera=False)
         self._update_selection_status()
+
+    def _on_auto_tolerance_changed(self, _value: float) -> None:
+        self._auto_tolerance_user_edited = True
+
+    def _sync_auto_tolerance_default(self) -> None:
+        if self._auto_tolerance_user_edited or not hasattr(self, "auto_tolerance_input"):
+            return
+        self.auto_tolerance_input.blockSignals(True)
+        self.auto_tolerance_input.setValue(min(1.0, max(1e-6, float(self._pick_tolerance))))
+        self.auto_tolerance_input.blockSignals(False)
 
     def _build_point_records(self, surface_idx: int) -> List[Dict[str, Any]]:
         geometry = self.gui._get_surface_constraint_geometry_for_advanced_selection(surface_idx)
@@ -936,7 +990,9 @@ class AdvancedConstraintSelectionDialog(QDialog):
 
         for line_data in geometry.get("intersections", []):
             line_id = int(line_data.get("line_id", 0))
-            for point_idx, point in enumerate(line_data.get("points", [])):
+            line_points = line_data.get("points") or []
+            line_point_count = len(line_points)
+            for point_idx, point in enumerate(line_points):
                 xyz = _constraint_point_xyz(point)
                 if xyz is None:
                     continue
@@ -947,6 +1003,8 @@ class AdvancedConstraintSelectionDialog(QDialog):
                     "surface_idx": surface_idx,
                     "line_id": line_id,
                     "point_idx": point_idx,
+                    "line_point_count": line_point_count,
+                    "is_endpoint": point_idx == 0 or point_idx == line_point_count - 1,
                     "point_type": _constraint_point_type(point),
                     "label": f"Line {line_id} P{point_idx}",
                 })
@@ -983,9 +1041,26 @@ class AdvancedConstraintSelectionDialog(QDialog):
 
         self._pick_tolerance = max(1e-6, min(max(base_tol, spacing * 1.5), max(diag * 0.08, 1.0)))
 
-    def _draw_surface_geometry(self) -> None:
+    def _capture_camera_position(self):
+        try:
+            camera_position = self.plotter.camera_position
+            return tuple(tuple(component) for component in camera_position)
+        except Exception:
+            return None
+
+    def _restore_camera_position(self, camera_position) -> None:
+        if camera_position is None:
+            return
+        try:
+            self.plotter.camera_position = camera_position
+        except Exception:
+            pass
+
+    def _draw_surface_geometry(self, preserve_camera: bool = True) -> None:
+        camera_position = self._capture_camera_position() if preserve_camera else None
         self.plotter.clear()
         self.plotter.set_background("white")
+        self.gui._apply_vertical_exaggeration_to_plotter(self.plotter)
         self._clear_selection_overlay(render=False)
 
         if self._current_surface_idx is None:
@@ -1056,7 +1131,11 @@ class AdvancedConstraintSelectionDialog(QDialog):
                 color="black",
             )
             self.plotter.add_axes()
-            self.plotter.reset_camera()
+            if preserve_camera and self._camera_initialized_for_surface and camera_position is not None:
+                self._restore_camera_position(camera_position)
+            else:
+                self.plotter.reset_camera()
+                self._camera_initialized_for_surface = True
             self._enable_point_picking()
             self._update_selection_overlay()
         else:
@@ -1108,7 +1187,10 @@ class AdvancedConstraintSelectionDialog(QDialog):
             self._selected_records.append(record)
 
         self._update_selection_status()
+        camera_position = self._capture_camera_position()
         self._update_selection_overlay()
+        self._restore_camera_position(camera_position)
+        self.plotter.render()
 
     def _find_nearest_record(self, picked_point) -> Optional[Dict[str, Any]]:
         if not self._point_records:
@@ -1181,6 +1263,7 @@ class AdvancedConstraintSelectionDialog(QDialog):
             self.plotter.render()
 
     def _update_selection_overlay(self) -> None:
+        camera_position = self._capture_camera_position()
         self._clear_selection_overlay(render=False)
 
         colors = ["#FFD54F", "#E91E63"]
@@ -1195,6 +1278,7 @@ class AdvancedConstraintSelectionDialog(QDialog):
             )
             self._selection_overlay_actors.append(actor)
 
+        self._restore_camera_position(camera_position)
         self.plotter.render()
 
     def _clear_selection(self) -> None:
@@ -1202,12 +1286,401 @@ class AdvancedConstraintSelectionDialog(QDialog):
         self._update_selection_status()
         self._update_selection_overlay()
 
+    def _set_undo_snapshot(self, snapshot: Optional[Dict[str, Any]]) -> None:
+        self._undo_snapshot = snapshot
+        if hasattr(self, "undo_selection_btn"):
+            self.undo_selection_btn.setEnabled(snapshot is not None)
+
+    def _clear_undo_snapshot(self) -> None:
+        self._set_undo_snapshot(None)
+
+    def _undo_last_selection(self) -> None:
+        if self._undo_snapshot is None:
+            return
+
+        snapshot = self._undo_snapshot
+        camera_position = self._capture_camera_position()
+        ok, message = self.gui._restore_advanced_constraint_edit_snapshot(snapshot)
+        if not ok:
+            QMessageBox.warning(self, "Undo Failed", message)
+            return
+
+        snapshot_surface_idx = snapshot.get("surface_idx")
+        if snapshot_surface_idx is not None and self.surface_combo.findData(snapshot_surface_idx) >= 0:
+            combo_index = self.surface_combo.findData(snapshot_surface_idx)
+            if combo_index != self.surface_combo.currentIndex():
+                self.surface_combo.setCurrentIndex(combo_index)
+            self._current_surface_idx = int(snapshot_surface_idx)
+
+        self._selected_records = []
+        if self._current_surface_idx is not None:
+            self._point_records = self._build_point_records(self._current_surface_idx)
+            self._update_pick_tolerance()
+        else:
+            self._point_records = []
+        self._draw_surface_geometry(preserve_camera=True)
+        self._restore_camera_position(camera_position)
+        self._update_selection_status()
+        self.selection_status_label.setText(message)
+        self._clear_undo_snapshot()
+        self.plotter.render()
+
     def _reset_camera(self) -> None:
         try:
             self.plotter.reset_camera()
+            self._camera_initialized_for_surface = True
             self.plotter.render()
         except Exception:
             pass
+
+    def _auto_equal_tolerance(self, tolerance: float) -> float:
+        if not self._point_records:
+            return max(1e-12, tolerance * 1e-9)
+        points = np.array([record["coords"] for record in self._point_records], dtype=float)
+        diag = float(np.linalg.norm(np.max(points, axis=0) - np.min(points, axis=0)))
+        return max(1e-10, diag * 1e-9, tolerance * 1e-9)
+
+    def _is_auto_source_endpoint(self, record: Dict[str, Any], equal_tol: float) -> bool:
+        if record.get("kind") != "intersection" or not record.get("is_endpoint", False):
+            return False
+
+        point_type = str(record.get("point_type", "DEFAULT")).upper()
+        if point_type in {"TRIPLE_POINT", "COMMON_INTERSECTION_CONVEXHULL_POINT"}:
+            return False
+
+        coords = np.array(record.get("coords", []), dtype=float)
+        if coords.size != 3:
+            return False
+
+        for hull_record in self._point_records:
+            if hull_record.get("kind") != "hull":
+                continue
+            hull_type = str(hull_record.get("point_type", "DEFAULT")).upper()
+            if hull_type != "COMMON_INTERSECTION_CONVEXHULL_POINT":
+                continue
+            if np.linalg.norm(coords - np.array(hull_record["coords"], dtype=float)) <= equal_tol:
+                return False
+
+        return True
+
+    @staticmethod
+    def _closest_point_on_segment_np(
+        point_xyz: np.ndarray,
+        seg_start: np.ndarray,
+        seg_end: np.ndarray,
+    ) -> Tuple[Optional[np.ndarray], Optional[float], float]:
+        segment = seg_end - seg_start
+        denom = float(np.dot(segment, segment))
+        if denom <= 1e-30:
+            return None, None, float("inf")
+        t = float(np.dot(point_xyz - seg_start, segment) / denom)
+        t = max(0.0, min(1.0, t))
+        closest = seg_start + segment * t
+        return closest, t, float(np.linalg.norm(point_xyz - closest))
+
+    def _auto_snap_mode(self) -> str:
+        if not hasattr(self, "auto_snap_mode_combo"):
+            return "all"
+        mode = self.auto_snap_mode_combo.currentData()
+        return str(mode or "all")
+
+    @staticmethod
+    def _auto_mode_allows(mode: str, family: str) -> bool:
+        return mode == "all" or mode == family
+
+    @staticmethod
+    def _hull_indices_are_adjacent(first_idx: int, second_idx: int, hull_count: int) -> bool:
+        if hull_count < 2:
+            return False
+        return abs(first_idx - second_idx) == 1 or {first_idx, second_idx} == {0, hull_count - 1}
+
+    def _find_auto_connection_candidates(self, tolerance: float) -> List[Dict[str, Any]]:
+        candidates: List[Dict[str, Any]] = []
+        if len(self._point_records) < 2:
+            return candidates
+
+        mode = self._auto_snap_mode()
+        equal_tol = self._auto_equal_tolerance(tolerance)
+        hull_records = [record for record in self._point_records if record.get("kind") == "hull"]
+        intersection_records = [
+            record for record in self._point_records if record.get("kind") == "intersection"
+        ]
+        source_records = [
+            record for record in intersection_records
+            if self._is_auto_source_endpoint(record, equal_tol)
+        ]
+
+        for source_record in source_records:
+            source_xyz = np.array(source_record.get("coords", []), dtype=float)
+            if source_xyz.size != 3:
+                continue
+
+            if self._auto_mode_allows(mode, "hull_intersection"):
+                for hull_record in hull_records:
+                    target_xyz = np.array(hull_record.get("coords", []), dtype=float)
+                    if target_xyz.size != 3:
+                        continue
+                    distance = float(np.linalg.norm(source_xyz - target_xyz))
+                    if distance <= tolerance:
+                        candidates.append({
+                            "source_uid": source_record.get("uid"),
+                            "target_uid": hull_record.get("uid"),
+                            "distance": distance,
+                            "connection_type": "intersection_hull_point",
+                        })
+
+                if len(hull_records) >= 2:
+                    for seg_idx, hull_record in enumerate(hull_records):
+                        next_record = hull_records[(seg_idx + 1) % len(hull_records)]
+                        seg_start = np.array(hull_record.get("coords", []), dtype=float)
+                        seg_end = np.array(next_record.get("coords", []), dtype=float)
+                        if seg_start.size != 3 or seg_end.size != 3:
+                            continue
+                        closest, t, distance = self._closest_point_on_segment_np(source_xyz, seg_start, seg_end)
+                        if closest is None or t is None:
+                            continue
+                        if t <= 1e-9 or t >= 1.0 - 1e-9:
+                            continue
+                        if distance <= tolerance:
+                            candidates.append({
+                                "source_uid": source_record.get("uid"),
+                                "target_segment_idx": seg_idx,
+                                "target_coords": closest.tolist(),
+                                "distance": distance,
+                                "connection_type": "intersection_hull_segment",
+                            })
+
+            if self._auto_mode_allows(mode, "intersection_intersection"):
+                for target_record in intersection_records:
+                    if target_record.get("uid") == source_record.get("uid"):
+                        continue
+                    if target_record.get("line_id") == source_record.get("line_id"):
+                        continue
+                    target_xyz = np.array(target_record.get("coords", []), dtype=float)
+                    if target_xyz.size != 3:
+                        continue
+                    distance = float(np.linalg.norm(source_xyz - target_xyz))
+                    if distance <= tolerance:
+                        if distance <= equal_tol:
+                            continue
+                        candidates.append({
+                            "source_uid": source_record.get("uid"),
+                            "target_uid": target_record.get("uid"),
+                            "distance": distance,
+                            "connection_type": "intersection_intersection",
+                        })
+
+        if self._auto_mode_allows(mode, "hull_hull") and len(hull_records) >= 2:
+            hull_count = len(hull_records)
+            for first_idx, first_record in enumerate(hull_records[:-1]):
+                first_xyz = np.array(first_record.get("coords", []), dtype=float)
+                if first_xyz.size != 3:
+                    continue
+                for second_idx, second_record in enumerate(hull_records[first_idx + 1:], start=first_idx + 1):
+                    if self._hull_indices_are_adjacent(first_idx, second_idx, hull_count):
+                        continue
+                    second_xyz = np.array(second_record.get("coords", []), dtype=float)
+                    if second_xyz.size != 3:
+                        continue
+                    distance = float(np.linalg.norm(first_xyz - second_xyz))
+                    if distance <= equal_tol or distance > tolerance:
+                        continue
+                    first_type = str(first_record.get("point_type", "DEFAULT")).upper()
+                    second_type = str(second_record.get("point_type", "DEFAULT")).upper()
+                    if first_type == "DEFAULT" and second_type != "DEFAULT":
+                        source_record, target_record = first_record, second_record
+                    else:
+                        source_record, target_record = second_record, first_record
+                    candidates.append({
+                        "source_uid": source_record.get("uid"),
+                        "target_uid": target_record.get("uid"),
+                        "distance": distance,
+                        "connection_type": "hull_hull",
+                    })
+
+        priority = {
+            "intersection_hull_point": 0,
+            "intersection_hull_segment": 1,
+            "intersection_intersection": 2,
+            "hull_hull": 3,
+        }
+        candidates.sort(key=lambda item: (item["distance"], priority.get(item["connection_type"], 99)))
+        return candidates
+
+    def _record_by_uid(self, uid: str) -> Optional[Dict[str, Any]]:
+        return next((record for record in self._point_records if record.get("uid") == uid), None)
+
+    def _nearest_hull_segment_candidate(
+        self,
+        source_record: Dict[str, Any],
+        tolerance: float,
+    ) -> Optional[Dict[str, Any]]:
+        source_xyz = np.array(source_record.get("coords", []), dtype=float)
+        if source_xyz.size != 3:
+            return None
+
+        hull_records = [record for record in self._point_records if record.get("kind") == "hull"]
+        if len(hull_records) < 2:
+            return None
+
+        best_candidate = None
+        for seg_idx, hull_record in enumerate(hull_records):
+            next_record = hull_records[(seg_idx + 1) % len(hull_records)]
+            seg_start = np.array(hull_record.get("coords", []), dtype=float)
+            seg_end = np.array(next_record.get("coords", []), dtype=float)
+            if seg_start.size != 3 or seg_end.size != 3:
+                continue
+            closest, t, distance = self._closest_point_on_segment_np(source_xyz, seg_start, seg_end)
+            if closest is None or t is None:
+                continue
+            if t <= 1e-9 or t >= 1.0 - 1e-9:
+                continue
+            if distance > tolerance:
+                continue
+            if best_candidate is None or distance < best_candidate["distance"]:
+                best_candidate = {
+                    "target_segment_idx": seg_idx,
+                    "target_coords": closest.tolist(),
+                    "distance": distance,
+                }
+
+        return best_candidate
+
+    def _auto_connect_close_points(self) -> None:
+        if self._current_surface_idx is None:
+            return
+
+        tolerance = float(self.auto_tolerance_input.value())
+        if tolerance <= 0.0:
+            QMessageBox.information(self, "Invalid Tolerance", "Enter a positive auto-connect tolerance.")
+            return
+
+        self._point_records = self._build_point_records(self._current_surface_idx)
+        candidates = self._find_auto_connection_candidates(tolerance)
+        if not candidates:
+            mode_text = self.auto_snap_mode_combo.currentText() if hasattr(self, "auto_snap_mode_combo") else "All"
+            self.selection_status_label.setText(
+                f"No {mode_text} point pairs were found within tolerance {tolerance:g}."
+            )
+            return
+
+        connected_count = 0
+        failed_count = 0
+        processed_sources = set()
+        camera_position = self._capture_camera_position()
+        undo_snapshot = self.gui._capture_advanced_constraint_edit_snapshot(self._current_surface_idx)
+
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            for candidate in candidates:
+                source_uid = candidate.get("source_uid")
+                target_uid = candidate.get("target_uid")
+                if not source_uid or source_uid in processed_sources:
+                    continue
+
+                self._point_records = self._build_point_records(self._current_surface_idx)
+                source_record = self._record_by_uid(source_uid)
+                if source_record is None:
+                    continue
+
+                connection_type = candidate.get("connection_type")
+                target_record = self._record_by_uid(target_uid) if target_uid else None
+                target_coords = candidate.get("target_coords")
+
+                if connection_type == "intersection_hull_segment":
+                    current_segment_candidate = self._nearest_hull_segment_candidate(source_record, tolerance)
+                    if current_segment_candidate is None:
+                        continue
+                    target_coords = current_segment_candidate["target_coords"]
+                    candidate["target_segment_idx"] = current_segment_candidate["target_segment_idx"]
+
+                if target_record is not None:
+                    current_distance = float(
+                        np.linalg.norm(
+                            np.array(source_record["coords"], dtype=float)
+                            - np.array(target_record["coords"], dtype=float)
+                        )
+                    )
+                elif target_coords is not None:
+                    current_distance = float(
+                        np.linalg.norm(
+                            np.array(source_record["coords"], dtype=float)
+                            - np.array(target_coords, dtype=float)
+                        )
+                    )
+                else:
+                    continue
+                if current_distance > tolerance:
+                    continue
+
+                if connection_type == "intersection_hull_point":
+                    if target_record is None:
+                        continue
+                    ok, _message = self.gui._connect_intersection_point_to_hull_point(
+                        self._current_surface_idx,
+                        source_record,
+                        target_record,
+                    )
+                elif connection_type == "intersection_hull_segment":
+                    ok, _message = self.gui._connect_intersection_point_to_hull_segment(
+                        self._current_surface_idx,
+                        source_record,
+                        int(candidate.get("target_segment_idx", -1)),
+                        np.array(target_coords, dtype=float),
+                    )
+                elif connection_type == "intersection_intersection":
+                    if target_record is None:
+                        continue
+                    ok, _message = self.gui._connect_advanced_selection_points(
+                        self._current_surface_idx,
+                        source_record,
+                        target_record,
+                    )
+                elif connection_type == "hull_hull":
+                    if target_record is None:
+                        continue
+                    ok, _message = self.gui._connect_hull_point_to_hull_point(
+                        self._current_surface_idx,
+                        source_record,
+                        target_record,
+                    )
+                else:
+                    continue
+                if ok:
+                    connected_count += 1
+                    processed_sources.add(source_uid)
+                    if (
+                        connection_type == "intersection_intersection"
+                        and target_record is not None
+                        and target_record.get("is_endpoint", False)
+                    ):
+                        processed_sources.add(target_record.get("uid"))
+                else:
+                    failed_count += 1
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        self._selected_records = []
+        self._point_records = self._build_point_records(self._current_surface_idx)
+        self._update_pick_tolerance()
+        self._draw_surface_geometry(preserve_camera=True)
+        self._restore_camera_position(camera_position)
+        self._update_selection_status()
+
+        if connected_count > 0:
+            self._set_undo_snapshot(undo_snapshot)
+            mode_text = self.auto_snap_mode_combo.currentText() if hasattr(self, "auto_snap_mode_combo") else "All"
+            status = f"Auto connected {connected_count} point pair(s) within tolerance {tolerance:g}."
+            status += f" Mode: {mode_text}."
+            if failed_count:
+                status += f" {failed_count} candidate(s) could not be connected."
+        else:
+            self._clear_undo_snapshot()
+            status = f"No point pairs could be connected within tolerance {tolerance:g}."
+            if failed_count:
+                status += f" {failed_count} candidate(s) failed."
+        self.selection_status_label.setText(status)
+        self.plotter.render()
 
     def _connect_selected_points(self) -> None:
         if self._current_surface_idx is None:
@@ -1220,6 +1693,7 @@ class AdvancedConstraintSelectionDialog(QDialog):
             )
             return
 
+        undo_snapshot = self.gui._capture_advanced_constraint_edit_snapshot(self._current_surface_idx)
         ok, message = self.gui._connect_advanced_selection_points(
             self._current_surface_idx,
             self._selected_records[0],
@@ -1229,10 +1703,11 @@ class AdvancedConstraintSelectionDialog(QDialog):
             QMessageBox.warning(self, "Connect Failed", message)
             return
 
+        self._set_undo_snapshot(undo_snapshot)
         self._selected_records = []
         self._point_records = self._build_point_records(self._current_surface_idx)
         self._update_pick_tolerance()
-        self._draw_surface_geometry()
+        self._draw_surface_geometry(preserve_camera=True)
         self._update_selection_status()
         self.selection_status_label.setText(message)
 
@@ -6930,6 +7405,90 @@ class MeshItWorkflowGUI(QWidget):
         self._update_advanced_selection_button_state()
         self._update_refined_visualization()
 
+    def _capture_advanced_constraint_edit_snapshot(self, surface_idx: int) -> Dict[str, Any]:
+        """Capture mutable advanced-selection constraint state for one-step undo."""
+        import copy
+
+        dataset_snapshots = []
+        for dataset in getattr(self, "datasets", []):
+            dataset_snapshots.append({
+                "has_hull_points": "hull_points" in dataset,
+                "hull_points": copy.deepcopy(dataset.get("hull_points")),
+                "has_stored_constraints": "stored_constraints" in dataset,
+                "stored_constraints": copy.deepcopy(dataset.get("stored_constraints")),
+                "has_needs_constraint_update": "needs_constraint_update" in dataset,
+                "needs_constraint_update": copy.deepcopy(dataset.get("needs_constraint_update")),
+            })
+
+        has_datasets_intersections = hasattr(self, "datasets_intersections")
+        has_refined_intersections = hasattr(self, "refined_intersections_for_visualization")
+
+        return {
+            "surface_idx": surface_idx,
+            "datasets": dataset_snapshots,
+            "has_datasets_intersections": has_datasets_intersections,
+            "datasets_intersections": copy.deepcopy(
+                getattr(self, "datasets_intersections", {}) if has_datasets_intersections else {}
+            ),
+            "has_refined_intersections": has_refined_intersections,
+            "refined_intersections_for_visualization": copy.deepcopy(
+                getattr(self, "refined_intersections_for_visualization", {}) if has_refined_intersections else {}
+            ),
+        }
+
+    def _restore_advanced_constraint_edit_snapshot(self, snapshot: Dict[str, Any]) -> Tuple[bool, str]:
+        """Restore a snapshot captured before an advanced-selection edit."""
+        import copy
+
+        if not snapshot:
+            return False, "No advanced selection state is available to restore."
+
+        dataset_snapshots = snapshot.get("datasets", [])
+        if len(dataset_snapshots) != len(getattr(self, "datasets", [])):
+            return False, "Cannot undo because the dataset list changed."
+
+        for dataset, dataset_snapshot in zip(self.datasets, dataset_snapshots):
+            if dataset_snapshot.get("has_hull_points"):
+                dataset["hull_points"] = copy.deepcopy(dataset_snapshot.get("hull_points"))
+            else:
+                dataset.pop("hull_points", None)
+
+            if dataset_snapshot.get("has_stored_constraints"):
+                dataset["stored_constraints"] = copy.deepcopy(dataset_snapshot.get("stored_constraints"))
+            else:
+                dataset.pop("stored_constraints", None)
+
+            if dataset_snapshot.get("has_needs_constraint_update"):
+                dataset["needs_constraint_update"] = copy.deepcopy(
+                    dataset_snapshot.get("needs_constraint_update")
+                )
+            else:
+                dataset.pop("needs_constraint_update", None)
+
+            dataset.pop("conforming_mesh", None)
+
+        if snapshot.get("has_datasets_intersections", False):
+            self.datasets_intersections = copy.deepcopy(snapshot.get("datasets_intersections", {}))
+        elif hasattr(self, "datasets_intersections"):
+            self.datasets_intersections = {}
+
+        if snapshot.get("has_refined_intersections", False):
+            self.refined_intersections_for_visualization = copy.deepcopy(
+                snapshot.get("refined_intersections_for_visualization", {})
+            )
+        elif hasattr(self, "refined_intersections_for_visualization"):
+            self.refined_intersections_for_visualization = {}
+
+        surface_idx = snapshot.get("surface_idx")
+        if not isinstance(surface_idx, int):
+            surface_idx = 0
+        self._refresh_after_advanced_constraint_edit(surface_idx)
+
+        message = "Advanced selection was restored to the state before the last connection."
+        logger.info(message)
+        self.statusBar().showMessage(message, 5000)
+        return True, message
+
     def _constraint_rows_from_points(self, points) -> List[List[Any]]:
         """Return mutable `[x, y, z, type]` rows for hull/intersection point collections."""
         rows: List[List[Any]] = []
@@ -7090,6 +7649,277 @@ class MeshItWorkflowGUI(QWidget):
                 updated += 1
 
         return updated
+
+    def _snap_intersection_point_to_xyz(
+        self,
+        surface_idx: int,
+        source_record: Dict[str, Any],
+        target_xyz: np.ndarray,
+        refresh: bool = True,
+    ) -> Tuple[bool, str]:
+        """Move one intersection point to a target XYZ and synchronize mirrored containers."""
+        source_line_id = source_record.get("line_id")
+        source_point_idx = source_record.get("point_idx")
+        if source_line_id is None or source_point_idx is None:
+            return False, "The selected intersection point is missing line metadata."
+
+        refined_map = getattr(self, "refined_intersections_for_visualization", {}) or {}
+        surface_lines = refined_map.get(surface_idx, [])
+        if int(source_line_id) < 0 or int(source_line_id) >= len(surface_lines):
+            return False, "The selected source intersection line is no longer available."
+
+        source_line_data = surface_lines[int(source_line_id)]
+        source_points = source_line_data.get("points") or []
+        if int(source_point_idx) < 0 or int(source_point_idx) >= len(source_points):
+            return False, "The selected source intersection point is no longer available."
+
+        source_reference_rows = self._constraint_rows_from_points(source_points)
+        target_xyz = np.array(target_xyz, dtype=float)
+        if target_xyz.size != 3:
+            return False, "Could not resolve the target coordinates."
+
+        updated_entries = self._update_matching_intersection_points(
+            source_line_data,
+            source_reference_rows,
+            int(source_point_idx),
+            target_xyz,
+        )
+        self._update_matching_stored_constraint_points(
+            source_line_data,
+            source_reference_rows,
+            int(source_point_idx),
+            target_xyz,
+        )
+
+        if updated_entries == 0:
+            return False, "No intersection point was updated."
+
+        affected_surface_ids = {
+            ds_idx
+            for ds_idx in (
+                surface_idx,
+                source_line_data.get("dataset_id1"),
+                source_line_data.get("dataset_id2"),
+            )
+            if isinstance(ds_idx, int) and 0 <= ds_idx < len(self.datasets)
+        }
+        for ds_idx in affected_surface_ids:
+            self.datasets[ds_idx].pop("conforming_mesh", None)
+
+        if refresh:
+            self._refresh_after_advanced_constraint_edit(surface_idx)
+
+        return True, "Intersection point snapped."
+
+    def _mark_or_insert_hull_connection_point(
+        self,
+        surface_idx: int,
+        target_xyz: np.ndarray,
+        hull_idx: Optional[int] = None,
+        segment_idx: Optional[int] = None,
+    ) -> Tuple[bool, str]:
+        """Mark an existing hull vertex or insert a hull segment point as a common connection."""
+        hull_points = self.datasets[surface_idx].get("hull_points")
+        if hull_points is None or len(hull_points) < 2:
+            return False, "The selected surface has no usable hull points."
+
+        hull_rows = self._constraint_rows_from_points(hull_points)
+        hull_xyz = np.array([np.array(row[:3], dtype=float) for row in hull_rows], dtype=float)
+        diag = float(np.linalg.norm(np.max(hull_xyz, axis=0) - np.min(hull_xyz, axis=0))) if len(hull_xyz) > 0 else 0.0
+        duplicate_tol = max(1e-8, diag * 1e-9, 1e-6)
+        target_xyz = np.array(target_xyz, dtype=float)
+        if target_xyz.size != 3:
+            return False, "Could not resolve the target hull coordinates."
+
+        if hull_idx is not None:
+            if int(hull_idx) < 0 or int(hull_idx) >= len(hull_rows):
+                return False, "The selected hull point is no longer available."
+            hull_rows[int(hull_idx)][0] = float(target_xyz[0])
+            hull_rows[int(hull_idx)][1] = float(target_xyz[1])
+            hull_rows[int(hull_idx)][2] = float(target_xyz[2])
+            hull_rows[int(hull_idx)][3] = "COMMON_INTERSECTION_CONVEXHULL_POINT"
+        else:
+            existing_idx = None
+            for idx, row in enumerate(hull_rows):
+                current_xyz = np.array(row[:3], dtype=float)
+                if np.linalg.norm(current_xyz - target_xyz) <= duplicate_tol:
+                    existing_idx = idx
+                    break
+
+            if existing_idx is not None:
+                hull_rows[existing_idx][0] = float(target_xyz[0])
+                hull_rows[existing_idx][1] = float(target_xyz[1])
+                hull_rows[existing_idx][2] = float(target_xyz[2])
+                hull_rows[existing_idx][3] = "COMMON_INTERSECTION_CONVEXHULL_POINT"
+            else:
+                if segment_idx is None:
+                    return False, "No hull point or segment was selected."
+                insert_after = int(segment_idx)
+                if insert_after < 0 or insert_after >= len(hull_rows):
+                    return False, "The selected hull segment is no longer available."
+                hull_rows.insert(
+                    insert_after + 1,
+                    [
+                        float(target_xyz[0]),
+                        float(target_xyz[1]),
+                        float(target_xyz[2]),
+                        "COMMON_INTERSECTION_CONVEXHULL_POINT",
+                    ],
+                )
+
+        self.datasets[surface_idx]["hull_points"] = np.array(hull_rows, dtype=object)
+        self.datasets[surface_idx].pop("conforming_mesh", None)
+        return True, "Hull connection point updated."
+
+    def _connect_intersection_point_to_hull_point(
+        self,
+        surface_idx: int,
+        line_record: Dict[str, Any],
+        hull_record: Dict[str, Any],
+    ) -> Tuple[bool, str]:
+        """Snap a disconnected intersection endpoint to an existing hull point."""
+        hull_idx = hull_record.get("point_idx")
+        target_xyz = np.array(hull_record.get("coords", []), dtype=float)
+        if hull_idx is None or target_xyz.size != 3:
+            return False, "The selected hull point is missing metadata."
+
+        ok, message = self._mark_or_insert_hull_connection_point(
+            surface_idx,
+            target_xyz,
+            hull_idx=int(hull_idx),
+        )
+        if not ok:
+            return False, message
+
+        ok, message = self._snap_intersection_point_to_xyz(
+            surface_idx,
+            line_record,
+            target_xyz,
+            refresh=True,
+        )
+        if not ok:
+            return False, message
+
+        surface_name = self.datasets[surface_idx].get("name", f"Surface_{surface_idx}")
+        message = (
+            f"Snapped intersection point {line_record.get('label', '')} "
+            f"to hull point {int(hull_idx)} on '{surface_name}'."
+        )
+        logger.info(message)
+        self.statusBar().showMessage(message, 5000)
+        return True, message
+
+    def _connect_intersection_point_to_hull_segment(
+        self,
+        surface_idx: int,
+        line_record: Dict[str, Any],
+        segment_idx: int,
+        target_xyz: np.ndarray,
+    ) -> Tuple[bool, str]:
+        """Snap a disconnected intersection endpoint to the nearest point on a hull segment."""
+        ok, message = self._mark_or_insert_hull_connection_point(
+            surface_idx,
+            np.array(target_xyz, dtype=float),
+            segment_idx=int(segment_idx),
+        )
+        if not ok:
+            return False, message
+
+        ok, message = self._snap_intersection_point_to_xyz(
+            surface_idx,
+            line_record,
+            np.array(target_xyz, dtype=float),
+            refresh=True,
+        )
+        if not ok:
+            return False, message
+
+        surface_name = self.datasets[surface_idx].get("name", f"Surface_{surface_idx}")
+        message = (
+            f"Snapped intersection point {line_record.get('label', '')} "
+            f"to hull segment {int(segment_idx)} on '{surface_name}'."
+        )
+        logger.info(message)
+        self.statusBar().showMessage(message, 5000)
+        return True, message
+
+    def _connect_hull_point_to_hull_point(
+        self,
+        surface_idx: int,
+        source_record: Dict[str, Any],
+        target_record: Dict[str, Any],
+    ) -> Tuple[bool, str]:
+        """Snap one hull point onto another hull point."""
+        source_idx = source_record.get("point_idx")
+        target_idx = target_record.get("point_idx")
+        if source_idx is None or target_idx is None:
+            return False, "The selected hull point is missing metadata."
+        source_idx = int(source_idx)
+        target_idx = int(target_idx)
+        if source_idx == target_idx:
+            return False, "Select two different hull points."
+
+        hull_points = self.datasets[surface_idx].get("hull_points")
+        if hull_points is None or source_idx >= len(hull_points) or target_idx >= len(hull_points):
+            return False, "The selected hull point is no longer available."
+
+        hull_rows = self._constraint_rows_from_points(hull_points)
+        target_xyz = np.array(target_record.get("coords", []), dtype=float)
+        if target_xyz.size != 3:
+            return False, "Could not resolve the selected hull coordinates."
+
+        def row_type(row: List[Any]) -> str:
+            return str(row[3] if len(row) > 3 and row[3] else "DEFAULT").upper()
+
+        source_type = row_type(hull_rows[source_idx])
+        target_type = row_type(hull_rows[target_idx])
+        merged_type = hull_rows[target_idx][3]
+        if target_type == "DEFAULT" and source_type != "DEFAULT":
+            merged_type = hull_rows[source_idx][3]
+
+        hull_rows[source_idx][0] = float(target_xyz[0])
+        hull_rows[source_idx][1] = float(target_xyz[1])
+        hull_rows[source_idx][2] = float(target_xyz[2])
+        hull_rows[source_idx][3] = merged_type
+        hull_rows[target_idx][3] = merged_type
+
+        hull_xyz = np.array([np.array(row[:3], dtype=float) for row in hull_rows], dtype=float)
+        diag = float(np.linalg.norm(np.max(hull_xyz, axis=0) - np.min(hull_xyz, axis=0))) if len(hull_xyz) > 0 else 0.0
+        duplicate_tol = max(1e-8, diag * 1e-9, 1e-6)
+
+        cleaned_rows: List[List[Any]] = []
+        for row in hull_rows:
+            if not cleaned_rows:
+                cleaned_rows.append(row)
+                continue
+            prev = np.array(cleaned_rows[-1][:3], dtype=float)
+            curr = np.array(row[:3], dtype=float)
+            if np.linalg.norm(prev - curr) <= duplicate_tol:
+                if row_type(row) != "DEFAULT":
+                    cleaned_rows[-1][3] = row[3]
+                continue
+            cleaned_rows.append(row)
+
+        if len(cleaned_rows) > 2:
+            first_xyz = np.array(cleaned_rows[0][:3], dtype=float)
+            last_xyz = np.array(cleaned_rows[-1][:3], dtype=float)
+            if np.linalg.norm(first_xyz - last_xyz) <= duplicate_tol:
+                if row_type(cleaned_rows[-1]) != "DEFAULT":
+                    cleaned_rows[0][3] = cleaned_rows[-1][3]
+                cleaned_rows.pop()
+
+        self.datasets[surface_idx]["hull_points"] = np.array(cleaned_rows, dtype=object)
+        self.datasets[surface_idx].pop("conforming_mesh", None)
+        self._refresh_after_advanced_constraint_edit(surface_idx)
+
+        surface_name = self.datasets[surface_idx].get("name", f"Surface_{surface_idx}")
+        message = (
+            f"Snapped hull point {source_idx} onto hull point {target_idx} "
+            f"on '{surface_name}'."
+        )
+        logger.info(message)
+        self.statusBar().showMessage(message, 5000)
+        return True, message
 
     def _connect_hull_point_to_intersection(
         self,
