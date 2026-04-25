@@ -7599,6 +7599,7 @@ class MeshItWorkflowGUI(QWidget):
         reference_rows: List[List[Any]],
         source_point_idx: int,
         target_xyz: np.ndarray,
+        point_type: Optional[str] = None,
     ) -> int:
         """Update the selected source intersection point in every mirrored intersection container."""
         dataset_ids = tuple(
@@ -7646,6 +7647,10 @@ class MeshItWorkflowGUI(QWidget):
             rows[mapped_idx][0] = float(target_xyz[0])
             rows[mapped_idx][1] = float(target_xyz[1])
             rows[mapped_idx][2] = float(target_xyz[2])
+            if point_type:
+                while len(rows[mapped_idx]) < 4:
+                    rows[mapped_idx].append("DEFAULT")
+                rows[mapped_idx][3] = point_type
             entry["points"] = rows
             updated += 1
 
@@ -7666,6 +7671,7 @@ class MeshItWorkflowGUI(QWidget):
         reference_rows: List[List[Any]],
         source_point_idx: int,
         target_xyz: np.ndarray,
+        point_type: Optional[str] = None,
     ) -> int:
         """Keep stored per-surface intersection constraints in sync with manual advanced edits."""
         dataset_ids = tuple(
@@ -7709,6 +7715,10 @@ class MeshItWorkflowGUI(QWidget):
                 rows[mapped_idx][0] = float(target_xyz[0])
                 rows[mapped_idx][1] = float(target_xyz[1])
                 rows[mapped_idx][2] = float(target_xyz[2])
+                if point_type:
+                    while len(rows[mapped_idx]) < 4:
+                        rows[mapped_idx].append("DEFAULT")
+                    rows[mapped_idx][3] = point_type
                 constraint["points"] = rows
                 self.datasets[surface_id]["needs_constraint_update"] = True
                 updated += 1
@@ -7721,6 +7731,7 @@ class MeshItWorkflowGUI(QWidget):
         source_record: Dict[str, Any],
         target_xyz: np.ndarray,
         refresh: bool = True,
+        point_type: Optional[str] = None,
     ) -> Tuple[bool, str]:
         """Move one intersection point to a target XYZ and synchronize mirrored containers."""
         source_line_id = source_record.get("line_id")
@@ -7748,12 +7759,14 @@ class MeshItWorkflowGUI(QWidget):
             source_reference_rows,
             int(source_point_idx),
             target_xyz,
+            point_type=point_type,
         )
         self._update_matching_stored_constraint_points(
             source_line_data,
             source_reference_rows,
             int(source_point_idx),
             target_xyz,
+            point_type=point_type,
         )
 
         if updated_entries == 0:
@@ -7775,6 +7788,64 @@ class MeshItWorkflowGUI(QWidget):
             self._refresh_after_advanced_constraint_edit(surface_idx)
 
         return True, "Intersection point snapped."
+
+    def _mark_intersection_record_point_type(
+        self,
+        surface_idx: int,
+        record: Dict[str, Any],
+        point_type: str,
+    ) -> int:
+        """Mark an existing intersection point as a split point in every mirrored container."""
+        line_id = record.get("line_id")
+        point_idx = record.get("point_idx")
+        if line_id is None or point_idx is None:
+            return 0
+
+        refined_map = getattr(self, "refined_intersections_for_visualization", {}) or {}
+        surface_lines = refined_map.get(surface_idx, [])
+        if int(line_id) < 0 or int(line_id) >= len(surface_lines):
+            return 0
+
+        line_data = surface_lines[int(line_id)]
+        points = line_data.get("points") or []
+        if int(point_idx) < 0 or int(point_idx) >= len(points):
+            return 0
+
+        target_xyz = np.array(record.get("coords", []), dtype=float)
+        if target_xyz.size != 3:
+            xyz = _constraint_point_xyz(points[int(point_idx)])
+            if xyz is None:
+                return 0
+            target_xyz = xyz
+
+        reference_rows = self._constraint_rows_from_points(points)
+        updated = self._update_matching_intersection_points(
+            line_data,
+            reference_rows,
+            int(point_idx),
+            target_xyz,
+            point_type=point_type,
+        )
+        updated += self._update_matching_stored_constraint_points(
+            line_data,
+            reference_rows,
+            int(point_idx),
+            target_xyz,
+            point_type=point_type,
+        )
+
+        affected_surface_ids = {
+            ds_idx
+            for ds_idx in (
+                surface_idx,
+                line_data.get("dataset_id1"),
+                line_data.get("dataset_id2"),
+            )
+            if isinstance(ds_idx, int) and 0 <= ds_idx < len(self.datasets)
+        }
+        for ds_idx in affected_surface_ids:
+            self.datasets[ds_idx].pop("conforming_mesh", None)
+        return updated
 
     def _mark_or_insert_hull_connection_point(
         self,
@@ -7861,6 +7932,7 @@ class MeshItWorkflowGUI(QWidget):
             line_record,
             target_xyz,
             refresh=True,
+            point_type="COMMON_INTERSECTION_CONVEXHULL_POINT",
         )
         if not ok:
             return False, message
@@ -7895,6 +7967,7 @@ class MeshItWorkflowGUI(QWidget):
             line_record,
             np.array(target_xyz, dtype=float),
             refresh=True,
+            point_type="COMMON_INTERSECTION_CONVEXHULL_POINT",
         )
         if not ok:
             return False, message
@@ -8051,6 +8124,11 @@ class MeshItWorkflowGUI(QWidget):
 
         self.datasets[surface_idx]["hull_points"] = np.array(cleaned_rows, dtype=object)
         self.datasets[surface_idx].pop("conforming_mesh", None)
+        self._mark_intersection_record_point_type(
+            surface_idx,
+            line_record,
+            "COMMON_INTERSECTION_CONVEXHULL_POINT",
+        )
 
         self._refresh_after_advanced_constraint_edit(surface_idx)
 
@@ -8099,16 +8177,23 @@ class MeshItWorkflowGUI(QWidget):
             source_reference_rows,
             int(source_point_idx),
             target_xyz,
+            point_type="TRIPLE_POINT",
         )
         self._update_matching_stored_constraint_points(
             source_line_data,
             source_reference_rows,
             int(source_point_idx),
             target_xyz,
+            point_type="TRIPLE_POINT",
         )
-
         if updated_entries == 0:
             return False, "No intersection point was updated."
+
+        self._mark_intersection_record_point_type(
+            surface_idx,
+            target_record,
+            "TRIPLE_POINT",
+        )
 
         affected_surface_ids = {
             ds_idx
@@ -26515,19 +26600,25 @@ segmentation, triangulation, and visualization.
 
         def segment_by_triples(pts):
             """
-            Return list of segments (each a list of points), split only at TRIPLE_POINTs,
-            and at endpoints. For closed loops, wrap between last and first triple.
+            Return list of segments, split at topological connection points and endpoints.
+            Advanced Selection can create COMMON_INTERSECTION_CONVEXHULL_POINT nodes, and
+            those must become selectable table breaks just like TRIPLE_POINT nodes.
             """
             if len(pts) < 2:
                 return []
             n = len(pts)
-            triples = [i for i, q in enumerate(pts) if get_type(q) == "TRIPLE_POINT"]
+            split_types = {
+                "TRIPLE_POINT",
+                "COMMON_INTERSECTION_CONVEXHULL_POINT",
+                "COMMON_INTERSECTION_POINT",
+            }
+            split_points = [i for i, q in enumerate(pts) if get_type(q) in split_types]
 
             closed = is_closed_loop(pts)
             segments = []
 
-            # No triple points
-            if not triples:
+            # No topological split points
+            if not split_points:
                 # One segment: whole polyline (or loop)
                 seg = pts[:]
                 if closed and seg[0] != seg[-1]:
@@ -26535,14 +26626,13 @@ segmentation, triangulation, and visualization.
                 segments.append(seg)
                 return segments
 
-            # At least one triple
             if closed:
-                tri = sorted(set(triples))
-                if len(tri) == 1:
-                    # Special case: only one triple in a closed loop
+                split_idx = sorted(set(split_points))
+                if len(split_idx) == 1:
+                    # Special case: only one split in a closed loop
                     segments.append(pts[:])  # entire loop as one block
                 else:
-                    for a, b in zip(tri, tri[1:] + tri[:1]):
+                    for a, b in zip(split_idx, split_idx[1:] + split_idx[:1]):
                         if a <= b:
                             seg = pts[a:b+1]
                         else:
@@ -26552,7 +26642,7 @@ segmentation, triangulation, and visualization.
 
             else:
                 # Open polyline: endpoints are split points too
-                splits = [0] + sorted(triples) + [n - 1]
+                splits = [0] + sorted(split_points) + [n - 1]
                 # Remove immediate duplicates (e.g., triple at index 0)
                 dedup_splits = []
                 for s in splits:
