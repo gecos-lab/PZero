@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QComboBox,
     QMenu,
+    QWidget,
 )
 from PySide6.QtGui import QAction, QDesktopServices, QPixmap
 from PySide6.QtCore import Qt, QTimer
@@ -85,6 +86,7 @@ from pzero.imports.pyvista2vtk import pyvista2vtk
 from pzero.imports.segy2vtk import segy2vtk, read_segy_file
 from pzero.imports.shp2vtk import shp2vtk
 from pzero.imports.stl2vtk import vtk2stl, vtk2stl_dilation
+from pzero.imports.table2data import import_tables
 from pzero.imports.well2vtk import well2vtk
 from pzero.imports.xyz2vtk import xyz2vtk
 from pzero.ui.project_window_ui import Ui_ProjectWindow
@@ -191,6 +193,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         super(ProjectWindow, self).__init__(*args, **kwargs)
         """Import GUI from project_window_ui.py"""
         self.setupUi(self)
+        self._install_import_table_action()
         self._install_import_xyz_action()
         self.TextTerminal.setReadOnly(True)
 
@@ -229,6 +232,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportGocad.triggered.connect(self.import_gocad)
         self.actionImportGocadXsection.triggered.connect(self.import_gocad_sections)
         self.actionImportBoundary.triggered.connect(self.import_gocad_boundary)
+        self.actionImportTable.triggered.connect(self.import_tables)
         self.actionImportXYZ.triggered.connect(self.import_XYZ)
         self.actionImportPyVista.triggered.connect(lambda: pyvista2vtk(self=self))
         self.actionImportPC.triggered.connect(self.import_PC)
@@ -304,6 +308,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionStereoplotView.triggered.connect(
             lambda: DockWindow(parent=self, window_type="ViewStereoplot")
         )
+        self.actionTableView = QAction("Table View", self)
+        self.actionTableView.setObjectName("actionTableView")
+        self.actionTableView.triggered.connect(
+            lambda: DockWindow(parent=self, window_type="ViewTable")
+        )
+        self.menuWindows.insertAction(self.actionXYPlotView, self.actionTableView)
 
         """File>CRS actions -> slots"""
         self.actionTransformSelectedCRS.triggered.connect(
@@ -408,6 +418,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def open_release_url(self):
         QDesktopServices.openUrl(QUrl("https://github.com/gecos-lab/PZero/releases"))
+
     """Methods used to manage the entities shown in tables."""
 
     @property
@@ -1311,6 +1322,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # this is used to delete open windows when the current project is closed (and a new one is opened)
         self.signals.project_close.emit()
 
+        self.custom_tables = {}
+        self.custom_table_types = {}
+        self.custom_table_options = {}
+
         # Create the geol_coll GeologicalCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         # and connect the model to GeologyTableView (a Qt QTableView created with QTDesigner and provided by
         # Ui_ProjectWindow). Setting the model also updates the view.
@@ -1536,6 +1551,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.backgrnd_coll.legend_df.to_json(
             out_dir_name + "/backgrounds_legend_table.json", orient="index"
         )
+
+        self.save_custom_tables(out_dir_name=out_dir_name)
 
         # --------------------- SAVE tables ---------------------
 
@@ -1782,6 +1799,70 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.SetInputData(self.backgrnd_coll.get_uid_vtk_obj(uid))
             pd_writer.Write()
             prgs_bar.add_one()
+
+    def save_custom_tables(self, out_dir_name: str = None):
+        """Persist user-defined tables alongside the project revision."""
+        if not out_dir_name:
+            return
+
+        tables_payload = {"version": 1, "tables": []}
+        for table_name, dataframe in self.custom_tables.items():
+            exported_df = dataframe.copy()
+            exported_df = exported_df.where(exported_df.notna(), "")
+            exported_df = exported_df.astype(str)
+            tables_payload["tables"].append(
+                {
+                    "name": table_name,
+                    "table_type": self.custom_table_types.get(table_name, "manual"),
+                    "options": self.custom_table_options.get(table_name, {}),
+                    "dataframe": {
+                        "columns": exported_df.columns.tolist(),
+                        "data": exported_df.values.tolist(),
+                    },
+                }
+            )
+
+        with open(out_dir_name + "/custom_tables.json", "w", encoding="utf-8") as fout:
+            json_dump(tables_payload, fout, indent=2)
+
+    def load_custom_tables(self, in_dir_name: str = None):
+        """Load user-defined project tables."""
+        self.custom_tables = {}
+        self.custom_table_types = {}
+        self.custom_table_options = {}
+        if not in_dir_name:
+            return
+
+        custom_tables_path = in_dir_name + "/custom_tables.json"
+        if not os_path.isfile(custom_tables_path):
+            return
+
+        with open(custom_tables_path, "r", encoding="utf-8") as fin:
+            tables_payload = json_load(fin)
+
+        for table_payload in tables_payload.get("tables", []):
+            table_name = str(table_payload.get("name", "")).strip()
+            if not table_name:
+                continue
+
+            dataframe_payload = table_payload.get("dataframe", {})
+            columns = [
+                str(column_name)
+                for column_name in dataframe_payload.get("columns", [])
+            ]
+            data = dataframe_payload.get("data", [])
+            self.custom_tables[table_name] = pd_DataFrame(data=data, columns=columns)
+            self.custom_table_types[table_name] = table_payload.get(
+                "table_type", "manual"
+            )
+            self.custom_table_options[table_name] = table_payload.get("options", {})
+
+        if self.custom_tables:
+            self.print_terminal(
+                f"Loaded {len(self.custom_tables)} custom table(s)."
+            )
+        self.sync_structural_topology_tables_from_legend()
+        self.refresh_custom_colormaps()
 
     def new_project(self):
         """Creates a new empty project, after having cleared all variables."""
@@ -3086,6 +3167,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.backgrnd_coll.table_model.endResetModel()
             # Update legend.
             self.prop_legend.update_widget(parent=self)
+            self.load_custom_tables(in_dir_name=in_dir_name)
 
 
         except BaseException as e:
@@ -3242,6 +3324,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         self.menuFile.insertAction(self.actionImportPC, self.actionImportXYZ)
 
+    def _install_import_table_action(self):
+        """Add the generic table import action to the File menu."""
+        self.actionImportTable = QAction("Import Tables", self)
+        self.actionImportTable.setObjectName("actionImportTable")
+        self.actionImportTable.setStatusTip(
+            "Import generic text tables into custom project tables"
+        )
+        self.menuFile.insertAction(self.actionImportPC, self.actionImportTable)
+
     def import_XYZ(self):
         """Import multiple generic XYZ point files into a selected collection."""
         self.print_terminal("Importing generic XYZ points")
@@ -3271,6 +3362,143 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             in_file_names=in_file_names,
             collection_name=collection_name,
         )
+
+    def import_tables(self):
+        """Import generic tabular files into custom project tables."""
+        self.print_terminal("Importing generic tables")
+        import_tables(self=self)
+
+    def refresh_table_views(self):
+        """Refresh any open custom table views."""
+        for child in self.findChildren(QWidget):
+            if hasattr(child, "refresh_table_list") and callable(
+                getattr(child, "refresh_table_list")
+            ):
+                try:
+                    child.refresh_table_list()
+                except Exception:
+                    pass
+
+    def get_structural_topology_legend_units(self):
+        """Return STm-ready units derived from the geological legend."""
+        legend_df = getattr(self.geol_coll, "legend_df", pd_DataFrame())
+        if legend_df is None or legend_df.empty:
+            return []
+
+        units_map = {}
+        for _, row in legend_df.iterrows():
+            feature_name = str(row.get("feature", "")).strip()
+            role_name = str(row.get("role", "")).strip()
+            unit_name = f"{feature_name}_{role_name}".strip("_")
+            if not unit_name or unit_name in units_map:
+                continue
+            units_map[unit_name] = {
+                "Name": unit_name,
+                "Unit": "NonVolumetric",
+                "Representative Surfaces": "No",
+                "Structural Polarity": row.get("time", 0.0),
+                "Domain_1": "",
+                "feature": feature_name,
+                "role": role_name,
+            }
+
+        return sorted(
+            units_map.values(),
+            key=lambda unit_info: str(unit_info.get("Name", "")).casefold(),
+        )
+
+    def sync_structural_topology_table_to_legend(self, table_name=None):
+        """Push structural polarity values from one STm table into the geology legend."""
+        if not table_name:
+            return
+        if self.custom_table_types.get(table_name) != "stm":
+            return
+
+        legend_df = getattr(self.geol_coll, "legend_df", pd_DataFrame())
+        table_df = self.custom_tables.get(table_name, pd_DataFrame())
+        if (
+            legend_df is None
+            or legend_df.empty
+            or table_df is None
+            or table_df.empty
+            or "Name" not in table_df.columns
+            or "Structural Polarity" not in table_df.columns
+        ):
+            return
+
+        legend_names = (
+            legend_df["feature"].astype(str).str.strip()
+            + "_"
+            + legend_df["role"].astype(str).str.strip()
+        )
+        legend_updated = False
+        for _, row in table_df.iterrows():
+            stm_name = str(row.get("Name", "")).strip()
+            if not stm_name:
+                continue
+            try:
+                polarity_value = float(row.get("Structural Polarity", ""))
+            except (TypeError, ValueError):
+                continue
+
+            mask = legend_names == stm_name
+            if not mask.any():
+                continue
+            self.geol_coll.legend_df.loc[mask, "time"] = polarity_value
+            legend_updated = True
+
+        if legend_updated:
+            self.geol_coll.legend_df.sort_values(
+                by="time", ascending=True, inplace=True
+            )
+            if hasattr(self, "legend"):
+                self.legend.update_widget(parent=self)
+
+    def sync_structural_topology_tables_from_legend(self):
+        """Refresh all STm table polarities from the geology legend."""
+        legend_units = self.get_structural_topology_legend_units()
+        if not legend_units:
+            return
+
+        polarity_map = {
+            unit_info["Name"]: unit_info.get("Structural Polarity", "")
+            for unit_info in legend_units
+        }
+        tables_updated = False
+
+        for table_name, table_df in self.custom_tables.items():
+            if self.custom_table_types.get(table_name) != "stm":
+                continue
+            if table_df is None:
+                continue
+
+            if "Domain" in table_df.columns and "Domain_1" not in table_df.columns:
+                table_df.rename(columns={"Domain": "Domain_1"}, inplace=True)
+            if "Name" not in table_df.columns:
+                table_df["Name"] = ""
+            if "Unit" not in table_df.columns:
+                table_df["Unit"] = "NonVolumetric"
+            if "Representative Surfaces" not in table_df.columns:
+                table_df["Representative Surfaces"] = "No"
+            if "Structural Polarity" not in table_df.columns:
+                table_df["Structural Polarity"] = ""
+            if not any(str(column).startswith("Domain") for column in table_df.columns):
+                table_df["Domain_1"] = ""
+
+            for row_idx in range(table_df.shape[0]):
+                stm_name = str(table_df.at[row_idx, "Name"]).strip()
+                if stm_name in polarity_map:
+                    table_df.at[row_idx, "Structural Polarity"] = polarity_map[stm_name]
+            tables_updated = True
+
+        if tables_updated:
+            self.refresh_table_views()
+
+    def refresh_custom_colormaps(self):
+        """Register project colormaps stored as advanced tables and refresh the legend widget."""
+        if hasattr(self, "prop_legend"):
+            PropertiesCMaps.register_custom_colormaps(parent=self)
+            self.prop_legend.update_widget(parent=self)
 
     def import_PC(self):
         """Import point cloud data. File extension dependent (.txt, .xyz, .las) -> Ui_ImportOptionsWindow ui to preview the data (similar to stereonet)"""
