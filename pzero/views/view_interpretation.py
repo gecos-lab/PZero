@@ -1705,6 +1705,51 @@ class ViewInterpretation(ViewMap):
                 return True
         return False
 
+    def _store_interpretation_kind_metadata(self, vtk_obj=None, kind=None):
+        """Persist a lightweight interpretation kind marker on generated polylines."""
+        if vtk_obj is None or not kind:
+            return
+        try:
+            from vtk import vtkStringArray
+
+            field_data = vtk_obj.GetFieldData()
+            if field_data is None:
+                return
+            kind_arr = vtkStringArray()
+            kind_arr.SetName("interpretation_kind")
+            kind_arr.SetNumberOfValues(1)
+            kind_arr.SetValue(0, str(kind))
+            if field_data.HasArray("interpretation_kind"):
+                field_data.RemoveArray("interpretation_kind")
+            field_data.AddArray(kind_arr)
+            vtk_obj.Modified()
+        except Exception:
+            pass
+
+    def _extract_interpretation_kind_metadata(self, uid=None, vtk_obj=None):
+        """Read the interpretation kind marker stored on generated polylines."""
+        if vtk_obj is None and uid is not None:
+            try:
+                vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            except Exception:
+                vtk_obj = None
+        if vtk_obj is None:
+            return None
+
+        try:
+            field_data = vtk_obj.GetFieldData()
+            if field_data is None or not field_data.HasArray("interpretation_kind"):
+                return None
+            kind_array = field_data.GetAbstractArray("interpretation_kind")
+            if kind_array is None or kind_array.GetNumberOfValues() <= 0:
+                return None
+            value = kind_array.GetValue(0)
+            if isinstance(value, str) and value.strip():
+                return value.strip().lower()
+        except Exception:
+            pass
+        return None
+
     def _register_multipart_interpretation_entity(
         self, uid, axis, slice_indices, slice_to_cell_index
     ):
@@ -5479,7 +5524,7 @@ class ViewInterpretation(ViewMap):
             side="right", callback=lambda event: end_digitize(event, line_dict)
         )
 
-    def add_picking_plane(self):
+    def add_picking_plane(self, expansion_factor=1.0):
         """Add a transparent plane at the current slice position for picking during line drawing."""
         # Remove any existing picking plane first
         if "picking_plane" in self.plotter.renderer.actors:
@@ -5494,6 +5539,10 @@ class ViewInterpretation(ViewMap):
             return
 
         bounds = self.current_slice_bounds
+        try:
+            expansion_factor = max(float(expansion_factor), 1.0)
+        except Exception:
+            expansion_factor = 1.0
 
         self.print_terminal(
             f"DEBUG: Creating picking plane at slice position {self.current_slice_position} for {self.current_axis} index {self.current_slice_index}"
@@ -5531,8 +5580,8 @@ class ViewInterpretation(ViewMap):
                 plane = pv.Plane(
                     center=disp_center,
                     direction=disp_normal,
-                    i_size=i_size,
-                    j_size=j_size,
+                    i_size=i_size * expansion_factor,
+                    j_size=j_size * expansion_factor,
                     i_resolution=1,
                     j_resolution=1,
                 )
@@ -5552,8 +5601,10 @@ class ViewInterpretation(ViewMap):
                 plane = pv.Plane(
                     center=plane_center,
                     direction=(1, 0, 0),  # Normal along X
-                    i_size=bounds[3] - bounds[2],  # Y extent
-                    j_size=abs(bounds[5] - bounds[4]) * v_exag,  # Z extent with VE
+                    i_size=(bounds[3] - bounds[2]) * expansion_factor,  # Y extent
+                    j_size=abs(bounds[5] - bounds[4])
+                    * v_exag
+                    * expansion_factor,  # Z extent with VE
                     i_resolution=1,
                     j_resolution=1,
                 )
@@ -5570,8 +5621,10 @@ class ViewInterpretation(ViewMap):
                 plane = pv.Plane(
                     center=plane_center,
                     direction=(0, 1, 0),  # Normal along Y
-                    i_size=bounds[1] - bounds[0],  # X extent
-                    j_size=abs(bounds[5] - bounds[4]) * v_exag,  # Z extent with VE
+                    i_size=(bounds[1] - bounds[0]) * expansion_factor,  # X extent
+                    j_size=abs(bounds[5] - bounds[4])
+                    * v_exag
+                    * expansion_factor,  # Z extent with VE
                     i_resolution=1,
                     j_resolution=1,
                 )
@@ -5588,8 +5641,8 @@ class ViewInterpretation(ViewMap):
                 plane = pv.Plane(
                     center=plane_center,
                     direction=(0, 0, 1),  # Normal along Z
-                    i_size=bounds[1] - bounds[0],  # X extent
-                    j_size=bounds[3] - bounds[2],  # Y extent
+                    i_size=(bounds[1] - bounds[0]) * expansion_factor,  # X extent
+                    j_size=(bounds[3] - bounds[2]) * expansion_factor,  # Y extent
                     i_resolution=1,
                     j_resolution=1,
                 )
@@ -7993,6 +8046,758 @@ class ViewInterpretation(ViewMap):
         except Exception:
             return None
 
+    def _world_to_slice_rc_unclipped(
+        self, world_point, slice_idx: int, affine=None, axis=None
+    ):
+        """Convert world coordinates to float slice coordinates without clipping to seismic bounds."""
+        axis = axis or self.current_axis
+        if affine is None:
+            affine = self._get_seismic_axis_vectors()
+
+        if affine is not None:
+            try:
+                origin, a0, a1, a2, _dims = affine
+                p = np.array(world_point, dtype=float)
+                i = int(slice_idx)
+
+                if axis == "Inline":
+                    base = origin + i * a0
+                    A = np.column_stack([a1, a2])
+                elif axis == "Crossline":
+                    base = origin + i * a1
+                    A = np.column_stack([a0, a2])
+                else:  # "Z-slice"
+                    base = origin + i * a2
+                    A = np.column_stack([a0, a1])
+
+                rc, *_ = np.linalg.lstsq(A, p - base, rcond=None)
+                return (float(rc[0]), float(rc[1]))
+            except Exception:
+                pass
+
+        try:
+            bounds = self._cached_bounds
+            dims = self._cached_dims
+            spacing = [
+                (bounds[1] - bounds[0]) / max(dims[0] - 1, 1),
+                (bounds[3] - bounds[2]) / max(dims[1] - 1, 1),
+                (bounds[5] - bounds[4]) / max(dims[2] - 1, 1),
+            ]
+            x, y, z = [float(v) for v in world_point[:3]]
+            if axis == "Inline":
+                row = (y - bounds[2]) / spacing[1] if spacing[1] != 0 else 0.0
+                col = (z - bounds[4]) / spacing[2] if spacing[2] != 0 else 0.0
+            elif axis == "Crossline":
+                row = (x - bounds[0]) / spacing[0] if spacing[0] != 0 else 0.0
+                col = (z - bounds[4]) / spacing[2] if spacing[2] != 0 else 0.0
+            else:
+                row = (x - bounds[0]) / spacing[0] if spacing[0] != 0 else 0.0
+                col = (y - bounds[2]) / spacing[1] if spacing[1] != 0 else 0.0
+            return (float(row), float(col))
+        except Exception:
+            return None
+
+    def _slice_rc_to_world_float(
+        self, slice_idx: int, row: float, col: float, affine=None, axis=None
+    ):
+        """Convert float slice coordinates to world coordinates, allowing picks outside the volume."""
+        axis = axis or self.current_axis
+        if affine is None:
+            affine = self._get_seismic_axis_vectors()
+
+        if affine is not None:
+            try:
+                origin, a0, a1, a2, _dims = affine
+                i = float(slice_idx)
+                r = float(row)
+                c = float(col)
+                if axis == "Inline":
+                    p = origin + i * a0 + r * a1 + c * a2
+                elif axis == "Crossline":
+                    p = origin + r * a0 + i * a1 + c * a2
+                else:
+                    p = origin + r * a0 + c * a1 + i * a2
+                return (float(p[0]), float(p[1]), float(p[2]))
+            except Exception:
+                pass
+
+        try:
+            bounds = self._cached_bounds
+            dims = self._cached_dims
+            spacing = [
+                (bounds[1] - bounds[0]) / max(dims[0] - 1, 1),
+                (bounds[3] - bounds[2]) / max(dims[1] - 1, 1),
+                (bounds[5] - bounds[4]) / max(dims[2] - 1, 1),
+            ]
+            if axis == "Inline":
+                x = bounds[0] + float(slice_idx) * spacing[0]
+                y = bounds[2] + float(row) * spacing[1]
+                z = bounds[4] + float(col) * spacing[2]
+            elif axis == "Crossline":
+                x = bounds[0] + float(row) * spacing[0]
+                y = bounds[2] + float(slice_idx) * spacing[1]
+                z = bounds[4] + float(col) * spacing[2]
+            else:
+                x = bounds[0] + float(row) * spacing[0]
+                y = bounds[2] + float(col) * spacing[1]
+                z = bounds[4] + float(slice_idx) * spacing[2]
+            return (float(x), float(y), float(z))
+        except Exception:
+            return None
+
+    def _display_point_to_real_slice_point(self, picked_point, v_exag=1.0):
+        """Convert a picked display-space point to real coordinates on the active slice plane."""
+        point = list(picked_point)
+        if v_exag == 0:
+            v_exag = 1.0
+        point[2] = float(point[2]) / float(v_exag)
+
+        plane_center = getattr(self, "current_slice_plane_center", None)
+        plane_normal = getattr(self, "current_slice_plane_normal", None)
+        if plane_center is not None and plane_normal is not None:
+            try:
+                projected = self._project_points_to_plane(
+                    np.array([point], dtype=np.float64), plane_center, plane_normal
+                )[0]
+                return (float(projected[0]), float(projected[1]), float(projected[2]))
+            except Exception:
+                pass
+
+        if self.current_axis == "Inline":
+            point[0] = self.current_slice_position
+        elif self.current_axis == "Crossline":
+            point[1] = self.current_slice_position
+        elif self.current_axis == "Z-slice":
+            point[2] = self.current_slice_position
+        return (float(point[0]), float(point[1]), float(point[2]))
+
+    def _get_axis_slice_limit(self, axis=None):
+        """Return the number of slices available for an interpretation axis."""
+        axis = axis or self.current_axis
+        dims = getattr(self, "_cached_dims", None)
+        if dims is None:
+            return 0
+        if axis == "Inline":
+            return int(dims[0])
+        if axis == "Crossline":
+            return int(dims[1])
+        return int(dims[2])
+
+    def _build_directional_slice_list(self, seed_slice_idx, direction, num_slices):
+        """Build the same forward/backward/both slice list used by propagation tools."""
+        max_slices = self._get_axis_slice_limit(self.current_axis)
+        if max_slices <= 0:
+            return []
+
+        seed_slice_idx = int(seed_slice_idx)
+        num_slices = max(1, int(num_slices))
+        if direction == 0:
+            return list(
+                range(
+                    seed_slice_idx + 1,
+                    min(seed_slice_idx + num_slices + 1, max_slices),
+                )
+            )
+        if direction == 1:
+            return list(
+                range(seed_slice_idx - 1, max(seed_slice_idx - num_slices - 1, -1), -1)
+            )
+
+        forward = list(
+            range(seed_slice_idx + 1, min(seed_slice_idx + num_slices + 1, max_slices))
+        )
+        backward = list(
+            range(seed_slice_idx - 1, max(seed_slice_idx - num_slices - 1, -1), -1)
+        )
+        return backward[::-1] + forward
+
+    def _is_connector_seed_line(self, uid):
+        """Return True for single-slice lines created or named as connector seeds."""
+        if self._extract_interpretation_kind_metadata(uid=uid) == "connector":
+            return True
+
+        for getter_name in ("get_uid_name", "get_uid_feature", "get_uid_role"):
+            try:
+                value = getattr(self.parent.geol_coll, getter_name)(uid)
+            except Exception:
+                value = None
+            if isinstance(value, str) and "connector" in value.strip().lower():
+                return True
+        return False
+
+    def _show_connector_preview(self, point_a, point_b):
+        """Show a straight preview segment for connector picking."""
+        try:
+            line = pv.Line(point_a, point_b)
+            preview_name = f"connector_preview_{len(self._connector_preview_actors)}"
+            actor = self.plotter.add_mesh(
+                line,
+                color="yellow",
+                line_width=5,
+                name=preview_name,
+                pickable=False,
+                reset_camera=False,
+                lighting=False,
+                render_lines_as_tubes=True,
+            )
+            self._apply_coplanar_interpretation_offset(actor=actor)
+            self._connector_preview_actors.append(preview_name)
+            self.plotter.render()
+        except Exception as e:
+            self.print_terminal(f"Connector preview error: {e}")
+
+    def _cleanup_connector_pick(self):
+        """Clean up temporary connector picking state and restore actor pickability."""
+        for name in list(getattr(self, "_connector_marker_actors", [])):
+            try:
+                if name in self.plotter.renderer.actors:
+                    self.plotter.remove_actor(name)
+            except Exception:
+                pass
+        self._connector_marker_actors = []
+
+        for name in list(getattr(self, "_connector_preview_actors", [])):
+            try:
+                if name in self.plotter.renderer.actors:
+                    self.plotter.remove_actor(name)
+            except Exception:
+                pass
+        self._connector_preview_actors = []
+
+        try:
+            if "picking_plane" in self.plotter.renderer.actors:
+                self.plotter.remove_actor("picking_plane")
+        except Exception:
+            pass
+
+        if hasattr(self, "_connector_saved_pickable_states"):
+            for name, was_pickable in self._connector_saved_pickable_states.items():
+                try:
+                    if name in self.plotter.renderer.actors:
+                        self.plotter.renderer.actors[name].SetPickable(was_pickable)
+                except Exception:
+                    pass
+            del self._connector_saved_pickable_states
+
+        for attr_name in (
+            "_connector_points",
+            "_connector_line_dict",
+            "_connector_v_exag",
+            "_connector_marker_size",
+        ):
+            if hasattr(self, attr_name):
+                delattr(self, attr_name)
+
+        try:
+            self.plotter.untrack_click_position(side="left")
+            self.plotter.untrack_click_position(side="right")
+        except Exception:
+            pass
+
+        self.plotter.render()
+
+    def draw_connector_line(self):
+        """Create a straight waypoint connector that may be picked outside the seismic bounds."""
+        self.disable_actions()
+
+        if not self.current_seismic_uid:
+            self.print_terminal("Please select a structured volume first!")
+            self.enable_actions()
+            return
+
+        line_dict = deepcopy(self.parent.geol_coll.entity_dict)
+        feature_choices = self._sanitize_legend_choices(
+            self.parent.geol_coll.legend_df["feature"].tolist(), fallback="connector"
+        )
+        if "connector" not in feature_choices:
+            feature_choices.insert(0, "connector")
+        scenario_choices = self._sanitize_legend_choices(
+            self.parent.geol_coll.legend_df["scenario"].tolist(), fallback="undef"
+        )
+        line_dict_in = {
+            "name": ["PolyLine name: ", "connector"],
+            "role": ["Role: ", self.parent.geol_coll.valid_roles],
+            "feature": ["Feature: ", feature_choices],
+            "scenario": ["Scenario: ", scenario_choices],
+        }
+        line_dict_updt = multiple_input_dialog(
+            title="Create Connector", input_dict=line_dict_in
+        )
+        if line_dict_updt is None:
+            self.enable_actions()
+            return
+
+        for key in line_dict_updt:
+            line_dict[key] = line_dict_updt[key]
+        line_dict["role"] = self._sanitize_legend_value(line_dict.get("role"), "top")
+        line_dict["feature"] = self._sanitize_legend_value(
+            line_dict.get("feature"), "connector"
+        )
+        line_dict["scenario"] = self._sanitize_legend_value(
+            line_dict.get("scenario"), "undef"
+        )
+        line_dict["topology"] = "PolyLine"
+        line_dict["x_section"] = ""
+        line_dict["vtk_obj"] = PolyLine()
+        self._set_entity_parent_to_current_seismic(line_dict)
+        self._connector_line_dict = line_dict
+
+        v_exag = 1.0
+        try:
+            if self.plotter.scale is not None and len(self.plotter.scale) >= 3:
+                v_exag = float(self.plotter.scale[2]) or 1.0
+        except Exception:
+            pass
+        self._connector_v_exag = v_exag
+        self._connector_points = []
+        self._connector_marker_actors = []
+        self._connector_preview_actors = []
+
+        self._connector_saved_pickable_states = {}
+        for name, actor in self.plotter.renderer.actors.items():
+            try:
+                self._connector_saved_pickable_states[name] = actor.GetPickable()
+                actor.SetPickable(False)
+            except Exception:
+                pass
+
+        self.add_picking_plane(expansion_factor=4.0)
+        try:
+            if "picking_plane" in self.plotter.renderer.actors:
+                self.plotter.renderer.actors["picking_plane"].SetPickable(True)
+            elif self.slice_actor is not None:
+                self.slice_actor.SetPickable(True)
+        except Exception as e:
+            self.print_terminal(f"Could not configure connector picker: {e}")
+
+        bounds = getattr(self, "current_slice_bounds", None)
+        if bounds is not None:
+            extent = max(
+                abs(bounds[1] - bounds[0]),
+                abs(bounds[3] - bounds[2]),
+                abs(bounds[5] - bounds[4]) * v_exag,
+            )
+        else:
+            extent = 100.0
+        self._connector_marker_size = max(extent * 0.01, 1.0e-6)
+
+        self.print_terminal("=== Create Connector ===")
+        self.print_terminal("LEFT-CLICK: Add connector points on or outside the slice")
+        self.print_terminal("RIGHT-CLICK: Finish and create the connector")
+
+        def on_point_picked(picked_point):
+            if picked_point is None:
+                return
+            point = self._display_point_to_real_slice_point(
+                picked_point, getattr(self, "_connector_v_exag", 1.0)
+            )
+
+            if self._connector_points:
+                self._show_connector_preview(self._connector_points[-1], point)
+            self._connector_points.append(point)
+
+            marker_name = f"connector_marker_{len(self._connector_points)}"
+            marker_point = list(point)
+            offset = getattr(self, "_connector_marker_size", 1.0) * 0.5
+            if self.current_axis == "Inline":
+                marker_point[0] -= offset
+            elif self.current_axis == "Crossline":
+                marker_point[1] -= offset
+            else:
+                marker_point[2] += offset
+            try:
+                self.plotter.add_point_labels(
+                    [marker_point],
+                    [f"  {len(self._connector_points)}"],
+                    name=marker_name,
+                    show_points=False,
+                    text_color="yellow",
+                    font_size=14,
+                    bold=True,
+                    shape=None,
+                    always_visible=True,
+                    pickable=False,
+                    reset_camera=False,
+                )
+                self._connector_marker_actors.append(marker_name)
+            except Exception:
+                pass
+
+            self.print_terminal(
+                f"Connector point {len(self._connector_points)} added at {point}"
+            )
+            self.plotter.render()
+
+        def on_finish(_point):
+            try:
+                if len(self._connector_points) < 2:
+                    self.print_terminal("Need at least 2 connector points.")
+                    return
+
+                points_array = np.array(self._connector_points, dtype=np.float64)
+                points_array = self.snap_points_to_slice(
+                    points_array, points_are_display_coords=False
+                )
+                n_points = len(points_array)
+                polydata = pv.PolyData(points_array)
+                polydata.lines = np.hstack([[n_points], np.arange(n_points)])
+
+                line_dict = self._connector_line_dict
+                line_dict["vtk_obj"].ShallowCopy(polydata)
+                self._store_interpretation_kind_metadata(
+                    vtk_obj=line_dict["vtk_obj"], kind="connector"
+                )
+
+                slice_info = {
+                    "seismic_uid": self.current_seismic_uid,
+                    "axis": self.current_axis,
+                    "slice_index": self.current_slice_index,
+                }
+                new_uid = str(uuid4())
+                line_dict["uid"] = new_uid
+                self._pending_fast_added_entities[new_uid] = {
+                    "kind": "single_line",
+                    "slice_info": slice_info,
+                }
+                new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
+                self.print_terminal(
+                    f"Created connector with {n_points} points, uid: {new_uid}"
+                )
+            except Exception as e:
+                self.print_terminal(f"Error creating connector: {e}")
+                import traceback
+
+                self.print_terminal(traceback.format_exc())
+            finally:
+                self._cleanup_connector_pick()
+                self.enable_actions()
+
+        self.plotter.track_click_position(side="left", callback=on_point_picked)
+        self.plotter.track_click_position(side="right", callback=on_finish)
+
+    def propagate_connector(self):
+        """Copy a connector seed to adjacent slices without seismic attribute tracking."""
+        self.disable_actions()
+
+        if not self.current_seismic_uid:
+            self.print_terminal("No structured volume loaded!")
+            self.enable_actions()
+            return
+
+        def uid_exists(uid):
+            try:
+                return (self.parent.geol_coll.df["uid"] == uid).any()
+            except Exception:
+                return False
+
+        for uid in list(getattr(self, "interpretation_lines", {}).keys()):
+            if not uid_exists(uid):
+                self.unregister_interpretation_line(uid)
+
+        connector_lines = []
+        for uid, slice_info in getattr(self, "interpretation_lines", {}).items():
+            if (
+                slice_info.get("seismic_uid") == self.current_seismic_uid
+                and slice_info.get("axis") == self.current_axis
+                and self._is_connector_seed_line(uid)
+                and uid_exists(uid)
+            ):
+                try:
+                    name = self.parent.geol_coll.get_uid_name(uid)
+                except Exception:
+                    name = f"Connector_{uid[:8]}"
+                connector_lines.append(
+                    (uid, name, int(slice_info.get("slice_index", -1)))
+                )
+
+        if not connector_lines:
+            self.print_terminal("No connector seed lines found!")
+            self.print_terminal("First use 'Create Connector' on this axis.")
+            self.enable_actions()
+            return
+
+        connector_lines.sort(key=lambda row: (row[2], row[1]))
+
+        from PySide6.QtWidgets import (
+            QButtonGroup,
+            QComboBox,
+            QDialog,
+            QFormLayout,
+            QGroupBox,
+            QHBoxLayout,
+            QLabel,
+            QPushButton,
+            QRadioButton,
+            QSpinBox,
+            QVBoxLayout,
+        )
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Propagate Connector")
+        dialog.setMinimumWidth(420)
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(8)
+
+        seed_layout = QHBoxLayout()
+        seed_layout.addWidget(QLabel("Connector seed:"))
+        combo_seed = QComboBox()
+        for uid, name, slice_idx in connector_lines:
+            combo_seed.addItem(f"{name} [Slice {slice_idx}]", uid)
+        seed_layout.addWidget(combo_seed, 1)
+        layout.addLayout(seed_layout)
+
+        options_layout = QHBoxLayout()
+        dir_group = QGroupBox("Direction")
+        dir_layout = QVBoxLayout(dir_group)
+        direction_group = QButtonGroup(dialog)
+        radio_forward = QRadioButton("Forward")
+        radio_backward = QRadioButton("Backward")
+        radio_both = QRadioButton("Both")
+        radio_forward.setChecked(True)
+        direction_group.addButton(radio_forward, 0)
+        direction_group.addButton(radio_backward, 1)
+        direction_group.addButton(radio_both, 2)
+        dir_layout.addWidget(radio_forward)
+        dir_layout.addWidget(radio_backward)
+        dir_layout.addWidget(radio_both)
+        options_layout.addWidget(dir_group)
+
+        params_group = QGroupBox("Parameters")
+        params_form = QFormLayout(params_group)
+        spin_slices = QSpinBox()
+        spin_slices.setRange(1, 500)
+        spin_slices.setValue(20)
+        self._apply_control_tooltip(
+            spin_slices,
+            "How many adjacent slices receive a copied connector.",
+            low_text="Shorter connector fill.",
+            high_text="Longer constant-position fill across the missing seismic interval.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Slices:",
+                "How many adjacent slices receive a copied connector.",
+                low_text="Shorter connector fill.",
+                high_text="Longer constant-position fill across the missing seismic interval.",
+            ),
+            spin_slices,
+        )
+        options_layout.addWidget(params_group, 1)
+        layout.addLayout(options_layout)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_ok = QPushButton("Propagate Connector")
+        btn_cancel = QPushButton("Cancel")
+        btn_ok.clicked.connect(dialog.accept)
+        btn_cancel.clicked.connect(dialog.reject)
+        btn_layout.addWidget(btn_ok)
+        btn_layout.addWidget(btn_cancel)
+        layout.addLayout(btn_layout)
+
+        if dialog.exec() != QDialog.Accepted:
+            self.enable_actions()
+            return
+
+        selected_idx = combo_seed.currentIndex()
+        seed_uid = combo_seed.currentData()
+        seed_name = connector_lines[selected_idx][1]
+        seed_slice_idx = connector_lines[selected_idx][2]
+        if seed_slice_idx < 0:
+            seed_slice_idx = self.current_slice_index
+
+        direction = direction_group.checkedId()
+        num_slices = spin_slices.value()
+
+        self.print_terminal("=== Propagating Connector ===")
+        self.print_terminal(f"Seed connector: {seed_name} (slice {seed_slice_idx})")
+        self.print_terminal(f"Direction: {['Forward', 'Backward', 'Both'][direction]}")
+
+        try:
+            self._run_connector_propagation(
+                seed_uid=seed_uid,
+                direction=direction,
+                num_slices=num_slices,
+                seed_slice_index=seed_slice_idx,
+            )
+        except Exception as e:
+            self.print_terminal(f"Error during connector propagation: {e}")
+            import traceback
+
+            self.print_terminal(traceback.format_exc())
+
+        self.enable_actions()
+
+    def _copy_connector_points_to_slice(
+        self, seed_points, seed_slice_idx, target_slice_idx, affine=None
+    ):
+        """Copy seed points to another slice by preserving float in-plane coordinates."""
+        copied = []
+        for point in seed_points:
+            rc = self._world_to_slice_rc_unclipped(
+                point,
+                slice_idx=seed_slice_idx,
+                affine=affine,
+                axis=self.current_axis,
+            )
+            if rc is None:
+                continue
+            world_point = self._slice_rc_to_world_float(
+                slice_idx=target_slice_idx,
+                row=rc[0],
+                col=rc[1],
+                affine=affine,
+                axis=self.current_axis,
+            )
+            if world_point is not None:
+                copied.append(world_point)
+        return copied
+
+    def _run_connector_propagation(
+        self, seed_uid, direction, num_slices, seed_slice_index=None
+    ):
+        """Create a multipart connector by copying the seed polyline to neighboring slices."""
+        from vtk import vtkCellArray, vtkIntArray, vtkPoints, vtkStringArray
+
+        if not hasattr(self, "_cached_seismic") or self._cached_seismic is None:
+            self.print_terminal("No cached seismic data!")
+            return
+
+        seed_vtk = self.parent.geol_coll.get_uid_vtk_obj(seed_uid)
+        if seed_vtk is None or seed_vtk.GetNumberOfPoints() < 2:
+            self.print_terminal("Connector seed has no usable points!")
+            return
+
+        seed_points = np.array(seed_vtk.GetPoints().GetData(), dtype=np.float64)
+        current_idx = (
+            int(seed_slice_index)
+            if seed_slice_index is not None
+            else int(self.current_slice_index)
+        )
+        slices_to_copy = self._build_directional_slice_list(
+            current_idx, direction, num_slices
+        )
+        if not slices_to_copy:
+            self.print_terminal("No slices to copy connector to!")
+            return
+
+        affine = self._get_seismic_axis_vectors()
+        all_points = []
+        all_lines = []
+        point_slice_indices = []
+        cell_slice_indices = []
+        slice_to_cell_index = {}
+        point_offset = 0
+
+        for slice_idx in slices_to_copy:
+            copied_points = self._copy_connector_points_to_slice(
+                seed_points=seed_points,
+                seed_slice_idx=current_idx,
+                target_slice_idx=slice_idx,
+                affine=affine,
+            )
+            if len(copied_points) < 2:
+                continue
+
+            start_idx = point_offset
+            n_points = len(copied_points)
+            all_points.extend(copied_points)
+            point_slice_indices.extend([slice_idx] * n_points)
+            all_lines.append(n_points)
+            all_lines.extend(list(range(start_idx, start_idx + n_points)))
+            slice_to_cell_index[int(slice_idx)] = len(cell_slice_indices)
+            cell_slice_indices.append(int(slice_idx))
+            point_offset += n_points
+
+        if len(all_points) < 2 or not cell_slice_indices:
+            self.print_terminal("No valid connector copies were created!")
+            return
+
+        vtk_points = vtkPoints()
+        for pt in all_points:
+            vtk_points.InsertNextPoint(float(pt[0]), float(pt[1]), float(pt[2]))
+
+        vtk_lines = vtkCellArray()
+        i = 0
+        while i < len(all_lines):
+            n_points = all_lines[i]
+            vtk_lines.InsertNextCell(n_points)
+            for j in range(n_points):
+                vtk_lines.InsertCellPoint(all_lines[i + 1 + j])
+            i += n_points + 1
+
+        multipart_connector = PolyLine()
+        multipart_connector.SetPoints(vtk_points)
+        multipart_connector.SetLines(vtk_lines)
+
+        point_slice_array = vtkIntArray()
+        point_slice_array.SetName("slice_index")
+        point_slice_array.SetNumberOfComponents(1)
+        for idx in point_slice_indices:
+            point_slice_array.InsertNextValue(int(idx))
+        multipart_connector.GetPointData().AddArray(point_slice_array)
+
+        cell_slice_array = vtkIntArray()
+        cell_slice_array.SetName("slice_index")
+        cell_slice_array.SetNumberOfComponents(1)
+        for idx in cell_slice_indices:
+            cell_slice_array.InsertNextValue(int(idx))
+        multipart_connector.GetCellData().AddArray(cell_slice_array)
+
+        axis_array = vtkStringArray()
+        axis_array.SetName("slice_axis")
+        axis_array.SetNumberOfValues(1)
+        axis_array.SetValue(0, self.current_axis)
+        multipart_connector.GetFieldData().AddArray(axis_array)
+        self._store_interpretation_kind_metadata(
+            vtk_obj=multipart_connector, kind="connector"
+        )
+
+        line_dict = deepcopy(self.parent.geol_coll.entity_dict)
+        line_dict["name"] = self._build_propagated_entity_name(
+            seed_uid=seed_uid,
+            slice_indices=cell_slice_indices,
+            fallback_name="connector",
+        )
+        line_dict["topology"] = "PolyLine"
+        line_dict["x_section"] = ""
+        line_dict["vtk_obj"] = multipart_connector
+        self._set_entity_parent_to_current_seismic(line_dict)
+        self._ensure_slice_index_property_metadata(
+            entity_dict=line_dict,
+            vtk_obj=multipart_connector,
+            slice_indices=cell_slice_indices,
+        )
+        line_dict["role"] = self._sanitize_legend_value(
+            self.parent.geol_coll.get_uid_role(seed_uid), "top"
+        )
+        line_dict["feature"] = self._sanitize_legend_value(
+            self.parent.geol_coll.get_uid_feature(seed_uid), "connector"
+        )
+        line_dict["scenario"] = self._sanitize_legend_value(
+            self.parent.geol_coll.get_uid_scenario(seed_uid), "undef"
+        )
+
+        new_uid = str(uuid4())
+        line_dict["uid"] = new_uid
+        self._pending_fast_added_entities[new_uid] = {
+            "kind": "multipart_horizon",
+            "axis": self.current_axis,
+            "slice_indices": list(cell_slice_indices),
+            "slice_to_cell_index": slice_to_cell_index,
+            "seed_slice": current_idx,
+        }
+        new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
+
+        self.print_terminal("=== Connector Propagation Complete ===")
+        self.print_terminal(f"Created multipart connector: {line_dict['name']}")
+        self.print_terminal(
+            f"Contains {len(cell_slice_indices)} copied segments across slices"
+        )
+        self.print_terminal(
+            f"Slice range: {min(cell_slice_indices)} to {max(cell_slice_indices)}"
+        )
+
     def draw_semi_auto_line(self):
         """
         Semi-automatic horizon tracking using edge detection and A* pathfinding.
@@ -10073,6 +10878,15 @@ class ViewInterpretation(ViewMap):
         self.semiAutoTrackFaultButton = QAction("Semi-Auto Track Fault", self)
         self.semiAutoTrackFaultButton.triggered.connect(self.draw_semi_auto_fault_line)
         self.menuCreate.addAction(self.semiAutoTrackFaultButton)
+
+        # Add connector actions for filling interpreted gaps outside seismic bounds
+        self.createConnectorButton = QAction("Create Connector", self)
+        self.createConnectorButton.triggered.connect(self.draw_connector_line)
+        self.menuCreate.addAction(self.createConnectorButton)
+
+        self.propagateConnectorButton = QAction("Propagate Connector (Copy 3D)", self)
+        self.propagateConnectorButton.triggered.connect(self.propagate_connector)
+        self.menuCreate.addAction(self.propagateConnectorButton)
 
         # Add propagate horizon action
         self.propagateHorizonButton = QAction("Propagate Horizon (Auto-Track 3D)", self)
