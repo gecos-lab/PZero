@@ -9,7 +9,16 @@ from pandas import isna as pd_isna
 from pandas import to_numeric as pd_to_numeric
 
 from PySide6.QtCore import QAbstractTableModel, Qt, QTimer
-from PySide6.QtGui import QAction, QColor, QBrush, QPen, QFont, QFontMetrics, QPainter
+from PySide6.QtGui import (
+    QAction,
+    QColor,
+    QBrush,
+    QPen,
+    QFont,
+    QFontMetrics,
+    QPainter,
+    QTransform,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -157,6 +166,27 @@ class ZoomableGraphicsView(QGraphicsView):
         super().wheelEvent(event)
 
 
+class STmGraphicsScene(QGraphicsScene):
+    """Graphics scene that forwards node clicks back to the STm dialog."""
+
+    def __init__(self, dialog=None, parent=None):
+        super().__init__(parent)
+        self.dialog = dialog
+
+    def mousePressEvent(self, event):
+        clicked_item = self.itemAt(event.scenePos(), QTransform())
+        while clicked_item is not None:
+            node_key = clicked_item.data(0)
+            if node_key and self.dialog is not None:
+                self.dialog.on_node_clicked(str(node_key))
+                event.accept()
+                return
+            clicked_item = clicked_item.parentItem()
+        if self.dialog is not None:
+            self.dialog.clear_selection()
+        super().mousePressEvent(event)
+
+
 class STmBuildDialog(QDialog):
     """Preview dialog that builds an STm graph from the current table."""
 
@@ -169,10 +199,25 @@ class STmBuildDialog(QDialog):
     NODE_PADDING_X = 28
     DOMAIN_MARGIN = 32
 
-    def __init__(self, parent=None, table_name=None, dataframe_provider=None):
+    def __init__(
+        self,
+        parent=None,
+        table_name=None,
+        dataframe_provider=None,
+        metadata_provider=None,
+        options_provider=None,
+        options_updater=None,
+    ):
         super().__init__(parent)
         self.table_name = str(table_name or "").strip() or "STm"
         self.dataframe_provider = dataframe_provider
+        self.metadata_provider = metadata_provider
+        self.options_provider = options_provider
+        self.options_updater = options_updater
+        self.selected_node_key = None
+        self.manual_connections = self._load_manual_connections()
+        self.node_items = {}
+        self.editing_enabled = False
         self.setWindowTitle(f"Build STm - {self.table_name}")
         self.resize(1120, 860)
         self._fit_on_next_rebuild = True
@@ -189,14 +234,24 @@ class STmBuildDialog(QDialog):
         self.graphics_view.setRenderHint(QPainter.TextAntialiasing, True)
         self.graphics_view.setDragMode(QGraphicsView.ScrollHandDrag)
         self.graphics_view.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
-        self.scene = QGraphicsScene(self)
+        self.scene = STmGraphicsScene(dialog=self, parent=self)
         self.graphics_view.setScene(self.scene)
         layout.addWidget(self.graphics_view, 1)
 
         buttons_layout = QHBoxLayout()
+        self.editing_toggle_button = QPushButton("Enable editing")
+        self.editing_toggle_button.setCheckable(True)
+        self.editing_toggle_button.toggled.connect(self.on_editing_toggled)
+        buttons_layout.addWidget(self.editing_toggle_button)
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.clicked.connect(self.rebuild_scene)
         buttons_layout.addWidget(self.refresh_button)
+        self.clear_selection_button = QPushButton("Clear selection")
+        self.clear_selection_button.clicked.connect(self.clear_selection)
+        buttons_layout.addWidget(self.clear_selection_button)
+        self.clear_manual_button = QPushButton("Clear manual links")
+        self.clear_manual_button.clicked.connect(self.clear_manual_connections)
+        buttons_layout.addWidget(self.clear_manual_button)
         zoom_out_button = QPushButton("-")
         zoom_out_button.setToolTip("Zoom out")
         zoom_out_button.clicked.connect(self.graphics_view.zoom_out)
@@ -218,10 +273,30 @@ class STmBuildDialog(QDialog):
         layout.addLayout(buttons_layout)
 
         self.rebuild_scene()
+        self.update_editing_ui()
+
+    def on_editing_toggled(self, checked):
+        """Enable/disable editing actions for manual STm links."""
+        self.editing_enabled = bool(checked)
+        if not self.editing_enabled:
+            self.selected_node_key = None
+        self.update_editing_ui()
+        self._update_node_highlight()
+
+    def update_editing_ui(self):
+        """Refresh editing controls in the STm builder."""
+        self.editing_toggle_button.setText(
+            "Disable editing" if self.editing_enabled else "Enable editing"
+        )
+        self.clear_selection_button.setEnabled(self.editing_enabled)
+        self.clear_manual_button.setEnabled(
+            self.editing_enabled and bool(self.manual_connections)
+        )
 
     def rebuild_scene(self):
         """Rebuild the graphics scene from the current STm table."""
         self.scene.clear()
+        self.node_items = {}
         dataframe = pd_DataFrame()
         if callable(self.dataframe_provider):
             current_df = self.dataframe_provider()
@@ -256,6 +331,13 @@ class STmBuildDialog(QDialog):
             empty_text.setPos(260, 220)
             return
 
+        metadata_by_name = {}
+        if callable(self.metadata_provider):
+            for unit_info in self.metadata_provider() or []:
+                unit_name = str(unit_info.get("Name", "")).strip()
+                if unit_name:
+                    metadata_by_name[unit_name] = dict(unit_info)
+
         rows = self._build_rows_payload(dataframe)
         unit_nodes = []
         surface_nodes = []
@@ -263,7 +345,8 @@ class STmBuildDialog(QDialog):
         domain_groups = {}
 
         for row_idx, row_info in enumerate(rows):
-            row_color = structural_topology_color(row_info["Name"])
+            metadata = metadata_by_name.get(row_info["Name"], {})
+            row_color = self._legend_color_for_row(row_info=row_info, metadata=metadata)
             row_color_dark = row_color.darker(150)
             row_nodes = []
 
@@ -332,30 +415,33 @@ class STmBuildDialog(QDialog):
             )
         )
 
-        node_items = {}
         for node_idx, node_info in enumerate(unit_nodes):
-            node_items[node_info["key"]] = self._add_node(
+            self.node_items[node_info["key"]] = self._add_node(
                 center_x=self.LEFT_X,
                 center_y=self.TOP_Y + node_idx * self.Y_STEP,
                 label=node_info["label"],
                 fill_color=node_info["brush"],
                 outline_color=node_info["pen"],
+                node_key=node_info["key"],
+                node_side="unit",
             )
 
         for node_idx, node_info in enumerate(surface_nodes):
-            node_items[node_info["key"]] = self._add_node(
+            self.node_items[node_info["key"]] = self._add_node(
                 center_x=self.RIGHT_X,
                 center_y=self.TOP_Y + node_idx * self.Y_STEP,
                 label=node_info["label"],
                 fill_color=node_info["brush"],
                 outline_color=node_info["pen"],
+                node_key=node_info["key"],
+                node_side="surface",
             )
 
-        self._add_domain_boxes(domain_groups=domain_groups, node_items=node_items)
+        self._add_domain_boxes(domain_groups=domain_groups, node_items=self.node_items)
 
         for link_info in paired_links:
-            source_item = node_items.get(link_info["source"])
-            target_item = node_items.get(link_info["target"])
+            source_item = self.node_items.get(link_info["source"])
+            target_item = self.node_items.get(link_info["target"])
             if source_item is None or target_item is None:
                 continue
             line_pen = QPen(link_info["color"])
@@ -367,6 +453,9 @@ class STmBuildDialog(QDialog):
                 target_item["left_anchor"][1],
                 line_pen,
             ).setZValue(-10)
+
+        self._draw_manual_connections()
+        self._update_node_highlight()
 
     def _build_rows_payload(self, dataframe):
         """Convert the dataframe into normalized STm rows."""
@@ -405,7 +494,152 @@ class STmBuildDialog(QDialog):
             )
         return rows
 
-    def _add_node(self, center_x=None, center_y=None, label=None, fill_color=None, outline_color=None):
+    def _legend_color_for_row(self, row_info=None, metadata=None):
+        """Return the legend color for a row, falling back to a stable generated color."""
+        metadata = metadata or {}
+        try:
+            red = int(float(metadata.get("color_R")))
+            green = int(float(metadata.get("color_G")))
+            blue = int(float(metadata.get("color_B")))
+            return QColor(
+                max(0, min(255, red)),
+                max(0, min(255, green)),
+                max(0, min(255, blue)),
+            )
+        except (TypeError, ValueError):
+            return structural_topology_color((row_info or {}).get("Name", ""))
+
+    def _load_manual_connections(self):
+        """Load persisted manual connections from the table options."""
+        options = {}
+        if callable(self.options_provider):
+            options = self.options_provider() or {}
+
+        connections = set()
+        for connection_info in options.get("manual_connections", []):
+            if not isinstance(connection_info, dict):
+                continue
+            unit_key = str(connection_info.get("unit", "")).strip()
+            surface_key = str(connection_info.get("surface", "")).strip()
+            if not unit_key or not surface_key:
+                continue
+            if not unit_key.startswith("unit:") or not surface_key.startswith("surface:"):
+                continue
+            connections.add((unit_key, surface_key))
+        return connections
+
+    def _save_manual_connections(self):
+        """Persist the current set of manual connections."""
+        if not callable(self.options_updater):
+            return
+        serialised_connections = [
+            {"unit": unit_key, "surface": surface_key}
+            for unit_key, surface_key in sorted(self.manual_connections)
+        ]
+        self.options_updater({"manual_connections": serialised_connections})
+
+    def _draw_manual_connections(self):
+        """Draw persisted manual links between unit and surface nodes."""
+        valid_connections = set()
+        for unit_key, surface_key in self.manual_connections:
+            source_item = self.node_items.get(unit_key)
+            target_item = self.node_items.get(surface_key)
+            if source_item is None or target_item is None:
+                continue
+            valid_connections.add((unit_key, surface_key))
+            line_pen = QPen(QColor(15, 15, 15))
+            line_pen.setWidth(5)
+            self.scene.addLine(
+                source_item["right_anchor"][0],
+                source_item["right_anchor"][1],
+                target_item["left_anchor"][0],
+                target_item["left_anchor"][1],
+                line_pen,
+            ).setZValue(-8)
+        if valid_connections != self.manual_connections:
+            self.manual_connections = valid_connections
+            self._save_manual_connections()
+
+    def clear_selection(self):
+        """Clear the active node selection."""
+        self.selected_node_key = None
+        self._update_node_highlight()
+
+    def clear_manual_connections(self):
+        """Remove all persisted manual links."""
+        if not self.editing_enabled:
+            return
+        if not self.manual_connections:
+            return
+        self.manual_connections.clear()
+        self._save_manual_connections()
+        self.clear_selection()
+        self.rebuild_scene()
+        self.update_editing_ui()
+
+    def on_node_clicked(self, node_key=None):
+        """Handle clicks on graph nodes to build/remove manual links."""
+        if not self.editing_enabled:
+            return
+        node_key = str(node_key or "").strip()
+        if node_key not in self.node_items:
+            self.clear_selection()
+            return
+
+        if self.selected_node_key is None:
+            self.selected_node_key = node_key
+            self._update_node_highlight()
+            return
+
+        if self.selected_node_key == node_key:
+            self.clear_selection()
+            return
+
+        source_info = self.node_items.get(self.selected_node_key)
+        target_info = self.node_items.get(node_key)
+        if source_info is None or target_info is None:
+            self.clear_selection()
+            return
+
+        if source_info["side"] == target_info["side"]:
+            self.selected_node_key = node_key
+            self._update_node_highlight()
+            return
+
+        if source_info["side"] == "unit":
+            connection_key = (self.selected_node_key, node_key)
+        else:
+            connection_key = (node_key, self.selected_node_key)
+
+        if connection_key in self.manual_connections:
+            self.manual_connections.remove(connection_key)
+        else:
+            self.manual_connections.add(connection_key)
+
+        self._save_manual_connections()
+        self.selected_node_key = None
+        self.rebuild_scene()
+        self.update_editing_ui()
+
+    def _update_node_highlight(self):
+        """Refresh node highlight based on the current selection."""
+        for node_key, node_info in self.node_items.items():
+            outline_pen = QPen(node_info["base_pen_color"])
+            outline_pen.setWidth(6 if node_key == self.selected_node_key else 3)
+            if node_key == self.selected_node_key:
+                outline_pen.setColor(QColor(0, 140, 255))
+            node_info["rect_item"].setPen(outline_pen)
+
+    def _add_node(
+        self,
+        center_x=None,
+        center_y=None,
+        label=None,
+        fill_color=None,
+        outline_color=None,
+        node_key=None,
+        node_side=None,
+    ):
         """Add a rounded graph node and return its geometry metadata."""
         font = QFont()
         font.setPointSize(20)
@@ -423,6 +657,7 @@ class STmBuildDialog(QDialog):
             rect_x, rect_y, rect_width, rect_height, rect_pen, QBrush(fill_color)
         )
         rect_item.setZValue(0)
+        rect_item.setData(0, node_key)
 
         text_item = self.scene.addText(str(label), font)
         text_rect = text_item.boundingRect()
@@ -432,6 +667,7 @@ class STmBuildDialog(QDialog):
         )
         text_item.setDefaultTextColor(QColor(20, 20, 20))
         text_item.setZValue(1)
+        text_item.setData(0, node_key)
 
         return {
             "rect": (rect_x, rect_y, rect_width, rect_height),
@@ -441,6 +677,11 @@ class STmBuildDialog(QDialog):
             "bottom": rect_y + rect_height,
             "left": rect_x,
             "right": rect_x + rect_width,
+            "rect_item": rect_item,
+            "text_item": text_item,
+            "label": str(label),
+            "side": str(node_side or ""),
+            "base_pen_color": outline_color or QColor(30, 30, 30),
         }
 
     def _add_domain_boxes(self, domain_groups=None, node_items=None):
@@ -1256,6 +1497,9 @@ class ViewTable(QWidget):
                 "Domain_1": "",
                 "feature": str(row.get("feature", "")).strip(),
                 "role": str(row.get("role", "")).strip(),
+                "color_R": row.get("color_R", 255),
+                "color_G": row.get("color_G", 255),
+                "color_B": row.get("color_B", 255),
             }
 
         return sorted(
@@ -1632,8 +1876,24 @@ class ViewTable(QWidget):
             dataframe_provider=lambda tn=table_name: self.parent.custom_tables.get(
                 tn, pd_DataFrame()
             ).copy(),
+            metadata_provider=lambda: list(self._available_stm_units()),
+            options_provider=lambda tn=table_name: dict(
+                self.parent.custom_table_options.get(tn, {})
+            ),
+            options_updater=lambda updates, tn=table_name: self._update_stm_build_options(
+                table_name=tn,
+                updates=updates,
+            ),
         )
         dialog.exec()
+
+    def _update_stm_build_options(self, table_name=None, updates=None):
+        """Persist STm builder options without discarding existing table options."""
+        if not table_name:
+            return
+        merged_options = dict(self.parent.custom_table_options.get(table_name, {}))
+        merged_options.update(dict(updates or {}))
+        self.parent.custom_table_options[table_name] = merged_options
 
     def add_row(self):
         table_name = self.current_table_name

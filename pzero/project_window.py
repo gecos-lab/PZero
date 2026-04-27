@@ -3400,6 +3400,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 "Domain_1": "",
                 "feature": feature_name,
                 "role": role_name,
+                "color_R": row.get("color_R", 255),
+                "color_G": row.get("color_G", 255),
+                "color_B": row.get("color_B", 255),
             }
 
         return sorted(
