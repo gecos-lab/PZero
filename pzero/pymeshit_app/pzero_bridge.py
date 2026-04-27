@@ -30,6 +30,15 @@ class PZeroPymeshitBridge:
 
     _POINT_IMPORT_TOPOLOGIES = frozenset({"TriSurf", "PolyLine", "XsPolyLine"})
     _POLYLINE_TOPOLOGIES = frozenset({"PolyLine", "XsPolyLine"})
+    SORT_OPTIONS: Dict[str, str] = {
+        "collection_name": "Collection, Name",
+        "role": "Role",
+        "topology": "Type",
+        "name": "Name",
+        "feature": "Feature",
+        "scenario": "Scenario",
+        "points": "Point Count",
+    }
 
     _COLLECTION_LABELS: Dict[str, str] = {
         "geol_coll": "Geology",
@@ -68,7 +77,11 @@ class PZeroPymeshitBridge:
     # --------------------------------------------------------------------- #
     # Public API
     # --------------------------------------------------------------------- #
-    def list_entities(self) -> List[PZeroEntityRecord]:
+    def list_entities(
+        self,
+        sort_by: str = "collection_name",
+        reverse: bool = False,
+    ) -> List[PZeroEntityRecord]:
         """Return a flat catalog of entities that own VTK geometries."""
         records: List[PZeroEntityRecord] = []
 
@@ -128,8 +141,71 @@ class PZeroPymeshitBridge:
                     )
                     records.append(record)
 
-        records.sort(key=lambda rec: (rec.collection_label, rec.name.lower()))
-        return records
+        return self.sort_entity_records(records, sort_by=sort_by, reverse=reverse)
+
+    @classmethod
+    def sort_entity_records(
+        cls,
+        records: List[PZeroEntityRecord],
+        sort_by: str = "collection_name",
+        reverse: bool = False,
+    ) -> List[PZeroEntityRecord]:
+        """Return records sorted by one of the import-table sort keys."""
+        sort_by = str(sort_by or "collection_name")
+
+        def text(value) -> str:
+            return str(value or "").casefold()
+
+        key_builders = {
+            "collection_name": lambda rec: (
+                text(rec.collection_label),
+                text(rec.name),
+                text(rec.topology),
+                text(rec.role),
+            ),
+            "role": lambda rec: (
+                text(rec.role),
+                text(rec.topology),
+                text(rec.collection_label),
+                text(rec.name),
+            ),
+            "topology": lambda rec: (
+                text(rec.topology),
+                text(rec.role),
+                text(rec.collection_label),
+                text(rec.name),
+            ),
+            "type": lambda rec: (
+                text(rec.topology),
+                text(rec.role),
+                text(rec.collection_label),
+                text(rec.name),
+            ),
+            "name": lambda rec: (
+                text(rec.name),
+                text(rec.collection_label),
+                text(rec.topology),
+            ),
+            "feature": lambda rec: (
+                text(rec.feature),
+                text(rec.role),
+                text(rec.collection_label),
+                text(rec.name),
+            ),
+            "scenario": lambda rec: (
+                text(rec.scenario),
+                text(rec.role),
+                text(rec.collection_label),
+                text(rec.name),
+            ),
+            "points": lambda rec: (
+                int(rec.point_count or 0),
+                text(rec.collection_label),
+                text(rec.name),
+            ),
+        }
+        key_func = key_builders.get(sort_by, key_builders["collection_name"])
+        return sorted(records, key=key_func, reverse=reverse)
 
     def load_points(
         self, collection_key: str, uid: str, face_id: Optional[int] = None,

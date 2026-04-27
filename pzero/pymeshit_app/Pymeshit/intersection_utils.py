@@ -37,6 +37,49 @@ except ImportError:
 
 logger = logging.getLogger("MeshIt-Workflow")
 
+TPS_GLOBAL_POINT_LIMIT = 1200
+TPS_LOCAL_NEIGHBORS = 128
+
+
+def _unique_xy_samples(xy: np.ndarray, values: np.ndarray, decimals: int = 12) -> Tuple[np.ndarray, np.ndarray]:
+    """Collapse duplicate 2D interpolation samples by averaging their values."""
+    xy = np.asarray(xy, dtype=float)
+    values = np.asarray(values, dtype=float)
+    if xy.ndim != 2 or xy.shape[0] == 0:
+        return xy, values
+
+    keys = np.round(xy, decimals=decimals)
+    unique_keys, inverse = np.unique(keys, axis=0, return_inverse=True)
+    if len(unique_keys) == len(xy):
+        return xy, values
+
+    xy_accum = np.zeros((len(unique_keys), xy.shape[1]), dtype=float)
+    value_shape = values.shape[1:] if values.ndim > 1 else ()
+    val_accum = np.zeros((len(unique_keys),) + value_shape, dtype=float)
+    counts = np.bincount(inverse).astype(float)
+
+    np.add.at(xy_accum, inverse, xy)
+    np.add.at(val_accum, inverse, values)
+    xy_accum /= counts[:, None]
+    if values.ndim > 1:
+        val_accum /= counts.reshape((-1,) + (1,) * len(value_shape))
+    else:
+        val_accum /= counts
+
+    logger.info(
+        "Collapsed %d duplicate TPS/IDW interpolation sample(s)",
+        len(xy) - len(unique_keys),
+    )
+    return xy_accum, val_accum
+
+
+def _tps_neighbors_for_count(n_samples: int) -> Optional[int]:
+    """Use a local TPS solve when a global RBF would be too expensive."""
+    if n_samples <= TPS_GLOBAL_POINT_LIMIT:
+        return None
+    return min(TPS_LOCAL_NEIGHBORS, max(32, n_samples - 1))
+
+
 class Vector3D:
     """Simple 3D vector class compatible with MeshIt's Vector3D"""
     
@@ -1912,11 +1955,17 @@ def refine_hull_with_interpolation(raw_hull_points: List[Vector3D],
         
         if interp_method == "Thin Plate Spline (TPS)":
             try:
+                tps_xy, tps_z = _unique_xy_samples(scattered_2d, scattered_z)
+                if len(tps_xy) < 4:
+                    raise ValueError("not enough unique TPS samples")
+                tps_neighbors = _tps_neighbors_for_count(len(tps_xy))
                 # Use RBF with thin plate spline kernel
                 rbf = RBFInterpolator(
-                    scattered_2d, scattered_z,
+                    tps_xy, tps_z,
                     kernel='thin_plate_spline',
-                    smoothing=0.0  # C++-equivalent: pure interpolation
+                    smoothing=float(smoothing),
+                    neighbors=tps_neighbors,
+                    degree=1,
                 )
                 refined_hull_pca[:, 2] = rbf(hull_2d)
             except Exception as e:
@@ -3081,14 +3130,17 @@ def run_constrained_triangulation_py(
     C = P - centroid
     sample_xy = np.column_stack([C @ ex, C @ ey])
     sample_w  = C @ ez
+    sample_xy, sample_w = _unique_xy_samples(sample_xy, sample_w)
 
     # interpolators in local frame
 
 
 
+    sample_tree = cKDTree(sample_xy)
+
     def z_idw(q, power=2):
-        tree = cKDTree(sample_xy); k = min(64, len(sample_xy))
-        d, idx = tree.query(q, k=k)
+        k = min(64, len(sample_xy))
+        d, idx = sample_tree.query(q, k=k)
         if k == 1: d = d[:, None]; idx = idx[:, None]
         r2 = np.maximum(d*d, 1e-24)
         w = 1.0 / (r2**power)   # same as interp_idw
@@ -3097,13 +3149,26 @@ def run_constrained_triangulation_py(
 
     def z_tps(q):
         try:
+            if len(sample_xy) < 4:
+                raise ValueError("not enough unique TPS samples")
+            tps_neighbors = _tps_neighbors_for_count(len(sample_xy))
+            logger.info(
+                "TPS interpolation: %d source samples, %d query points, neighbors=%s, smoothing=%g",
+                len(sample_xy),
+                len(q),
+                tps_neighbors if tps_neighbors is not None else "global",
+                smoothing,
+            )
             rbf = RBFInterpolator(
                 sample_xy, sample_w,
                 kernel='thin_plate_spline',
-                smoothing=0.0  # C++-equivalent
+                smoothing=smoothing,
+                neighbors=tps_neighbors,
+                degree=1,
             )
             return rbf(q)
-        except Exception:
+        except Exception as exc:
+            logger.warning("TPS interpolation failed (%s), falling back to IDW", exc)
             return z_idw(q)
 
 

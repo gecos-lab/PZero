@@ -22,6 +22,37 @@ from scipy.spatial.distance import pdist
 
 logger = logging.getLogger("MeshIt-Workflow")
 
+TPS_GLOBAL_POINT_LIMIT = 1200
+TPS_LOCAL_NEIGHBORS = 128
+
+
+def _unique_rows_with_values(points_2d: np.ndarray, values: np.ndarray, decimals: int = 12):
+    """Collapse duplicate 2D samples by averaging their paired values."""
+    points_2d = np.asarray(points_2d, dtype=np.float64)
+    values = np.asarray(values, dtype=np.float64)
+    if points_2d.ndim != 2 or len(points_2d) == 0:
+        return points_2d, values
+
+    keys = np.round(points_2d, decimals=decimals)
+    unique_keys, inverse = np.unique(keys, axis=0, return_inverse=True)
+    if len(unique_keys) == len(points_2d):
+        return points_2d, values
+
+    points_accum = np.zeros((len(unique_keys), points_2d.shape[1]), dtype=np.float64)
+    values_accum = np.zeros((len(unique_keys), values.shape[1]), dtype=np.float64)
+    counts = np.bincount(inverse).astype(np.float64)
+    np.add.at(points_accum, inverse, points_2d)
+    np.add.at(values_accum, inverse, values)
+
+    logger.info("Isomap: collapsed %d duplicate interpolation sample(s)", len(points_2d) - len(unique_keys))
+    return points_accum / counts[:, None], values_accum / counts[:, None]
+
+
+def _tps_neighbors_for_count(n_samples: int) -> Optional[int]:
+    if n_samples <= TPS_GLOBAL_POINT_LIMIT:
+        return None
+    return min(TPS_LOCAL_NEIGHBORS, max(32, n_samples - 1))
+
 
 class IsomapTriangulator:
     """
@@ -452,12 +483,24 @@ class IsomapTriangulator:
         # Store smoothing and interpolator for use in interpolation
         self._tps_smoothing = smoothing
         self._interpolator = interpolator.lower() if interpolator else "tps"
+        self._idw_power = 2.0
         
         # Normalize interpolator value
         if "tps" in self._interpolator or "thin" in self._interpolator or "spline" in self._interpolator:
             self._interpolator = "tps"
         elif "idw" in self._interpolator:
             self._interpolator = "idw"
+            power_match = None
+            try:
+                import re
+                power_match = re.search(r"p\s*=\s*([0-9.]+)", interpolator or "", flags=re.IGNORECASE)
+            except Exception:
+                power_match = None
+            if power_match is not None:
+                try:
+                    self._idw_power = max(0.1, float(power_match.group(1)))
+                except ValueError:
+                    self._idw_power = 2.0
         else:
             self._interpolator = "tps"  # Default to TPS
         
@@ -859,14 +902,17 @@ class IsomapTriangulator:
             
             source_2d = source_2d[:n_source]
             target_3d = reference_points_3d[:n_source]
+            source_2d, target_3d = _unique_rows_with_values(source_2d, target_3d)
+            n_source = len(source_2d)
+            if n_source < 4:
+                logger.warning("Not enough unique points for TPS interpolation")
+                return None
             
             logger.info(f"TPS interpolation with smoothing={smoothing:.4f}, "
                        f"using {n_source} source points")
             
             tps_start = time.perf_counter()
-            tps_neighbors = None
-            if n_source > 2000:
-                tps_neighbors = min(256, max(96, n_source // 80))
+            tps_neighbors = _tps_neighbors_for_count(n_source)
 
             try:
                 rbf = RBFInterpolator(
@@ -915,7 +961,7 @@ class IsomapTriangulator:
         points_2d: np.ndarray,
         reference_points_3d: np.ndarray,
         k: int = 12,
-        power: float = 2.0
+        power: Optional[float] = None
     ) -> np.ndarray:
         """
         Batch IDW interpolation in Isomap 2D space for one or more points.
@@ -930,8 +976,19 @@ class IsomapTriangulator:
         if self._tree_2d is None:
             raise RuntimeError("Isomap model not fitted - call fit() first")
 
-        k_actual = min(k, len(self.points_2d))
-        dists, idxs = self._tree_2d.query(points_2d, k=k_actual)
+        if power is None:
+            power = float(getattr(self, '_idw_power', 2.0))
+
+        n_source = min(len(self.points_2d), len(reference_points_3d))
+        if n_source <= 0:
+            raise ValueError("No reference points available for IDW interpolation")
+
+        source_2d = self.points_2d[:n_source]
+        source_values = reference_points_3d[:n_source]
+        source_tree = self._tree_2d if n_source == len(self.points_2d) else cKDTree(source_2d)
+
+        k_actual = min(k, n_source)
+        dists, idxs = source_tree.query(points_2d, k=k_actual)
 
         if k_actual == 1:
             dists = dists[:, np.newaxis]
@@ -940,13 +997,13 @@ class IsomapTriangulator:
         weights = 1.0 / np.power(np.maximum(dists, 1e-12), power)
         weights /= weights.sum(axis=1, keepdims=True)
 
-        results = np.einsum('ij,ijk->ik', weights, reference_points_3d[idxs])
+        results = np.einsum('ij,ijk->ik', weights, source_values[idxs])
 
         exact_rows = np.any(dists < 1e-12, axis=1)
         if np.any(exact_rows):
             exact_cols = np.argmax(dists[exact_rows] < 1e-12, axis=1)
             exact_indices = idxs[exact_rows, exact_cols]
-            results[exact_rows] = reference_points_3d[exact_indices]
+            results[exact_rows] = source_values[exact_indices]
 
         return results
     

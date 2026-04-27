@@ -10,6 +10,34 @@ import triangle as tr
 import logging
 from typing import Dict, List, Optional, Tuple
 
+TPS_GLOBAL_POINT_LIMIT = 1200
+TPS_LOCAL_NEIGHBORS = 128
+
+
+def _unique_xy_samples(xy: np.ndarray, values: np.ndarray, decimals: int = 12) -> Tuple[np.ndarray, np.ndarray]:
+    xy = np.asarray(xy, dtype=float)
+    values = np.asarray(values, dtype=float)
+    if xy.ndim != 2 or len(xy) == 0:
+        return xy, values
+
+    keys = np.round(xy, decimals=decimals)
+    unique_keys, inverse = np.unique(keys, axis=0, return_inverse=True)
+    if len(unique_keys) == len(xy):
+        return xy, values
+
+    xy_accum = np.zeros((len(unique_keys), xy.shape[1]), dtype=float)
+    val_accum = np.zeros(len(unique_keys), dtype=float)
+    counts = np.bincount(inverse).astype(float)
+    np.add.at(xy_accum, inverse, xy)
+    np.add.at(val_accum, inverse, values)
+    return xy_accum / counts[:, None], val_accum / counts
+
+
+def _tps_neighbors_for_count(n_samples: int) -> Optional[int]:
+    if n_samples <= TPS_GLOBAL_POINT_LIMIT:
+        return None
+    return min(TPS_LOCAL_NEIGHBORS, max(32, n_samples - 1))
+
 # Try to import triunsuitable bridge helpers.
 try:
     from . import triangle_callback
@@ -788,7 +816,24 @@ class DirectTriangleWrapper:
                     try:
                         self.logger.info(f"Fallback: Using TPS interpolation (smoothing={smoothing})")
                         from scipy.interpolate import RBFInterpolator
-                        rbf = RBFInterpolator(orig_2d, z_orig, kernel='thin_plate_spline', smoothing=smoothing)
+                        tps_xy, tps_z = _unique_xy_samples(orig_2d, z_orig)
+                        if len(tps_xy) < 4:
+                            raise ValueError("not enough unique TPS samples")
+                        tps_neighbors = _tps_neighbors_for_count(len(tps_xy))
+                        self.logger.info(
+                            "Fallback TPS: %d source samples, %d query points, neighbors=%s",
+                            len(tps_xy),
+                            len(vertices_2d),
+                            tps_neighbors if tps_neighbors is not None else "global",
+                        )
+                        rbf = RBFInterpolator(
+                            tps_xy,
+                            tps_z,
+                            kernel='thin_plate_spline',
+                            smoothing=smoothing,
+                            neighbors=tps_neighbors,
+                            degree=1,
+                        )
                         z_new = rbf(vertices_2d)
                     except Exception as e:
                         self.logger.warning(f"Fallback TPS failed: {e}")

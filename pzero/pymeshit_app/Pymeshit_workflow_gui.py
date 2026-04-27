@@ -13311,6 +13311,19 @@ segmentation, triangulation, and visualization.
 
             # Prepare interpolation data
             sample_xy = all_pts_rot[:, :2]; sample_z = all_pts_rot[:, 2]
+            sample_keys, sample_inverse = np.unique(np.round(sample_xy, decimals=12), axis=0, return_inverse=True)
+            if len(sample_keys) != len(sample_xy):
+                dedup_xy = np.zeros((len(sample_keys), 2), dtype=float)
+                dedup_z = np.zeros(len(sample_keys), dtype=float)
+                counts = np.bincount(sample_inverse).astype(float)
+                np.add.at(dedup_xy, sample_inverse, sample_xy)
+                np.add.at(dedup_z, sample_inverse, sample_z)
+                sample_xy = dedup_xy / counts[:, None]
+                sample_z = dedup_z / counts
+                logger.info(
+                    "Triangulation interpolation: collapsed %d duplicate source sample(s)",
+                    len(sample_inverse) - len(sample_keys),
+                )
 
             # Legacy branch keeps hull+snap
             if "Legacy" in interp_label:
@@ -13353,15 +13366,28 @@ segmentation, triangulation, and visualization.
             def interp_tps(q):
                 try:
                     from scipy.interpolate import RBFInterpolator
-                    # Use all points, but limit neighbors for speed (like moving window in C++)
-                    # neighbors=50 is a good tradeoff; adjust as needed
+                    if len(sample_xy) < 4:
+                        raise ValueError("not enough unique TPS samples")
+                    tps_neighbors = None
+                    if len(sample_xy) > 1200:
+                        tps_neighbors = min(128, max(32, len(sample_xy) - 1))
+                    logger.info(
+                        "Triangulation TPS interpolation: %d source samples, %d query points, neighbors=%s, smoothing=%g",
+                        len(sample_xy),
+                        len(q),
+                        tps_neighbors if tps_neighbors is not None else "global",
+                        smoothing,
+                    )
                     rbf = RBFInterpolator(
                         sample_xy, sample_z,
                         kernel='thin_plate_spline',
-                        smoothing=float(smoothing)
+                        smoothing=float(smoothing),
+                        neighbors=tps_neighbors,
+                        degree=1,
                     )
                     return rbf(q)
-                except Exception:
+                except Exception as exc:
+                    logger.warning("Triangulation TPS failed (%s), falling back to IDW", exc)
                     return interp_idw(q)
             # choose method
             if "Thin Plate" in interp_label:
@@ -28377,6 +28403,8 @@ class PZeroEntitySelectionDialog(QDialog):
     def __init__(self, parent, entity_records, bridge=None):
         super().__init__(parent)
         self._pzero_bridge = bridge
+        self._entity_records = list(entity_records)
+        self._record_items = []
         self.setWindowTitle("Load From PZero")
         self.resize(980, 520)
 
@@ -28384,6 +28412,51 @@ class PZeroEntitySelectionDialog(QDialog):
         layout.addWidget(
             QLabel("Select structures or point clouds to import into PyMeshIt:")
         )
+
+        controls_layout = QHBoxLayout()
+        controls_layout.addWidget(QLabel("Sort:"))
+        self.sort_combo = QComboBox()
+        sort_options = (
+            getattr(self._pzero_bridge, "SORT_OPTIONS", None)
+            if self._pzero_bridge is not None
+            else None
+        ) or {
+            "collection_name": "Collection, Name",
+            "role": "Role",
+            "topology": "Type",
+            "name": "Name",
+            "feature": "Feature",
+            "scenario": "Scenario",
+            "points": "Point Count",
+        }
+        for key, label in sort_options.items():
+            self.sort_combo.addItem(label, key)
+        self.sort_combo.currentIndexChanged.connect(self._on_sort_changed)
+        controls_layout.addWidget(self.sort_combo)
+
+        self.sort_desc_checkbox = QCheckBox("Descending")
+        self.sort_desc_checkbox.toggled.connect(self._on_sort_changed)
+        controls_layout.addWidget(self.sort_desc_checkbox)
+
+        self.select_role_btn = QPushButton("Select Role")
+        self.select_role_btn.setMenu(self._build_role_menu())
+        controls_layout.addWidget(self.select_role_btn)
+
+        select_trisurf_btn = QPushButton("Select TriSurf")
+        select_trisurf_btn.clicked.connect(lambda: self._set_checked_by_topology({"TriSurf"}, True))
+        controls_layout.addWidget(select_trisurf_btn)
+
+        select_polyline_btn = QPushButton("Select PolyLine")
+        select_polyline_btn.clicked.connect(
+            lambda: self._set_checked_by_topology({"PolyLine", "XsPolyLine"}, True)
+        )
+        controls_layout.addWidget(select_polyline_btn)
+
+        clear_btn = QPushButton("Clear")
+        clear_btn.clicked.connect(lambda: self._set_checked_for_all(False))
+        controls_layout.addWidget(clear_btn)
+        controls_layout.addStretch(1)
+        layout.addLayout(controls_layout)
 
         self.tree = QTreeWidget()
         self.tree.setColumnCount(9)
@@ -28403,82 +28476,6 @@ class PZeroEntitySelectionDialog(QDialog):
         self.tree.setAlternatingRowColors(True)
         layout.addWidget(self.tree, 1)
 
-        grouped: Dict[str, List["PZeroEntityRecord"]] = {}
-        for record in entity_records:
-            grouped.setdefault(record.collection_label, []).append(record)
-
-        for collection_label, records in grouped.items():
-            parent_item = QTreeWidgetItem([collection_label, "", "", "", "", "", "", "", ""])
-            parent_item.setFirstColumnSpanned(True)
-            parent_item.setFlags(Qt.ItemIsEnabled)
-            self.tree.addTopLevelItem(parent_item)
-
-            for record in records:
-                supports_extension = record.topology in {"TriSurf", "PolyLine", "XsPolyLine"}
-                supports_as_points = self._supports_as_points(record)
-                child = QTreeWidgetItem(
-                    [
-                        "",
-                        record.name,
-                        record.topology or "-",
-                        getattr(record, "role", "") or "-",
-                        getattr(record, "feature", "") or "-",
-                        getattr(record, "scenario", "") or "-",
-                        str(record.point_count),
-                        "",  # "Load as Points" column - will be set below
-                        "",  # Extend factor column - widget added later
-                    ]
-                )
-                child.setData(0, Qt.UserRole, record)
-                child.setFlags(
-                    Qt.ItemIsEnabled
-                    | Qt.ItemIsSelectable
-                    | Qt.ItemIsUserCheckable
-                )
-                child.setCheckState(0, Qt.Unchecked)
-                
-                # Add item to tree first
-                parent_item.addChild(child)
-                
-                # Add "Load as Points" checkbox widget where supported
-                if supports_as_points:
-                    # Clear any text in the widget column to ensure checkbox is visible
-                    child.setText(self.COL_AS_POINTS, "")
-                    checkbox = QCheckBox(self.tree)  # Parent to tree widget
-                    checkbox.setChecked(False)
-                    checkbox.setToolTip(self._as_points_tooltip(record))
-                    # Ensure checkbox is visible
-                    checkbox.show()
-                    self.tree.setItemWidget(child, self.COL_AS_POINTS, checkbox)
-                else:
-                    child.setText(self.COL_AS_POINTS, "-")
-
-                if supports_extension:
-                    spinbox = QDoubleSpinBox(self.tree)
-                    spinbox.setDecimals(2)
-                    spinbox.setRange(0.0, 1.0)
-                    spinbox.setSingleStep(0.05)
-                    spinbox.setValue(0.0)
-                    if record.topology == "TriSurf":
-                        spinbox.setToolTip(
-                            "Extend this surface footprint by the selected factor (0.2 = 20%)."
-                        )
-                    else:
-                        extension_mode = _polyline_extension_mode_for_role(
-                            getattr(record, "role", "")
-                        )
-                        spinbox.setToolTip(
-                            "Extend this polyline by the selected factor. "
-                            f"{extension_mode.capitalize()} extension is chosen from its role."
-                        )
-                    spinbox.setKeyboardTracking(False)
-                    spinbox.show()
-                    self.tree.setItemWidget(child, self.COL_EXTEND, spinbox)
-                else:
-                    child.setText(self.COL_EXTEND, "-")
-
-            parent_item.setExpanded(True)
-
         header = self.tree.header()
         # Set resize modes: metadata columns size to contents, controls fixed, names stretch.
         for i in range(self.tree.columnCount()):
@@ -28493,10 +28490,212 @@ class PZeroEntitySelectionDialog(QDialog):
             else:
                 header.setSectionResizeMode(i, QHeaderView.ResizeToContents)
 
+        self._populate_tree()
+
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
         layout.addWidget(button_box)
+
+    def _record_key(self, record) -> Tuple[str, str, int]:
+        """Stable key for preserving options while rebuilding the import table."""
+        return (
+            str(getattr(record, "collection_key", "")),
+            str(getattr(record, "uid", "")),
+            int(getattr(record, "face_id", -1) if getattr(record, "face_id", None) is not None else -1),
+        )
+
+    def _snapshot_options(self) -> Dict[Tuple[str, str, int], Tuple[bool, bool, float]]:
+        """Remember checked/as-points/extension state before sorting or rebuilding."""
+        snapshot = {}
+        for child in self._iter_record_items():
+            record = child.data(0, Qt.UserRole)
+            checkbox_widget = self.tree.itemWidget(child, self.COL_AS_POINTS)
+            extension_widget = self.tree.itemWidget(child, self.COL_EXTEND)
+            snapshot[self._record_key(record)] = (
+                child.checkState(0) == Qt.Checked,
+                bool(
+                    checkbox_widget is not None
+                    and isinstance(checkbox_widget, QCheckBox)
+                    and checkbox_widget.isChecked()
+                ),
+                float(extension_widget.value())
+                if extension_widget is not None and isinstance(extension_widget, QDoubleSpinBox)
+                else 0.0,
+            )
+        return snapshot
+
+    def _sort_records(self, records):
+        """Sort records using the bridge sort API when available."""
+        sort_by = self.sort_combo.currentData() or "collection_name"
+        reverse = self.sort_desc_checkbox.isChecked()
+        if self._pzero_bridge is not None and hasattr(self._pzero_bridge, "sort_entity_records"):
+            return self._pzero_bridge.sort_entity_records(list(records), sort_by=sort_by, reverse=reverse)
+
+        def text(value):
+            return str(value or "").casefold()
+
+        fallback_keys = {
+            "role": lambda rec: (text(getattr(rec, "role", "")), text(rec.topology), text(rec.name)),
+            "topology": lambda rec: (text(rec.topology), text(getattr(rec, "role", "")), text(rec.name)),
+            "name": lambda rec: text(rec.name),
+            "feature": lambda rec: (text(getattr(rec, "feature", "")), text(rec.name)),
+            "scenario": lambda rec: (text(getattr(rec, "scenario", "")), text(rec.name)),
+            "points": lambda rec: (int(rec.point_count or 0), text(rec.name)),
+        }
+        key_func = fallback_keys.get(
+            sort_by,
+            lambda rec: (text(rec.collection_label), text(rec.name)),
+        )
+        return sorted(records, key=key_func, reverse=reverse)
+
+    def _group_label_for_record(self, record) -> str:
+        """Group rows around the active sort dimension."""
+        sort_by = self.sort_combo.currentData() or "collection_name"
+        if sort_by == "role":
+            return getattr(record, "role", "") or "(No Role)"
+        if sort_by in ("topology", "type"):
+            return getattr(record, "topology", "") or "(No Type)"
+        if sort_by == "feature":
+            return getattr(record, "feature", "") or "(No Feature)"
+        if sort_by == "scenario":
+            return getattr(record, "scenario", "") or "(No Scenario)"
+        if sort_by in ("name", "points"):
+            return "All Entities"
+        return record.collection_label
+
+    def _populate_tree(self) -> None:
+        """Rebuild the import tree with the active sort/grouping."""
+        snapshot = self._snapshot_options() if hasattr(self, "tree") else {}
+        self.tree.clear()
+        self._record_items = []
+
+        grouped: Dict[str, List["PZeroEntityRecord"]] = {}
+        for record in self._sort_records(self._entity_records):
+            grouped.setdefault(self._group_label_for_record(record), []).append(record)
+
+        for group_label, records in grouped.items():
+            parent_item = QTreeWidgetItem([group_label, "", "", "", "", "", "", "", ""])
+            parent_item.setFirstColumnSpanned(True)
+            parent_item.setFlags(Qt.ItemIsEnabled)
+            self.tree.addTopLevelItem(parent_item)
+
+            for record in records:
+                saved_options = snapshot.get(self._record_key(record))
+                child = self._create_record_item(record, saved_options)
+                parent_item.addChild(child)
+                self._install_record_widgets(child, record, saved_options)
+                self._record_items.append(child)
+
+            parent_item.setExpanded(True)
+
+    def _create_record_item(self, record, saved_options=None):
+        checked = (saved_options or (False, False, 0.0))[0]
+        child = QTreeWidgetItem(
+            [
+                "",
+                record.name,
+                record.topology or "-",
+                getattr(record, "role", "") or "-",
+                getattr(record, "feature", "") or "-",
+                getattr(record, "scenario", "") or "-",
+                str(record.point_count),
+                "",
+                "",
+            ]
+        )
+        child.setData(0, Qt.UserRole, record)
+        child.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
+        child.setCheckState(0, Qt.Checked if checked else Qt.Unchecked)
+        return child
+
+    def _install_record_widgets(self, child, record, saved_options=None):
+        """Install checkbox/spinbox widgets after the row has been inserted."""
+        supports_extension = record.topology in {"TriSurf", "PolyLine", "XsPolyLine"}
+        supports_as_points = self._supports_as_points(record)
+        _checked, load_as_points, extension_factor = saved_options or (False, False, 0.0)
+
+        if supports_as_points:
+            checkbox = QCheckBox(self.tree)
+            checkbox.setChecked(load_as_points)
+            checkbox.setToolTip(self._as_points_tooltip(record))
+            checkbox.show()
+            self.tree.setItemWidget(child, self.COL_AS_POINTS, checkbox)
+        else:
+            child.setText(self.COL_AS_POINTS, "-")
+
+        if supports_extension:
+            spinbox = QDoubleSpinBox(self.tree)
+            spinbox.setDecimals(2)
+            spinbox.setRange(0.0, 1.0)
+            spinbox.setSingleStep(0.05)
+            spinbox.setValue(extension_factor)
+            if record.topology == "TriSurf":
+                spinbox.setToolTip(
+                    "Extend this surface footprint by the selected factor (0.2 = 20%)."
+                )
+            else:
+                extension_mode = _polyline_extension_mode_for_role(getattr(record, "role", ""))
+                spinbox.setToolTip(
+                    "Extend this polyline by the selected factor. "
+                    f"{extension_mode.capitalize()} extension is chosen from its role."
+                )
+            spinbox.setKeyboardTracking(False)
+            spinbox.show()
+            self.tree.setItemWidget(child, self.COL_EXTEND, spinbox)
+        else:
+            child.setText(self.COL_EXTEND, "-")
+
+    def _iter_record_items(self):
+        for index in range(self.tree.topLevelItemCount()):
+            parent = self.tree.topLevelItem(index)
+            for child_index in range(parent.childCount()):
+                child = parent.child(child_index)
+                if child.data(0, Qt.UserRole) is not None:
+                    yield child
+
+    def _on_sort_changed(self, *_args) -> None:
+        self._populate_tree()
+
+    def _build_role_menu(self) -> QMenu:
+        menu = QMenu(self)
+        roles = sorted(
+            {
+                str(getattr(record, "role", "")).strip()
+                for record in self._entity_records
+                if str(getattr(record, "role", "")).strip()
+            },
+            key=str.casefold,
+        )
+        if not roles:
+            action = QAction("No roles available", self)
+            action.setEnabled(False)
+            menu.addAction(action)
+            return menu
+
+        for role in roles:
+            action = QAction(role, self)
+            action.triggered.connect(lambda _checked=False, role_name=role: self._set_checked_by_role(role_name, True))
+            menu.addAction(action)
+        return menu
+
+    def _set_checked_by_role(self, role: str, checked: bool) -> None:
+        target = str(role or "").casefold()
+        for child in self._iter_record_items():
+            record = child.data(0, Qt.UserRole)
+            if str(getattr(record, "role", "") or "").casefold() == target:
+                child.setCheckState(0, Qt.Checked if checked else Qt.Unchecked)
+
+    def _set_checked_by_topology(self, topologies: set, checked: bool) -> None:
+        normalized = {str(topology or "").casefold() for topology in topologies}
+        for child in self._iter_record_items():
+            record = child.data(0, Qt.UserRole)
+            if str(getattr(record, "topology", "") or "").casefold() in normalized:
+                child.setCheckState(0, Qt.Checked if checked else Qt.Unchecked)
+
+    def _set_checked_for_all(self, checked: bool) -> None:
+        for child in self._iter_record_items():
+            child.setCheckState(0, Qt.Checked if checked else Qt.Unchecked)
 
     def _supports_as_points(self, record) -> bool:
         """Return True when the record can be imported as XYZ points."""
