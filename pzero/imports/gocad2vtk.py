@@ -15,6 +15,7 @@ from vtk import (
     vtkCellArray,
     vtkDataArrayCollection,
     vtkFloatArray,
+    vtkIntArray,
     vtkLine,
     vtkTriangle,
     vtkVertex,
@@ -183,6 +184,9 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             curr_obj_points = vtkPoints()
             curr_obj_cells = vtkCellArray()
             curr_obj_properties_collection = vtkDataArrayCollection()
+            curr_obj_tface_ids = vtkIntArray()
+            curr_obj_tface_ids.SetName("GOCAD_TFACE")
+            curr_tface_id = 0
             properties_number = 0
 
             # Initialize color
@@ -265,8 +269,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
             pass
 
         elif clean_line[0] == "TFACE":
-            # see in the future if and how to start a new TFACE part here
-            pass
+            curr_tface_id += 1
 
         elif clean_line[0] in ["VRTX", "PVRTX", "SEG", "TRGL", "ATOM"]:
             # This inner condition is required to handle multipart entities.
@@ -384,6 +387,7 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 triangle.GetPointIds().SetId(1, int(clean_line[2]) - 1)
                 triangle.GetPointIds().SetId(2, int(clean_line[3]) - 1)
                 curr_obj_cells.InsertNextCell(triangle)
+                curr_obj_tface_ids.InsertNextValue(curr_tface_id)
 
         elif clean_line[0] == "BSTONE":
             # NOT YET IMPLEMENTED
@@ -426,6 +430,8 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 )
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 curr_obj_dict["vtk_obj"].SetPolys(curr_obj_cells)
+                if curr_obj_tface_ids.GetNumberOfTuples() == curr_obj_cells.GetNumberOfCells():
+                    curr_obj_dict["vtk_obj"].GetCellData().AddArray(curr_obj_tface_ids)
 
             if properties_number > 0:
                 for i in range(properties_number):

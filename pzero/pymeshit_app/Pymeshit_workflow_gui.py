@@ -153,6 +153,137 @@ def extend_surface_points(points: np.ndarray, extension_factor: float) -> np.nda
     return extended
 
 
+def extend_border_strip_points(
+    points: np.ndarray,
+    extension_factor: float,
+    triangles: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    """
+    Extend a split border strip past its two cut ends.
+
+    Split tube borders must overlap their neighbouring strips at the corner
+    cuts. A radial best-fit-plane extension can pull the cut edges apart, so
+    this grows only the two end columns along the strip's footprint direction.
+    """
+    if points is None:
+        return points
+    if extension_factor <= 0.0:
+        return np.asarray(points, dtype=float).copy()
+
+    pts = np.asarray(points, dtype=float)
+    if pts.ndim != 2 or pts.shape[1] < 3 or pts.shape[0] < 4:
+        return extend_surface_points(pts, extension_factor)
+
+    unique_xy, vertex_column_ids = np.unique(
+        np.round(pts[:, :2], decimals=6),
+        axis=0,
+        return_inverse=True,
+    )
+    if len(unique_xy) < 2:
+        return pts.copy()
+
+    path_columns = []
+    if triangles is not None:
+        path_columns = _trace_open_xy_column_path(vertex_column_ids, unique_xy, triangles)
+    if not path_columns:
+        path_columns = _pca_order_xy_columns(unique_xy)
+    if len(path_columns) < 2:
+        return extend_surface_points(pts, extension_factor)
+
+    path_xy = unique_xy[path_columns]
+    segment_lengths = np.linalg.norm(np.diff(path_xy, axis=0), axis=1)
+    total_length = float(np.sum(segment_lengths))
+    if total_length <= 0.0:
+        return pts.copy()
+
+    start_tangent = _path_end_tangent(path_xy, from_start=True)
+    end_tangent = _path_end_tangent(path_xy, from_start=False)
+    if start_tangent is None or end_tangent is None:
+        return extend_surface_points(pts, extension_factor)
+
+    extension_distance = 0.5 * float(extension_factor) * total_length
+    extended = pts.copy()
+    start_column = int(path_columns[0])
+    end_column = int(path_columns[-1])
+    extended[vertex_column_ids == start_column, :2] -= start_tangent * extension_distance
+    extended[vertex_column_ids == end_column, :2] += end_tangent * extension_distance
+    return extended
+
+
+def _trace_open_xy_column_path(
+    vertex_column_ids: np.ndarray,
+    unique_xy: np.ndarray,
+    triangles: np.ndarray,
+) -> List[int]:
+    """Trace the open XY column path for one split tube strip."""
+    try:
+        triangles = np.asarray(triangles, dtype=np.int32)
+    except Exception:
+        return []
+    if triangles.ndim != 2 or triangles.shape[0] == 0 or triangles.shape[1] < 3:
+        return []
+
+    adjacency: Dict[int, set] = {}
+    for tri in triangles[:, :3]:
+        columns = sorted({int(vertex_column_ids[int(point_id)]) for point_id in tri})
+        if len(columns) != 2:
+            continue
+        a, b = columns
+        adjacency.setdefault(a, set()).add(b)
+        adjacency.setdefault(b, set()).add(a)
+
+    endpoints = [column for column, neighbours in adjacency.items() if len(neighbours) == 1]
+    if len(endpoints) != 2:
+        return []
+    if any(len(neighbours) > 2 for neighbours in adjacency.values()):
+        return []
+
+    start = min(endpoints, key=lambda idx: (unique_xy[idx, 0], unique_xy[idx, 1]))
+    path = [start]
+    previous = None
+    current = start
+    while True:
+        next_candidates = [idx for idx in adjacency[current] if idx != previous]
+        if not next_candidates:
+            break
+        next_idx = next_candidates[0]
+        path.append(next_idx)
+        previous, current = current, next_idx
+        if current in endpoints and current != start:
+            break
+        if len(path) > len(adjacency):
+            return []
+
+    return path if len(path) == len(adjacency) else []
+
+
+def _pca_order_xy_columns(unique_xy: np.ndarray) -> List[int]:
+    """Fallback ordering for boundary-only points without triangle connectivity."""
+    centered = unique_xy - np.mean(unique_xy, axis=0)
+    try:
+        _u, _s, vh = np.linalg.svd(centered, full_matrices=False)
+    except np.linalg.LinAlgError:
+        return []
+    if vh.shape[0] == 0:
+        return []
+    projections = centered @ vh[0]
+    return [int(idx) for idx in np.argsort(projections)]
+
+
+def _path_end_tangent(path_xy: np.ndarray, from_start: bool) -> Optional[np.ndarray]:
+    """Return a stable unit tangent at one end of a footprint path."""
+    if len(path_xy) < 2:
+        return None
+    indices = range(1, len(path_xy)) if from_start else range(len(path_xy) - 2, -1, -1)
+    origin = path_xy[0] if from_start else path_xy[-1]
+    for idx in indices:
+        vector = path_xy[idx] - origin if from_start else origin - path_xy[idx]
+        length = float(np.linalg.norm(vector))
+        if length > 0.0:
+            return vector / length
+    return None
+
+
 def _polyline_extension_mode_for_role(role: Optional[str]) -> str:
     """Choose how a polyline grows based on its geological role."""
     normalized = str(role or "").strip().lower()
@@ -14991,25 +15122,135 @@ segmentation, triangulation, and visualization.
                 "None of the selected PZero entities provided usable point data.",
             )
 
+    def _append_imported_trisurf_dataset(
+        self,
+        record,
+        vertices,
+        triangles,
+        boundary_hull,
+        extension_factor: float = 0.0,
+        dataset_name: Optional[str] = None,
+        split_from_trisurf: bool = False,
+    ) -> bool:
+        """Append one PZero TriSurf face/component as a PyMeshIt dataset."""
+        vertices = np.asarray(vertices, dtype=float)
+        triangles = np.asarray(triangles, dtype=np.int32)
+        if vertices.size == 0 or triangles.size == 0:
+            return False
+
+        use_border_strip_extension = (
+            split_from_trisurf
+            and self._record_is_border_like_trisurf(record)
+        )
+        if extension_factor > 0.0:
+            if use_border_strip_extension:
+                vertices = extend_border_strip_points(
+                    vertices,
+                    extension_factor,
+                    triangles=triangles,
+                )
+            else:
+                vertices = extend_surface_points(vertices, extension_factor)
+
+        dataset = {
+            "name": self._make_unique_dataset_name(dataset_name or record.name),
+            "type": "TriSurf",
+            "points": vertices,
+            "visible": True,
+            "color": self._get_next_color(),
+            "source": "PZERO",
+            "collection": record.collection_label,
+            "collection_key": record.collection_key,
+            "uid": record.uid,
+            "source_topology": record.topology,
+            "role": getattr(record, "role", ""),
+            "feature": getattr(record, "feature", ""),
+            "scenario": getattr(record, "scenario", ""),
+            "loaded_as_points": False,
+            "split_from_trisurf": bool(split_from_trisurf),
+            "source_triangulation_result": {
+                "vertices": vertices,
+                "triangles": triangles,
+            },
+        }
+        if extension_factor > 0.0:
+            dataset["extension_factor"] = extension_factor
+            dataset["surface_extension_factor"] = extension_factor
+
+        boundary_points_for_dataset = boundary_hull
+        if boundary_points_for_dataset is not None and len(boundary_points_for_dataset) > 0:
+            if extension_factor > 0.0:
+                if use_border_strip_extension:
+                    boundary_points_for_dataset = extend_border_strip_points(
+                        boundary_points_for_dataset,
+                        extension_factor,
+                    )
+                else:
+                    boundary_points_for_dataset = extend_surface_points(
+                        boundary_points_for_dataset, extension_factor
+                    )
+            dataset["imported_boundary_points"] = np.asarray(
+                boundary_points_for_dataset, dtype=float
+            )
+            dataset["hull_points"] = self._format_boundary_points_as_hull(
+                dataset["imported_boundary_points"]
+            )
+            if dataset["hull_points"] is None:
+                raise ValueError("Imported TriSurf boundary could not be converted into a hull loop")
+        else:
+            from scipy.spatial import ConvexHull
+
+            try:
+                hull = ConvexHull(vertices)
+                dataset["imported_boundary_points"] = vertices[hull.vertices]
+                dataset["hull_points"] = self._format_boundary_points_as_hull(
+                    dataset["imported_boundary_points"]
+                )
+                if dataset["hull_points"] is None:
+                    raise ValueError("Fallback hull could not be converted into a closed loop")
+            except Exception as exc:
+                logger.warning("Failed to compute fallback convex hull for %s: %s", record.name, exc)
+
+        self.datasets.append(dataset)
+        if hasattr(self, "tri_use_edges_checkbox"):
+            self.tri_use_edges_checkbox.setChecked(True)
+        if hasattr(self, "mesh_use_edges_checkbox"):
+            self.mesh_use_edges_checkbox.setChecked(True)
+        return True
+
+    @staticmethod
+    def _record_is_border_like_trisurf(record) -> bool:
+        """Return True for geology TriSurfs that look like imported borders."""
+        if getattr(record, "topology", None) != "TriSurf":
+            return False
+        text = " ".join(
+            str(getattr(record, attr, "") or "").casefold()
+            for attr in ("name", "role", "feature")
+        )
+        return any(token in text for token in ("border", "boundary", "outer", "tube"))
+
     def _import_pzero_records(self, records):
         """
         Convert selected PZero entities to datasets.
         
         Parameters
         ----------
-        records : List[Tuple[PZeroEntityRecord, bool, float]]
-            Tuples containing (record, load_as_points, extension_factor). extension_factor
-            defaults to 0.0 for dialogs that do not expose the per-geometry control.
+        records : List[Tuple[PZeroEntityRecord, bool, float, bool]]
+            Tuples containing (record, load_as_points, extension_factor, split_faces).
+            Older tuples without split_faces are still accepted.
         """
         loaded = 0
         skipped = 0
 
         for record_tuple in records:
             extension_factor = 0.0
+            split_faces = False
 
             if isinstance(record_tuple, tuple):
                 tuple_len = len(record_tuple)
-                if tuple_len == 3:
+                if tuple_len == 4:
+                    record, load_as_points, extension_factor, split_faces = record_tuple
+                elif tuple_len == 3:
                     record, load_as_points, extension_factor = record_tuple
                 elif tuple_len == 2:
                     record, load_as_points = record_tuple
@@ -15042,7 +15283,43 @@ segmentation, triangulation, and visualization.
                     record.topology, load_as_points=bool(load_as_points)
                 )
                 
-                if is_trisurf and not load_as_points:
+                if is_trisurf and split_faces and not load_as_points:
+                    components = self.pzero_bridge.load_trisurf_components(
+                        record.collection_key, record.uid
+                    )
+                    if not components:
+                        logger.warning(
+                            "Failed to split TriSurf %s (%s) into faces",
+                            record.uid, record.name,
+                        )
+                        skipped += 1
+                        continue
+
+                    component_count = 0
+                    for face_idx, (vertices, triangles, boundary_hull) in enumerate(components, start=1):
+                        face_name = f"{record.name} - Face {face_idx}"
+                        if self._append_imported_trisurf_dataset(
+                            record,
+                            vertices,
+                            triangles,
+                            boundary_hull,
+                            extension_factor=extension_factor,
+                            dataset_name=face_name,
+                            split_from_trisurf=True,
+                        ):
+                            component_count += 1
+
+                    if component_count == 0:
+                        skipped += 1
+                        continue
+
+                    loaded += component_count
+                    logger.info(
+                        "Loaded TriSurf %s as %d split face dataset(s)",
+                        record.name, component_count,
+                    )
+
+                elif is_trisurf and not load_as_points:
                     # For TriSurf: extract triangles and boundary edges directly
                     tri_data = self.pzero_bridge.load_triangles(
                         record.collection_key, record.uid
@@ -15060,86 +15337,20 @@ segmentation, triangulation, and visualization.
                         continue
                     
                     vertices, triangles = tri_data
-                    if extension_factor > 0.0:
-                        vertices = extend_surface_points(vertices, extension_factor)
-                    
-                    # Preserve the source mesh, but keep the TriSurf in the normal
-                    # hull -> segmentation -> triangulation workflow.
-                    dataset_name = self._make_unique_dataset_name(record.name)
-                    dataset = {
-                        "name": dataset_name,
-                        "type": "TriSurf",  # Mark as TriSurf
-                        "points": vertices,  # Keep points for compatibility
-                        "visible": True,
-                        "color": self._get_next_color(),
-                        "source": "PZERO",
-                        "collection": record.collection_label,
-                        "collection_key": record.collection_key,
-                        "uid": record.uid,
-                        "source_topology": record.topology,
-                        "role": record_role,
-                        "feature": getattr(record, "feature", ""),
-                        "scenario": getattr(record, "scenario", ""),
-                        "loaded_as_points": False,
-                        "source_triangulation_result": {
-                            "vertices": vertices,
-                            "triangles": triangles,
-                        },
-                    }
-                    if extension_factor > 0.0:
-                        dataset["extension_factor"] = extension_factor
-                        dataset["surface_extension_factor"] = extension_factor
-                    
-                    # Extract convex hull from boundary edges
-                    boundary_points_for_dataset = boundary_hull
-                    if (
-                        boundary_points_for_dataset is not None
-                        and len(boundary_points_for_dataset) > 0
+                    if self._append_imported_trisurf_dataset(
+                        record,
+                        vertices,
+                        triangles,
+                        boundary_hull,
+                        extension_factor=extension_factor,
                     ):
-                        if extension_factor > 0.0:
-                            boundary_points_for_dataset = extend_surface_points(
-                                boundary_points_for_dataset, extension_factor
-                            )
-                        dataset["imported_boundary_points"] = np.asarray(
-                            boundary_points_for_dataset, dtype=float
-                        )
-                        dataset["hull_points"] = self._format_boundary_points_as_hull(
-                            dataset["imported_boundary_points"]
-                        )
-                        if dataset["hull_points"] is None:
-                            raise ValueError("Imported TriSurf boundary could not be converted into a hull loop")
+                        loaded += 1
                         logger.info(
-                            "Extracted %d boundary points for TriSurf %s",
-                            len(boundary_points_for_dataset), record.name
+                            "Loaded TriSurf %s: %d vertices, %d source triangles; boundary workflow enabled",
+                            record.name, len(vertices), len(triangles)
                         )
                     else:
-                        logger.warning(
-                            "Could not extract boundary edges for TriSurf %s, using point cloud convex hull",
-                            record.name
-                        )
-                        # Fallback: compute convex hull from vertices
-                        from scipy.spatial import ConvexHull
-                        try:
-                            hull = ConvexHull(vertices)
-                            dataset["imported_boundary_points"] = vertices[hull.vertices]
-                            dataset["hull_points"] = self._format_boundary_points_as_hull(
-                                dataset["imported_boundary_points"]
-                            )
-                            if dataset["hull_points"] is None:
-                                raise ValueError("Fallback hull could not be converted into a closed loop")
-                        except Exception as e:
-                            logger.warning(f"Failed to compute fallback convex hull: {e}")
-                    
-                    self.datasets.append(dataset)
-                    loaded += 1
-                    if hasattr(self, "tri_use_edges_checkbox"):
-                        self.tri_use_edges_checkbox.setChecked(True)
-                    if hasattr(self, "mesh_use_edges_checkbox"):
-                        self.mesh_use_edges_checkbox.setChecked(True)
-                    logger.info(
-                        "Loaded TriSurf %s: %d vertices, %d source triangles; boundary workflow enabled",
-                        record.name, len(vertices), len(triangles)
-                    )
+                        skipped += 1
                     
                 elif is_trisurf and load_as_points:
                     # Load TriSurf as points when "Load as Points" checkbox is checked
@@ -28008,7 +28219,7 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
     """
     Unified table that shows both loaded datasets and accepts drops from PZero.
     
-    Each row shows: Name, Type, Extension Factor (spinbox), As Points (checkbox), Status
+    Each row shows: Name, Type, Extension Factor, As Points, Split Faces, Status
     Drag-drop from PZero adds items as "Pending" which can then be loaded.
     """
     
@@ -28022,7 +28233,8 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
     COL_TYPE = 1
     COL_EXTEND = 2
     COL_AS_POINTS = 3
-    COL_STATUS = 4
+    COL_SPLIT_FACES = 4
+    COL_STATUS = 5
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -28030,8 +28242,8 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         self._pending_items = []  # List of pending PZero records
         
         # Setup columns
-        self.setColumnCount(5)
-        self.setHeaderLabels(["Name", "Type", "Extend", "As Points", "Status"])
+        self.setColumnCount(6)
+        self.setHeaderLabels(["Name", "Type", "Extend", "As Points", "Split Faces", "Status"])
         self.setAlternatingRowColors(True)
         self.setRootIsDecorated(False)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -28050,9 +28262,11 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         header.setSectionResizeMode(self.COL_TYPE, QHeaderView.ResizeToContents)
         header.setSectionResizeMode(self.COL_EXTEND, QHeaderView.Fixed)
         header.setSectionResizeMode(self.COL_AS_POINTS, QHeaderView.Fixed)
+        header.setSectionResizeMode(self.COL_SPLIT_FACES, QHeaderView.Fixed)
         header.setSectionResizeMode(self.COL_STATUS, QHeaderView.ResizeToContents)
         self.setColumnWidth(self.COL_EXTEND, 70)
         self.setColumnWidth(self.COL_AS_POINTS, 70)
+        self.setColumnWidth(self.COL_SPLIT_FACES, 90)
     
     def dragEnterEvent(self, event):
         """Accept drag events from PZero tables."""
@@ -28172,11 +28386,16 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         self.addTopLevelItem(item)
         
         # Add Extension Factor spinbox
+        supports_split_faces = self._supports_split_faces(record)
+        default_extension = 0.0
+        if supports_split_faces and self._record_is_border_like_trisurf(record):
+            default_extension = float(getattr(self._parent_gui, "border_extension_factor", 0.2))
+
         extend_spin = QDoubleSpinBox()
         extend_spin.setRange(0.0, 1.0)
         extend_spin.setSingleStep(0.05)
         extend_spin.setDecimals(2)
-        extend_spin.setValue(0.0)
+        extend_spin.setValue(default_extension)
         extend_spin.setToolTip("Extension factor (0.2 = 20% extension)")
         self.setItemWidget(item, self.COL_EXTEND, extend_spin)
         
@@ -28193,6 +28412,17 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         cb_layout.setAlignment(Qt.AlignCenter)
         cb_layout.setContentsMargins(0, 0, 0, 0)
         self.setItemWidget(item, self.COL_AS_POINTS, cb_widget)
+
+        split_faces_cb = QCheckBox()
+        split_faces_cb.setChecked(False)
+        split_faces_cb.setToolTip("Split a multi-part TriSurf into separate connected face datasets.")
+        split_faces_cb.setEnabled(supports_split_faces)
+        split_widget = QWidget()
+        split_layout = QHBoxLayout(split_widget)
+        split_layout.addWidget(split_faces_cb)
+        split_layout.setAlignment(Qt.AlignCenter)
+        split_layout.setContentsMargins(0, 0, 0, 0)
+        self.setItemWidget(item, self.COL_SPLIT_FACES, split_widget)
 
         supports_extension = record.topology in {"TriSurf", "PolyLine", "XsPolyLine"}
         extend_spin.setEnabled(supports_extension)
@@ -28217,6 +28447,7 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
             'item': item,
             'extend_spin': extend_spin,
             'as_points_cb': as_points_cb,
+            'split_faces_cb': split_faces_cb,
         })
         
         # Select the new item
@@ -28228,6 +28459,25 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         if bridge is not None:
             return bridge.supports_point_import_option(record.topology)
         return record.topology in {"TriSurf", "PolyLine", "XsPolyLine"}
+
+    @staticmethod
+    def _supports_split_faces(record) -> bool:
+        """Return True when the row can be split into connected TriSurf faces."""
+        return (
+            getattr(record, "topology", None) == "TriSurf"
+            and getattr(record, "collection_key", None) == "geol_coll"
+        )
+
+    @staticmethod
+    def _record_is_border_like_trisurf(record) -> bool:
+        """Return True for geology TriSurfs that look like imported borders."""
+        if getattr(record, "topology", None) != "TriSurf":
+            return False
+        text = " ".join(
+            str(getattr(record, attr, "") or "").casefold()
+            for attr in ("name", "role", "feature")
+        )
+        return any(token in text for token in ("border", "boundary", "outer", "tube"))
 
     @staticmethod
     def _as_points_tooltip(record) -> str:
@@ -28266,6 +28516,7 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
             item.setText(self.COL_AS_POINTS, "Yes")
         else:
             item.setText(self.COL_AS_POINTS, "-")
+        item.setText(self.COL_SPLIT_FACES, "Yes" if dataset.get("split_from_trisurf", False) else "-")
     
     def get_pending_records(self) -> list:
         """Get all pending records with their options."""
@@ -28274,7 +28525,8 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
             record = pending['record']
             extend_factor = pending['extend_spin'].value()
             as_points = pending['as_points_cb'].isChecked()
-            records.append((record, as_points, extend_factor))
+            split_faces = pending.get('split_faces_cb') is not None and pending['split_faces_cb'].isChecked()
+            records.append((record, as_points, extend_factor, split_faces))
         return records
     
     def clear_pending(self):
@@ -28345,6 +28597,7 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
                     ext_factor = dataset.get('extension_factor', dataset.get('surface_extension_factor', 0.0))
                     item.setText(self.COL_EXTEND, f"{ext_factor:.2f}")
                     item.setText(self.COL_AS_POINTS, "Yes" if dataset.get("loaded_as_points", False) else "-")
+                    item.setText(self.COL_SPLIT_FACES, "Yes" if dataset.get("split_from_trisurf", False) else "-")
 
             self.clearSelection()
             if 0 <= selected_index < len(datasets):
@@ -28398,7 +28651,8 @@ class PZeroEntitySelectionDialog(QDialog):
     COL_SCENARIO = 5
     COL_POINTS = 6
     COL_AS_POINTS = 7
-    COL_EXTEND = 8
+    COL_SPLIT_FACES = 8
+    COL_EXTEND = 9
 
     def __init__(self, parent, entity_records, bridge=None):
         super().__init__(parent)
@@ -28459,7 +28713,7 @@ class PZeroEntitySelectionDialog(QDialog):
         layout.addLayout(controls_layout)
 
         self.tree = QTreeWidget()
-        self.tree.setColumnCount(9)
+        self.tree.setColumnCount(10)
         self.tree.setHeaderLabels(
             [
                 "Collection",
@@ -28470,6 +28724,7 @@ class PZeroEntitySelectionDialog(QDialog):
                 "Scenario",
                 "Points",
                 "Load as Points",
+                "Split Faces",
                 "Extend Factor",
             ]
         )
@@ -28482,6 +28737,9 @@ class PZeroEntitySelectionDialog(QDialog):
             if i == self.COL_AS_POINTS:
                 header.setSectionResizeMode(i, QHeaderView.Fixed)
                 self.tree.setColumnWidth(i, 120)
+            elif i == self.COL_SPLIT_FACES:
+                header.setSectionResizeMode(i, QHeaderView.Fixed)
+                self.tree.setColumnWidth(i, 110)
             elif i == self.COL_EXTEND:
                 header.setSectionResizeMode(i, QHeaderView.Fixed)
                 self.tree.setColumnWidth(i, 130)
@@ -28505,12 +28763,13 @@ class PZeroEntitySelectionDialog(QDialog):
             int(getattr(record, "face_id", -1) if getattr(record, "face_id", None) is not None else -1),
         )
 
-    def _snapshot_options(self) -> Dict[Tuple[str, str, int], Tuple[bool, bool, float]]:
+    def _snapshot_options(self) -> Dict[Tuple[str, str, int], Tuple[bool, bool, bool, float]]:
         """Remember checked/as-points/extension state before sorting or rebuilding."""
         snapshot = {}
         for child in self._iter_record_items():
             record = child.data(0, Qt.UserRole)
             checkbox_widget = self.tree.itemWidget(child, self.COL_AS_POINTS)
+            split_widget = self.tree.itemWidget(child, self.COL_SPLIT_FACES)
             extension_widget = self.tree.itemWidget(child, self.COL_EXTEND)
             snapshot[self._record_key(record)] = (
                 child.checkState(0) == Qt.Checked,
@@ -28518,6 +28777,11 @@ class PZeroEntitySelectionDialog(QDialog):
                     checkbox_widget is not None
                     and isinstance(checkbox_widget, QCheckBox)
                     and checkbox_widget.isChecked()
+                ),
+                bool(
+                    split_widget is not None
+                    and isinstance(split_widget, QCheckBox)
+                    and split_widget.isChecked()
                 ),
                 float(extension_widget.value())
                 if extension_widget is not None and isinstance(extension_widget, QDoubleSpinBox)
@@ -28575,7 +28839,7 @@ class PZeroEntitySelectionDialog(QDialog):
             grouped.setdefault(self._group_label_for_record(record), []).append(record)
 
         for group_label, records in grouped.items():
-            parent_item = QTreeWidgetItem([group_label, "", "", "", "", "", "", "", ""])
+            parent_item = QTreeWidgetItem([group_label, "", "", "", "", "", "", "", "", ""])
             parent_item.setFirstColumnSpanned(True)
             parent_item.setFlags(Qt.ItemIsEnabled)
             self.tree.addTopLevelItem(parent_item)
@@ -28590,7 +28854,7 @@ class PZeroEntitySelectionDialog(QDialog):
             parent_item.setExpanded(True)
 
     def _create_record_item(self, record, saved_options=None):
-        checked = (saved_options or (False, False, 0.0))[0]
+        checked = (saved_options or (False, False, False, 0.0))[0]
         child = QTreeWidgetItem(
             [
                 "",
@@ -28600,6 +28864,7 @@ class PZeroEntitySelectionDialog(QDialog):
                 getattr(record, "feature", "") or "-",
                 getattr(record, "scenario", "") or "-",
                 str(record.point_count),
+                "",
                 "",
                 "",
             ]
@@ -28613,7 +28878,8 @@ class PZeroEntitySelectionDialog(QDialog):
         """Install checkbox/spinbox widgets after the row has been inserted."""
         supports_extension = record.topology in {"TriSurf", "PolyLine", "XsPolyLine"}
         supports_as_points = self._supports_as_points(record)
-        _checked, load_as_points, extension_factor = saved_options or (False, False, 0.0)
+        supports_split_faces = self._supports_split_faces(record)
+        _checked, load_as_points, split_faces, extension_factor = saved_options or (False, False, False, 0.0)
 
         if supports_as_points:
             checkbox = QCheckBox(self.tree)
@@ -28624,11 +28890,28 @@ class PZeroEntitySelectionDialog(QDialog):
         else:
             child.setText(self.COL_AS_POINTS, "-")
 
+        if supports_split_faces:
+            split_checkbox = QCheckBox(self.tree)
+            split_checkbox.setChecked(split_faces)
+            split_checkbox.setToolTip(
+                "Split a multi-part TriSurf into separate connected face datasets."
+            )
+            split_checkbox.show()
+            self.tree.setItemWidget(child, self.COL_SPLIT_FACES, split_checkbox)
+        else:
+            child.setText(self.COL_SPLIT_FACES, "-")
+
         if supports_extension:
             spinbox = QDoubleSpinBox(self.tree)
             spinbox.setDecimals(2)
             spinbox.setRange(0.0, 1.0)
             spinbox.setSingleStep(0.05)
+            if (
+                saved_options is None
+                and supports_split_faces
+                and self._record_is_border_like_trisurf(record)
+            ):
+                extension_factor = float(getattr(self.parent(), "border_extension_factor", 0.2))
             spinbox.setValue(extension_factor)
             if record.topology == "TriSurf":
                 spinbox.setToolTip(
@@ -28704,6 +28987,25 @@ class PZeroEntitySelectionDialog(QDialog):
         return record.topology in {"TriSurf", "PolyLine", "XsPolyLine"}
 
     @staticmethod
+    def _supports_split_faces(record) -> bool:
+        """Return True when a TriSurf can be split into connected face datasets."""
+        return (
+            getattr(record, "topology", None) == "TriSurf"
+            and getattr(record, "collection_key", None) == "geol_coll"
+        )
+
+    @staticmethod
+    def _record_is_border_like_trisurf(record) -> bool:
+        """Return True for geology TriSurfs that look like imported borders."""
+        if getattr(record, "topology", None) != "TriSurf":
+            return False
+        text = " ".join(
+            str(getattr(record, attr, "") or "").casefold()
+            for attr in ("name", "role", "feature")
+        )
+        return any(token in text for token in ("border", "boundary", "outer", "tube"))
+
+    @staticmethod
     def _as_points_tooltip(record) -> str:
         """Tooltip text for the advanced import checkbox."""
         if record.topology == "TriSurf":
@@ -28718,9 +29020,10 @@ class PZeroEntitySelectionDialog(QDialog):
         
         Returns
         -------
-        List[Tuple[PZeroEntityRecord, bool, float]]
-            Tuples of (record, load_as_points, extension_factor). extension_factor equals
-            the per-geometry extend factor selected in the table (0.0 if not applicable).
+        List[Tuple[PZeroEntityRecord, bool, float, bool]]
+            Tuples of (record, load_as_points, extension_factor, split_faces).
+            extension_factor equals the per-geometry extend factor selected in
+            the table (0.0 if not applicable).
         """
         selections = []
         for index in range(self.tree.topLevelItemCount()):
@@ -28736,6 +29039,12 @@ class PZeroEntitySelectionDialog(QDialog):
                         and isinstance(checkbox_widget, QCheckBox)
                         and checkbox_widget.isChecked()
                     )
+                    split_widget = self.tree.itemWidget(child, self.COL_SPLIT_FACES)
+                    split_faces = (
+                        split_widget is not None
+                        and isinstance(split_widget, QCheckBox)
+                        and split_widget.isChecked()
+                    )
                     extension_widget = self.tree.itemWidget(child, self.COL_EXTEND)
                     extension_factor = 0.0
                     if (
@@ -28743,7 +29052,7 @@ class PZeroEntitySelectionDialog(QDialog):
                         and isinstance(extension_widget, QDoubleSpinBox)
                     ):
                         extension_factor = extension_widget.value()
-                    selections.append((record, load_as_points, extension_factor))
+                    selections.append((record, load_as_points, extension_factor, split_faces))
         return selections
 
 if __name__ == "__main__":

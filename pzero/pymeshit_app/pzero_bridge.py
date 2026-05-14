@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -295,6 +296,39 @@ class PZeroPymeshitBridge:
         
         return vertices, triangles
 
+    def load_trisurf_components(
+        self, collection_key: str, uid: str
+    ) -> List[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]]:
+        """
+        Extract disconnected triangle components from a TriSurf entity.
+
+        GOCAD border files can contain several TFACE parts that PZero stores as
+        one geology TriSurf. PyMeshIt needs those independent border faces as
+        separate surfaces, so split by triangle connectivity and provide each
+        component's vertices, triangles, and ordered boundary loop.
+        """
+        collection = getattr(self._project, collection_key, None)
+        vtk_obj = None
+        if collection is not None and hasattr(collection, "get_uid_vtk_obj"):
+            vtk_obj = collection.get_uid_vtk_obj(uid)
+
+        tri_data = self.load_triangles(collection_key, uid)
+        if tri_data is None:
+            return []
+
+        vertices, triangles = tri_data
+        tface_ids = _get_cell_data_array(vtk_obj, "GOCAD_TFACE")
+        if tface_ids is not None and len(tface_ids) == len(triangles):
+            components = _split_triangles_by_cell_labels(vertices, triangles, tface_ids)
+            if len(components) > 1:
+                return components
+
+        tube_side_components = _split_tube_surface_by_direction_changes(vertices, triangles)
+        if len(tube_side_components) > 1:
+            return tube_side_components
+
+        return _split_triangles_by_connected_components(vertices, triangles)
+
     def load_boundary_edges(
         self, collection_key: str, uid: str
     ) -> Optional[np.ndarray]:
@@ -392,6 +426,451 @@ def _vtk_dataset_to_points(vtk_obj) -> Optional[np.ndarray]:
         return None
     # Always return a float64 copy to avoid dangling references.
     return np.asarray(np_points, dtype=float).copy()
+
+
+def _get_cell_data_array(vtk_obj, array_name: str) -> Optional[np.ndarray]:
+    """Return a named VTK cell-data array as numpy, when available."""
+    if vtk_obj is None or not hasattr(vtk_obj, "GetCellData"):
+        return None
+    try:
+        vtk_array = vtk_obj.GetCellData().GetArray(array_name)
+    except Exception:
+        return None
+    if vtk_array is None:
+        return None
+    try:
+        return np.asarray(vtk_to_numpy(vtk_array)).copy()
+    except Exception:
+        return None
+
+
+def _split_triangles_by_cell_labels(
+    vertices: np.ndarray,
+    triangles: np.ndarray,
+    labels: np.ndarray,
+) -> List[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]]:
+    """Split triangles into components using a per-cell label such as GOCAD_TFACE."""
+    vertices = np.asarray(vertices, dtype=float)
+    triangles = np.asarray(triangles, dtype=np.int32)
+    labels = np.asarray(labels)
+    components: List[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]] = []
+
+    for label in sorted(np.unique(labels)):
+        tri_indices = np.where(labels == label)[0]
+        if len(tri_indices) == 0:
+            continue
+        component_global_triangles = triangles[tri_indices]
+        used_point_ids = np.unique(component_global_triangles.ravel())
+        point_id_map = {int(old_id): new_id for new_id, old_id in enumerate(used_point_ids)}
+        local_triangles = np.array(
+            [[point_id_map[int(point_id)] for point_id in tri] for tri in component_global_triangles],
+            dtype=np.int32,
+        )
+        local_vertices = vertices[used_point_ids].copy()
+        boundary_points = _component_boundary_loop(local_vertices, local_triangles)
+        components.append((local_vertices, local_triangles, boundary_points))
+
+    components.sort(key=lambda item: len(item[1]), reverse=True)
+    return components
+
+
+def _split_triangles_by_connected_components(
+    vertices: np.ndarray,
+    triangles: np.ndarray,
+) -> List[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]]:
+    """Split triangles into connected components using shared triangle vertices."""
+    vertices = np.asarray(vertices, dtype=float)
+    triangles = np.asarray(triangles, dtype=np.int32)
+    if vertices.ndim != 2 or vertices.shape[0] == 0:
+        return []
+    if triangles.ndim != 2 or triangles.shape[0] == 0 or triangles.shape[1] < 3:
+        return []
+
+    triangles = triangles[:, :3]
+    point_to_triangles: Dict[int, List[int]] = {}
+    for tri_idx, tri in enumerate(triangles):
+        for point_id in tri:
+            point_to_triangles.setdefault(int(point_id), []).append(tri_idx)
+
+    visited = np.zeros(len(triangles), dtype=bool)
+    components: List[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]] = []
+
+    for seed_idx in range(len(triangles)):
+        if visited[seed_idx]:
+            continue
+
+        stack = [seed_idx]
+        visited[seed_idx] = True
+        component_tri_indices = []
+
+        while stack:
+            tri_idx = stack.pop()
+            component_tri_indices.append(tri_idx)
+            for point_id in triangles[tri_idx]:
+                for neighbour_idx in point_to_triangles.get(int(point_id), []):
+                    if not visited[neighbour_idx]:
+                        visited[neighbour_idx] = True
+                        stack.append(neighbour_idx)
+
+        component_global_triangles = triangles[component_tri_indices]
+        used_point_ids = np.unique(component_global_triangles.ravel())
+        point_id_map = {int(old_id): new_id for new_id, old_id in enumerate(used_point_ids)}
+        local_triangles = np.array(
+            [[point_id_map[int(point_id)] for point_id in tri] for tri in component_global_triangles],
+            dtype=np.int32,
+        )
+        local_vertices = vertices[used_point_ids].copy()
+        boundary_points = _component_boundary_loop(local_vertices, local_triangles)
+        components.append((local_vertices, local_triangles, boundary_points))
+
+    components.sort(key=lambda item: len(item[1]), reverse=True)
+    return components
+
+
+def _split_tube_surface_by_direction_changes(
+    vertices: np.ndarray,
+    triangles: np.ndarray,
+) -> List[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]]:
+    """
+    Split a closed lateral border tube into direction-aware side faces.
+
+    SKUA/GOCAD borders often store top and bottom as separate TriSurfs and the
+    lateral border as one connected TUBE surface. That tube has repeated XY
+    columns through Z, so connected-component splitting cannot separate it. We
+    trace the XY column loop and split at the major footprint direction changes.
+    """
+    vertices = np.asarray(vertices, dtype=float)
+    triangles = np.asarray(triangles, dtype=np.int32)
+    if vertices.ndim != 2 or vertices.shape[0] < 8:
+        return []
+    if triangles.ndim != 2 or triangles.shape[0] < 4 or triangles.shape[1] < 3:
+        return []
+
+    unique_xy, vertex_column_ids, xy_counts = _tube_unique_xy_columns(vertices)
+    if len(unique_xy) < 4:
+        return []
+
+    # Tube side surfaces have vertical columns: many Z values for every XY.
+    # Regular geological surfaces normally have each XY only once.
+    repeated_column_ratio = float(len(vertices)) / float(len(unique_xy))
+    if repeated_column_ratio < 3.0 or int(np.median(xy_counts)) < 3:
+        return []
+
+    ring = _trace_xy_column_ring(vertex_column_ids, unique_xy, triangles)
+    if len(ring) < 4:
+        return []
+
+    corner_positions = _major_direction_break_positions(unique_xy[ring], target_count=4)
+    if len(corner_positions) < 3:
+        return []
+
+    components: List[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]] = []
+    min_triangles = max(4, int(0.005 * len(triangles)))
+    for segment_columns in _ring_segments_from_break_positions(ring, corner_positions):
+        segment_column_set = set(segment_columns)
+        tri_indices = []
+        for tri_idx, tri in enumerate(triangles[:, :3]):
+            tri_columns = {int(vertex_column_ids[int(point_id)]) for point_id in tri}
+            if tri_columns.issubset(segment_column_set):
+                tri_indices.append(tri_idx)
+
+        if len(tri_indices) < min_triangles:
+            return []
+
+        component_global_triangles = triangles[np.asarray(tri_indices, dtype=np.int32), :3]
+        used_point_ids = np.unique(component_global_triangles.ravel())
+        point_id_map = {int(old_id): new_id for new_id, old_id in enumerate(used_point_ids)}
+        local_triangles = np.array(
+            [[point_id_map[int(point_id)] for point_id in tri] for tri in component_global_triangles],
+            dtype=np.int32,
+        )
+        local_vertices = vertices[used_point_ids].copy()
+        boundary_points = _component_boundary_loop(local_vertices, local_triangles)
+        components.append((local_vertices, local_triangles, boundary_points))
+
+    return components
+
+
+def _tube_unique_xy_columns(vertices: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return unique XY columns and the per-vertex column ids."""
+    xy = np.round(np.asarray(vertices, dtype=float)[:, :2], decimals=6)
+    unique_xy, vertex_column_ids, xy_counts = np.unique(
+        xy,
+        axis=0,
+        return_inverse=True,
+        return_counts=True,
+    )
+    return unique_xy, vertex_column_ids, xy_counts
+
+
+def _trace_xy_column_ring(
+    vertex_column_ids: np.ndarray,
+    unique_xy: np.ndarray,
+    triangles: np.ndarray,
+) -> List[int]:
+    """Trace the closed XY column loop of a tube side surface."""
+    adjacency: Dict[int, set] = {}
+    for tri in triangles[:, :3]:
+        tri_columns = sorted({int(vertex_column_ids[int(point_id)]) for point_id in tri})
+        if len(tri_columns) != 2:
+            continue
+        a, b = tri_columns
+        adjacency.setdefault(a, set()).add(b)
+        adjacency.setdefault(b, set()).add(a)
+
+    if len(adjacency) < 4:
+        return []
+    if any(len(neighbours) != 2 for neighbours in adjacency.values()):
+        return []
+
+    start = min(adjacency, key=lambda idx: (unique_xy[idx, 0], unique_xy[idx, 1]))
+    start_neighbours = sorted(
+        adjacency[start],
+        key=lambda idx: np.arctan2(
+            unique_xy[idx, 1] - unique_xy[start, 1],
+            unique_xy[idx, 0] - unique_xy[start, 0],
+        ),
+    )
+    if not start_neighbours:
+        return []
+
+    ring = [start, start_neighbours[0]]
+    previous = start
+    current = start_neighbours[0]
+    while True:
+        next_candidates = [idx for idx in adjacency[current] if idx != previous]
+        if not next_candidates:
+            return []
+        next_idx = next_candidates[0]
+        if next_idx == start:
+            break
+        ring.append(next_idx)
+        previous, current = current, next_idx
+        if len(ring) > len(adjacency):
+            return []
+
+    return ring if len(ring) == len(adjacency) else []
+
+
+def _major_direction_break_positions(
+    loop_xy: np.ndarray,
+    target_count: int = 4,
+) -> List[int]:
+    """Find major footprint direction breaks from a closed XY loop."""
+    loop_xy = np.asarray(loop_xy, dtype=float)
+    if loop_xy.ndim != 2 or len(loop_xy) < target_count:
+        return []
+
+    bbox_diag = float(np.linalg.norm(loop_xy.max(axis=0) - loop_xy.min(axis=0)))
+    if bbox_diag <= 0.0:
+        return []
+
+    best_indices = None
+    best_delta = None
+    for fraction in (0.10, 0.09, 0.08, 0.07, 0.06, 0.05, 0.04, 0.03, 0.02, 0.015, 0.01, 0.005):
+        indices = _rdp_closed_loop_indices(loop_xy, bbox_diag * fraction)
+        if len(indices) < target_count:
+            continue
+        if len(indices) == target_count:
+            return sorted(indices)
+        delta = abs(len(indices) - target_count)
+        if best_indices is None or delta < best_delta:
+            best_indices = indices
+            best_delta = delta
+
+    if best_indices is None:
+        return _largest_turn_positions(loop_xy, target_count)
+
+    return sorted(_select_polygon_corners_by_area(loop_xy, best_indices, target_count))
+
+
+def _rdp_closed_loop_indices(points: np.ndarray, epsilon: float) -> List[int]:
+    """Simplify a closed 2D loop and return vertex positions in the original loop."""
+    closed = np.vstack([points, points[0]])
+    indices = _rdp_open_polyline_indices(closed, epsilon)
+    last_index = len(closed) - 1
+    unique_indices = []
+    for idx in indices:
+        idx = int(idx)
+        if idx == last_index:
+            idx = 0
+        if idx not in unique_indices:
+            unique_indices.append(idx)
+    return unique_indices
+
+
+def _rdp_open_polyline_indices(points: np.ndarray, epsilon: float, offset: int = 0) -> List[int]:
+    """Ramer-Douglas-Peucker simplification returning source indices."""
+    if len(points) <= 2:
+        return [offset, offset + len(points) - 1]
+
+    start = points[0]
+    end = points[-1]
+    distances = np.array(
+        [_point_to_segment_distance(point, start, end) for point in points[1:-1]],
+        dtype=float,
+    )
+    if len(distances) == 0:
+        return [offset, offset + len(points) - 1]
+
+    max_local_idx = int(np.argmax(distances)) + 1
+    if distances[max_local_idx - 1] <= epsilon:
+        return [offset, offset + len(points) - 1]
+
+    left = _rdp_open_polyline_indices(points[: max_local_idx + 1], epsilon, offset)
+    right = _rdp_open_polyline_indices(points[max_local_idx:], epsilon, offset + max_local_idx)
+    return left[:-1] + right
+
+
+def _point_to_segment_distance(point: np.ndarray, start: np.ndarray, end: np.ndarray) -> float:
+    segment = end - start
+    denom = float(np.dot(segment, segment))
+    if denom <= 0.0:
+        return float(np.linalg.norm(point - start))
+    t = float(np.clip(np.dot(point - start, segment) / denom, 0.0, 1.0))
+    closest = start + t * segment
+    return float(np.linalg.norm(point - closest))
+
+
+def _select_polygon_corners_by_area(
+    loop_xy: np.ndarray,
+    candidate_indices: List[int],
+    target_count: int,
+) -> List[int]:
+    """Choose a target number of simplified-loop vertices that preserve area."""
+    candidate_indices = sorted({int(idx) for idx in candidate_indices})
+    if len(candidate_indices) <= target_count:
+        return candidate_indices
+    if len(candidate_indices) > 24:
+        local_positions = _largest_turn_positions(loop_xy[candidate_indices], target_count)
+        return [candidate_indices[pos] for pos in local_positions]
+
+    best_combo = None
+    best_area = -1.0
+    for combo in itertools.combinations(candidate_indices, target_count):
+        polygon = loop_xy[list(combo)]
+        area = _polygon_area_2d(polygon)
+        if area > best_area:
+            best_combo = combo
+            best_area = area
+    return list(best_combo) if best_combo is not None else candidate_indices[:target_count]
+
+
+def _polygon_area_2d(points: np.ndarray) -> float:
+    if len(points) < 3:
+        return 0.0
+    x = points[:, 0]
+    y = points[:, 1]
+    return float(abs(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))) * 0.5)
+
+
+def _largest_turn_positions(loop_xy: np.ndarray, target_count: int) -> List[int]:
+    """Fallback corner picker based on local turning angle."""
+    turns = []
+    for idx in range(len(loop_xy)):
+        prev_pt = loop_xy[(idx - 1) % len(loop_xy)]
+        curr_pt = loop_xy[idx]
+        next_pt = loop_xy[(idx + 1) % len(loop_xy)]
+        v1 = curr_pt - prev_pt
+        v2 = next_pt - curr_pt
+        len1 = np.linalg.norm(v1)
+        len2 = np.linalg.norm(v2)
+        if len1 <= 0.0 or len2 <= 0.0:
+            angle = 0.0
+        else:
+            angle = float(np.degrees(np.arccos(np.clip(np.dot(v1 / len1, v2 / len2), -1.0, 1.0))))
+        turns.append((angle, idx))
+
+    selected = []
+    min_separation = max(1, len(loop_xy) // max(1, target_count * 4))
+    for _angle, idx in sorted(turns, reverse=True):
+        if all(min((idx - prev) % len(loop_xy), (prev - idx) % len(loop_xy)) >= min_separation for prev in selected):
+            selected.append(idx)
+        if len(selected) == target_count:
+            break
+    return sorted(selected)
+
+
+def _ring_segments_from_break_positions(
+    ring: List[int],
+    break_positions: List[int],
+) -> List[List[int]]:
+    """Return inclusive column segments between consecutive break positions."""
+    n_ring = len(ring)
+    breaks = sorted({int(pos) % n_ring for pos in break_positions})
+    segments = []
+    for idx, start_pos in enumerate(breaks):
+        end_pos = breaks[(idx + 1) % len(breaks)]
+        if start_pos < end_pos:
+            segments.append(ring[start_pos : end_pos + 1])
+        else:
+            segments.append(ring[start_pos:] + ring[: end_pos + 1])
+    return segments
+
+
+def _component_boundary_loop(
+    vertices: np.ndarray,
+    triangles: np.ndarray,
+) -> Optional[np.ndarray]:
+    """Return the dominant ordered boundary loop for a triangle component."""
+    edge_counts: Dict[Tuple[int, int], int] = {}
+    for tri in triangles:
+        tri_ids = [int(tri[0]), int(tri[1]), int(tri[2])]
+        for a, b in ((tri_ids[0], tri_ids[1]), (tri_ids[1], tri_ids[2]), (tri_ids[2], tri_ids[0])):
+            edge = (a, b) if a < b else (b, a)
+            edge_counts[edge] = edge_counts.get(edge, 0) + 1
+
+    boundary_edges = [edge for edge, count in edge_counts.items() if count == 1]
+    if not boundary_edges:
+        return None
+
+    adjacency: Dict[int, List[int]] = {}
+    for a, b in boundary_edges:
+        adjacency.setdefault(a, []).append(b)
+        adjacency.setdefault(b, []).append(a)
+
+    chains = []
+    unused_edges = {edge for edge in boundary_edges}
+
+    def remove_edge(a: int, b: int) -> None:
+        edge = (a, b) if a < b else (b, a)
+        unused_edges.discard(edge)
+
+    while unused_edges:
+        start_a, start_b = next(iter(unused_edges))
+        chain = [start_a, start_b]
+        remove_edge(start_a, start_b)
+
+        while True:
+            current = chain[-1]
+            previous = chain[-2] if len(chain) > 1 else None
+            next_candidates = []
+            for candidate in adjacency.get(current, []):
+                edge = (current, candidate) if current < candidate else (candidate, current)
+                if edge in unused_edges and candidate != previous:
+                    next_candidates.append(candidate)
+            if not next_candidates:
+                break
+            next_point = next_candidates[0]
+            chain.append(next_point)
+            remove_edge(current, next_point)
+            if next_point == chain[0]:
+                break
+
+        chains.append(chain)
+
+    if not chains:
+        return None
+
+    chains.sort(key=len, reverse=True)
+    dominant_chain = chains[0]
+    if len(dominant_chain) < 3:
+        return None
+
+    boundary = vertices[np.asarray(dominant_chain, dtype=np.int32), :3]
+    if not np.allclose(boundary[0], boundary[-1], atol=1e-10):
+        boundary = np.vstack([boundary, boundary[0]])
+    return np.asarray(boundary, dtype=float)
 
 
 def _extract_ordered_boundary_points(boundary_polydata) -> Optional[np.ndarray]:
