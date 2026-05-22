@@ -7,6 +7,7 @@ from numpy import cos as np_cos
 from numpy import cross as np_cross
 from numpy import deg2rad as np_deg2rad
 from numpy import greater as np_greater
+from numpy import isfinite as np_isfinite
 from numpy import less_equal as np_less_equal
 from numpy import ndarray as np_ndarray
 from numpy import number as np_number
@@ -185,14 +186,28 @@ def set_normals(self):
                         )
                         return
                 for uid in self.selected_uids:
-                    self.geol_coll.append_uid_property(
-                        uid=uid, property_name="Normals", property_components=3
-                    )
-                    self.geol_coll.get_uid_vtk_obj(uid).vtk_set_normals()
+                    if "Normals" not in self.geol_coll.get_uid_properties_names(uid):
+                        self.geol_coll.append_uid_property(
+                            uid=uid, property_name="Normals", property_components=3
+                        )
+                    vtk_obj = self.geol_coll.get_uid_vtk_obj(uid)
+                    # These normals are stored as an explicit property. The
+                    # LoopStructural fault tool will only use them if the user
+                    # has run this step before modelling.
+                    vtk_obj.vtk_set_normals()
                     self.prop_legend.update_widget(self)
-                    self.print_terminal("Normals set on TriSurf or XsPolyLine" + uid)
-                    obj = self.geol_coll.get_uid_vtk_obj(uid)
-                    normals = obj.get_property("Normals")
+                    normals = np_array(
+                        self.geol_coll.get_uid_property(
+                            uid=uid, property_name="Normals"
+                        )
+                    )
+                    if normals.ndim == 1:
+                        normals = normals.reshape(1, -1)
+                    finite_normals = int(np_isfinite(normals).all(axis=1).sum())
+                    self.print_terminal(
+                        f"Normals set on TriSurf or XsPolyLine {uid} "
+                        f"({finite_normals}/{len(normals)} finite vectors)"
+                    )
                     # self.print_terminal(f"UID {uid}:")
                     # self.print_terminal("getproperties", normals)
                     # for n in normals:

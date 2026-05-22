@@ -849,13 +849,19 @@ class TriSurf(PolyData):
         normals_filter.AutoOrientNormalsOff()
         normals_filter.NonManifoldTraversalOff()
         normals_filter.Update()
-        # Update the input polydata "self" with the new normals.
-        self.GetPointData().SetNormals(
-            normals_filter.GetOutput().GetPointData().GetNormals()
-        )
-        self.GetCellData().SetNormals(
-            normals_filter.GetOutput().GetCellData().GetNormals()
-        )
+        # Update the input polydata "self" with the new normals. Keep the
+        # point-data property explicit so collection.get_uid_property("Normals")
+        # and VTK active normals always reference the same array. This is used
+        # as an optional experimental constraint by the LoopStructural fault
+        # workflow, so avoid hidden duplicate "Normals" arrays.
+        point_normals = normals_filter.GetOutput().GetPointData().GetNormals()
+        cell_normals = normals_filter.GetOutput().GetCellData().GetNormals()
+        if "Normals" in self.point_data_keys:
+            self.remove_point_data("Normals")
+        self.set_point_data("Normals", vtk_to_numpy(point_normals))
+        self.GetPointData().SetNormals(self.GetPointData().GetArray("Normals"))
+        self.GetCellData().RemoveArray("Normals")
+        self.GetCellData().SetNormals(cell_normals)
         self.Modified()
 
     def append_cell(self, cell_array=None):

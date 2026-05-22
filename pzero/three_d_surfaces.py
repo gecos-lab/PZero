@@ -23,6 +23,7 @@ from numpy import sqrt as np_sqrt
 from numpy import zeros as np_zeros
 from numpy import array as np_array
 from numpy import sum as np_sum
+from numpy import where as np_where
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import concat as pd_concat
@@ -3180,6 +3181,7 @@ def implicit_model_loop_structural_with_faults(self):
                     "point_segments": [],
                     "trace_segments": [],
                     "normal_segments": [],
+                    "normal_segment_sources": [],
                     "time": float("nan"),
                 },
             )
@@ -3191,20 +3193,37 @@ def implicit_model_loop_structural_with_faults(self):
                 group["trace_segments"].append(points_arr)
 
             normals_arr = None
+            normals_source = "none"
+            # Experimental fault-frame hint: only user-created/stored Normals are
+            # read here. We intentionally do not auto-compute surface normals in
+            # the LoopStructural workflow, so each run makes it clear whether
+            # local normal constraints are being used.
             if "Normals" in self.geol_coll.get_uid_properties_names(uid):
-                normals_arr = np_array(
-                    self.geol_coll.get_uid_property(uid=uid, property_name="Normals"),
-                    dtype=float,
-                )
+                try:
+                    normals_arr = np_array(
+                        self.geol_coll.get_uid_property(
+                            uid=uid, property_name="Normals"
+                        ),
+                        dtype=float,
+                    )
+                except Exception as exc:
+                    self.print_terminal(
+                        f"  WARNING: Could not read Normals for fault entity '{entity_name}' "
+                        f"({uid}); ignoring them. Reason: {exc}"
+                    )
+                    normals_arr = None
                 if (
-                    normals_arr.ndim != 2
+                    normals_arr is None
+                    or normals_arr.ndim != 2
                     or normals_arr.shape[0] != points_arr.shape[0]
                     or normals_arr.shape[1] < 3
                 ):
                     normals_arr = None
                 else:
                     normals_arr = normals_arr[:, :3]
+                    normals_source = "stored_normals"
             group["normal_segments"].append(normals_arr)
+            group["normal_segment_sources"].append(normals_source)
 
             existing_time = _safe_relative_time(group.get("time"))
             if existing_time != existing_time and fault_time == fault_time:
@@ -3290,6 +3309,10 @@ def implicit_model_loop_structural_with_faults(self):
 
             explicit_center_normal = None
             if valid_normal_vectors:
+                # Use the stored normal closest to the fault-group centre as a
+                # representative polarity hint for the global LoopStructural
+                # fault normal. This is still experimental for curved/listric
+                # faults and should be revisited when a richer frame model is added.
                 normal_points = np_concatenate(valid_normal_points, axis=0)
                 normal_vectors = np_concatenate(valid_normal_vectors, axis=0)
                 center_idx = int(np_argmin(np_sum((normal_points - obb_center) ** 2, axis=1)))
@@ -3305,6 +3328,17 @@ def implicit_model_loop_structural_with_faults(self):
                 fallback_axes=obb_axes,
             )
             center_normal = np_array(normal_info["normal"], dtype=float)
+            finite_normal_mask = ~np_isnan(merged_normals).any(axis=1)
+            if finite_normal_mask.any():
+                # Keep all local normal constraints in the same hemisphere as
+                # the representative fault normal. Loop is sensitive to mixed
+                # normal polarity, especially on open surfaces.
+                normal_dots = merged_normals[finite_normal_mask] @ center_normal
+                merged_normals[finite_normal_mask] = np_where(
+                    normal_dots[:, None] < 0.0,
+                    -merged_normals[finite_normal_mask],
+                    merged_normals[finite_normal_mask],
+                )
 
             plane_axes = _orient_fault_axes_for_rake(
                 obb_axes, center_normal=center_normal, trace_points=trace_points
@@ -3324,6 +3358,9 @@ def implicit_model_loop_structural_with_faults(self):
             if np_linalg.norm(fault_normal) <= 1e-9:
                 fault_normal = np_array([0.0, 0.0, 1.0], dtype=float)
             missing_normals = np_isnan(merged_normals).any(axis=1)
+            # Points without explicit stored normals are given the global fault
+            # normal. This keeps the fault frame constrained while leaving Loop
+            # free to solve the finite-fault displacement field.
             merged_normals[missing_normals] = fault_normal
 
             entity_df = pd_DataFrame(columns=list(loop_input_dict.keys()))
@@ -3359,6 +3396,12 @@ def implicit_model_loop_structural_with_faults(self):
                 f"center={default_geometry['center']}, lengths={default_geometry['lengths']}, "
                 f"normal_source={normal_info['source']}"
             )
+            if finite_normal_mask.any():
+                normal_sources = sorted(set(group.get("normal_segment_sources", [])))
+                self.print_terminal(
+                    f"    Local normal constraints: {int(finite_normal_mask.sum())}/{len(points_arr)} "
+                    f"points, sources={normal_sources}"
+                )
             prgs_bar.add_one()
         prgs_bar.close()
 
@@ -3387,12 +3430,22 @@ def implicit_model_loop_structural_with_faults(self):
             entity_df[["X", "Y", "Z"]] = points_arr
 
             if "Normals" in self.geol_coll.get_uid_properties_names(uid):
-                normals_arr = np_array(
-                    self.geol_coll.get_uid_property(uid=uid, property_name="Normals"),
-                    dtype=float,
-                )
+                try:
+                    normals_arr = np_array(
+                        self.geol_coll.get_uid_property(
+                            uid=uid, property_name="Normals"
+                        ),
+                        dtype=float,
+                    )
+                except Exception as exc:
+                    self.print_terminal(
+                        f"  WARNING: Could not read Normals for stratigraphy entity "
+                        f"'{entity_name}' ({uid}); ignoring them. Reason: {exc}"
+                    )
+                    normals_arr = None
                 if (
-                    normals_arr.ndim == 2
+                    normals_arr is not None
+                    and normals_arr.ndim == 2
                     and normals_arr.shape[0] == points_arr.shape[0]
                     and normals_arr.shape[1] >= 3
                 ):
@@ -3881,6 +3934,9 @@ def implicit_model_loop_structural_with_faults(self):
             "    faultfunction=LoopStructural BaseFault3D "
             "(built-in finite-fault displacement function; no runtime override)"
         )
+        # BaseFault3D is currently the least-custom LoopStructural option for
+        # finite faults. We pass PZero-derived axes/lengths/displacement, then
+        # let Loop build the actual fault frame and displacement support.
         use_points = True
         self.print_terminal(
             f"    Using points={use_points} for fault frame construction"
