@@ -10,12 +10,16 @@ from copy import deepcopy
 from rioxarray import open_rasterio as rx_open_rasterio
 
 from numpy import meshgrid as np_meshgrid
+from numpy import amax as np_amax
+from numpy import amin as np_amin
+from numpy import nan as np_nan
 
 from pyvista import StructuredGrid as pv_StructuredGrid
 
 from pzero.collections.dom_collection import DomCollection
 from pzero.collections.fluid_collection import FluidCollection
 from pzero.entities_factory import DEM
+from pzero.helpers.helper_dialogs import options_dialog
 
 
 def dem2vtk(self=None, in_file_name=None, collection=None):
@@ -31,6 +35,19 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
     #     values[nans] = np_nan
     xx, yy = np_meshgrid(data["x"], data["y"])
     zz = values.reshape(xx.shape)
+
+    # detect NaN's
+    max_zz = np_amax(zz)
+    min_zz = np_amin(zz)
+    max_zz_txt = f"NaN value = {max_zz}"
+    min_zz_txt = f"NaN value = {min_zz}"
+
+    nan_option = options_dialog(title="NaN's in DEM", message="Does this DEM includes NaN's?", yes_role=max_zz_txt, no_role=min_zz_txt, reject_role="No NaN's are present")
+    if nan_option == 0:
+        zz[zz == max_zz] = np_nan
+    elif nan_option == 1:
+        zz[zz == min_zz] = np_nan
+
     # Convert to DEM() instance.
     curr_obj = DEM()
     temp_obj = pv_StructuredGrid(xx, yy, zz)
