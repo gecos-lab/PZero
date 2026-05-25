@@ -2462,8 +2462,11 @@ def _fault_obb_settings_dialog(
 
     raw_lengths_label = QLabel("")
     scaled_lengths_label = QLabel("")
+    support_warning_label = QLabel("")
+    support_warning_label.setWordWrap(True)
     obb_form.addRow("Raw Trace/Dip/Normal", raw_lengths_label)
     obb_form.addRow("Scaled Trace/Dip/Normal", scaled_lengths_label)
+    obb_form.addRow("Support warning", support_warning_label)
     controls_layout.addLayout(obb_form, 0, 1)
 
     relations_form = QFormLayout()
@@ -2942,12 +2945,30 @@ def _fault_obb_settings_dialog(
         geometry = get_fault_geometry(fault_name)
         base_lengths = geometry["lengths"]
         scaled_lengths = geometry["scaled_lengths"]
+        displacement = abs(float(defaults_by_fault[fault_name]["displacement"]))
+        normal_support = abs(float(scaled_lengths[2]))
         raw_lengths_label.setText(
             f"{base_lengths[0]:.2f}, {base_lengths[1]:.2f}, {base_lengths[2]:.2f}"
         )
         scaled_lengths_label.setText(
             f"{scaled_lengths[0]:.2f}, {scaled_lengths[1]:.2f}, {scaled_lengths[2]:.2f}"
         )
+        # Numerical guardrail: BaseFault3D uses the normal support as the
+        # displacement support volume, not as geological fault thickness. When
+        # displacement is larger than this support, the displacement field can
+        # become strongly localized or produce taper artefacts near support edges.
+        if displacement > 0.0 and normal_support < displacement:
+            support_warning_label.setText(
+                "Normal support is smaller than displacement; displacement may "
+                "be strongly localized or unstable. Consider increasing Normal "
+                "scale before interpreting the result geologically."
+            )
+            support_warning_label.setStyleSheet("color: rgb(230, 150, 40);")
+        else:
+            support_warning_label.setText(
+                "OK. Normal support is at least as large as displacement."
+            )
+            support_warning_label.setStyleSheet("color: rgb(120, 190, 120);")
 
     def update_preview(fault_name):
         geometry = get_fault_geometry(fault_name)
@@ -3773,15 +3794,31 @@ def implicit_model_loop_structural_with_faults(self):
         self.print_terminal("Per-fault parameters configured:")
         for fault_name in _sorted_fault_names_by_time(fault_data, older_first=True):
             params = fault_params_by_name.get(fault_name, {})
+            support_lengths = params.get("support_lengths", params.get("lengths"))
             self.print_terminal(
                 f"  {fault_name}: displacement={float(params.get('displacement', 0.0)):.2f}, "
                 f"rake={float(params.get('rake', -90.0)):.1f} deg, "
                 f"flip_polarity={'ON' if params.get('flip_polarity', False) else 'OFF'}, "
-                f"support_lengths={params.get('support_lengths', params.get('lengths'))}, "
+                f"support_lengths={support_lengths}, "
                 f"surface_lengths={params.get('surface_lengths')}, "
                 f"abutting={params.get('abutting_fault') if params.get('has_abutting') else 'None'}, "
                 f"abut_side={'positive' if params.get('abutting_positive', True) else 'negative'}"
             )
+            # Keep this warning in the terminal as well as in the dialog so
+            # project logs show when a result may be dominated by support-edge
+            # taper rather than geological displacement.
+            if support_lengths is not None:
+                support_lengths_arr = np_array(support_lengths, dtype=float)
+                displacement_abs = abs(float(params.get("displacement", 0.0)))
+                if (
+                    support_lengths_arr.size >= 3
+                    and displacement_abs > 0.0
+                    and abs(float(support_lengths_arr[2])) < displacement_abs
+                ):
+                    self.print_terminal(
+                        "    WARNING: Normal support is smaller than displacement; "
+                        "BaseFault3D displacement may be localized or show support-edge artefacts."
+                    )
 
     model_name = "Loop_model_faults"
     fault_creation_order = _sorted_fault_names_by_time(fault_data, older_first=True)
