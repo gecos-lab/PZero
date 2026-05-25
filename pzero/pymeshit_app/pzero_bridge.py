@@ -297,16 +297,22 @@ class PZeroPymeshitBridge:
         return vertices, triangles
 
     def load_trisurf_components(
-        self, collection_key: str, uid: str
+        self, collection_key: str, uid: str, target_face_count: int = 4
     ) -> List[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]]:
         """
-        Extract disconnected triangle components from a TriSurf entity.
+        Extract triangle components/faces from a TriSurf entity.
 
         GOCAD border files can contain several TFACE parts that PZero stores as
         one geology TriSurf. PyMeshIt needs those independent border faces as
         separate surfaces, so split by triangle connectivity and provide each
         component's vertices, triangles, and ordered boundary loop.
         """
+        try:
+            target_face_count = int(target_face_count)
+        except (TypeError, ValueError):
+            target_face_count = 4
+        target_face_count = max(2, min(24, target_face_count))
+
         collection = getattr(self._project, collection_key, None)
         vtk_obj = None
         if collection is not None and hasattr(collection, "get_uid_vtk_obj"):
@@ -323,7 +329,11 @@ class PZeroPymeshitBridge:
             if len(components) > 1:
                 return components
 
-        tube_side_components = _split_tube_surface_by_direction_changes(vertices, triangles)
+        tube_side_components = _split_tube_surface_by_direction_changes(
+            vertices,
+            triangles,
+            target_count=target_face_count,
+        )
         if len(tube_side_components) > 1:
             return tube_side_components
 
@@ -530,6 +540,7 @@ def _split_triangles_by_connected_components(
 def _split_tube_surface_by_direction_changes(
     vertices: np.ndarray,
     triangles: np.ndarray,
+    target_count: int = 4,
 ) -> List[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]]:
     """
     Split a closed lateral border tube into direction-aware side faces.
@@ -541,6 +552,12 @@ def _split_tube_surface_by_direction_changes(
     """
     vertices = np.asarray(vertices, dtype=float)
     triangles = np.asarray(triangles, dtype=np.int32)
+    try:
+        target_count = int(target_count)
+    except (TypeError, ValueError):
+        target_count = 4
+    target_count = max(2, min(24, target_count))
+
     if vertices.ndim != 2 or vertices.shape[0] < 8:
         return []
     if triangles.ndim != 2 or triangles.shape[0] < 4 or triangles.shape[1] < 3:
@@ -560,8 +577,8 @@ def _split_tube_surface_by_direction_changes(
     if len(ring) < 4:
         return []
 
-    corner_positions = _major_direction_break_positions(unique_xy[ring], target_count=4)
-    if len(corner_positions) < 3:
+    corner_positions = _major_direction_break_positions(unique_xy[ring], target_count=target_count)
+    if len(corner_positions) < 2:
         return []
 
     components: List[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]] = []

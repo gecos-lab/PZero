@@ -1957,6 +1957,7 @@ class MeshItWorkflowGUI(QWidget):
         self._pending_pzero_bridge = pzero_bridge
         self.border_extension_factor = 0.2  # Extension factor for boundary faces from PZero (20% default)
         self.vertical_exaggeration = 1.0
+        self.show_surface_labels = False
         
         self.plotters = {}
         self._updating_coordinates = False  # Flag to prevent recursive updates during coordinate editing
@@ -1992,6 +1993,21 @@ class MeshItWorkflowGUI(QWidget):
         # 1. Create Custom Menu Bar (Since QWidget doesn't have one natively)
         self._custom_menu_bar = QMenuBar()
         self.main_layout.addWidget(self._custom_menu_bar)
+
+        global_view_controls = QWidget()
+        global_view_layout = QHBoxLayout(global_view_controls)
+        global_view_layout.setContentsMargins(6, 2, 6, 2)
+        self.show_surface_labels_global_checkbox = QCheckBox("Show Surface Labels")
+        self.show_surface_labels_global_checkbox.setChecked(bool(self.show_surface_labels))
+        self.show_surface_labels_global_checkbox.setToolTip(
+            "Show dataset/surface names in all PyMeshIt 3D views."
+        )
+        self.show_surface_labels_global_checkbox.toggled.connect(
+            self._on_show_surface_labels_changed
+        )
+        global_view_layout.addWidget(self.show_surface_labels_global_checkbox)
+        global_view_layout.addStretch()
+        self.main_layout.addWidget(global_view_controls)
         
         # 2. Create the Notebook (Tabs)
         self.notebook = QTabWidget()
@@ -2133,6 +2149,179 @@ class MeshItWorkflowGUI(QWidget):
         """Apply the current global Z exaggeration to every active plotter."""
         for plotter in self._iter_unique_plotters():
             self._apply_vertical_exaggeration_to_plotter(plotter, render=render)
+
+    def _on_show_surface_labels_changed(self, checked: bool):
+        """Toggle surface labels in all 3D views and refresh the active tab."""
+        self.show_surface_labels = bool(checked)
+
+        for attr_name in (
+            "show_surface_labels_global_checkbox",
+            "show_surface_labels_checkbox",
+            "show_surface_labels_action",
+        ):
+            widget = getattr(self, attr_name, None)
+            if widget is None:
+                continue
+            try:
+                widget.blockSignals(True)
+                widget.setChecked(self.show_surface_labels)
+            finally:
+                try:
+                    widget.blockSignals(False)
+                except Exception:
+                    pass
+
+        if hasattr(self, "notebook"):
+            self._on_tab_changed(self.notebook.currentIndex())
+
+        self.statusBar().showMessage(
+            "Surface labels shown" if self.show_surface_labels else "Surface labels hidden"
+        )
+
+    def _add_point_labels_safe(
+        self,
+        plotter,
+        points,
+        labels,
+        name: str = "surface_labels",
+        text_color: str = "white",
+    ) -> None:
+        """Add PyVista point labels, tolerating older PyVista signatures."""
+        if plotter is None or not self.show_surface_labels:
+            return
+
+        points = np.asarray(points, dtype=float)
+        labels = [str(label) for label in labels]
+        if points.ndim != 2 or points.shape[0] == 0 or points.shape[1] < 3:
+            return
+        if len(labels) != len(points):
+            return
+
+        try:
+            if name in getattr(plotter, "actors", {}):
+                plotter.remove_actor(name)
+        except Exception:
+            pass
+
+        kwargs = dict(
+            font_size=12,
+            text_color=text_color,
+            point_size=6,
+            point_color="white",
+            render_points_as_spheres=True,
+            always_visible=True,
+            shape="rect",
+            shape_color="black",
+            shape_opacity=0.55,
+            name=name,
+        )
+        try:
+            plotter.add_point_labels(points[:, :3], labels, **kwargs)
+        except TypeError:
+            kwargs.pop("name", None)
+            kwargs.pop("always_visible", None)
+            try:
+                plotter.add_point_labels(points[:, :3], labels, **kwargs)
+            except TypeError:
+                kwargs.pop("shape", None)
+                kwargs.pop("shape_color", None)
+                kwargs.pop("shape_opacity", None)
+                plotter.add_point_labels(points[:, :3], labels, **kwargs)
+        except Exception as exc:
+            logger.debug("Failed to add surface labels: %s", exc)
+
+    def _dataset_label_anchor(self, dataset: dict, view_type: str = "points") -> Optional[np.ndarray]:
+        """Return a representative 3D label position for one dataset."""
+        try:
+            candidates = None
+            if view_type == "triangulation" and dataset.get("triangulation_result"):
+                candidates = dataset["triangulation_result"].get("vertices")
+            elif view_type == "hulls" and dataset.get("hull_points") is not None:
+                hull_rows = []
+                for point in dataset.get("hull_points", []):
+                    if len(point) >= 3:
+                        hull_rows.append([float(point[0]), float(point[1]), float(point[2])])
+                candidates = np.asarray(hull_rows, dtype=float) if hull_rows else None
+            elif view_type == "segments" and dataset.get("segments") is not None:
+                segment_points = []
+                for segment in dataset.get("segments", []):
+                    if len(segment) >= 2:
+                        segment_points.append(segment[0])
+                        segment_points.append(segment[1])
+                candidates = np.asarray(segment_points, dtype=float) if segment_points else None
+
+            if candidates is None:
+                if dataset.get("conforming_mesh") is not None:
+                    candidates = dataset["conforming_mesh"].get("vertices")
+                elif dataset.get("source_triangulation_result") is not None:
+                    candidates = dataset["source_triangulation_result"].get("vertices")
+                else:
+                    candidates = dataset.get("points")
+
+            pts = np.asarray(candidates, dtype=float)
+            if pts.ndim != 2 or pts.shape[0] == 0:
+                return None
+            if pts.shape[1] < 3:
+                pts_3d = np.zeros((len(pts), 3), dtype=float)
+                pts_3d[:, : pts.shape[1]] = pts
+                pts = pts_3d
+            return np.mean(pts[:, :3], axis=0)
+        except Exception:
+            return None
+
+    def _add_dataset_labels_to_plotter(
+        self,
+        plotter,
+        datasets: List[dict],
+        view_type: str = "points",
+        name: str = "surface_labels",
+    ) -> None:
+        """Add labels for visible datasets to a plotter."""
+        if not self.show_surface_labels:
+            return
+
+        label_points = []
+        label_texts = []
+        for dataset in datasets:
+            if not dataset.get("visible", True):
+                continue
+            anchor = self._dataset_label_anchor(dataset, view_type=view_type)
+            if anchor is None:
+                continue
+            label_points.append(anchor)
+            label_texts.append(dataset.get("name", "Unnamed"))
+
+        if label_points:
+            self._add_point_labels_safe(plotter, label_points, label_texts, name=name)
+
+    def _add_named_geometry_labels_to_plotter(
+        self,
+        plotter,
+        geometries: List[Tuple[str, np.ndarray]],
+        name: str = "surface_labels",
+    ) -> None:
+        """Add labels for arbitrary named vertex arrays."""
+        if not self.show_surface_labels:
+            return
+
+        label_points = []
+        label_texts = []
+        for label, vertices in geometries:
+            try:
+                pts = np.asarray(vertices, dtype=float)
+                if pts.ndim != 2 or len(pts) == 0:
+                    continue
+                if pts.shape[1] < 3:
+                    pts_3d = np.zeros((len(pts), 3), dtype=float)
+                    pts_3d[:, : pts.shape[1]] = pts
+                    pts = pts_3d
+                label_points.append(np.mean(pts[:, :3], axis=0))
+                label_texts.append(label)
+            except Exception:
+                continue
+
+        if label_points:
+            self._add_point_labels_safe(plotter, label_points, label_texts, name=name)
 
     def _init_material_selection_ui(self) -> QGroupBox:
         """
@@ -4021,6 +4210,16 @@ class MeshItWorkflowGUI(QWidget):
         # --- Visualization Menu ---
         viz_menu = menu_bar.addMenu("&Visualization")
 
+        self.show_surface_labels_action = QAction("Show Surface Labels", self)
+        self.show_surface_labels_action.setCheckable(True)
+        self.show_surface_labels_action.setChecked(bool(self.show_surface_labels))
+        self.show_surface_labels_action.setStatusTip(
+            "Show dataset/surface names in the 3D views."
+        )
+        self.show_surface_labels_action.toggled.connect(
+            self._on_show_surface_labels_changed
+        )
+        viz_menu.addAction(self.show_surface_labels_action)
 
 
 
@@ -4193,6 +4392,16 @@ class MeshItWorkflowGUI(QWidget):
         vertical_exag_layout.addWidget(self.vertical_exaggeration_input)
         vertical_exag_layout.addStretch()
         file_layout.addLayout(vertical_exag_layout)
+
+        self.show_surface_labels_checkbox = QCheckBox("Show Surface Labels")
+        self.show_surface_labels_checkbox.setChecked(bool(self.show_surface_labels))
+        self.show_surface_labels_checkbox.setToolTip(
+            "Show dataset/surface names in all PyMeshIt 3D views."
+        )
+        self.show_surface_labels_checkbox.toggled.connect(
+            self._on_show_surface_labels_changed
+        )
+        file_layout.addWidget(self.show_surface_labels_checkbox)
 
         control_layout.addWidget(file_group)
         
@@ -8786,6 +8995,7 @@ class MeshItWorkflowGUI(QWidget):
             colors = ['lightblue', 'lightgreen', 'lightcoral', 'lightyellow', 
                      'lightpink', 'lightcyan', 'wheat', 'lightgray']
             
+            label_geometries = []
             for i, surface_idx in enumerate(self.selected_conforming_surfaces):
                 if surface_idx not in self.conforming_mesh_data:
                     continue
@@ -8815,16 +9025,13 @@ class MeshItWorkflowGUI(QWidget):
                     opacity=0.8,
                     name=f"surface_{surface_idx}"
                 )
-                
-                # Add surface label
-                center = vertices.mean(axis=0)
-                self.pre_tetramesh_plotter.add_point_labels(
-                    [center],
-                    [mesh_data['name']],
-                    point_size=0,
-                    font_size=12,
-                    text_color='white'
-                )
+                label_geometries.append((mesh_data['name'], vertices))
+
+            self._add_named_geometry_labels_to_plotter(
+                self.pre_tetramesh_plotter,
+                label_geometries,
+                name="pre_tetra_surface_labels",
+            )
             
             # Add wells (1D polylines) — only selected segments from constraint tree
             sel_wd = self._get_selected_well_viz_data()
@@ -10889,6 +11096,7 @@ class MeshItWorkflowGUI(QWidget):
             
             # Count surfaces with conforming meshes
             surfaces_with_meshes = 0
+            label_geometries = []
             
             # Visualize conforming meshes for each surface if enabled
             if show_conforming_meshes:
@@ -10926,6 +11134,7 @@ class MeshItWorkflowGUI(QWidget):
                         edge_color='black',
                         label=f"{surface_name} ({len(vertices)} vertices, {len(triangles)} triangles)"
                     )
+                    label_geometries.append((surface_name, vertices))
                     
                     logger.info(f"Visualized conforming mesh for {surface_name}: {len(vertices)} vertices, {len(triangles)} triangles")
             
@@ -10942,6 +11151,11 @@ class MeshItWorkflowGUI(QWidget):
                 display_text.append(f"Refined Intersection Lines: {num_intersections} lines")
             
             if display_text:
+                self._add_named_geometry_labels_to_plotter(
+                    self.refine_mesh_plotter,
+                    label_geometries,
+                    name="refine_conforming_surface_labels",
+                )
                 self.refine_mesh_plotter.add_text(
                     "\n".join(display_text),
                     position='upper_edge',
@@ -15131,6 +15345,7 @@ segmentation, triangulation, and visualization.
         extension_factor: float = 0.0,
         dataset_name: Optional[str] = None,
         split_from_trisurf: bool = False,
+        split_face_count: int = 0,
     ) -> bool:
         """Append one PZero TriSurf face/component as a PyMeshIt dataset."""
         vertices = np.asarray(vertices, dtype=float)
@@ -15173,6 +15388,11 @@ segmentation, triangulation, and visualization.
                 "triangles": triangles,
             },
         }
+        if split_from_trisurf and split_face_count:
+            try:
+                dataset["split_face_count"] = int(split_face_count)
+            except (TypeError, ValueError):
+                pass
         if extension_factor > 0.0:
             dataset["extension_factor"] = extension_factor
             dataset["surface_extension_factor"] = extension_factor
@@ -15235,9 +15455,10 @@ segmentation, triangulation, and visualization.
         
         Parameters
         ----------
-        records : List[Tuple[PZeroEntityRecord, bool, float, bool]]
-            Tuples containing (record, load_as_points, extension_factor, split_faces).
-            Older tuples without split_faces are still accepted.
+        records : List[Tuple[PZeroEntityRecord, bool, float, bool, int]]
+            Tuples containing (record, load_as_points, extension_factor,
+            split_faces, split_face_count). Older tuples without split options
+            are still accepted.
         """
         loaded = 0
         skipped = 0
@@ -15245,10 +15466,13 @@ segmentation, triangulation, and visualization.
         for record_tuple in records:
             extension_factor = 0.0
             split_faces = False
+            split_face_count = 4
 
             if isinstance(record_tuple, tuple):
                 tuple_len = len(record_tuple)
-                if tuple_len == 4:
+                if tuple_len >= 5:
+                    record, load_as_points, extension_factor, split_faces, split_face_count = record_tuple[:5]
+                elif tuple_len == 4:
                     record, load_as_points, extension_factor, split_faces = record_tuple
                 elif tuple_len == 3:
                     record, load_as_points, extension_factor = record_tuple
@@ -15273,6 +15497,12 @@ segmentation, triangulation, and visualization.
             except (TypeError, ValueError):
                 extension_factor = 0.0
             extension_factor = max(0.0, extension_factor)
+
+            try:
+                split_face_count = int(split_face_count)
+            except (TypeError, ValueError):
+                split_face_count = 4
+            split_face_count = max(2, min(24, split_face_count))
             
             try:
                 # Check if this is a TriSurf entity (already triangulated)
@@ -15285,7 +15515,9 @@ segmentation, triangulation, and visualization.
                 
                 if is_trisurf and split_faces and not load_as_points:
                     components = self.pzero_bridge.load_trisurf_components(
-                        record.collection_key, record.uid
+                        record.collection_key,
+                        record.uid,
+                        target_face_count=split_face_count,
                     )
                     if not components:
                         logger.warning(
@@ -15306,6 +15538,7 @@ segmentation, triangulation, and visualization.
                             extension_factor=extension_factor,
                             dataset_name=face_name,
                             split_from_trisurf=True,
+                            split_face_count=split_face_count,
                         ):
                             component_count += 1
 
@@ -15315,8 +15548,8 @@ segmentation, triangulation, and visualization.
 
                     loaded += component_count
                     logger.info(
-                        "Loaded TriSurf %s as %d split face dataset(s)",
-                        record.name, component_count,
+                        "Loaded TriSurf %s as %d split face dataset(s) with target split count %d",
+                        record.name, component_count, split_face_count,
                     )
 
                 elif is_trisurf and not load_as_points:
@@ -15994,6 +16227,20 @@ segmentation, triangulation, and visualization.
                 except Exception as e:
                     logger.error(f"Error visualizing convex hull for dataset {original_idx}: {e}")
 
+        if plotter_has_content:
+            label_datasets = [
+                self.datasets[idx]
+                for idx in involved_dataset_indices
+                if 0 <= idx < len(self.datasets)
+                and self.datasets[idx].get("visible", True)
+            ]
+            self._add_dataset_labels_to_plotter(
+                plotter,
+                label_datasets,
+                view_type="hulls",
+                name="refine_intersection_surface_labels",
+            )
+
         # Add triple points from stored triple points
         # Add triple points to constraint points
         if hasattr(self, 'triple_points') and self.triple_points:
@@ -16448,6 +16695,7 @@ segmentation, triangulation, and visualization.
             if not hasattr(self, 'constraint_segment_actor_refs'):
                 self.constraint_segment_actor_refs = {}
 
+            label_datasets = []
             for ds in self.datasets:
                 if ds.get('type') == 'WELL':
                     continue
@@ -16470,6 +16718,7 @@ segmentation, triangulation, and visualization.
                     edge_color="black",
                 )
                 self.conforming_mesh_actor_refs.append(actor)
+                label_datasets.append(ds)
 
             well_cb = getattr(self, 'show_well_constraints_checkbox', None)
             if well_cb is None or well_cb.isChecked():
@@ -16480,6 +16729,12 @@ segmentation, triangulation, and visualization.
                     selected_well_data=sel_wd if sel_wd else None)
 
             plotter.add_axes()
+            self._add_dataset_labels_to_plotter(
+                plotter,
+                label_datasets,
+                view_type="triangulation",
+                name="refine_mesh_surface_labels",
+            )
             plotter.reset_camera()
             plotter.render()
             return
@@ -16673,6 +16928,20 @@ segmentation, triangulation, and visualization.
             if details:
                 msg += " (" + ", ".join(details) + ")"
             plotter.add_text(msg, position='upper_edge', color='white')
+        else:
+            label_datasets = [
+                dataset
+                for idx, dataset in enumerate(self.datasets)
+                if dataset.get("type") != "WELL"
+                and dataset.get("visible", True)
+                and surface_is_visible(idx)
+            ]
+            self._add_dataset_labels_to_plotter(
+                plotter,
+                label_datasets,
+                view_type="segments",
+                name="refine_segment_surface_labels",
+            )
 
         plotter.add_axes()
         plotter.reset_camera()
@@ -17325,6 +17594,12 @@ segmentation, triangulation, and visualization.
                         plotter_has_geometry = True
 
         if plotter_has_geometry:
+            self._add_dataset_labels_to_plotter(
+                plotter,
+                datasets,
+                view_type=view_type,
+                name=f"{view_type}_surface_labels",
+            )
             plotter.add_axes()
             plotter.add_legend()
             self._apply_vertical_exaggeration_to_plotter(plotter)
@@ -18544,6 +18819,17 @@ segmentation, triangulation, and visualization.
         self._add_wells_polyline_to_plotter(plotter)
 
         if plotter_has_content:
+            label_datasets = [
+                self.datasets[idx]
+                for idx in involved_dataset_indices
+                if 0 <= idx < len(self.datasets)
+            ]
+            self._add_dataset_labels_to_plotter(
+                plotter,
+                label_datasets,
+                view_type="triangulation",
+                name="intersection_surface_labels",
+            )
             # Use white text for legend on dark background
             plotter.add_legend(bcolor=None, face='circle', border=False, size=(0.15, 0.15))
             plotter.add_axes()
@@ -18673,6 +18959,17 @@ segmentation, triangulation, and visualization.
                      logger.error(f"Error adding triple points during selection view: {e}")
 
         if plotter_has_content:
+            label_datasets = [
+                self.datasets[idx]
+                for idx in involved_dataset_ids
+                if 0 <= idx < len(self.datasets)
+            ]
+            self._add_dataset_labels_to_plotter(
+                plotter,
+                label_datasets,
+                view_type="triangulation",
+                name="selected_intersection_surface_labels",
+            )
             # Use white text for legend on dark background
             plotter.add_legend(bcolor=None, face='circle', border=False, size=(0.15, 0.15))
             plotter.add_axes()
@@ -18943,6 +19240,7 @@ segmentation, triangulation, and visualization.
         self.tetrahedral_mesh = None
         self.tetra_selected_surfaces = set()  # Surfaces transferred from pre-tetra tab
         self.tetra_surface_data = {}  # Store transferred surface data
+        self.tetgen_failed_facet_entries = []
         
         # Create main layout with splitter so all panes are draggable.
         tab_layout = QVBoxLayout(self.tetra_mesh_tab)
@@ -19059,6 +19357,31 @@ segmentation, triangulation, and visualization.
         self.generate_tetra_mesh_btn.clicked.connect(self._generate_tetrahedral_mesh_action)
         self.generate_tetra_mesh_btn.setEnabled(False)  # Enable after loading surfaces
         generate_layout.addWidget(self.generate_tetra_mesh_btn)
+
+        failed_facet_layout = QHBoxLayout()
+        self.show_failed_facet_btn = QPushButton("Show Failed Facet")
+        self.show_failed_facet_btn.setToolTip(
+            "Highlight the skipped TetGen facet from the latest failure report in the 3D view."
+        )
+        self.show_failed_facet_btn.clicked.connect(self._show_tetgen_failed_facet)
+        failed_facet_layout.addWidget(self.show_failed_facet_btn)
+
+        self.remove_failed_facet_btn = QPushButton("Remove Highlighted")
+        self.remove_failed_facet_btn.setToolTip(
+            "Remove the highlighted skipped facet from the current tetra mesh input surface."
+        )
+        self.remove_failed_facet_btn.setEnabled(False)
+        self.remove_failed_facet_btn.clicked.connect(self._remove_highlighted_tetgen_failed_facet)
+        failed_facet_layout.addWidget(self.remove_failed_facet_btn)
+
+        self.repair_failed_facet_btn = QPushButton("Repair Highlighted")
+        self.repair_failed_facet_btn.setToolTip(
+            "Try to repair the highlighted skipped facet by locally splitting it along crossing facets."
+        )
+        self.repair_failed_facet_btn.setEnabled(False)
+        self.repair_failed_facet_btn.clicked.connect(self._repair_highlighted_tetgen_failed_facet)
+        failed_facet_layout.addWidget(self.repair_failed_facet_btn)
+        generate_layout.addLayout(failed_facet_layout)
         
         self.export_mesh_btn = QPushButton("Export Mesh")
         self.export_mesh_btn.clicked.connect(self._export_tetrahedral_mesh)
@@ -19297,6 +19620,986 @@ segmentation, triangulation, and visualization.
             self.tetra_plotter = None
         
         return viz_panel
+
+    def _surface_idx_from_tetgen_marker(self, marker) -> Optional[int]:
+        """Map a TetGen facet marker back to a loaded dataset index."""
+        try:
+            marker_i = int(marker)
+        except Exception:
+            return None
+
+        if marker_i >= 1000:
+            surface_idx = marker_i - 1000
+        elif marker_i > 0:
+            surface_idx = marker_i - 1
+        else:
+            return None
+
+        if 0 <= surface_idx < len(self.datasets):
+            return surface_idx
+        return None
+
+    def _find_tetra_surface_idx_by_name(self, surface_name: str) -> Optional[int]:
+        """Find a loaded tetra surface by its display name."""
+        target = str(surface_name or "").strip().casefold()
+        if not target:
+            return None
+        for surface_idx, surface_data in getattr(self, "tetra_surface_data", {}).items():
+            name = str(surface_data.get("name", "")).strip().casefold()
+            if name == target:
+                return surface_idx
+        for idx, dataset in enumerate(getattr(self, "datasets", [])):
+            name = str(dataset.get("name", "")).strip().casefold()
+            if name == target:
+                return idx
+        return None
+
+    def _read_tetgen_skipped_facet_entries(
+        self,
+        face_path: str = "tetgen-tmpfile_skipped.face",
+        node_path: str = "tetgen-tmpfile_skipped.node",
+        report_path: str = "tetgen_failure_report.txt",
+    ) -> List[Dict[str, Any]]:
+        """Read skipped TetGen facets from raw TetGen artifacts or the text report."""
+        entries: List[Dict[str, Any]] = []
+        node_coords: Dict[int, Tuple[float, float, float]] = {}
+
+        if os.path.exists(node_path):
+            try:
+                with open(node_path, "r", encoding="utf-8", errors="ignore") as handle:
+                    lines = [
+                        line.strip()
+                        for line in handle
+                        if line.strip() and not line.lstrip().startswith("#")
+                    ]
+                for line in lines[1:]:
+                    parts = line.split()
+                    if len(parts) < 4:
+                        continue
+                    node_coords[int(parts[0])] = (
+                        float(parts[1]),
+                        float(parts[2]),
+                        float(parts[3]),
+                    )
+            except Exception as exc:
+                logger.warning("Could not parse TetGen skipped node file '%s': %s", node_path, exc)
+
+        if os.path.exists(face_path):
+            try:
+                with open(face_path, "r", encoding="utf-8", errors="ignore") as handle:
+                    lines = [
+                        line.strip()
+                        for line in handle
+                        if line.strip() and not line.lstrip().startswith("#")
+                    ]
+                has_marker = 0
+                if lines:
+                    header = lines[0].split()
+                    if len(header) > 1:
+                        try:
+                            has_marker = int(header[1])
+                        except Exception:
+                            has_marker = 0
+
+                for line in lines[1:]:
+                    parts = line.split()
+                    if len(parts) < 4:
+                        continue
+                    face_id = int(parts[0])
+                    nodes = (int(parts[1]), int(parts[2]), int(parts[3]))
+                    marker = int(parts[4]) if has_marker and len(parts) > 4 else 0
+                    surface_idx = self._surface_idx_from_tetgen_marker(marker)
+                    coords = [node_coords[node_id] for node_id in nodes if node_id in node_coords]
+                    surface_name = (
+                        self.datasets[surface_idx].get("name", f"Surface_{surface_idx}")
+                        if surface_idx is not None and surface_idx < len(self.datasets)
+                        else f"marker_{marker}"
+                    )
+                    entries.append(
+                        {
+                            "face_id": face_id,
+                            "nodes": nodes,
+                            "marker": marker,
+                            "surface_idx": surface_idx,
+                            "surface_name": surface_name,
+                            "coords": coords,
+                            "source": os.path.abspath(face_path),
+                        }
+                    )
+            except Exception as exc:
+                logger.warning("Could not parse TetGen skipped face file '%s': %s", face_path, exc)
+
+        if entries and all(len(entry.get("coords", [])) == 3 for entry in entries):
+            return entries
+
+        if not os.path.exists(report_path):
+            return entries
+
+        report_entries: List[Dict[str, Any]] = []
+        try:
+            with open(report_path, "r", encoding="utf-8", errors="ignore") as handle:
+                for line in handle:
+                    if "face_id=" not in line or "coords=" not in line:
+                        continue
+                    face_match = re.search(r"face_id\s*=\s*(-?\d+)", line)
+                    marker_match = re.search(r"marker\s*=\s*(-?\d+)", line)
+                    surface_match = re.search(r"surface\s*=\s*([^,]+)", line)
+                    nodes_match = re.search(r"nodes\s*=\s*\[([^\]]*)\]", line)
+                    coord_matches = re.findall(
+                        r"\(([-+0-9.eE]+),\s*([-+0-9.eE]+),\s*([-+0-9.eE]+)\)",
+                        line,
+                    )
+                    if not coord_matches:
+                        continue
+
+                    marker = int(marker_match.group(1)) if marker_match else 0
+                    surface_name = surface_match.group(1).strip() if surface_match else ""
+                    surface_idx = self._surface_idx_from_tetgen_marker(marker)
+                    if surface_idx is None:
+                        surface_idx = self._find_tetra_surface_idx_by_name(surface_name)
+                    nodes = tuple(
+                        int(part.strip())
+                        for part in (nodes_match.group(1).split(",") if nodes_match else [])
+                        if part.strip()
+                    )
+                    report_entries.append(
+                        {
+                            "face_id": int(face_match.group(1)) if face_match else len(report_entries),
+                            "nodes": nodes,
+                            "marker": marker,
+                            "surface_idx": surface_idx,
+                            "surface_name": surface_name,
+                            "coords": [tuple(float(value) for value in match) for match in coord_matches[:3]],
+                            "source": os.path.abspath(report_path),
+                        }
+                    )
+        except Exception as exc:
+            logger.warning("Could not parse TetGen failure report '%s': %s", report_path, exc)
+
+        return report_entries or entries
+
+    def _clear_tetgen_failed_facet_actors(self) -> None:
+        """Remove previous failed-facet overlays from the tetra plotter."""
+        plotter = getattr(self, "tetra_plotter", None)
+        if plotter is None:
+            return
+        for actor_name in list(getattr(plotter, "actors", {}).keys()):
+            if str(actor_name).startswith("tetgen_failed_"):
+                try:
+                    plotter.remove_actor(actor_name)
+                except Exception:
+                    pass
+
+    def _resolve_failed_facet_surface_idx(self, entry: Dict[str, Any]) -> Optional[int]:
+        """Resolve a skipped-facet entry to a loaded tetra surface index."""
+        surface_idx = entry.get("surface_idx")
+        if isinstance(surface_idx, int) and surface_idx in getattr(self, "tetra_surface_data", {}):
+            return surface_idx
+        surface_idx = self._surface_idx_from_tetgen_marker(entry.get("marker"))
+        if isinstance(surface_idx, int) and surface_idx in getattr(self, "tetra_surface_data", {}):
+            return surface_idx
+        surface_idx = self._find_tetra_surface_idx_by_name(entry.get("surface_name", ""))
+        if isinstance(surface_idx, int) and surface_idx in getattr(self, "tetra_surface_data", {}):
+            return surface_idx
+        return None
+
+    def _show_tetgen_failed_facet(
+        self,
+        *_args,
+        show_message: bool = True,
+        reset_camera: bool = True,
+    ) -> None:
+        """Highlight TetGen skipped facets in the tetra mesh 3D viewer."""
+        plotter = getattr(self, "tetra_plotter", None)
+        if plotter is None:
+            if show_message:
+                QMessageBox.warning(self, "No Tetra Viewer", "The tetra mesh 3D viewer is not available.")
+            return
+
+        entries = self._read_tetgen_skipped_facet_entries()
+        entries = [entry for entry in entries if len(entry.get("coords", [])) == 3]
+        if not entries:
+            if show_message:
+                QMessageBox.warning(
+                    self,
+                    "No Failed Facet",
+                    "No skipped TetGen facet was found in tetgen_failure_report.txt or tetgen-tmpfile_skipped.face.",
+                )
+            return
+
+        if hasattr(self, "notebook") and hasattr(self, "tetra_mesh_tab"):
+            self.notebook.setCurrentWidget(self.tetra_mesh_tab)
+
+        self._clear_tetgen_failed_facet_actors()
+        self.tetgen_failed_facet_entries = entries
+
+        try:
+            for entry_idx, entry in enumerate(entries):
+                coords = np.asarray(entry["coords"], dtype=float)
+                face_mesh = pv.PolyData(coords[:, :3], np.asarray([3, 0, 1, 2], dtype=np.int64))
+                centroid = coords[:, :3].mean(axis=0)
+                edge_lengths = [
+                    float(np.linalg.norm(coords[(i + 1) % 3, :3] - coords[i, :3]))
+                    for i in range(3)
+                ]
+                radius = max(max(edge_lengths) * 0.035, 5.0)
+
+                plotter.add_mesh(
+                    face_mesh,
+                    color="yellow",
+                    opacity=1.0,
+                    show_edges=True,
+                    edge_color="red",
+                    line_width=6,
+                    name=f"tetgen_failed_facet_{entry_idx}",
+                    label=f"TetGen failed facet {entry_idx + 1}",
+                )
+                plotter.add_mesh(
+                    pv.Sphere(radius=radius, center=centroid),
+                    color="red",
+                    opacity=0.85,
+                    name=f"tetgen_failed_centroid_{entry_idx}",
+                )
+
+                label = (
+                    f"Skipped facet {entry.get('face_id', entry_idx)}\n"
+                    f"{entry.get('surface_name', 'unknown surface')}"
+                )
+                try:
+                    plotter.add_point_labels(
+                        [centroid],
+                        [label],
+                        font_size=12,
+                        text_color="yellow",
+                        point_size=0,
+                        always_visible=True,
+                        shape="rect",
+                        shape_color="black",
+                        shape_opacity=0.65,
+                        name=f"tetgen_failed_label_{entry_idx}",
+                    )
+                except TypeError:
+                    plotter.add_point_labels(
+                        [centroid],
+                        [label],
+                        font_size=12,
+                        text_color="yellow",
+                        point_size=0,
+                    )
+
+            if reset_camera:
+                plotter.reset_camera(render=True)
+            plotter.render()
+            if hasattr(self, "remove_failed_facet_btn"):
+                self.remove_failed_facet_btn.setEnabled(True)
+            if hasattr(self, "repair_failed_facet_btn"):
+                self.repair_failed_facet_btn.setEnabled(True)
+
+            first = entries[0]
+            self.statusBar().showMessage(
+                f"Highlighted {len(entries)} TetGen skipped facet(s); first is on {first.get('surface_name', 'unknown surface')}"
+            )
+        except Exception as exc:
+            logger.error("Failed to show TetGen failed facet: %s", exc, exc_info=True)
+            if show_message:
+                QMessageBox.critical(self, "Display Failed", f"Could not display failed facet:\n{exc}")
+
+    def _failed_facet_match_tolerance(self, vertices: np.ndarray) -> float:
+        """Coordinate tolerance for matching report coordinates back to a surface triangle."""
+        vertices = np.asarray(vertices, dtype=float)
+        if vertices.ndim != 2 or len(vertices) == 0:
+            return 0.5
+        bbox_diag = float(np.linalg.norm(np.nanmax(vertices[:, :3], axis=0) - np.nanmin(vertices[:, :3], axis=0)))
+        return max(0.5, bbox_diag * 1e-8)
+
+    def _find_matching_failed_facet_triangle(
+        self,
+        surface_idx: int,
+        coords: np.ndarray,
+    ) -> Tuple[Optional[int], Optional[float]]:
+        """Find the local triangle index matching a skipped TetGen facet."""
+        surface_data = getattr(self, "tetra_surface_data", {}).get(surface_idx)
+        if not surface_data:
+            return None, None
+
+        vertices = np.asarray(surface_data.get("vertices", []), dtype=float)
+        triangles = np.asarray(surface_data.get("triangles", []), dtype=np.int64)
+        coords = np.asarray(coords, dtype=float)
+        if vertices.ndim != 2 or len(vertices) == 0:
+            return None, None
+        if triangles.ndim != 2 or len(triangles) == 0 or triangles.shape[1] < 3:
+            return None, None
+        if coords.ndim != 2 or coords.shape[0] != 3 or coords.shape[1] < 3:
+            return None, None
+
+        tolerance = self._failed_facet_match_tolerance(vertices)
+        nearest_vertex_ids = []
+        nearest_distances = []
+        for point in coords[:, :3]:
+            distances = np.linalg.norm(vertices[:, :3] - point, axis=1)
+            nearest_idx = int(np.argmin(distances))
+            nearest_vertex_ids.append(nearest_idx)
+            nearest_distances.append(float(distances[nearest_idx]))
+
+        if len(set(nearest_vertex_ids)) == 3 and max(nearest_distances) <= tolerance:
+            target_ids = set(nearest_vertex_ids)
+            for tri_idx, tri in enumerate(triangles[:, :3]):
+                if set(int(value) for value in tri) == target_ids:
+                    return int(tri_idx), max(nearest_distances)
+
+        target_centroid = coords[:, :3].mean(axis=0)
+        tri_vertices = vertices[triangles[:, :3], :3]
+        tri_centroids = tri_vertices.mean(axis=1)
+        candidate_order = np.argsort(np.linalg.norm(tri_centroids - target_centroid, axis=1))[:100]
+
+        best_idx = None
+        best_distance = float("inf")
+        for tri_idx in candidate_order:
+            candidate = tri_vertices[int(tri_idx)]
+            local_best = min(
+                float(np.max(np.linalg.norm(candidate[list(order)] - coords[:, :3], axis=1)))
+                for order in itertools.permutations(range(3))
+            )
+            if local_best < best_distance:
+                best_idx = int(tri_idx)
+                best_distance = local_best
+
+        if best_idx is not None and best_distance <= max(tolerance, 1.0):
+            return best_idx, best_distance
+        return None, best_distance if np.isfinite(best_distance) else None
+
+    @staticmethod
+    def _point_key_for_repair(point: np.ndarray, decimals: int = 6) -> Tuple[float, float, float]:
+        point = np.asarray(point, dtype=float)
+        return tuple(float(round(float(value), decimals)) for value in point[:3])
+
+    @staticmethod
+    def _triangle_plane_basis_for_repair(coords: np.ndarray) -> Optional[Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        """Return origin and two orthonormal in-plane axes for one triangle."""
+        coords = np.asarray(coords, dtype=float)
+        if coords.shape[0] != 3 or coords.shape[1] < 3:
+            return None
+        origin = coords[0, :3].copy()
+        edge1 = coords[1, :3] - origin
+        edge2 = coords[2, :3] - origin
+        edge1_len = float(np.linalg.norm(edge1))
+        normal = np.cross(edge1, edge2)
+        normal_len = float(np.linalg.norm(normal))
+        if edge1_len <= 0.0 or normal_len <= 0.0:
+            return None
+        axis_u = edge1 / edge1_len
+        normal = normal / normal_len
+        axis_v = np.cross(normal, axis_u)
+        axis_v_len = float(np.linalg.norm(axis_v))
+        if axis_v_len <= 0.0:
+            return None
+        return origin, axis_u, axis_v / axis_v_len
+
+    @staticmethod
+    def _project_points_to_repair_plane(
+        points: np.ndarray,
+        basis: Tuple[np.ndarray, np.ndarray, np.ndarray],
+    ) -> np.ndarray:
+        origin, axis_u, axis_v = basis
+        rel = np.asarray(points, dtype=float)[:, :3] - origin
+        return np.column_stack((rel @ axis_u, rel @ axis_v))
+
+    @staticmethod
+    def _unproject_points_from_repair_plane(
+        points_2d: np.ndarray,
+        basis: Tuple[np.ndarray, np.ndarray, np.ndarray],
+    ) -> np.ndarray:
+        origin, axis_u, axis_v = basis
+        points_2d = np.asarray(points_2d, dtype=float)
+        return origin + points_2d[:, 0:1] * axis_u + points_2d[:, 1:2] * axis_v
+
+    def _add_repair_point(
+        self,
+        repair_points: List[np.ndarray],
+        point: np.ndarray,
+        tolerance: float,
+    ) -> int:
+        """Add or reuse a local repair point."""
+        point = np.asarray(point, dtype=float)[:3]
+        for idx, existing in enumerate(repair_points):
+            if float(np.linalg.norm(existing - point)) <= tolerance:
+                return idx
+        repair_points.append(point.copy())
+        return len(repair_points) - 1
+
+    def _collect_failed_facet_crossing_segments(
+        self,
+        surface_idx: int,
+        tri_idx: int,
+    ) -> Tuple[List[Tuple[np.ndarray, np.ndarray]], List[str], List[Dict[str, Any]]]:
+        """Find local triangle-triangle intersection segments crossing a failed facet."""
+        surface_data = getattr(self, "tetra_surface_data", {}).get(surface_idx)
+        if not surface_data:
+            return [], [], []
+
+        vertices = np.asarray(surface_data.get("vertices", []), dtype=float)
+        triangles = np.asarray(surface_data.get("triangles", []), dtype=np.int64)
+        if vertices.ndim != 2 or triangles.ndim != 2 or not (0 <= tri_idx < len(triangles)):
+            return [], [], []
+
+        failed_coords = vertices[triangles[tri_idx, :3], :3]
+        bbox_min = failed_coords.min(axis=0)
+        bbox_max = failed_coords.max(axis=0)
+        bbox_diag = float(np.linalg.norm(bbox_max - bbox_min))
+        tolerance = max(1e-4, bbox_diag * 1e-8)
+        bbox_pad = max(1.0, bbox_diag * 0.05)
+
+        try:
+            from Pymeshit.intersection_utils import Triangle, triangle_triangle_intersection
+        except Exception as exc:
+            logger.warning("Could not import triangle intersection helper for facet repair: %s", exc)
+            return [], [], []
+
+        failed_triangle = Triangle(
+            Vector3D(*failed_coords[0]),
+            Vector3D(*failed_coords[1]),
+            Vector3D(*failed_coords[2]),
+        )
+        failed_vertex_keys = {self._point_key_for_repair(point) for point in failed_coords}
+
+        segments: List[Tuple[np.ndarray, np.ndarray]] = []
+        partner_names = set()
+        crossing_details: List[Dict[str, Any]] = []
+        segment_keys = set()
+
+        for other_idx, other_data in getattr(self, "tetra_surface_data", {}).items():
+            other_vertices = np.asarray(other_data.get("vertices", []), dtype=float)
+            other_triangles = np.asarray(other_data.get("triangles", []), dtype=np.int64)
+            if other_vertices.ndim != 2 or other_triangles.ndim != 2 or len(other_triangles) == 0:
+                continue
+
+            tri_pts = other_vertices[other_triangles[:, :3], :3]
+            tri_mins = tri_pts.min(axis=1)
+            tri_maxs = tri_pts.max(axis=1)
+            mask = np.all(tri_maxs >= (bbox_min - bbox_pad), axis=1) & np.all(
+                tri_mins <= (bbox_max + bbox_pad), axis=1
+            )
+            candidate_indices = np.where(mask)[0]
+
+            for candidate_idx in candidate_indices:
+                if other_idx == surface_idx and int(candidate_idx) == int(tri_idx):
+                    continue
+
+                candidate_coords = tri_pts[int(candidate_idx)]
+                if other_idx == surface_idx:
+                    candidate_keys = {self._point_key_for_repair(point) for point in candidate_coords}
+                    # Same-surface neighbors that only touch by existing vertices/edges do
+                    # not define a missing cross-surface constraint.
+                    if len(failed_vertex_keys.intersection(candidate_keys)) >= 1:
+                        continue
+
+                try:
+                    other_triangle = Triangle(
+                        Vector3D(*candidate_coords[0]),
+                        Vector3D(*candidate_coords[1]),
+                        Vector3D(*candidate_coords[2]),
+                    )
+                    intersection = triangle_triangle_intersection(failed_triangle, other_triangle)
+                except Exception:
+                    continue
+
+                if len(intersection) < 2:
+                    continue
+
+                p0 = np.asarray([intersection[0].x, intersection[0].y, intersection[0].z], dtype=float)
+                p1 = np.asarray([intersection[1].x, intersection[1].y, intersection[1].z], dtype=float)
+                if float(np.linalg.norm(p1 - p0)) <= tolerance:
+                    continue
+
+                key0 = self._point_key_for_repair(p0)
+                key1 = self._point_key_for_repair(p1)
+                segment_key = tuple(sorted((key0, key1)))
+                if segment_key in segment_keys:
+                    continue
+                segment_keys.add(segment_key)
+
+                segments.append((p0, p1))
+                other_name = other_data.get("name", f"Surface_{other_idx}")
+                partner_names.add(other_name)
+                crossing_details.append(
+                    {
+                        "surface_idx": int(other_idx),
+                        "tri_idx": int(candidate_idx),
+                        "surface_name": other_name,
+                        "segment": (p0, p1),
+                    }
+                )
+
+        return segments, sorted(partner_names), crossing_details
+
+    def _triangulate_failed_facet_repair_patch(
+        self,
+        failed_coords: np.ndarray,
+        crossing_segments: List[Tuple[np.ndarray, np.ndarray]],
+        tolerance: float,
+    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+        """Triangulate one failed facet with local crossing segments inserted."""
+        basis = self._triangle_plane_basis_for_repair(failed_coords)
+        if basis is None:
+            return None, None
+
+        repair_points: List[np.ndarray] = [np.asarray(point, dtype=float)[:3].copy() for point in failed_coords]
+        repair_segments = {(0, 1), (1, 2), (2, 0)}
+
+        for p0, p1 in crossing_segments:
+            i0 = self._add_repair_point(repair_points, p0, tolerance)
+            i1 = self._add_repair_point(repair_points, p1, tolerance)
+            if i0 != i1:
+                repair_segments.add(tuple(sorted((i0, i1))))
+
+        if len(repair_points) <= 3:
+            return None, None
+
+        points_3d = np.asarray(repair_points, dtype=float)
+        points_2d = self._project_points_to_repair_plane(points_3d, basis)
+        segments = np.asarray(sorted(repair_segments), dtype=np.int32)
+
+        try:
+            import triangle as tr
+            result = tr.triangulate(
+                {
+                    "vertices": points_2d,
+                    "segments": segments,
+                },
+                "pQ",
+            )
+        except Exception as exc:
+            logger.warning("Triangle failed to locally repair skipped facet: %s", exc)
+            return None, None
+
+        if not result or "vertices" not in result or "triangles" not in result:
+            return None, None
+        new_points_2d = np.asarray(result["vertices"], dtype=float)
+        new_triangles = np.asarray(result["triangles"], dtype=np.int64)
+        if new_points_2d.ndim != 2 or new_triangles.ndim != 2 or len(new_triangles) == 0:
+            return None, None
+
+        new_points_3d = self._unproject_points_from_repair_plane(new_points_2d, basis)
+        old_normal = np.cross(failed_coords[1, :3] - failed_coords[0, :3], failed_coords[2, :3] - failed_coords[0, :3])
+        oriented_triangles = []
+        for tri in new_triangles[:, :3]:
+            tri = [int(tri[0]), int(tri[1]), int(tri[2])]
+            tri_coords = new_points_3d[tri]
+            normal = np.cross(tri_coords[1] - tri_coords[0], tri_coords[2] - tri_coords[0])
+            if float(np.dot(normal, old_normal)) < 0.0:
+                tri[1], tri[2] = tri[2], tri[1]
+            oriented_triangles.append(tri)
+
+        return np.asarray(new_points_3d, dtype=float), np.asarray(oriented_triangles, dtype=np.int64)
+
+    def _apply_failed_facet_repair_patch(
+        self,
+        surface_idx: int,
+        tri_idx: int,
+        patch_vertices: np.ndarray,
+        patch_triangles: np.ndarray,
+        crossing_partners: List[str],
+    ) -> int:
+        """Replace a failed facet with a locally repaired triangulated patch."""
+        surface_data = self.tetra_surface_data.get(surface_idx)
+        if not surface_data:
+            return 0
+
+        vertices = np.asarray(surface_data.get("vertices", []), dtype=float)
+        triangles = np.asarray(surface_data.get("triangles", []), dtype=np.int64)
+        if vertices.ndim != 2 or triangles.ndim != 2 or not (0 <= tri_idx < len(triangles)):
+            return 0
+
+        original_vertex_count = len(vertices)
+        old_tri = triangles[tri_idx, :3].astype(int)
+        old_coords = vertices[old_tri, :3]
+        global_ids: List[int] = []
+        tolerance = self._failed_facet_match_tolerance(vertices)
+        for point in np.asarray(patch_vertices, dtype=float)[:, :3]:
+            old_distances = np.linalg.norm(old_coords - point, axis=1)
+            old_nearest = int(np.argmin(old_distances))
+            if float(old_distances[old_nearest]) <= tolerance:
+                global_ids.append(int(old_tri[old_nearest]))
+                continue
+
+            distances = np.linalg.norm(vertices[:, :3] - point, axis=1)
+            nearest_idx = int(np.argmin(distances)) if len(distances) else -1
+            if nearest_idx >= 0 and float(distances[nearest_idx]) <= tolerance:
+                global_ids.append(nearest_idx)
+            else:
+                global_ids.append(len(vertices))
+                vertices = np.vstack([vertices, point])
+
+        replacement_tris = np.asarray(
+            [[global_ids[int(idx)] for idx in tri[:3]] for tri in patch_triangles],
+            dtype=np.int64,
+        )
+        if len(replacement_tris) <= 1:
+            return 0
+
+        triangles_out = np.delete(triangles, tri_idx, axis=0)
+        triangles_out = np.vstack([triangles_out, replacement_tris])
+        surface_data["vertices"] = vertices
+        surface_data["triangles"] = triangles_out
+
+        facet_markers = np.asarray(surface_data.get("facet_markers", []))
+        if facet_markers.ndim == 1 and len(facet_markers) == len(triangles):
+            marker = facet_markers[int(tri_idx)]
+            facet_markers_out = np.delete(facet_markers, tri_idx, axis=0)
+            facet_markers_out = np.concatenate(
+                [facet_markers_out, np.full(len(replacement_tris), marker, dtype=facet_markers.dtype)]
+            )
+            surface_data["facet_markers"] = facet_markers_out
+
+        surface_data.setdefault("repaired_tetgen_facets", []).append(
+            {
+                "triangle_index": int(tri_idx),
+                "new_triangle_count": int(len(replacement_tris)),
+                "inserted_vertex_count": int(max(0, len(vertices) - original_vertex_count)),
+                "crossing_partners": list(crossing_partners),
+            }
+        )
+        return int(len(replacement_tris))
+
+    def _refresh_tetra_loaded_surface_list(self) -> None:
+        """Refresh the compact loaded-surface list after tetra input edits."""
+        if not hasattr(self, "loaded_surfaces_list"):
+            return
+        self.loaded_surfaces_list.clear()
+        for surface_idx in sorted(getattr(self, "tetra_selected_surfaces", set())):
+            surface_data = getattr(self, "tetra_surface_data", {}).get(surface_idx)
+            if not surface_data:
+                continue
+            vertices = np.asarray(surface_data.get("vertices", []))
+            triangles = np.asarray(surface_data.get("triangles", []))
+            removed = len(surface_data.get("removed_tetgen_facets", []))
+            repaired = len(surface_data.get("repaired_tetgen_facets", []))
+            suffix_parts = []
+            if repaired:
+                suffix_parts.append(f"{repaired} repaired")
+            if removed:
+                suffix_parts.append(f"{removed} removed")
+            suffix = f", {', '.join(suffix_parts)}" if suffix_parts else ""
+            item_text = (
+                f"{surface_data.get('name', f'Surface_{surface_idx}')} "
+                f"({len(vertices)} verts, {len(triangles)} tris{suffix}) [Conforming]"
+            )
+            self.loaded_surfaces_list.addItem(item_text)
+
+    def _repair_highlighted_tetgen_failed_facet(self, *_args) -> None:
+        """Locally split highlighted skipped TetGen facets along detected crossings."""
+        entries = list(getattr(self, "tetgen_failed_facet_entries", []) or [])
+        if not entries:
+            entries = self._read_tetgen_skipped_facet_entries()
+            entries = [entry for entry in entries if len(entry.get("coords", [])) == 3]
+
+        if not entries:
+            QMessageBox.warning(self, "No Failed Facet", "Show a failed TetGen facet before repairing it.")
+            return
+
+        matches = []
+        unresolved = []
+        for entry in entries:
+            surface_idx = self._resolve_failed_facet_surface_idx(entry)
+            if surface_idx is None:
+                unresolved.append((entry, "surface not loaded"))
+                continue
+            tri_idx, distance = self._find_matching_failed_facet_triangle(
+                surface_idx,
+                np.asarray(entry.get("coords", []), dtype=float),
+            )
+            if tri_idx is None:
+                unresolved.append((entry, f"matching triangle not found (nearest distance={distance})"))
+                continue
+            matches.append((surface_idx, tri_idx, distance, entry))
+
+        if not matches:
+            detail = "\n".join(
+                f"- {entry.get('surface_name', 'unknown')}: {reason}" for entry, reason in unresolved[:5]
+            )
+            QMessageBox.warning(
+                self,
+                "Facet Not Found",
+                "The failed facet could not be matched to the current tetra input surface."
+                + (f"\n\n{detail}" if detail else ""),
+            )
+            return
+
+        repair_plan = []
+        for surface_idx, tri_idx, _distance, entry in matches:
+            surface_data = self.tetra_surface_data.get(surface_idx)
+            if not surface_data:
+                unresolved.append((entry, "surface data missing"))
+                continue
+            vertices = np.asarray(surface_data.get("vertices", []), dtype=float)
+            triangles = np.asarray(surface_data.get("triangles", []), dtype=np.int64)
+            if vertices.ndim != 2 or triangles.ndim != 2 or not (0 <= tri_idx < len(triangles)):
+                unresolved.append((entry, "triangle index is no longer valid"))
+                continue
+
+            failed_coords = vertices[triangles[int(tri_idx), :3], :3]
+            crossing_segments, crossing_partners, crossing_details = self._collect_failed_facet_crossing_segments(
+                surface_idx,
+                int(tri_idx),
+            )
+            if not crossing_segments:
+                unresolved.append((entry, "no local crossing segment found"))
+                continue
+
+            tolerance = self._failed_facet_match_tolerance(vertices)
+            patch_vertices, patch_triangles = self._triangulate_failed_facet_repair_patch(
+                failed_coords,
+                crossing_segments,
+                tolerance,
+            )
+            if patch_vertices is None or patch_triangles is None or len(patch_triangles) <= 1:
+                unresolved.append((entry, "local constrained retriangulation failed"))
+                continue
+
+            repair_plan.append(
+                {
+                    "surface_idx": int(surface_idx),
+                    "tri_idx": int(tri_idx),
+                    "patch_vertices": patch_vertices,
+                    "patch_triangles": patch_triangles,
+                    "crossing_partners": crossing_partners,
+                    "entry": entry,
+                    "role": "failed",
+                }
+            )
+
+            partner_groups: Dict[Tuple[int, int], Dict[str, Any]] = {}
+            failed_name = surface_data.get("name", f"Surface_{surface_idx}")
+            for detail in crossing_details:
+                other_surface_idx = int(detail["surface_idx"])
+                other_tri_idx = int(detail["tri_idx"])
+                if other_surface_idx not in getattr(self, "tetra_surface_data", {}):
+                    continue
+                key = (other_surface_idx, other_tri_idx)
+                group = partner_groups.setdefault(
+                    key,
+                    {
+                        "surface_idx": other_surface_idx,
+                        "tri_idx": other_tri_idx,
+                        "segments": [],
+                        "crossing_partners": [failed_name],
+                    },
+                )
+                group["segments"].append(detail["segment"])
+
+            for group in partner_groups.values():
+                other_data = self.tetra_surface_data.get(group["surface_idx"])
+                if not other_data:
+                    continue
+                other_vertices = np.asarray(other_data.get("vertices", []), dtype=float)
+                other_triangles = np.asarray(other_data.get("triangles", []), dtype=np.int64)
+                other_tri_idx = int(group["tri_idx"])
+                if (
+                    other_vertices.ndim != 2
+                    or other_triangles.ndim != 2
+                    or not (0 <= other_tri_idx < len(other_triangles))
+                ):
+                    continue
+                other_coords = other_vertices[other_triangles[other_tri_idx, :3], :3]
+                other_patch_vertices, other_patch_triangles = self._triangulate_failed_facet_repair_patch(
+                    other_coords,
+                    group["segments"],
+                    self._failed_facet_match_tolerance(other_vertices),
+                )
+                if other_patch_vertices is None or other_patch_triangles is None or len(other_patch_triangles) <= 1:
+                    continue
+                repair_plan.append(
+                    {
+                        "surface_idx": int(group["surface_idx"]),
+                        "tri_idx": other_tri_idx,
+                        "patch_vertices": other_patch_vertices,
+                        "patch_triangles": other_patch_triangles,
+                        "crossing_partners": group["crossing_partners"],
+                        "entry": entry,
+                        "role": "partner",
+                    }
+                )
+
+        if not repair_plan:
+            detail = "\n".join(
+                f"- {entry.get('surface_name', 'unknown')}: {reason}" for entry, reason in unresolved[:6]
+            )
+            QMessageBox.warning(
+                self,
+                "Repair Failed",
+                "No local repair patch could be built for the skipped facet."
+                + (f"\n\n{detail}" if detail else ""),
+            )
+            return
+
+        surface_names = sorted(
+            {
+                self.tetra_surface_data[item["surface_idx"]].get("name", f"Surface_{item['surface_idx']}")
+                for item in repair_plan
+            }
+        )
+        failed_patch_count = sum(1 for item in repair_plan if item.get("role") == "failed")
+        partner_patch_count = len(repair_plan) - failed_patch_count
+        confirm = QMessageBox.question(
+            self,
+            "Repair Failed Facet",
+            f"Repair {failed_patch_count} skipped TetGen facet(s) and "
+            f"{partner_patch_count} local crossing neighbor facet(s) by constrained splitting?\n\n"
+            f"Surface(s): {', '.join(surface_names)}\n\n"
+            "This keeps the surface closed and edits only the current tetra input in memory. "
+            "Reloading surfaces restores the original mesh.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        repaired_count = 0
+        new_triangle_count = 0
+        for item in sorted(repair_plan, key=lambda value: (value["surface_idx"], value["tri_idx"]), reverse=True):
+            count = self._apply_failed_facet_repair_patch(
+                item["surface_idx"],
+                item["tri_idx"],
+                item["patch_vertices"],
+                item["patch_triangles"],
+                item["crossing_partners"],
+            )
+            if count > 1:
+                repaired_count += 1
+                new_triangle_count += count
+
+        self.tetgen_failed_facet_entries = []
+        if hasattr(self, "remove_failed_facet_btn"):
+            self.remove_failed_facet_btn.setEnabled(False)
+        if hasattr(self, "repair_failed_facet_btn"):
+            self.repair_failed_facet_btn.setEnabled(False)
+        self._clear_tetgen_failed_facet_actors()
+        self._refresh_tetra_loaded_surface_list()
+        self._visualize_loaded_surfaces(reset_camera=False)
+
+        if repaired_count:
+            self.statusBar().showMessage(
+                f"Repaired {repaired_count} local facet patch(es) as {new_triangle_count} triangles"
+            )
+            QMessageBox.information(
+                self,
+                "Facet Repaired",
+                f"Repaired {repaired_count} local facet patch(es) by constrained splitting.\n\n"
+                "Run Generate Tetrahedral Mesh again to retry.",
+            )
+        else:
+            QMessageBox.warning(self, "Repair Failed", "No failed facet was repaired.")
+
+    def _remove_highlighted_tetgen_failed_facet(self, *_args) -> None:
+        """Remove highlighted skipped TetGen facet triangles from current tetra input."""
+        entries = list(getattr(self, "tetgen_failed_facet_entries", []) or [])
+        if not entries:
+            entries = self._read_tetgen_skipped_facet_entries()
+            entries = [entry for entry in entries if len(entry.get("coords", [])) == 3]
+
+        if not entries:
+            QMessageBox.warning(self, "No Failed Facet", "Show a failed TetGen facet before removing it.")
+            return
+
+        matches = []
+        unresolved = []
+        for entry in entries:
+            surface_idx = self._resolve_failed_facet_surface_idx(entry)
+            if surface_idx is None:
+                unresolved.append((entry, "surface not loaded"))
+                continue
+            tri_idx, distance = self._find_matching_failed_facet_triangle(
+                surface_idx,
+                np.asarray(entry.get("coords", []), dtype=float),
+            )
+            if tri_idx is None:
+                unresolved.append((entry, f"matching triangle not found (nearest distance={distance})"))
+                continue
+            matches.append((surface_idx, tri_idx, distance, entry))
+
+        if not matches:
+            detail = "\n".join(
+                f"- {entry.get('surface_name', 'unknown')}: {reason}" for entry, reason in unresolved[:5]
+            )
+            QMessageBox.warning(
+                self,
+                "Facet Not Found",
+                "The failed facet could not be matched to the current tetra input surface."
+                + (f"\n\n{detail}" if detail else ""),
+            )
+            return
+
+        surface_names = sorted(
+            {
+                self.tetra_surface_data[surface_idx].get("name", f"Surface_{surface_idx}")
+                for surface_idx, _tri_idx, _distance, _entry in matches
+            }
+        )
+        confirm = QMessageBox.question(
+            self,
+            "Remove Failed Facet",
+            f"Remove {len(matches)} skipped TetGen facet triangle(s) from the current tetra input?\n\n"
+            f"Surface(s): {', '.join(surface_names)}\n\n"
+            "This edits the loaded conforming mesh in memory. Reloading surfaces will restore the original triangles.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if confirm != QMessageBox.Yes:
+            return
+
+        removed_count = 0
+        matches_by_surface: Dict[int, List[Tuple[int, float, Dict[str, Any]]]] = {}
+        for surface_idx, tri_idx, distance, entry in matches:
+            matches_by_surface.setdefault(surface_idx, []).append((tri_idx, distance, entry))
+
+        for surface_idx, surface_matches in matches_by_surface.items():
+            surface_data = self.tetra_surface_data.get(surface_idx)
+            if not surface_data:
+                continue
+            triangles = np.asarray(surface_data.get("triangles", []), dtype=np.int64)
+            if triangles.ndim != 2 or len(triangles) == 0:
+                continue
+            remove_indices = sorted({int(tri_idx) for tri_idx, _distance, _entry in surface_matches}, reverse=True)
+            valid_remove_indices = [idx for idx in remove_indices if 0 <= idx < len(triangles)]
+            if not valid_remove_indices:
+                continue
+
+            new_triangles = np.delete(triangles, valid_remove_indices, axis=0)
+            surface_data["triangles"] = new_triangles
+
+            facet_markers = np.asarray(surface_data.get("facet_markers", []))
+            if facet_markers.ndim == 1 and len(facet_markers) == len(triangles):
+                surface_data["facet_markers"] = np.delete(facet_markers, valid_remove_indices, axis=0)
+
+            removed_entries = surface_data.setdefault("removed_tetgen_facets", [])
+            for tri_idx, distance, entry in surface_matches:
+                if int(tri_idx) in valid_remove_indices:
+                    removed_entries.append(
+                        {
+                            "triangle_index": int(tri_idx),
+                            "match_distance": float(distance) if distance is not None else None,
+                            "face_id": entry.get("face_id"),
+                            "marker": entry.get("marker"),
+                            "coords": entry.get("coords"),
+                        }
+                    )
+                    removed_count += 1
+
+        self.tetgen_failed_facet_entries = []
+        if hasattr(self, "remove_failed_facet_btn"):
+            self.remove_failed_facet_btn.setEnabled(False)
+        if hasattr(self, "repair_failed_facet_btn"):
+            self.repair_failed_facet_btn.setEnabled(False)
+        self._clear_tetgen_failed_facet_actors()
+        self._refresh_tetra_loaded_surface_list()
+        self._visualize_loaded_surfaces(reset_camera=False)
+        self.statusBar().showMessage(f"Removed {removed_count} TetGen failed facet triangle(s) from tetra input")
+        QMessageBox.information(
+            self,
+            "Facet Removed",
+            f"Removed {removed_count} failed facet triangle(s) from the current tetra input.\n\n"
+            "Run Generate Tetrahedral Mesh again to retry.",
+        )
 
     def _load_conforming_meshes_for_tetgen(self):
         """Load conforming meshes from Tab 6 (Refine & Mesh) following C++ approach"""
@@ -19835,6 +21138,7 @@ segmentation, triangulation, and visualization.
                 (0.2, 0.8, 0.8),  # Cyan
             ]
             
+            label_geometries = []
             for i, surface_idx in enumerate(self.tetra_selected_surfaces):
                 surface_data = self.tetra_surface_data[surface_idx]
                 vertices = np.array(surface_data['vertices'])
@@ -19858,11 +21162,17 @@ segmentation, triangulation, and visualization.
                     name=f"surface_{surface_idx}",
                     label=surface_data['name']
                 )
+                label_geometries.append((surface_data['name'], vertices))
             # Add wells (1D polylines) as edge constraints visualization
             self._add_wells_polyline_to_plotter(self.tetra_plotter, show_intersection_points=True)
             
             # Add legend and optionally reset camera
             if self.tetra_selected_surfaces:
+                self._add_named_geometry_labels_to_plotter(
+                    self.tetra_plotter,
+                    label_geometries,
+                    name="tetra_surface_labels",
+                )
                 self.tetra_plotter.add_legend()
                 # Only reset camera if explicitly requested AND globally allowed
                 if reset_camera and self._allow_camera_reset:
@@ -20195,7 +21505,14 @@ segmentation, triangulation, and visualization.
             self._visualize_tetrahedral_mesh_in_tetra_tab()
             self._update_tetra_stats()
         else:
-            QMessageBox.critical(self, "TetGen Failure", "Failed to generate tetrahedral mesh. Check the logs and the exported debug_plc.vtm file for details.")
+            self._show_tetgen_failed_facet(show_message=False, reset_camera=True)
+            QMessageBox.critical(
+                self,
+                "TetGen Failure",
+                "Failed to generate tetrahedral mesh.\n\n"
+                "If TetGen reported a skipped facet, it has been highlighted in the Tetra Mesh 3D view. "
+                "Try 'Repair Highlighted' first. If that cannot build a local split, use 'Remove Highlighted' as a fallback.",
+            )
 
         self.statusBar().showMessage("Tetrahedral meshing complete.")
 
@@ -28219,7 +29536,7 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
     """
     Unified table that shows both loaded datasets and accepts drops from PZero.
     
-    Each row shows: Name, Type, Extension Factor, As Points, Split Faces, Status
+    Each row shows: Name, Type, Extension Factor, As Points, Split Faces, Split Count, Status
     Drag-drop from PZero adds items as "Pending" which can then be loaded.
     """
     
@@ -28234,7 +29551,8 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
     COL_EXTEND = 2
     COL_AS_POINTS = 3
     COL_SPLIT_FACES = 4
-    COL_STATUS = 5
+    COL_SPLIT_COUNT = 5
+    COL_STATUS = 6
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -28242,8 +29560,10 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         self._pending_items = []  # List of pending PZero records
         
         # Setup columns
-        self.setColumnCount(6)
-        self.setHeaderLabels(["Name", "Type", "Extend", "As Points", "Split Faces", "Status"])
+        self.setColumnCount(7)
+        self.setHeaderLabels(
+            ["Name", "Type", "Extend", "As Points", "Split Faces", "Split Count", "Status"]
+        )
         self.setAlternatingRowColors(True)
         self.setRootIsDecorated(False)
         self.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -28263,10 +29583,12 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         header.setSectionResizeMode(self.COL_EXTEND, QHeaderView.Fixed)
         header.setSectionResizeMode(self.COL_AS_POINTS, QHeaderView.Fixed)
         header.setSectionResizeMode(self.COL_SPLIT_FACES, QHeaderView.Fixed)
+        header.setSectionResizeMode(self.COL_SPLIT_COUNT, QHeaderView.Fixed)
         header.setSectionResizeMode(self.COL_STATUS, QHeaderView.ResizeToContents)
         self.setColumnWidth(self.COL_EXTEND, 70)
         self.setColumnWidth(self.COL_AS_POINTS, 70)
         self.setColumnWidth(self.COL_SPLIT_FACES, 90)
+        self.setColumnWidth(self.COL_SPLIT_COUNT, 90)
     
     def dragEnterEvent(self, event):
         """Accept drag events from PZero tables."""
@@ -28415,7 +29737,7 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
 
         split_faces_cb = QCheckBox()
         split_faces_cb.setChecked(False)
-        split_faces_cb.setToolTip("Split a multi-part TriSurf into separate connected face datasets.")
+        split_faces_cb.setToolTip("Split a multi-part or tube-style TriSurf into separate face datasets.")
         split_faces_cb.setEnabled(supports_split_faces)
         split_widget = QWidget()
         split_layout = QHBoxLayout(split_widget)
@@ -28423,6 +29745,21 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         split_layout.setAlignment(Qt.AlignCenter)
         split_layout.setContentsMargins(0, 0, 0, 0)
         self.setItemWidget(item, self.COL_SPLIT_FACES, split_widget)
+
+        split_count_spin = None
+        if supports_split_faces:
+            split_count_spin = QSpinBox()
+            split_count_spin.setRange(2, 24)
+            split_count_spin.setSingleStep(1)
+            split_count_spin.setValue(4)
+            split_count_spin.setEnabled(False)
+            split_count_spin.setToolTip(
+                "Target number of faces for tube-style border TriSurfs when Split Faces is checked."
+            )
+            split_faces_cb.toggled.connect(split_count_spin.setEnabled)
+            self.setItemWidget(item, self.COL_SPLIT_COUNT, split_count_spin)
+        else:
+            item.setText(self.COL_SPLIT_COUNT, "-")
 
         supports_extension = record.topology in {"TriSurf", "PolyLine", "XsPolyLine"}
         extend_spin.setEnabled(supports_extension)
@@ -28448,6 +29785,7 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
             'extend_spin': extend_spin,
             'as_points_cb': as_points_cb,
             'split_faces_cb': split_faces_cb,
+            'split_count_spin': split_count_spin,
         })
         
         # Select the new item
@@ -28462,7 +29800,7 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
 
     @staticmethod
     def _supports_split_faces(record) -> bool:
-        """Return True when the row can be split into connected TriSurf faces."""
+        """Return True when the row can be split into TriSurf face datasets."""
         return (
             getattr(record, "topology", None) == "TriSurf"
             and getattr(record, "collection_key", None) == "geol_coll"
@@ -28517,6 +29855,11 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
         else:
             item.setText(self.COL_AS_POINTS, "-")
         item.setText(self.COL_SPLIT_FACES, "Yes" if dataset.get("split_from_trisurf", False) else "-")
+        split_face_count = dataset.get("split_face_count")
+        item.setText(
+            self.COL_SPLIT_COUNT,
+            str(split_face_count) if dataset.get("split_from_trisurf", False) and split_face_count else "-",
+        )
     
     def get_pending_records(self) -> list:
         """Get all pending records with their options."""
@@ -28526,7 +29869,9 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
             extend_factor = pending['extend_spin'].value()
             as_points = pending['as_points_cb'].isChecked()
             split_faces = pending.get('split_faces_cb') is not None and pending['split_faces_cb'].isChecked()
-            records.append((record, as_points, extend_factor, split_faces))
+            split_count_spin = pending.get('split_count_spin')
+            split_face_count = split_count_spin.value() if split_count_spin is not None else 4
+            records.append((record, as_points, extend_factor, split_faces, split_face_count))
         return records
     
     def clear_pending(self):
@@ -28598,6 +29943,13 @@ class PZeroUnifiedDatasetTable(QTreeWidget):
                     item.setText(self.COL_EXTEND, f"{ext_factor:.2f}")
                     item.setText(self.COL_AS_POINTS, "Yes" if dataset.get("loaded_as_points", False) else "-")
                     item.setText(self.COL_SPLIT_FACES, "Yes" if dataset.get("split_from_trisurf", False) else "-")
+                    split_face_count = dataset.get("split_face_count")
+                    item.setText(
+                        self.COL_SPLIT_COUNT,
+                        str(split_face_count)
+                        if dataset.get("split_from_trisurf", False) and split_face_count
+                        else "-",
+                    )
 
             self.clearSelection()
             if 0 <= selected_index < len(datasets):
@@ -28652,7 +30004,8 @@ class PZeroEntitySelectionDialog(QDialog):
     COL_POINTS = 6
     COL_AS_POINTS = 7
     COL_SPLIT_FACES = 8
-    COL_EXTEND = 9
+    COL_SPLIT_COUNT = 9
+    COL_EXTEND = 10
 
     def __init__(self, parent, entity_records, bridge=None):
         super().__init__(parent)
@@ -28660,7 +30013,7 @@ class PZeroEntitySelectionDialog(QDialog):
         self._entity_records = list(entity_records)
         self._record_items = []
         self.setWindowTitle("Load From PZero")
-        self.resize(980, 520)
+        self.resize(1100, 520)
 
         layout = QVBoxLayout(self)
         layout.addWidget(
@@ -28713,7 +30066,7 @@ class PZeroEntitySelectionDialog(QDialog):
         layout.addLayout(controls_layout)
 
         self.tree = QTreeWidget()
-        self.tree.setColumnCount(10)
+        self.tree.setColumnCount(11)
         self.tree.setHeaderLabels(
             [
                 "Collection",
@@ -28725,6 +30078,7 @@ class PZeroEntitySelectionDialog(QDialog):
                 "Points",
                 "Load as Points",
                 "Split Faces",
+                "Split Count",
                 "Extend Factor",
             ]
         )
@@ -28738,6 +30092,9 @@ class PZeroEntitySelectionDialog(QDialog):
                 header.setSectionResizeMode(i, QHeaderView.Fixed)
                 self.tree.setColumnWidth(i, 120)
             elif i == self.COL_SPLIT_FACES:
+                header.setSectionResizeMode(i, QHeaderView.Fixed)
+                self.tree.setColumnWidth(i, 110)
+            elif i == self.COL_SPLIT_COUNT:
                 header.setSectionResizeMode(i, QHeaderView.Fixed)
                 self.tree.setColumnWidth(i, 110)
             elif i == self.COL_EXTEND:
@@ -28763,13 +30120,14 @@ class PZeroEntitySelectionDialog(QDialog):
             int(getattr(record, "face_id", -1) if getattr(record, "face_id", None) is not None else -1),
         )
 
-    def _snapshot_options(self) -> Dict[Tuple[str, str, int], Tuple[bool, bool, bool, float]]:
-        """Remember checked/as-points/extension state before sorting or rebuilding."""
+    def _snapshot_options(self) -> Dict[Tuple[str, str, int], Tuple[bool, bool, bool, int, float]]:
+        """Remember checked/as-points/split/extension state before rebuilding."""
         snapshot = {}
         for child in self._iter_record_items():
             record = child.data(0, Qt.UserRole)
             checkbox_widget = self.tree.itemWidget(child, self.COL_AS_POINTS)
             split_widget = self.tree.itemWidget(child, self.COL_SPLIT_FACES)
+            split_count_widget = self.tree.itemWidget(child, self.COL_SPLIT_COUNT)
             extension_widget = self.tree.itemWidget(child, self.COL_EXTEND)
             snapshot[self._record_key(record)] = (
                 child.checkState(0) == Qt.Checked,
@@ -28783,6 +30141,9 @@ class PZeroEntitySelectionDialog(QDialog):
                     and isinstance(split_widget, QCheckBox)
                     and split_widget.isChecked()
                 ),
+                int(split_count_widget.value())
+                if split_count_widget is not None and isinstance(split_count_widget, QSpinBox)
+                else 4,
                 float(extension_widget.value())
                 if extension_widget is not None and isinstance(extension_widget, QDoubleSpinBox)
                 else 0.0,
@@ -28839,7 +30200,7 @@ class PZeroEntitySelectionDialog(QDialog):
             grouped.setdefault(self._group_label_for_record(record), []).append(record)
 
         for group_label, records in grouped.items():
-            parent_item = QTreeWidgetItem([group_label, "", "", "", "", "", "", "", "", ""])
+            parent_item = QTreeWidgetItem([group_label, "", "", "", "", "", "", "", "", "", ""])
             parent_item.setFirstColumnSpanned(True)
             parent_item.setFlags(Qt.ItemIsEnabled)
             self.tree.addTopLevelItem(parent_item)
@@ -28854,7 +30215,7 @@ class PZeroEntitySelectionDialog(QDialog):
             parent_item.setExpanded(True)
 
     def _create_record_item(self, record, saved_options=None):
-        checked = (saved_options or (False, False, False, 0.0))[0]
+        checked = (saved_options or (False, False, False, 4, 0.0))[0]
         child = QTreeWidgetItem(
             [
                 "",
@@ -28864,6 +30225,7 @@ class PZeroEntitySelectionDialog(QDialog):
                 getattr(record, "feature", "") or "-",
                 getattr(record, "scenario", "") or "-",
                 str(record.point_count),
+                "",
                 "",
                 "",
                 "",
@@ -28879,7 +30241,12 @@ class PZeroEntitySelectionDialog(QDialog):
         supports_extension = record.topology in {"TriSurf", "PolyLine", "XsPolyLine"}
         supports_as_points = self._supports_as_points(record)
         supports_split_faces = self._supports_split_faces(record)
-        _checked, load_as_points, split_faces, extension_factor = saved_options or (False, False, False, 0.0)
+        options = saved_options or (False, False, False, 4, 0.0)
+        if len(options) >= 5:
+            _checked, load_as_points, split_faces, split_face_count, extension_factor = options[:5]
+        else:
+            _checked, load_as_points, split_faces, extension_factor = options
+            split_face_count = 4
 
         if supports_as_points:
             checkbox = QCheckBox(self.tree)
@@ -28894,12 +30261,28 @@ class PZeroEntitySelectionDialog(QDialog):
             split_checkbox = QCheckBox(self.tree)
             split_checkbox.setChecked(split_faces)
             split_checkbox.setToolTip(
-                "Split a multi-part TriSurf into separate connected face datasets."
+                "Split a multi-part or tube-style TriSurf into separate face datasets."
             )
             split_checkbox.show()
             self.tree.setItemWidget(child, self.COL_SPLIT_FACES, split_checkbox)
+
+            split_count_spin = QSpinBox(self.tree)
+            split_count_spin.setRange(2, 24)
+            split_count_spin.setSingleStep(1)
+            try:
+                split_count_spin.setValue(int(split_face_count))
+            except (TypeError, ValueError):
+                split_count_spin.setValue(4)
+            split_count_spin.setEnabled(bool(split_faces))
+            split_count_spin.setToolTip(
+                "Target number of faces for tube-style border TriSurfs when Split Faces is checked."
+            )
+            split_checkbox.toggled.connect(split_count_spin.setEnabled)
+            split_count_spin.show()
+            self.tree.setItemWidget(child, self.COL_SPLIT_COUNT, split_count_spin)
         else:
             child.setText(self.COL_SPLIT_FACES, "-")
+            child.setText(self.COL_SPLIT_COUNT, "-")
 
         if supports_extension:
             spinbox = QDoubleSpinBox(self.tree)
@@ -28988,7 +30371,7 @@ class PZeroEntitySelectionDialog(QDialog):
 
     @staticmethod
     def _supports_split_faces(record) -> bool:
-        """Return True when a TriSurf can be split into connected face datasets."""
+        """Return True when a TriSurf can be split into face datasets."""
         return (
             getattr(record, "topology", None) == "TriSurf"
             and getattr(record, "collection_key", None) == "geol_coll"
@@ -29020,8 +30403,9 @@ class PZeroEntitySelectionDialog(QDialog):
         
         Returns
         -------
-        List[Tuple[PZeroEntityRecord, bool, float, bool]]
-            Tuples of (record, load_as_points, extension_factor, split_faces).
+        List[Tuple[PZeroEntityRecord, bool, float, bool, int]]
+            Tuples of (record, load_as_points, extension_factor, split_faces,
+            split_face_count).
             extension_factor equals the per-geometry extend factor selected in
             the table (0.0 if not applicable).
         """
@@ -29045,6 +30429,13 @@ class PZeroEntitySelectionDialog(QDialog):
                         and isinstance(split_widget, QCheckBox)
                         and split_widget.isChecked()
                     )
+                    split_count_widget = self.tree.itemWidget(child, self.COL_SPLIT_COUNT)
+                    split_face_count = 4
+                    if (
+                        split_count_widget is not None
+                        and isinstance(split_count_widget, QSpinBox)
+                    ):
+                        split_face_count = split_count_widget.value()
                     extension_widget = self.tree.itemWidget(child, self.COL_EXTEND)
                     extension_factor = 0.0
                     if (
@@ -29052,7 +30443,9 @@ class PZeroEntitySelectionDialog(QDialog):
                         and isinstance(extension_widget, QDoubleSpinBox)
                     ):
                         extension_factor = extension_widget.value()
-                    selections.append((record, load_as_points, extension_factor, split_faces))
+                    selections.append(
+                        (record, load_as_points, extension_factor, split_faces, split_face_count)
+                    )
         return selections
 
 if __name__ == "__main__":
