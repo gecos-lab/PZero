@@ -291,6 +291,19 @@ def transform_vtk_from_aligned_to_world(vtk_obj, obb_info):
     return vtk_obj
 
 
+def transform_vector_from_aligned_to_world(vector, obb_info):
+    """Rotate a direction vector from OBB-aligned model coordinates to world coordinates."""
+    if not obb_info["has_obb"]:
+        return vector
+
+    vector = np_array(vector, dtype=float)
+    angle = obb_info["angle"]
+    c, s = np_cos(angle), np_sin(angle)
+    R_to_world = np_array([[c, -s], [s, c]])
+    xy_world = R_to_world @ vector[:2]
+    return np_array([xy_world[0], xy_world[1], vector[2]], dtype=float)
+
+
 def transform_voxet_to_obb(voxet, obb_info, original_origin, original_spacing, original_dimensions):
     """
     Transform a Voxet from axis-aligned space back to OBB-oriented space.
@@ -1500,16 +1513,31 @@ def _orient_fault_axes_for_rake(axes, center_normal=None, trace_points=None):
         normal,
         fallback=preferred_trace,
     )
-    trace_axis = trace_from_polyline if trace_from_polyline is not None else preferred_trace
-    if trace_axis is None:
-        trace_axis = _project_vector_to_plane(intermediate, normal, fallback=[1.0, 0.0, 0.0])
+    vertical = np_array([0.0, 0.0, 1.0], dtype=float)
+
+    # Geological fault frames should keep strike horizontal whenever possible.
+    # A free 3D OBB/PCA frame is mathematically tidy, but curved surfaces or
+    # section sticks can make the trace axis plunge and the support rectangle
+    # rotate around X/Y, producing a flattened fault that is hard to interpret.
+    # Use PCA/trace only as polarity hints and as fallbacks for near-horizontal
+    # surfaces where a horizontal strike is not well defined.
+    horizontal_strike = np_cross(vertical, normal)
+    if np_linalg.norm(horizontal_strike) > 1e-9:
+        trace_axis = _normed(horizontal_strike, fallback=preferred_trace)
+    else:
+        trace_axis = trace_from_polyline if trace_from_polyline is not None else preferred_trace
+        if trace_axis is None:
+            trace_axis = _project_vector_to_plane(
+                intermediate, normal, fallback=[1.0, 0.0, 0.0]
+            )
     trace_axis = _normed(trace_axis, fallback=[1.0, 0.0, 0.0])
 
-    if preferred_trace is not None and np_dot(trace_axis, preferred_trace) < 0.0:
+    sign_hint = trace_from_polyline if trace_from_polyline is not None else preferred_trace
+    if sign_hint is not None and np_dot(trace_axis, sign_hint) < 0.0:
         trace_axis = -trace_axis
 
     dip_axis = _normed(np_cross(normal, trace_axis), fallback=[0.0, 0.0, 1.0])
-    up_proj = _project_vector_to_plane([0.0, 0.0, 1.0], normal, fallback=[0.0, 1.0, 0.0])
+    up_proj = _project_vector_to_plane(vertical, normal, fallback=[0.0, 1.0, 0.0])
     if up_proj is not None and np_dot(dip_axis, up_proj) < 0.0:
         trace_axis = -trace_axis
         dip_axis = -dip_axis
@@ -3964,6 +3992,23 @@ def implicit_model_loop_structural_with_faults(self):
         self.print_terminal(
             f"    fault_normal_vector: {fault_normal.tolist()}"
         )
+        if use_obb_alignment:
+            # These are the same geological vectors expressed back in world
+            # coordinates. The aligned components above should rotate with the
+            # OBB coordinate basis; the world vectors should not rotate just
+            # because the modelling box was rotated.
+            slip_vector_world = transform_vector_from_aligned_to_world(
+                slip_vector, obb_info
+            )
+            fault_normal_world = transform_vector_from_aligned_to_world(
+                fault_normal, obb_info
+            )
+            self.print_terminal(
+                f"    fault_slip_vector (world): {slip_vector_world.tolist()}"
+            )
+            self.print_terminal(
+                f"    fault_normal_vector (world): {fault_normal_world.tolist()}"
+            )
         self.print_terminal(
             f"    flip_polarity={'ON' if flip_polarity else 'OFF'}"
         )
