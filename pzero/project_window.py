@@ -3389,13 +3389,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         for _, row in legend_df.iterrows():
             feature_name = str(row.get("feature", "")).strip()
             role_name = str(row.get("role", "")).strip()
-            unit_name = f"{feature_name}_{role_name}".strip("_")
-            if not unit_name or unit_name in units_map:
+            if not feature_name or feature_name in units_map:
                 continue
-            units_map[unit_name] = {
-                "Name": unit_name,
-                "Unit": "NonVolumetric",
-                "Representative Surfaces": "No",
+            units_map[feature_name] = {
+                "Feature": feature_name,
+                "Unit Role": "NonVolumetric",
                 "Structural Polarity": row.get("time", 0.0),
                 "Domain_1": "",
                 "feature": feature_name,
@@ -3407,7 +3405,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         return sorted(
             units_map.values(),
-            key=lambda unit_info: str(unit_info.get("Name", "")).casefold(),
+            key=lambda unit_info: str(unit_info.get("Feature", "")).casefold(),
         )
 
     def sync_structural_topology_table_to_legend(self, table_name=None):
@@ -3424,27 +3422,23 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             or legend_df.empty
             or table_df is None
             or table_df.empty
-            or "Name" not in table_df.columns
+            or "Feature" not in table_df.columns
             or "Structural Polarity" not in table_df.columns
         ):
             return
 
-        legend_names = (
-            legend_df["feature"].astype(str).str.strip()
-            + "_"
-            + legend_df["role"].astype(str).str.strip()
-        )
+        legend_features = legend_df["feature"].astype(str).str.strip()
         legend_updated = False
         for _, row in table_df.iterrows():
-            stm_name = str(row.get("Name", "")).strip()
-            if not stm_name:
+            stm_feature = str(row.get("Feature", "")).strip()
+            if not stm_feature:
                 continue
             try:
                 polarity_value = float(row.get("Structural Polarity", ""))
             except (TypeError, ValueError):
                 continue
 
-            mask = legend_names == stm_name
+            mask = legend_features == stm_feature
             if not mask.any():
                 continue
             self.geol_coll.legend_df.loc[mask, "time"] = polarity_value
@@ -3464,7 +3458,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
 
         polarity_map = {
-            unit_info["Name"]: unit_info.get("Structural Polarity", "")
+            unit_info["Feature"]: unit_info.get("Structural Polarity", "")
             for unit_info in legend_units
         }
         tables_updated = False
@@ -3477,21 +3471,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
             if "Domain" in table_df.columns and "Domain_1" not in table_df.columns:
                 table_df.rename(columns={"Domain": "Domain_1"}, inplace=True)
-            if "Name" not in table_df.columns:
-                table_df["Name"] = ""
-            if "Unit" not in table_df.columns:
-                table_df["Unit"] = "NonVolumetric"
-            if "Representative Surfaces" not in table_df.columns:
-                table_df["Representative Surfaces"] = "No"
+            if "Feature" not in table_df.columns:
+                table_df["Feature"] = ""
+            if "Unit Role" not in table_df.columns:
+                table_df["Unit Role"] = "NonVolumetric"
             if "Structural Polarity" not in table_df.columns:
                 table_df["Structural Polarity"] = ""
             if not any(str(column).startswith("Domain") for column in table_df.columns):
                 table_df["Domain_1"] = ""
 
-            for row_idx in range(table_df.shape[0]):
-                stm_name = str(table_df.at[row_idx, "Name"]).strip()
-                if stm_name in polarity_map:
-                    table_df.at[row_idx, "Structural Polarity"] = polarity_map[stm_name]
+            for row_label in table_df.index.tolist():
+                stm_feature = str(table_df.at[row_label, "Feature"]).strip()
+                if stm_feature in polarity_map:
+                    table_df.at[row_label, "Structural Polarity"] = polarity_map[stm_feature]
             tables_updated = True
 
         if tables_updated:

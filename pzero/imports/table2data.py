@@ -33,16 +33,32 @@ TEXT_TABLE_FILTER = (
 SPECIAL_ASSIGNMENTS = ["As is", "User defined", "N.a."]
 COLORMAP_ASSIGNMENTS = ["value", "color_R", "color_G", "color_B"]
 STRUCTURAL_TOPOLOGY_TABLE_TYPE = "stm"
-STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS = ["Name", "Unit", "Structural Polarity"]
-STRUCTURAL_TOPOLOGY_OPTIONAL_COLUMNS = ["Representative Surfaces"]
+STRUCTURAL_TOPOLOGY_FEATURE_COLUMN = "Feature"
+STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN = "Unit Role"
+STRUCTURAL_TOPOLOGY_POLARITY_COLUMN = "Structural Polarity"
+STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS = [
+    STRUCTURAL_TOPOLOGY_FEATURE_COLUMN,
+    STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN,
+    STRUCTURAL_TOPOLOGY_POLARITY_COLUMN,
+]
+STRUCTURAL_TOPOLOGY_UNIT_VALUES = [
+    "TMU",
+    "TSU",
+    "SU",
+    "IU",
+    "SZ",
+    "NonVolumetric",
+]
 
 
-def _normalise_stm_representative_value(raw_value):
-    """Return the canonical Representative Surfaces value."""
-    value = str(raw_value or "").strip().casefold()
-    if value in {"yes", "1"}:
-        return "Yes"
-    return "No"
+def _normalise_stm_unit_role(raw_value):
+    """Return a valid canonical Unit Role value."""
+    value = str(raw_value or "").strip()
+    valid_by_casefold = {
+        str(valid_value).casefold(): str(valid_value)
+        for valid_value in STRUCTURAL_TOPOLOGY_UNIT_VALUES
+    }
+    return valid_by_casefold.get(value.casefold(), value or "NonVolumetric")
 
 
 def _count_file_lines(file_path):
@@ -183,10 +199,9 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         if self.ImportAsSTmCheckBox.isChecked():
             return [
                 "As is",
-                "Name",
-                "Unit",
-                "Representative Surfaces",
-                "Structural Polarity",
+                STRUCTURAL_TOPOLOGY_FEATURE_COLUMN,
+                STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN,
+                STRUCTURAL_TOPOLOGY_POLARITY_COLUMN,
                 "Domain",
                 "User defined",
                 "N.a.",
@@ -349,10 +364,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         if self.ImportAsColormapCheckBox.isChecked():
             target_assignments = COLORMAP_ASSIGNMENTS
         else:
-            target_assignments = (
-                STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS
-                + STRUCTURAL_TOPOLOGY_OPTIONAL_COLUMNS
-            )
+            target_assignments = STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS
 
         self.rename_dict = {}
         remaining_targets = {
@@ -599,7 +611,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
                     self,
                     "Invalid STm mapping",
                     "An STm import requires at least these fields: "
-                    "Name, Unit, Structural Polarity.",
+                    "Feature, Unit Role, Structural Polarity.",
                 )
                 return
 
@@ -720,22 +732,20 @@ def _normalise_stm_dataframe(input_df):
     for required_column in STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS:
         if required_column not in output_df.columns:
             output_df[required_column] = ""
-    if "Representative Surfaces" not in output_df.columns:
-        output_df["Representative Surfaces"] = "No"
-    else:
-        output_df["Representative Surfaces"] = output_df[
-            "Representative Surfaces"
-        ].apply(_normalise_stm_representative_value)
+    for row_label in output_df.index.tolist():
+        unit_role = _normalise_stm_unit_role(
+            output_df.at[row_label, STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN]
+        )
+        output_df.at[row_label, STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN] = unit_role
     if not any(str(column).startswith("Domain") for column in output_df.columns):
         output_df["Domain_1"] = ""
 
     ordered_columns = [
         column_name
         for column_name in [
-            "Name",
-            "Unit",
-            "Representative Surfaces",
-            "Structural Polarity",
+            STRUCTURAL_TOPOLOGY_FEATURE_COLUMN,
+            STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN,
+            STRUCTURAL_TOPOLOGY_POLARITY_COLUMN,
         ]
         if column_name in output_df.columns
     ]
