@@ -7,7 +7,28 @@ from qtpy.QtWidgets import QFileDialog
 from copy import deepcopy
 import os
 
-from pzero.entities_factory import VertexSet, PolyLine, TriSurf, TetraSolid
+from pzero.entities_factory import (
+    VertexSet,
+    PolyLine,
+    TriSurf,
+    TetraSolid,
+    Voxet,
+    XsVoxet,
+)
+
+
+def _get_point_data_type(vtk_obj, key):
+    if hasattr(vtk_obj, "get_point_data_type"):
+        return vtk_obj.get_point_data_type(key)
+    if hasattr(vtk_obj, "get_point_data_types"):
+        return vtk_obj.get_point_data_types(key)
+    return vtk_obj.GetPointData().GetArray(key).GetDataTypeAsString()
+
+
+def _get_cell_data_type(vtk_obj, key):
+    if hasattr(vtk_obj, "get_cell_data_type"):
+        return vtk_obj.get_cell_data_type(key)
+    return vtk_obj.GetCellData().GetArray(key).GetDataTypeAsString()
 
 
 def pyvista2vtk(self):
@@ -48,13 +69,15 @@ def pyvista2vtk(self):
         self.print_terminal(f"in_file_name: {in_file_name}")
         # Initialize
         cell_type = -1
+        out_coll = self.geol_coll
 
         # Read file with pv_read() function and detect topology
         try:
             curr_obj = pv_read(in_file_name)
 
-            # Get topology (CellType) of first cell in object
-            cell_type = curr_obj.GetCellType(0)
+            if curr_obj.GetNumberOfCells() > 0:
+                # Get topology (CellType) of first cell in object
+                cell_type = curr_obj.GetCellType(0)
         except Exception as e:
             self.print_terminal(
                 f"pyvista2vtk - entity topology not recognized ERROR: {e}"
@@ -62,7 +85,17 @@ def pyvista2vtk(self):
             return  # Exit the function if reading fails
 
         # If curr_obj is a recognized topology, assign to PZero class
-        if cell_type == 1:
+        if curr_obj.IsA("vtkImageData"):
+            if sum(dim > 1 for dim in curr_obj.GetDimensions()) <= 2:
+                topology = "XsVoxet"
+                wrapped_obj = XsVoxet(parent=self)
+            else:
+                topology = "Voxet"
+                wrapped_obj = Voxet()
+            wrapped_obj.ShallowCopy(curr_obj)
+            curr_obj = wrapped_obj
+            out_coll = self.mesh3d_coll
+        elif cell_type == 1:
             curr_obj.__class__ = VertexSet
             topology = "VertexSet"
         elif cell_type == 3:
@@ -72,23 +105,44 @@ def pyvista2vtk(self):
             curr_obj.__class__ = TriSurf
             topology = "TriSurf"
         elif cell_type == 10:
-            curr_obj.__class__ = TetraSolid
+            wrapped_obj = TetraSolid()
+            wrapped_obj.ShallowCopy(curr_obj)
+            curr_obj = wrapped_obj
             topology = "TetraSolid"
+            out_coll = self.mesh3d_coll
         else:
             self.print_terminal("pyvista2vtk - unrecognized cell type.")
             return  # Exit if cell type is not recognized
 
         # Create the entity dictionary similar to dem2vtk.py
-        curr_obj_attributes = deepcopy(self.geol_coll.entity_dict)
+        curr_obj_attributes = deepcopy(out_coll.entity_dict)
         curr_obj_attributes["uid"] = str(uuid4())
         curr_obj_attributes["name"] = os.path.basename(in_file_name)
         curr_obj_attributes["topology"] = topology
         curr_obj_attributes["vtk_obj"] = curr_obj
-        curr_obj_attributes["properties_names"] = []  # Add if there are any properties
-        curr_obj_attributes["properties_components"] = []
+        properties_names = []
+        properties_components = []
+        properties_types = []
 
-        # Add the entity to the geological collection
-        self.geol_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
+        if hasattr(curr_obj, "point_data_keys"):
+            for key in curr_obj.point_data_keys:
+                properties_names.append(key)
+                properties_components.append(curr_obj.get_point_data_shape(key)[-1])
+                properties_types.append(_get_point_data_type(curr_obj, key))
+
+        if hasattr(curr_obj, "cell_data_keys"):
+            for key in curr_obj.cell_data_keys:
+                if key not in properties_names:
+                    properties_names.append(key)
+                    properties_components.append(curr_obj.get_cell_data_shape(key)[-1])
+                    properties_types.append(_get_cell_data_type(curr_obj, key))
+
+        curr_obj_attributes["properties_names"] = properties_names
+        curr_obj_attributes["properties_components"] = properties_components
+        curr_obj_attributes["properties_types"] = properties_types
+
+        # Add the entity to the appropriate collection
+        out_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
 
         # Clean up
         del curr_obj

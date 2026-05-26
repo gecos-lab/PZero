@@ -14,7 +14,16 @@ from numpy import sin as np_sin
 
 from PySide6.QtCore import Signal as pyqtSignal
 from PySide6.QtCore import QObject, QUrl
-from PySide6.QtWidgets import QMainWindow, QMessageBox, QDialog, QLabel, QVBoxLayout, QComboBox
+from PySide6.QtWidgets import (
+    QMainWindow,
+    QMessageBox,
+    QDialog,
+    QLabel,
+    QVBoxLayout,
+    QComboBox,
+    QMenu,
+    QWidget,
+)
 from PySide6.QtGui import QAction, QDesktopServices, QPixmap
 from PySide6.QtCore import Qt, QTimer
 
@@ -81,10 +90,12 @@ from pzero.imports.obj2vtk import vtk2obj
 from pzero.imports.pc2vtk import pc2vtk
 from pzero.imports.ply2vtk import vtk2ply
 from pzero.imports.pyvista2vtk import pyvista2vtk
-from pzero.imports.segy2vtk import segy2vtk
+from pzero.imports.segy2vtk import segy2vtk, read_segy_file
 from pzero.imports.shp2vtk import shp2vtk
 from pzero.imports.stl2vtk import vtk2stl, vtk2stl_dilation
+from pzero.imports.table2data import import_tables
 from pzero.imports.well2vtk import well2vtk
+from pzero.imports.xyz2vtk import xyz2vtk
 from pzero.ui.project_window_ui import Ui_ProjectWindow
 from pzero.pymeshit_app.pzero_bridge import PZeroPymeshitBridge
 from .entities_factory import (
@@ -116,6 +127,7 @@ from .three_d_surfaces import (
     implicit_model_loop_structural,
     surface_smoothing,
     linear_extrusion,
+    enhanced_linear_extrusion,
     decimation_pro_resampling,
     decimation_quadric_resampling,
     subdivision_resampling,
@@ -128,6 +140,9 @@ from .three_d_surfaces import (
 
 from pzero.views.dock_window import DockWindow
 from .processing.CRS import CRS_list, CRS_transform_selected
+# import json
+from json import dump as json_dump
+from json import load as json_load
 from PySide6.QtWidgets import QDockWidget
 from numpy import cos as np_cos
 from numpy import pi as np_pi
@@ -168,8 +183,6 @@ class _PyMeshItDockWidget(QDockWidget):
         # Just hide the dock instead of closing/destroying it
         self.hide()
         event.ignore()  # Prevent actual close/destruction
-
-
 class ProjectSignals(QObject):
     """
     This class is used to store signals used project-wide that will be used according
@@ -227,6 +240,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         super(ProjectWindow, self).__init__(*args, **kwargs)
         """Import GUI from project_window_ui.py"""
         self.setupUi(self)
+        self._install_import_table_action()
+        self._install_import_xyz_action()
         self.TextTerminal.setReadOnly(True)
         self.actionRetriangulateSurface = QAction(self)
         self.actionRetriangulateSurface.setObjectName("actionRetriangulateSurface")
@@ -268,6 +283,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportGocad.triggered.connect(self.import_gocad)
         self.actionImportGocadXsection.triggered.connect(self.import_gocad_sections)
         self.actionImportBoundary.triggered.connect(self.import_gocad_boundary)
+        self.actionImportTable.triggered.connect(self.import_tables)
+        self.actionImportXYZ.triggered.connect(self.import_XYZ)
         self.actionImportPyVista.triggered.connect(lambda: pyvista2vtk(self=self))
         self.actionImportPC.triggered.connect(self.import_PC)
         self.actionImportSHP.triggered.connect(self.import_SHP)
@@ -314,6 +331,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             lambda: decimation_quadric_resampling(self)
         )
         self.actionExtrusion.triggered.connect(lambda: linear_extrusion(self))
+        self.actionEnhancedExtrusion = QAction("Enhanced Extrusion", self)
+        self.actionEnhancedExtrusion.setObjectName("actionEnhancedExtrusion")
+        self.actionEnhancedExtrusion.triggered.connect(
+            lambda: enhanced_linear_extrusion(self)
+        )
+        self.menuProjection.addAction(self.actionEnhancedExtrusion)
         self.actionProject2DEM.triggered.connect(lambda: project_2_dem(self))
         self.actionXSectionIntersection.triggered.connect(lambda: intersection_xs(self))
         self.actionProject2XSection.triggered.connect(lambda: project_2_xs(self))
@@ -328,12 +351,22 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionMapView.triggered.connect(
             lambda: DockWindow(parent=self, window_type="ViewMap")
         )
+
         self.actionXSectionView.triggered.connect(
             lambda: DockWindow(parent=self, window_type="ViewXsection")
+        )
+        self.actionInterpretationView.triggered.connect(
+            lambda: DockWindow(parent=self, window_type="ViewInterpretation")
         )
         self.actionStereoplotView.triggered.connect(
             lambda: DockWindow(parent=self, window_type="ViewStereoplot")
         )
+        self.actionTableView = QAction("Table View", self)
+        self.actionTableView.setObjectName("actionTableView")
+        self.actionTableView.triggered.connect(
+            lambda: DockWindow(parent=self, window_type="ViewTable")
+        )
+        self.menuWindows.insertAction(self.actionXYPlotView, self.actionTableView)
 
         """File>CRS actions -> slots"""
         self.actionTransformSelectedCRS.triggered.connect(
@@ -438,6 +471,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def open_release_url(self):
         QDesktopServices.openUrl(QUrl("https://github.com/gecos-lab/PZero/releases"))
+
     """Methods used to manage the entities shown in tables."""
 
     @property
@@ -449,6 +483,170 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def selected_collection(self):
         """Returns which collection is shown, based on shown_table."""
         return self.tab_collection_dict[self.shown_table]
+
+    @property
+    def table_view_collection_dict(self):
+        """Map table view widgets to collection attribute names."""
+        return {
+            self.GeologyTableView: "geol_coll",
+            self.XSectionsTableView: "xsect_coll",
+            self.DOMsTableView: "dom_coll",
+            self.ImagesTableView: "image_coll",
+            self.Meshes3DTableView: "mesh3d_coll",
+            self.BoundariesTableView: "boundary_coll",
+            self.WellsTableView: "well_coll",
+            self.FluidsTableView: "fluid_coll",
+            self.BackgroundsTableView: "backgrnd_coll",
+        }
+
+    def collection_display_name(self, collection_name: str = None) -> str:
+        """Return a user-facing collection name."""
+        names = {
+            "geol_coll": "Geology",
+            "xsect_coll": "X Sections",
+            "dom_coll": "DEMs and DOMs",
+            "image_coll": "Images",
+            "mesh3d_coll": "Meshes and Grids",
+            "boundary_coll": "Boundaries",
+            "well_coll": "Wells",
+            "fluid_coll": "Fluids",
+            "backgrnd_coll": "Background",
+        }
+        return names.get(collection_name, str(collection_name))
+
+    def bind_collection_table_context_menus(self):
+        """Bind right-click context menus for all entities table views."""
+        for table_view, collection_name in self.table_view_collection_dict.items():
+            old_handler = getattr(table_view, "_transfer_context_handler", None)
+            if old_handler:
+                try:
+                    table_view.customContextMenuRequested.disconnect(old_handler)
+                except Exception:
+                    pass
+            table_view.setContextMenuPolicy(Qt.CustomContextMenu)
+            handler = (
+                lambda pos, tv=table_view, src=collection_name: self.on_entities_table_context_menu(
+                    table_view=tv, source_collection_name=src, position=pos
+                )
+            )
+            table_view._transfer_context_handler = handler
+            table_view.customContextMenuRequested.connect(handler)
+
+    def get_selected_uids_from_table(self, table_view=None) -> list:
+        """Get selected entity UIDs from a given table view."""
+        if table_view is None or table_view.selectionModel() is None:
+            return []
+        selected_rows = table_view.selectionModel().selectedRows(column=0)
+        return list(dict.fromkeys([idx.data() for idx in selected_rows if idx.data()]))
+
+    def on_entities_table_context_menu(
+        self, table_view=None, source_collection_name: str = None, position=None
+    ):
+        """Open table right-click menu with Copy to / Move to actions."""
+        if table_view is None or not source_collection_name:
+            return
+
+        idx = table_view.indexAt(position)
+        if idx.isValid():
+            selected_rows = {
+                selected_idx.row()
+                for selected_idx in table_view.selectionModel().selectedRows()
+            }
+            if idx.row() not in selected_rows:
+                table_view.clearSelection()
+                table_view.selectRow(idx.row())
+
+        selected_uids = self.get_selected_uids_from_table(table_view=table_view)
+        if not selected_uids:
+            return
+
+        source_collection = getattr(self, source_collection_name, None)
+        if source_collection is None:
+            return
+
+        menu = QMenu(table_view)
+        copy_menu = menu.addMenu("Copy to")
+        move_menu = menu.addMenu("Move to")
+
+        action_map = {}
+        for destination_collection_name in self.tab_collection_dict.values():
+            destination_collection = getattr(self, destination_collection_name, None)
+            if destination_collection is None:
+                continue
+
+            label = self.collection_display_name(destination_collection_name)
+            copy_action = copy_menu.addAction(label)
+            move_action = move_menu.addAction(label)
+            action_map[copy_action] = (destination_collection_name, False)
+            action_map[move_action] = (destination_collection_name, True)
+
+            compatible = True
+            for uid in selected_uids:
+                can_transfer, _ = source_collection.can_transfer_uid_to_collection(
+                    uid=uid, destination_collection=destination_collection
+                )
+                if not can_transfer:
+                    compatible = False
+                    break
+
+            copy_action.setEnabled(compatible)
+            move_action.setEnabled(
+                compatible and destination_collection_name != source_collection_name
+            )
+
+        chosen_action = menu.exec(table_view.viewport().mapToGlobal(position))
+        if chosen_action not in action_map:
+            return
+
+        destination_collection_name, move = action_map[chosen_action]
+        self.transfer_entities_between_collections(
+            source_collection_name=source_collection_name,
+            destination_collection_name=destination_collection_name,
+            selected_uids=selected_uids,
+            move=move,
+        )
+
+    def transfer_entities_between_collections(
+        self,
+        source_collection_name: str = None,
+        destination_collection_name: str = None,
+        selected_uids: list = None,
+        move: bool = False,
+    ) -> dict:
+        """Copy/move selected UIDs between collections and log the result."""
+        source_collection = getattr(self, source_collection_name, None)
+        destination_collection = getattr(self, destination_collection_name, None)
+        if source_collection is None or destination_collection is None or not selected_uids:
+            return {"added_uids": [], "removed_uids": [], "failed": []}
+
+        if move and source_collection_name == destination_collection_name:
+            self.print_terminal(
+                "Move cancelled: source and destination collections are the same."
+            )
+            return {
+                "added_uids": [],
+                "removed_uids": [],
+                "failed": [{"uid": None, "reason": "same source and destination"}],
+            }
+
+        report = source_collection.transfer_uids_to_collection(
+            destination_collection=destination_collection,
+            uids=selected_uids,
+            move=move,
+            keep_uid_on_move=False,
+        )
+
+        operation = "Moved" if move else "Copied"
+        self.print_terminal(
+            f"{operation} {len(report['added_uids'])} entities from "
+            f"{self.collection_display_name(source_collection_name)} to "
+            f"{self.collection_display_name(destination_collection_name)}."
+        )
+        for failed in report["failed"]:
+            self.print_terminal(
+                f"{operation} skipped for uid {failed['uid']}: {failed['reason']}"
+            )
+        return report
 
     @property
     def selected_uids(self):
@@ -1549,6 +1747,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # this is used to delete open windows when the current project is closed (and a new one is opened)
         self.signals.project_close.emit()
 
+        self.custom_tables = {}
+        self.custom_table_types = {}
+        self.custom_table_options = {}
+
         # Create the geol_coll GeologicalCollection (a Qt QAbstractTableModel with a Pandas dataframe as attribute)
         # and connect the model to GeologyTableView (a Qt QTableView created with QTDesigner and provided by
         # Ui_ProjectWindow). Setting the model also updates the view.
@@ -1608,6 +1810,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             (self.BackgroundsTableView, self.backgrnd_coll),
         ]:
             self.bind_role_click_editor(table_view=table_view, collection=collection)
+        self.bind_collection_table_context_menus()
 
         # Create the geol_coll.legend_df legend table (a Pandas dataframe), create the corresponding QT
         # Legend self.legend (a Qt QTreeWidget that is internally connected to its data source),
@@ -1615,7 +1818,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.geol_coll.legend_df = pd_DataFrame(
             columns=list(Legend.geol_legend_dict.keys())
         )
-        self.well_legend_df = pd_DataFrame(columns=list(Legend.well_legend_dict.keys()))
         self.fluid_coll.legend_df = pd_DataFrame(
             columns=list(Legend.fluids_legend_dict.keys())
         )
@@ -1767,10 +1969,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         # self.prop_legend_df.to_csv(out_dir_name + '/prop_legend_df.csv', encoding='utf-8', index=False)
 
-        self.well_legend_df.to_json(
-            out_dir_name + "/well_legend_table.json", orient="index"
-        )
-
         self.fluid_coll.legend_df.to_json(
             out_dir_name + "/fluids_legend_table.json", orient="index"
         )
@@ -1778,6 +1976,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.backgrnd_coll.legend_df.to_json(
             out_dir_name + "/backgrounds_legend_table.json", orient="index"
         )
+
+        self.save_custom_tables(out_dir_name=out_dir_name)
 
         # --------------------- SAVE tables ---------------------
 
@@ -1887,10 +2087,34 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             elif self.image_coll.df.loc[
                 self.image_coll.df["uid"] == uid, "topology"
             ].values[0] in ["Seismics"]:
-                sg_writer = vtkXMLStructuredGridWriter()
-                sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
-                sg_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
-                sg_writer.Write()
+                source_file = None
+                if "seismic_source_file" in self.image_coll.df.columns:
+                    try:
+                        source_file = self.image_coll.df.loc[
+                            self.image_coll.df["uid"] == uid, "seismic_source_file"
+                        ].values[0]
+                    except Exception:
+                        source_file = None
+
+                source_file = source_file if isinstance(source_file, str) and source_file.strip() else None
+                source_exists = bool(source_file and os_path.isfile(source_file))
+
+                # Fast path: keep only a reference to the original SEG-Y source when it is available.
+                # Fallback: persist a VTK copy only when the source cannot be reused on reopen.
+                if not source_exists:
+                    sg_writer = vtkXMLStructuredGridWriter()
+                    sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
+                    sg_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
+                    sg_writer.Write()
+
+                seismic_metadata = {
+                    "uid": uid,
+                    "source_file": source_file,
+                    "storage": "source_file" if source_exists else "embedded_vts",
+                }
+                with open(out_dir_name + "/" + uid + "_seismic_metadata.json", "w") as f:
+                    json_dump(seismic_metadata, f, indent=2)
+                prgs_bar.add_one()
 
         # Save mesh3d collection table to JSON file and entities as VTK.
         out_cols = list(self.mesh3d_coll.df.columns)
@@ -2013,6 +2237,70 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.SetInputData(self.backgrnd_coll.get_uid_vtk_obj(uid))
             pd_writer.Write()
             prgs_bar.add_one()
+
+    def save_custom_tables(self, out_dir_name: str = None):
+        """Persist user-defined tables alongside the project revision."""
+        if not out_dir_name:
+            return
+
+        tables_payload = {"version": 1, "tables": []}
+        for table_name, dataframe in self.custom_tables.items():
+            exported_df = dataframe.copy()
+            exported_df = exported_df.where(exported_df.notna(), "")
+            exported_df = exported_df.astype(str)
+            tables_payload["tables"].append(
+                {
+                    "name": table_name,
+                    "table_type": self.custom_table_types.get(table_name, "manual"),
+                    "options": self.custom_table_options.get(table_name, {}),
+                    "dataframe": {
+                        "columns": exported_df.columns.tolist(),
+                        "data": exported_df.values.tolist(),
+                    },
+                }
+            )
+
+        with open(out_dir_name + "/custom_tables.json", "w", encoding="utf-8") as fout:
+            json_dump(tables_payload, fout, indent=2)
+
+    def load_custom_tables(self, in_dir_name: str = None):
+        """Load user-defined project tables."""
+        self.custom_tables = {}
+        self.custom_table_types = {}
+        self.custom_table_options = {}
+        if not in_dir_name:
+            return
+
+        custom_tables_path = in_dir_name + "/custom_tables.json"
+        if not os_path.isfile(custom_tables_path):
+            return
+
+        with open(custom_tables_path, "r", encoding="utf-8") as fin:
+            tables_payload = json_load(fin)
+
+        for table_payload in tables_payload.get("tables", []):
+            table_name = str(table_payload.get("name", "")).strip()
+            if not table_name:
+                continue
+
+            dataframe_payload = table_payload.get("dataframe", {})
+            columns = [
+                str(column_name)
+                for column_name in dataframe_payload.get("columns", [])
+            ]
+            data = dataframe_payload.get("data", [])
+            self.custom_tables[table_name] = pd_DataFrame(data=data, columns=columns)
+            self.custom_table_types[table_name] = table_payload.get(
+                "table_type", "manual"
+            )
+            self.custom_table_options[table_name] = table_payload.get("options", {})
+
+        if self.custom_tables:
+            self.print_terminal(
+                f"Loaded {len(self.custom_tables)} custom table(s)."
+            )
+        self.sync_structural_topology_tables_from_legend()
+        self.refresh_custom_colormaps()
 
     def new_project(self):
         """Creates a new empty project, after having cleared all variables."""
@@ -2142,38 +2430,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     by="time", ascending=True, inplace=True
                 )
 
-            # Read well legend tables.
-            if os_path.isfile(
-                (in_dir_name + "/well_legend_table.csv")
-            ) or os_path.isfile((in_dir_name + "/well_legend_table.json")):
-                if os_path.isfile((in_dir_name + "/well_legend_table.json")):
-                    new_well_legend_df = pd_read_json(
-                        in_dir_name + "/well_legend_table.json",
-                        orient="index",
-                        dtype=Legend.legend_dict_types,
-                    )
-                else:
-                    new_well_legend_df = pd_read_csv(
-                        in_dir_name + "/well_legend_table.csv",
-                        encoding="utf-8",
-                        dtype=Legend.legend_dict_types,
-                        keep_default_na=False,
-                    )
-                if not new_well_legend_df.empty:
-                    self.well_legend_df = new_well_legend_df
-                in_keys = set(self.well_legend_df.keys())
-                def_keys = set(Legend.well_legend_dict.keys())
-
-                diffs = def_keys.difference(in_keys)
-
-                if len(diffs) > 0:
-                    self.print_terminal(f"well_legend_table diffs: {diffs}")
-                    for diff in diffs:
-                        self.well_legend_df[diff] = Legend.well_legend_dict[diff]
-                    self.well_legend_df.sort_values(
-                        by="name", ascending=True, inplace=True
-                    )
-
             # Read fluids legend tables.
             if os_path.isfile(
                 (in_dir_name + "/fluids_legend_table.csv")
@@ -2256,6 +2512,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         dtype=Legend.legend_dict_types,
                         keep_default_na=False,
                     )
+                if not new_others_legend_df.empty:
+                    self.others_legend_df = new_others_legend_df
                 in_keys = set(self.others_legend_df.keys())
                 def_keys = set(Legend.others_legend_dict.keys())
 
@@ -2265,6 +2523,42 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     self.print_terminal(f"others_legend_table diffs: {diffs}")
                     for diff in diffs:
                         self.others_legend_df[diff] = Legend.others_legend_dict[diff]
+                default_other_rows = []
+                for idx, other_collection in enumerate(
+                    Legend.others_legend_dict["other_collection"]
+                ):
+                    if other_collection in self.others_legend_df[
+                        "other_collection"
+                    ].tolist():
+                        continue
+                    default_other_rows.append(
+                        {
+                            key: Legend.others_legend_dict[key][idx]
+                            for key in Legend.others_legend_dict.keys()
+                        }
+                    )
+                if default_other_rows:
+                    self.others_legend_df = pd_concat(
+                        [
+                            self.others_legend_df,
+                            pd_DataFrame(default_other_rows),
+                        ],
+                        ignore_index=True,
+                    )
+                other_order = {
+                    name: idx
+                    for idx, name in enumerate(
+                        Legend.others_legend_dict["other_collection"]
+                    )
+                }
+                self.others_legend_df["legend_order"] = self.others_legend_df[
+                    "other_collection"
+                ].map(other_order)
+                self.others_legend_df.sort_values(
+                    by="legend_order", ascending=True, inplace=True
+                )
+                self.others_legend_df.drop(columns=["legend_order"], inplace=True)
+                self.others_legend_df.reset_index(drop=True, inplace=True)
 
             if os_path.isfile((in_dir_name + "/prop_legend_df.csv")) or os_path.isfile(
                 (in_dir_name + "/prop_legend_df.json")
@@ -2423,6 +2717,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             )
                             self.print_terminal(f"column {column} added to xsect table")
 
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_xsect_coll_df = new_xsect_coll_df.loc[:, ~new_xsect_coll_df.columns.duplicated()]
+
                     # reorder columns
                     new_xsect_coll_df = new_xsect_coll_df[self.xsect_coll.df.columns]
 
@@ -2509,6 +2806,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                                 axis=1,
                             )
                             self.print_terminal(f"column {column} added to dom table")
+
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_dom_coll_df = new_dom_coll_df.loc[:, ~new_dom_coll_df.columns.duplicated()]
 
                     # reorder columns
                     new_dom_coll_df = new_dom_coll_df[self.dom_coll.df.columns]
@@ -2620,6 +2920,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             )
                             self.print_terminal(f"column {column} added to image table")
 
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_image_coll_df = new_image_coll_df.loc[:, ~new_image_coll_df.columns.duplicated()]
+
                     # reorder columns
                     new_image_coll_df = new_image_coll_df[self.image_coll.df.columns]
 
@@ -2665,14 +2968,38 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     elif self.image_coll.df.loc[
                         self.image_coll.df["uid"] == uid, "topology"
                     ].values[0] in ["Seismics"]:
-                        if not os_path.isfile((in_dir_name + "/" + uid + ".vts")):
-                            print("error: missing VTK file")
-                            return
                         vtk_object = Seismics()
-                        sg_reader = vtkXMLStructuredGridReader()
-                        sg_reader.SetFileName(in_dir_name + "/" + uid + ".vts")
-                        sg_reader.Update()
-                        vtk_object.ShallowCopy(sg_reader.GetOutput())
+                        seismic_vts_path = in_dir_name + "/" + uid + ".vts"
+                        seismic_metadata_path = (
+                            in_dir_name + "/" + uid + "_seismic_metadata.json"
+                        )
+
+                        if os_path.isfile(seismic_vts_path):
+                            sg_reader = vtkXMLStructuredGridReader()
+                            sg_reader.SetFileName(seismic_vts_path)
+                            sg_reader.Update()
+                            vtk_object.ShallowCopy(sg_reader.GetOutput())
+                        else:
+                            source_file = None
+                            if os_path.isfile(seismic_metadata_path):
+                                try:
+                                    with open(seismic_metadata_path, "r") as fin:
+                                        seismic_metadata = json_load(fin)
+                                    source_file = seismic_metadata.get("source_file")
+                                except Exception:
+                                    source_file = None
+                            if not source_file:
+                                try:
+                                    source_file = self.image_coll.df.loc[
+                                        self.image_coll.df["uid"] == uid,
+                                        "seismic_source_file",
+                                    ].values[0]
+                                except Exception:
+                                    source_file = None
+                            if not source_file or not os_path.isfile(source_file):
+                                print("error: missing seismic VTK file and source file")
+                                return
+                            vtk_object.ShallowCopy(read_segy_file(in_file_name=source_file))
                         vtk_object.Modified()
                     self.image_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                     prgs_bar.add_one()
@@ -2736,6 +3063,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             self.print_terminal(
                                 f"column {column} added to mesh3d table"
                             )
+
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_mesh3d_coll_df = new_mesh3d_coll_df.loc[:, ~new_mesh3d_coll_df.columns.duplicated()]
 
                     # reorder columns
                     new_mesh3d_coll_df = new_mesh3d_coll_df[self.mesh3d_coll.df.columns]
@@ -2879,6 +3209,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                                 f"column {column} added to boundary table"
                             )
 
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_boundary_coll_df = new_boundary_coll_df.loc[:, ~new_boundary_coll_df.columns.duplicated()]
+
                     # reorder columns
                     new_boundary_coll_df = new_boundary_coll_df[
                         self.boundary_coll.df.columns
@@ -2963,6 +3296,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                                 axis=1,
                             )
                             self.print_terminal(f"column {column} added to wells table")
+
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_well_coll_df = new_well_coll_df.loc[:, ~new_well_coll_df.columns.duplicated()]
 
                     # reorder columns
                     new_well_coll_df = new_well_coll_df[self.well_coll.df.columns]
@@ -3049,6 +3385,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             self.print_terminal(
                                 f"column {column} added to geology table"
                             )
+
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_geol_coll_df = new_geol_coll_df.loc[:, ~new_geol_coll_df.columns.duplicated()]
 
                     # reorder columns
                     new_geol_coll_df = new_geol_coll_df[self.geol_coll.df.columns]
@@ -3149,6 +3488,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             self.print_terminal(
                                 f"column {column} added to fluids table"
                             )
+
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_fluids_coll_df = new_fluids_coll_df.loc[:, ~new_fluids_coll_df.columns.duplicated()]
 
                     # reorder columns
                     new_fluids_coll_df = new_fluids_coll_df[self.fluid_coll.df.columns]
@@ -3255,6 +3597,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                                 f"column {column} added to background table"
                             )
 
+                    # Remove duplicate columns if any (can occur when loading old projects)
+                    new_backgrounds_coll_df = new_backgrounds_coll_df.loc[:, ~new_backgrounds_coll_df.columns.duplicated()]
+
                     # reorder columns
                     new_backgrounds_coll_df = new_backgrounds_coll_df[
                         self.backgrnd_coll.df.columns
@@ -3277,12 +3622,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         vtk_object = VertexSet()
                     elif self.backgrnd_coll.get_uid_topology(uid) == "PolyLine":
                         vtk_object = PolyLine()
-                    # elif self.backgrnd_coll.get_uid_topology(uid) == 'TriSurf':
-                    #     vtk_object = TriSurf()
-                    # elif self.backgrnd_coll.get_uid_topology(uid) == 'XsVertexSet':
-                    #     vtk_object = XsVertexSet(self.backgrnd_coll.get_uid_x_section(uid), parent=self)
-                    # elif self.backgrnd_coll.get_uid_topology(uid) == 'XsPolyLine':
-                    #     vtk_object = XsPolyLine(self.backgrnd_coll.get_uid_x_section(uid), parent=self)
+                    elif self.backgrnd_coll.get_uid_topology(uid) == "TriSurf":
+                        vtk_object = TriSurf()
+                    elif self.backgrnd_coll.get_uid_topology(uid) == "XsVertexSet":
+                        vtk_object = XsVertexSet(
+                            self.backgrnd_coll.get_uid_x_section(uid), parent=self
+                        )
+                    elif self.backgrnd_coll.get_uid_topology(uid) == "XsPolyLine":
+                        vtk_object = XsPolyLine(
+                            self.backgrnd_coll.get_uid_x_section(uid), parent=self
+                        )
                     pd_reader = vtkXMLPolyDataReader()
                     pd_reader.SetFileName(in_dir_name + "/" + uid + ".vtp")
                     pd_reader.Update()
@@ -3293,6 +3642,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.backgrnd_coll.table_model.endResetModel()
             # Update legend.
             self.prop_legend.update_widget(parent=self)
+            self.load_custom_tables(in_dir_name=in_dir_name)
 
 
         except BaseException as e:
@@ -3440,6 +3790,186 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # sections_from_file(self)
         pass
 
+    def _install_import_xyz_action(self):
+        """Add the generic XYZ import action to the File menu."""
+        self.actionImportXYZ = QAction("Import XYZ", self)
+        self.actionImportXYZ.setObjectName("actionImportXYZ")
+        self.actionImportXYZ.setStatusTip(
+            "Import multiple XYZ-like point files as VertexSet entities"
+        )
+        self.menuFile.insertAction(self.actionImportPC, self.actionImportXYZ)
+
+    def _install_import_table_action(self):
+        """Add the generic table import action to the File menu."""
+        self.actionImportTable = QAction("Import Tables", self)
+        self.actionImportTable.setObjectName("actionImportTable")
+        self.actionImportTable.setStatusTip(
+            "Import generic text tables into custom project tables"
+        )
+        self.menuFile.insertAction(self.actionImportPC, self.actionImportTable)
+
+    def import_XYZ(self):
+        """Import multiple generic XYZ point files into a selected collection."""
+        self.print_terminal("Importing generic XYZ points")
+        in_file_names = open_files_dialog(
+            parent=self,
+            caption="Import XYZ points from file(s)",
+            filter=(
+                "Supported XYZ files (*.csv *.dat *.txt *.xyz *.asc *.vtu *.vtk *.vtp);;"
+                "Text files (*.csv *.dat *.txt *.xyz *.asc);;"
+                "VTK files (*.vtu *.vtk *.vtp)"
+            ),
+        )
+        if not in_file_names:
+            return
+
+        collection_name = input_combo_dialog(
+            parent=self,
+            title="Collection",
+            label="Assign collection",
+            choice_list=["Geology", "Fluid contacts", "Background data"],
+        )
+        if not collection_name:
+            return
+
+        xyz2vtk(
+            self=self,
+            in_file_names=in_file_names,
+            collection_name=collection_name,
+        )
+
+    def import_tables(self):
+        """Import generic tabular files into custom project tables."""
+        self.print_terminal("Importing generic tables")
+        import_tables(self=self)
+
+    def refresh_table_views(self):
+        """Refresh any open custom table views."""
+        for child in self.findChildren(QWidget):
+            if hasattr(child, "refresh_table_list") and callable(
+                getattr(child, "refresh_table_list")
+            ):
+                try:
+                    child.refresh_table_list()
+                except Exception:
+                    pass
+
+    def get_structural_topology_legend_units(self):
+        """Return STm-ready units derived from the geological legend."""
+        legend_df = getattr(self.geol_coll, "legend_df", pd_DataFrame())
+        if legend_df is None or legend_df.empty:
+            return []
+
+        units_map = {}
+        for _, row in legend_df.iterrows():
+            feature_name = str(row.get("feature", "")).strip()
+            role_name = str(row.get("role", "")).strip()
+            if not feature_name or feature_name in units_map:
+                continue
+            units_map[feature_name] = {
+                "Feature": feature_name,
+                "Unit Role": "NonVolumetric",
+                "Structural Polarity": row.get("time", 0.0),
+                "Domain_1": "",
+                "feature": feature_name,
+                "role": role_name,
+                "color_R": row.get("color_R", 255),
+                "color_G": row.get("color_G", 255),
+                "color_B": row.get("color_B", 255),
+            }
+
+        return sorted(
+            units_map.values(),
+            key=lambda unit_info: str(unit_info.get("Feature", "")).casefold(),
+        )
+
+    def sync_structural_topology_table_to_legend(self, table_name=None):
+        """Push structural polarity values from one STm table into the geology legend."""
+        if not table_name:
+            return
+        if self.custom_table_types.get(table_name) != "stm":
+            return
+
+        legend_df = getattr(self.geol_coll, "legend_df", pd_DataFrame())
+        table_df = self.custom_tables.get(table_name, pd_DataFrame())
+        if (
+            legend_df is None
+            or legend_df.empty
+            or table_df is None
+            or table_df.empty
+            or "Feature" not in table_df.columns
+            or "Structural Polarity" not in table_df.columns
+        ):
+            return
+
+        legend_features = legend_df["feature"].astype(str).str.strip()
+        legend_updated = False
+        for _, row in table_df.iterrows():
+            stm_feature = str(row.get("Feature", "")).strip()
+            if not stm_feature:
+                continue
+            try:
+                polarity_value = float(row.get("Structural Polarity", ""))
+            except (TypeError, ValueError):
+                continue
+
+            mask = legend_features == stm_feature
+            if not mask.any():
+                continue
+            self.geol_coll.legend_df.loc[mask, "time"] = polarity_value
+            legend_updated = True
+
+        if legend_updated:
+            self.geol_coll.legend_df.sort_values(
+                by="time", ascending=True, inplace=True
+            )
+            if hasattr(self, "legend"):
+                self.legend.update_widget(parent=self)
+
+    def sync_structural_topology_tables_from_legend(self):
+        """Refresh all STm table polarities from the geology legend."""
+        legend_units = self.get_structural_topology_legend_units()
+        if not legend_units:
+            return
+
+        polarity_map = {
+            unit_info["Feature"]: unit_info.get("Structural Polarity", "")
+            for unit_info in legend_units
+        }
+        tables_updated = False
+
+        for table_name, table_df in self.custom_tables.items():
+            if self.custom_table_types.get(table_name) != "stm":
+                continue
+            if table_df is None:
+                continue
+
+            if "Domain" in table_df.columns and "Domain_1" not in table_df.columns:
+                table_df.rename(columns={"Domain": "Domain_1"}, inplace=True)
+            if "Feature" not in table_df.columns:
+                table_df["Feature"] = ""
+            if "Unit Role" not in table_df.columns:
+                table_df["Unit Role"] = "NonVolumetric"
+            if "Structural Polarity" not in table_df.columns:
+                table_df["Structural Polarity"] = ""
+            if not any(str(column).startswith("Domain") for column in table_df.columns):
+                table_df["Domain_1"] = ""
+
+            for row_label in table_df.index.tolist():
+                stm_feature = str(table_df.at[row_label, "Feature"]).strip()
+                if stm_feature in polarity_map:
+                    table_df.at[row_label, "Structural Polarity"] = polarity_map[stm_feature]
+            tables_updated = True
+
+        if tables_updated:
+            self.refresh_table_views()
+
+    def refresh_custom_colormaps(self):
+        """Register project colormaps stored as advanced tables and refresh the legend widget."""
+        if hasattr(self, "prop_legend"):
+            PropertiesCMaps.register_custom_colormaps(parent=self)
+            self.prop_legend.update_widget(parent=self)
+
     def import_PC(self):
         """Import point cloud data. File extension dependent (.txt, .xyz, .las) -> Ui_ImportOptionsWindow ui to preview the data (similar to stereonet)"""
 
@@ -3557,15 +4087,34 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.prop_legend.update_widget(parent=self)
 
     def import_welldata(self):
-        path = open_file_dialog(
+        paths = open_files_dialog(
             parent=self, caption="Import well data", filter="XLXS files (*.xlsx)"
         )
 
-        if path:
-            well2vtk(self, path=path)
-            self.prop_legend.update_widget(parent=self)
-        else:
+        if not paths:
             return
+
+        imported_paths = []
+        skipped_paths = []
+
+        for path in paths:
+            self.print_terminal("in_file_name: " + path)
+            try:
+                well2vtk(self, path=path)
+                imported_paths.append(path)
+            except Exception as exc:
+                skipped_paths.append(path)
+
+        if imported_paths:
+            self.prop_legend.update_widget(parent=self)
+            self.print_terminal(
+                f"Imported {len(imported_paths)} well file(s) successfully."
+            )
+
+        if skipped_paths:
+            self.print_terminal(
+                f"Rejected {len(skipped_paths)} incompatible well file(s)."
+            )
 
         # loc_attr_list = ['As is','LocationID', 'LocationType', 'Easting', 'Northing', 'GroundLevel', 'FinalDepth', 'Trend', 'Plunge','N.a.']
 

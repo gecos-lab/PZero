@@ -11,6 +11,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QMenu
 
 # Numpy imports____
+import numpy as np
 from numpy import append as np_append
 
 # VTK imports____
@@ -209,7 +210,17 @@ class View3D(ViewVTK):
         # self.menuBaseView.addAction(self.showOct)
         # self.toolBarBase.addAction(self.showOct)
 
-    # Called by BaseView.toggle_property after main actor's property changes via tree combo
+    def toggle_property(self, collection_name=None, uid=None, prop_text=None):
+        """Extend base property toggle to keep Mesh Slicer slices in sync."""
+        super().toggle_property(
+            collection_name=collection_name, uid=uid, prop_text=prop_text
+        )
+        # Rebuild any active slice actors for this entity with the newly selected property.
+        self.on_property_toggled(
+            collection_name=collection_name, uid=uid, prop_text=prop_text
+        )
+
+    # Called by View3D.toggle_property after main actor's property changes via tree combo
     def on_property_toggled(self, collection_name=None, uid=None, prop_text=None):
         try:
             # Find the entity label used in the slicer combo for this uid
@@ -268,29 +279,32 @@ class View3D(ViewVTK):
             if entity is None:
                 return
             pv_entity = pv.wrap(entity)
-            b = pv_entity.bounds
-            origin = actor.GetCenter()
-            if axis == "X" and b[1] > b[0]:
-                norm = (origin[0] - b[0]) / (b[1] - b[0])
-            elif axis == "Y" and b[3] > b[2]:
-                norm = (origin[1] - b[2]) / (b[3] - b[2])
-            elif axis == "Z" and b[5] > b[4]:
-                norm = (origin[2] - b[4]) / (b[5] - b[4])
-            else:
-                norm = 0.5
-            position = {
-                "X": b[0] + norm * (b[1] - b[0]),
-                "Y": b[2] + norm * (b[3] - b[2]),
-                "Z": b[4] + norm * (b[5] - b[4]),
-            }[axis]
-            normal = {"X": [1, 0, 0], "Y": [0, 1, 0], "Z": [0, 0, 1]}[axis]
-            origin_vec = {
-                "X": [position, 0, 0],
-                "Y": [0, position, 0],
-                "Z": [0, 0, position],
-            }[axis]
-            slice_data = pv_entity.slice(normal=normal, origin=origin_vec)
-            if slice_data.n_points <= 0:
+            slice_data = None
+
+            # Reuse current slice geometry if available. This avoids axis-specific
+            # positioning issues (especially W/Z when vertical exaggeration is active).
+            try:
+                mapper = actor.GetMapper()
+                if mapper is not None and mapper.GetInput() is not None:
+                    slice_data = pv.wrap(mapper.GetInput())
+            except Exception:
+                slice_data = None
+
+            # Fallback: reconstruct slice geometry from actor center.
+            if slice_data is None or slice_data.n_points <= 0:
+                norm = self._normalized_slicer_position_from_point(
+                    dataset=pv_entity,
+                    slice_type=axis,
+                    point=actor.GetCenter(),
+                    display_coordinates=True,
+                )
+                slice_data, _plane_info = self._extract_slice_data_for_slicer(
+                    dataset=pv_entity,
+                    slice_type=axis,
+                    normalized_position=norm,
+                )
+
+            if slice_data is None or slice_data.n_points <= 0:
                 return
             # Resolve property
             main_uid = self.get_entity_uid_by_name(labeled_name)
@@ -352,6 +366,483 @@ class View3D(ViewVTK):
         except Exception:
             pass
 
+    @staticmethod
+    def _slice_axis_index(slice_type):
+        return {"X": 0, "Y": 1, "Z": 2}.get(slice_type, 0)
+
+    def _get_structured_slicer_affine(self, dataset):
+        """
+        Return affine axis vectors for structured datasets so slicer planes follow
+        the dataset I/J/K orientation rather than raw world X/Y/Z bounds.
+        """
+        try:
+            vtk_obj = dataset
+            if (
+                vtk_obj is None
+                or not hasattr(vtk_obj, "GetDimensions")
+                or not hasattr(vtk_obj, "GetPoint")
+            ):
+                return None
+
+            dims = tuple(int(v) for v in vtk_obj.GetDimensions())
+            if len(dims) != 3 or any(v <= 0 for v in dims):
+                return None
+
+            origin = np.array(vtk_obj.GetPoint(0), dtype=float)
+            a0 = (
+                np.array(vtk_obj.GetPoint(1), dtype=float) - origin
+                if dims[0] > 1
+                else np.array([1.0, 0.0, 0.0], dtype=float)
+            )
+            a1 = (
+                np.array(vtk_obj.GetPoint(dims[0]), dtype=float) - origin
+                if dims[1] > 1
+                else np.array([0.0, 1.0, 0.0], dtype=float)
+            )
+            a2 = (
+                np.array(vtk_obj.GetPoint(dims[0] * dims[1]), dtype=float) - origin
+                if dims[2] > 1
+                else np.array([0.0, 0.0, 1.0], dtype=float)
+            )
+
+            matrix = np.column_stack([a0, a1, a2])
+            if np.linalg.matrix_rank(matrix) < 3:
+                return None
+
+            return {
+                "origin": origin,
+                "axes": (a0, a1, a2),
+                "dims": dims,
+                "matrix": matrix,
+                "inverse": np.linalg.pinv(matrix),
+            }
+        except Exception:
+            return None
+
+    def _structured_slice_index(self, dims, slice_type, normalized_position, interior=False):
+        axis_idx = self._slice_axis_index(slice_type)
+        axis_dim = int(dims[axis_idx]) if dims and len(dims) > axis_idx else 0
+        if axis_dim <= 1:
+            return 0
+
+        try:
+            t = float(normalized_position)
+        except Exception:
+            t = 0.5
+        t = max(0.0, min(1.0, t))
+
+        idx = int(t * (axis_dim - 1))
+        if interior and axis_dim > 2:
+            idx = max(1, min(axis_dim - 2, idx))
+        else:
+            idx = max(0, min(axis_dim - 1, idx))
+        return idx
+
+    @staticmethod
+    def _project_points_to_plane(points, center, normal):
+        pts = np.asarray(points, dtype=np.float64)
+        ctr = np.asarray(center, dtype=np.float64)
+        nrm = np.asarray(normal, dtype=np.float64)
+        n_norm = float(np.linalg.norm(nrm))
+        if n_norm == 0.0:
+            return pts
+        nrm = nrm / n_norm
+        d = np.dot(pts - ctr, nrm)
+        return pts - d[:, None] * nrm[None, :]
+
+    def _slice_plane_from_dataset(
+        self,
+        dataset,
+        slice_type,
+        normalized_position=None,
+        slice_index=None,
+    ):
+        """
+        Build the slicer plane in world coordinates.
+
+        Structured datasets use their affine I/J/K axes so rotated voxets are sliced
+        along their true orientation.
+        """
+        affine = self._get_structured_slicer_affine(dataset)
+        if affine is not None:
+            origin = affine["origin"]
+            a0, a1, a2 = affine["axes"]
+            dims = affine["dims"]
+            if slice_index is None:
+                slice_index = self._structured_slice_index(
+                    dims=dims,
+                    slice_type=slice_type,
+                    normalized_position=normalized_position,
+                )
+
+            if slice_type == "X":
+                base = origin + slice_index * a0
+                row_vec = a1
+                col_vec = a2
+                center = base + 0.5 * max(dims[1] - 1, 0) * row_vec + 0.5 * max(
+                    dims[2] - 1, 0
+                ) * col_vec
+            elif slice_type == "Y":
+                base = origin + slice_index * a1
+                row_vec = a0
+                col_vec = a2
+                center = base + 0.5 * max(dims[0] - 1, 0) * row_vec + 0.5 * max(
+                    dims[2] - 1, 0
+                ) * col_vec
+            else:
+                base = origin + slice_index * a2
+                row_vec = a0
+                col_vec = a1
+                center = base + 0.5 * max(dims[0] - 1, 0) * row_vec + 0.5 * max(
+                    dims[1] - 1, 0
+                ) * col_vec
+
+            normal = np.cross(row_vec, col_vec)
+            n_norm = float(np.linalg.norm(normal))
+            if n_norm > 0.0:
+                normal = normal / n_norm
+
+            return {
+                "center": center,
+                "normal": normal,
+                "row_vec": row_vec,
+                "col_vec": col_vec,
+                "dims": dims,
+                "index": slice_index,
+                "affine": affine,
+            }
+
+        try:
+            pv_entity = dataset if isinstance(dataset, pv.DataSet) else pv.wrap(dataset)
+            bounds = pv_entity.bounds
+        except Exception:
+            return None
+
+        try:
+            t = float(normalized_position)
+        except Exception:
+            t = 0.5
+        t = max(0.0, min(1.0, t))
+
+        if slice_type == "X":
+            center = np.array(
+                [
+                    bounds[0] + t * (bounds[1] - bounds[0]),
+                    0.5 * (bounds[2] + bounds[3]),
+                    0.5 * (bounds[4] + bounds[5]),
+                ],
+                dtype=float,
+            )
+            normal = np.array([1.0, 0.0, 0.0], dtype=float)
+        elif slice_type == "Y":
+            center = np.array(
+                [
+                    0.5 * (bounds[0] + bounds[1]),
+                    bounds[2] + t * (bounds[3] - bounds[2]),
+                    0.5 * (bounds[4] + bounds[5]),
+                ],
+                dtype=float,
+            )
+            normal = np.array([0.0, 1.0, 0.0], dtype=float)
+        else:
+            center = np.array(
+                [
+                    0.5 * (bounds[0] + bounds[1]),
+                    0.5 * (bounds[2] + bounds[3]),
+                    bounds[4] + t * (bounds[5] - bounds[4]),
+                ],
+                dtype=float,
+            )
+            normal = np.array([0.0, 0.0, 1.0], dtype=float)
+
+        return {"center": center, "normal": normal, "dims": None, "index": None, "affine": None}
+
+    def _normalized_slicer_position_from_point(
+        self,
+        dataset,
+        slice_type,
+        point,
+        display_coordinates=False,
+    ):
+        try:
+            p = np.asarray(point, dtype=float).copy()
+        except Exception:
+            return 0.5
+
+        if display_coordinates:
+            v_exag = getattr(self, "v_exaggeration", 1.0)
+            if v_exag not in [0, 1.0, None]:
+                p[2] = p[2] / v_exag
+
+        affine = self._get_structured_slicer_affine(dataset)
+        axis_idx = self._slice_axis_index(slice_type)
+        if affine is not None:
+            try:
+                ijk = affine["inverse"].dot(p - affine["origin"])
+                axis_dim = int(affine["dims"][axis_idx])
+                if axis_dim <= 1:
+                    return 0.0
+                return max(0.0, min(1.0, float(ijk[axis_idx]) / max(axis_dim - 1, 1)))
+            except Exception:
+                pass
+
+        try:
+            pv_entity = dataset if isinstance(dataset, pv.DataSet) else pv.wrap(dataset)
+            bounds = pv_entity.bounds
+            if slice_type == "X" and bounds[1] > bounds[0]:
+                return max(0.0, min(1.0, float((p[0] - bounds[0]) / (bounds[1] - bounds[0]))))
+            if slice_type == "Y" and bounds[3] > bounds[2]:
+                return max(0.0, min(1.0, float((p[1] - bounds[2]) / (bounds[3] - bounds[2]))))
+            if slice_type == "Z" and bounds[5] > bounds[4]:
+                return max(0.0, min(1.0, float((p[2] - bounds[4]) / (bounds[5] - bounds[4]))))
+        except Exception:
+            pass
+
+        return 0.5
+
+    def _extract_structured_subset_slice(self, pv_entity, slice_type, slice_index):
+        dims = pv_entity.dimensions
+        if slice_type == "X":
+            subset = pv_entity.extract_subset([slice_index, slice_index, 0, dims[1] - 1, 0, dims[2] - 1])
+        elif slice_type == "Y":
+            subset = pv_entity.extract_subset([0, dims[0] - 1, slice_index, slice_index, 0, dims[2] - 1])
+        else:
+            subset = pv_entity.extract_subset([0, dims[0] - 1, 0, dims[1] - 1, slice_index, slice_index])
+        return subset.extract_surface() if subset.n_points > 0 else subset
+
+    def _build_affine_image_slice_surface(self, pv_entity, slice_type, slice_index, affine):
+        """
+        Build slice geometry explicitly from the image affine instead of trusting
+        `extract_subset()` geometry for oriented image data.
+
+        On the current VTK/PyVista stack, oriented `vtkImageData` subset geometry can
+        end up translated in-plane even when the normal is correct. Constructing the
+        slice from the voxet's own affine grid keeps the slice exactly on the displayed
+        voxet position.
+        """
+        if affine is None:
+            return None
+
+        origin = affine["origin"]
+        a0, a1, a2 = affine["axes"]
+        nx, ny, nz = affine["dims"]
+
+        if slice_type == "X":
+            rows, cols = ny, nz
+
+            def point_and_id(row, col):
+                j = row
+                k = col
+                point = origin + slice_index * a0 + j * a1 + k * a2
+                point_id = slice_index + j * nx + k * nx * ny
+                return point, point_id
+
+        elif slice_type == "Y":
+            rows, cols = nx, nz
+
+            def point_and_id(row, col):
+                i = row
+                k = col
+                point = origin + i * a0 + slice_index * a1 + k * a2
+                point_id = i + slice_index * nx + k * nx * ny
+                return point, point_id
+
+        else:
+            rows, cols = nx, ny
+
+            def point_and_id(row, col):
+                i = row
+                j = col
+                point = origin + i * a0 + j * a1 + slice_index * a2
+                point_id = i + j * nx + slice_index * nx * ny
+                return point, point_id
+
+        points = []
+        point_ids = []
+        for row in range(rows):
+            for col in range(cols):
+                point, point_id = point_and_id(row, col)
+                points.append(point)
+                point_ids.append(point_id)
+
+        if not points:
+            return None
+
+        points = np.asarray(points, dtype=float)
+        point_ids = np.asarray(point_ids, dtype=int)
+
+        if rows > 1 and cols > 1:
+            faces = []
+            for row in range(rows - 1):
+                for col in range(cols - 1):
+                    p0 = row * cols + col
+                    p1 = p0 + 1
+                    p2 = (row + 1) * cols + col + 1
+                    p3 = (row + 1) * cols + col
+                    faces.extend([4, p0, p1, p2, p3])
+            slice_surface = pv.PolyData(points, np.asarray(faces, dtype=np.int64))
+        else:
+            slice_surface = pv.PolyData(points)
+
+        try:
+            for array_name in list(pv_entity.point_data.keys()):
+                array_values = np.asarray(pv_entity.point_data[array_name])[point_ids]
+                slice_surface.point_data[array_name] = array_values
+            active_name = pv_entity.active_scalars_name
+            if active_name and active_name in slice_surface.point_data:
+                slice_surface.set_active_scalars(active_name)
+        except Exception:
+            pass
+
+        return slice_surface
+
+    def _extract_slice_data_for_slicer(
+        self,
+        dataset,
+        slice_type,
+        normalized_position,
+        nudge_inside=True,
+    ):
+        """
+        Extract one slicer plane from any supported dataset.
+
+        For structured datasets we preserve the exact I/J/K slice index and then
+        project the extracted geometry back onto the true oriented plane so rotated
+        voxets do not fall back to axis-aligned slicing.
+        """
+        pv_entity = dataset if isinstance(dataset, pv.DataSet) else pv.wrap(dataset)
+        affine = self._get_structured_slicer_affine(pv_entity)
+        axis_idx = self._slice_axis_index(slice_type)
+        slice_data = None
+        plane_info = None
+
+        if affine is not None and isinstance(pv_entity, pv.ImageData):
+            idx = self._structured_slice_index(
+                dims=affine["dims"],
+                slice_type=slice_type,
+                normalized_position=normalized_position,
+            )
+            plane_info = self._slice_plane_from_dataset(
+                pv_entity,
+                slice_type=slice_type,
+                slice_index=idx,
+            )
+            slice_data = self._build_affine_image_slice_surface(
+                pv_entity=pv_entity,
+                slice_type=slice_type,
+                slice_index=idx,
+                affine=affine,
+            )
+
+            if (
+                (slice_data is None or slice_data.n_points <= 0)
+                and nudge_inside
+                and affine["dims"][axis_idx] > 2
+            ):
+                idx = self._structured_slice_index(
+                    dims=affine["dims"],
+                    slice_type=slice_type,
+                    normalized_position=normalized_position,
+                    interior=True,
+                )
+                plane_info = self._slice_plane_from_dataset(
+                    pv_entity,
+                    slice_type=slice_type,
+                    slice_index=idx,
+                )
+                slice_data = self._build_affine_image_slice_surface(
+                    pv_entity=pv_entity,
+                    slice_type=slice_type,
+                    slice_index=idx,
+                    affine=affine,
+                )
+
+            if slice_data is not None and slice_data.n_points > 0:
+                return slice_data, plane_info
+
+        if affine is not None and affine["dims"][axis_idx] > 1:
+            idx = self._structured_slice_index(
+                dims=affine["dims"],
+                slice_type=slice_type,
+                normalized_position=normalized_position,
+            )
+            plane_info = self._slice_plane_from_dataset(
+                pv_entity,
+                slice_type=slice_type,
+                slice_index=idx,
+            )
+            try:
+                slice_data = self._extract_structured_subset_slice(
+                    pv_entity=pv_entity,
+                    slice_type=slice_type,
+                    slice_index=idx,
+                )
+            except Exception:
+                slice_data = None
+
+            if (
+                (slice_data is None or slice_data.n_points <= 0)
+                and nudge_inside
+                and affine["dims"][axis_idx] > 2
+            ):
+                idx = self._structured_slice_index(
+                    dims=affine["dims"],
+                    slice_type=slice_type,
+                    normalized_position=normalized_position,
+                    interior=True,
+                )
+                plane_info = self._slice_plane_from_dataset(
+                    pv_entity,
+                    slice_type=slice_type,
+                    slice_index=idx,
+                )
+                try:
+                    slice_data = self._extract_structured_subset_slice(
+                        pv_entity=pv_entity,
+                        slice_type=slice_type,
+                        slice_index=idx,
+                    )
+                except Exception:
+                    slice_data = None
+
+            if slice_data is not None and slice_data.n_points > 0 and plane_info is not None:
+                try:
+                    slice_data.points = self._project_points_to_plane(
+                        slice_data.points,
+                        plane_info["center"],
+                        plane_info["normal"],
+                    )
+                except Exception:
+                    pass
+                return slice_data, plane_info
+
+        plane_info = self._slice_plane_from_dataset(
+            pv_entity,
+            slice_type=slice_type,
+            normalized_position=normalized_position,
+        )
+        if plane_info is None:
+            return None, None
+
+        try:
+            slice_data = pv_entity.slice(
+                normal=plane_info["normal"],
+                origin=plane_info["center"],
+            )
+        except Exception:
+            slice_data = None
+
+        if slice_data is not None and slice_data.n_points > 0 and plane_info is not None:
+            try:
+                slice_data.points = self._project_points_to_plane(
+                    slice_data.points,
+                    plane_info["center"],
+                    plane_info["normal"],
+                )
+            except Exception:
+                pass
+        return slice_data, plane_info
+
     def _rebuild_grid_slice_actor(self, slice_uid, enforced_prop=None):
         try:
             if not hasattr(self, "slice_actors") or slice_uid not in self.slice_actors:
@@ -366,23 +857,31 @@ class View3D(ViewVTK):
             if entity is None:
                 return
             pv_entity = pv.wrap(entity)
-            # Compute origin position from actor
-            origin = actor.GetCenter()
-            b = pv_entity.bounds
-            if axis == "X":
-                position = origin[0]
-                normal = [1, 0, 0]
-                origin_vec = [position, 0, 0]
-            elif axis == "Y":
-                position = origin[1]
-                normal = [0, 1, 0]
-                origin_vec = [0, position, 0]
-            else:
-                position = origin[2]
-                normal = [0, 0, 1]
-                origin_vec = [0, 0, position]
-            slice_data = pv_entity.slice(normal=normal, origin=origin_vec)
-            if slice_data.n_points <= 0:
+            slice_data = None
+
+            # Reuse existing grid-slice geometry when possible.
+            try:
+                mapper = actor.GetMapper()
+                if mapper is not None and mapper.GetInput() is not None:
+                    slice_data = pv.wrap(mapper.GetInput())
+            except Exception:
+                slice_data = None
+
+            # Fallback: reconstruct from actor center.
+            if slice_data is None or slice_data.n_points <= 0:
+                norm = self._normalized_slicer_position_from_point(
+                    dataset=pv_entity,
+                    slice_type=axis,
+                    point=actor.GetCenter(),
+                    display_coordinates=True,
+                )
+                slice_data, _plane_info = self._extract_slice_data_for_slicer(
+                    dataset=pv_entity,
+                    slice_type=axis,
+                    normalized_position=norm,
+                )
+
+            if slice_data is None or slice_data.n_points <= 0:
                 return
             # Determine prop
             main_uid = self.get_entity_uid_by_name(entity_name)
@@ -456,6 +955,68 @@ class View3D(ViewVTK):
         self.show()
         self.init_zoom = self.plotter.camera.distance
         # self.picker = self.plotter.enable_mesh_picking(callback= self.pkd_mesh,show_message=False)
+
+    def vert_exag(self):
+        """Override parent's vertical exaggeration to store value and refresh plane widgets."""
+        from ..helpers.helper_dialogs import input_one_value_dialog
+        
+        # Get current scale value as default
+        current_scale = 1.0
+        if hasattr(self, 'v_exaggeration'):
+            current_scale = self.v_exaggeration
+        elif self.plotter.scale is not None and len(self.plotter.scale) >= 3:
+            current_scale = self.plotter.scale[2]
+        
+        exag_value = input_one_value_dialog(
+            parent=self,
+            title="Vertical exaggeration options",
+            label="Set vertical exaggeration",
+            default_value=current_scale,
+        )
+        
+        if exag_value is None:
+            return
+        
+        # Store the exaggeration value for plane widgets to use
+        self.v_exaggeration = exag_value
+        
+        # Apply the scale to the plotter
+        self.plotter.set_scale(zscale=exag_value)
+        
+        # Refresh plane widgets if mesh slicer is open with manipulation enabled
+        self._refresh_plane_widgets_for_exaggeration()
+        
+        self.plotter.render()
+
+    def _refresh_plane_widgets_for_exaggeration(self):
+        """Refresh plane widgets when vertical exaggeration changes."""
+        # Check if mesh slicer dialog is open
+        if not hasattr(self, 'mesh_slicer_dialog') or self.mesh_slicer_dialog is None:
+            return
+        
+        try:
+            dialog = self.mesh_slicer_dialog
+            if not dialog.isVisible():
+                return
+            
+            # Find the enable manipulation checkbox
+            enable_manip_checkbox = None
+            for checkbox in dialog.findChildren(QCheckBox):
+                if checkbox.text() == "Enable Direct Manipulation":
+                    enable_manip_checkbox = checkbox
+                    break
+            
+            if enable_manip_checkbox is None or not enable_manip_checkbox.isChecked():
+                return
+            
+            # Toggle manipulation off and on to refresh widgets with new bounds
+            print("Refreshing plane widgets for new vertical exaggeration...")
+            enable_manip_checkbox.setChecked(False)
+            QApplication.processEvents()
+            enable_manip_checkbox.setChecked(True)
+            
+        except Exception as e:
+            print(f"Error refreshing plane widgets: {e}")
 
     # ================================  Methods specific to 3D views ==================================================
 
@@ -939,7 +1500,16 @@ class View3D(ViewVTK):
 
         # Initialize throttle time for UI updates
         self.last_slider_update = time.time()
-        slider_throttle = 1 / 30.0
+        slider_throttle = 1 / 60.0  # 60 FPS for smoother updates
+        
+        # Entity cache for fast slice updates - avoids repeated lookups
+        self._slicer_entity_cache = {
+            'entity_name': None,
+            'entity': None,
+            'pv_entity': None,
+            'bounds': None,
+            'main_uid': None,
+        }
 
         # Create entity selection group (shared between modes)
         entity_group = QGroupBox("Entity Selection")
@@ -1141,12 +1711,14 @@ class View3D(ViewVTK):
         # Create buttons
         create_btn = QPushButton("Create Slices")
         remove_btn = QPushButton("Remove Slices")
+        create_xsection_btn = QPushButton("Create Section")
 
         # Add buttons to layout
         buttons_layout = QHBoxLayout()
         buttons_layout.addWidget(create_btn)
         buttons_layout.addWidget(remove_btn)
         multi_slice_layout.addLayout(buttons_layout)
+        multi_slice_layout.addWidget(create_xsection_btn)
 
         # Add direct manipulation option for multi-slice grid
         multi_manipulation_group = QGroupBox("Grid Visualization")
@@ -1242,25 +1814,12 @@ class View3D(ViewVTK):
 
                         # Calculate normalized position from actor's current position
                         origin = actor.GetCenter()  # Get the center of the slice actor
-                        normalized_pos = 0.5  # Default fallback
-
-                        if slice_type == "X" and bounds[1] > bounds[0]:
-                            normalized_pos = (origin[0] - bounds[0]) / (
-                                bounds[1] - bounds[0]
-                            )
-                        elif slice_type == "Y" and bounds[3] > bounds[2]:
-                            # Assuming Y corresponds to index 1 in VTK origin/center
-                            # Check VTK documentation if this is incorrect for Y slices
-                            normalized_pos = (origin[1] - bounds[2]) / (
-                                bounds[3] - bounds[2]
-                            )
-                        elif slice_type == "Z" and bounds[5] > bounds[4]:
-                            # Assuming Z corresponds to index 2
-                            normalized_pos = (origin[2] - bounds[4]) / (
-                                bounds[5] - bounds[4]
-                            )
-
-                        normalized_pos = max(0, min(1, normalized_pos))  # Clamp 0-1
+                        normalized_pos = self._normalized_slicer_position_from_point(
+                            dataset=pv_entity,
+                            slice_type=slice_type,
+                            point=origin,
+                            display_coordinates=True,
+                        )
 
                         print(
                             f"  Creating widget for {slice_id} at norm_pos={normalized_pos:.3f}"
@@ -1272,31 +1831,13 @@ class View3D(ViewVTK):
                         ):
                             def slice_update_callback(normal, widget_origin):
                                 # Calculate normalized position from widget interaction
-                                current_bounds = self.get_entity_by_name(
-                                    target_entity_name
-                                ).bounds
-                                new_normalized_pos = 0.5  # Default fallback
-                                if (
-                                    target_slice_type == "X"
-                                    and current_bounds[1] > current_bounds[0]
-                                ):
-                                    new_normalized_pos = (
-                                        widget_origin[0] - current_bounds[0]
-                                    ) / (current_bounds[1] - current_bounds[0])
-                                elif (
-                                    target_slice_type == "Y"
-                                    and current_bounds[3] > current_bounds[2]
-                                ):
-                                    new_normalized_pos = (
-                                        widget_origin[1] - current_bounds[2]
-                                    ) / (current_bounds[3] - current_bounds[2])
-                                elif (
-                                    target_slice_type == "Z"
-                                    and current_bounds[5] > current_bounds[4]
-                                ):
-                                    new_normalized_pos = (
-                                        widget_origin[2] - current_bounds[4]
-                                    ) / (current_bounds[5] - current_bounds[4])
+                                current_entity = self.get_entity_by_name(target_entity_name)
+                                new_normalized_pos = self._normalized_slicer_position_from_point(
+                                    dataset=current_entity,
+                                    slice_type=target_slice_type,
+                                    point=widget_origin,
+                                    display_coordinates=True,
+                                )
 
                                 # Clamp slightly inside [0,1] to prevent disappearing at exact bounds
                                 eps = getattr(self, "_slice_edge_epsilon", 1e-6)
@@ -1326,6 +1867,7 @@ class View3D(ViewVTK):
                             create_slice_update_callback(
                                 slice_id, entity_name, slice_type
                             ),  # Pass slice_id to callback context
+                            entity=pv_entity,
                         )
 
                         if widget:
@@ -1423,6 +1965,15 @@ class View3D(ViewVTK):
             mapping = {"U Direction": "X", "V Direction": "Y", "W Direction": "Z"}
             return mapping.get(direction, "X")
 
+        def extract_slice_data_for_position(pv_entity, slice_type, normalized_pos, bounds):
+            """Create one slice at a normalized position, respecting dataset orientation."""
+            slice_data, _plane_info = self._extract_slice_data_for_slicer(
+                dataset=pv_entity,
+                slice_type=slice_type,
+                normalized_position=normalized_pos,
+            )
+            return slice_data
+
         # Multi-slice implementation functions
         def create_grid_slices():
             """Create multiple slices along the selected direction"""
@@ -1447,14 +1998,6 @@ class View3D(ViewVTK):
             # Get bounds and slice type
             bounds = entity.bounds
             slice_type = direction_to_slice_type(direction)
-
-            # Calculate positions along the axis
-            if slice_type == "X":  # U direction
-                min_val, max_val = bounds[0], bounds[1]
-            elif slice_type == "Y":  # V direction
-                min_val, max_val = bounds[2], bounds[3]
-            else:  # Z (W direction)
-                min_val, max_val = bounds[4], bounds[5]
 
             # Get the start and end positions from sliders
             start_norm = start_slider.value() / 100.0
@@ -1481,16 +2024,9 @@ class View3D(ViewVTK):
                     continue
 
                 try:
-                    # Calculate actual position
-                    if slice_type == "X":  # U direction
-                        pos = min_val + normalized_pos * (max_val - min_val)
-                        slice_data = entity.slice(normal="x", origin=[pos, 0, 0])
-                    elif slice_type == "Y":  # V direction
-                        pos = min_val + normalized_pos * (max_val - min_val)
-                        slice_data = entity.slice(normal="y", origin=[0, pos, 0])
-                    else:  # Z (W direction)
-                        pos = min_val + normalized_pos * (max_val - min_val)
-                        slice_data = entity.slice(normal="z", origin=[0, 0, pos])
+                    slice_data = extract_slice_data_for_position(
+                        entity, slice_type, normalized_pos, bounds
+                    )
 
                     # Skip empty slices
                     if slice_data.n_points <= 0:
@@ -1626,12 +2162,6 @@ class View3D(ViewVTK):
                 entity = pv.wrap(entity)
             bounds = entity.bounds
             slice_type = direction_to_slice_type(direction)
-            if slice_type == "X":
-                min_val, max_val = bounds[0], bounds[1]
-            elif slice_type == "Y":
-                min_val, max_val = bounds[2], bounds[3]
-            else:
-                min_val, max_val = bounds[4], bounds[5]
             start_norm = start_slider.value() / 100.0
             end_norm = end_slider.value() / 100.0
             import numpy as np
@@ -1655,15 +2185,9 @@ class View3D(ViewVTK):
                     print(f"Slice {slice_id} already exists, skipping")
                     continue
                 try:
-                    if slice_type == "X":
-                        pos = min_val + normalized_pos * (max_val - min_val)
-                        slice_data = entity.slice(normal="x", origin=[pos, 0, 0])
-                    elif slice_type == "Y":
-                        pos = min_val + normalized_pos * (max_val - min_val)
-                        slice_data = entity.slice(normal="y", origin=[0, pos, 0])
-                    else:
-                        pos = min_val + normalized_pos * (max_val - min_val)
-                        slice_data = entity.slice(normal="z", origin=[0, 0, pos])
+                    slice_data = extract_slice_data_for_position(
+                        entity, slice_type, normalized_pos, bounds
+                    )
                     if slice_data.n_points <= 0:
                         print(f"Skipping empty slice at position {normalized_pos}")
                         continue
@@ -1727,8 +2251,93 @@ class View3D(ViewVTK):
                     continue
             self.plotter.render()
 
+        def create_section_from_slice():
+            """Create one XSection from an indexed multi-slice position and open its view."""
+            entity_name = multi_entity_combo.currentText()
+            if not entity_name:
+                self.print_terminal("No entity selected.")
+                return
+
+            default_direction = direction_combo.currentText()
+            default_n_slices = int(slices_spin.value())
+            default_slice_no = max(1, int((default_n_slices + 1) / 2))
+            direction_letter = {"U Direction": "U", "V Direction": "V", "W Direction": "W"}.get(
+                default_direction, "U"
+            )
+            plain_name = entity_name.split(": ", 1)[1] if ": " in entity_name else entity_name
+            safe_name = plain_name.replace(" ", "_")
+            default_section_name = f"XS_{safe_name}_{direction_letter}_{default_slice_no}"
+
+            out_dict = multiple_input_dialog(
+                title="Create Section from Slice",
+                input_dict={
+                    "direction": [
+                        "Direction",
+                        ["U Direction", "V Direction", "W Direction"],
+                        default_direction,
+                    ],
+                    "slice_no": ["Slice number (1..N)", default_slice_no],
+                    "n_slices": ["Total slices (N)", default_n_slices],
+                    "section_name": ["X-Section name", default_section_name],
+                },
+            )
+            if out_dict is None:
+                return
+
+            direction = out_dict["direction"]
+            slice_type = direction_to_slice_type(direction)
+
+            try:
+                n_slices = int(out_dict["n_slices"])
+            except Exception:
+                n_slices = default_n_slices
+            n_slices = max(1, n_slices)
+
+            try:
+                slice_no = int(out_dict["slice_no"])
+            except Exception:
+                slice_no = default_slice_no
+            slice_no = max(1, min(n_slices, slice_no))
+
+            section_name = str(out_dict["section_name"]).strip()
+            if not section_name:
+                section_name = default_section_name
+
+            start_norm = start_slider.value() / 100.0
+            end_norm = end_slider.value() / 100.0
+            if n_slices == 1:
+                normalized_pos = start_norm
+            else:
+                normalized_pos = start_norm + (slice_no - 1) * (
+                    (end_norm - start_norm) / (n_slices - 1)
+                )
+            normalized_pos = max(0.0, min(1.0, normalized_pos))
+
+            xuid = self._create_xsection_from_slicer_slice(
+                entity_name=entity_name,
+                slice_type=slice_type,
+                normalized_position=normalized_pos,
+                section_name=section_name,
+            )
+            if not xuid:
+                self.print_terminal("Failed to create X-Section from selected slice.")
+                return
+
+            xs_data_uid = self._add_xsection_data_from_entity(entity_name=entity_name, xuid=xuid)
+            if not xs_data_uid:
+                self.print_terminal(
+                    "Warning: Section created, but slice data could not be attached."
+                )
+
+            created_name = self.parent.xsect_coll.get_uid_name(xuid)
+            self.print_terminal(
+                f"Created section '{created_name}' from {direction} slice #{slice_no}/{n_slices}."
+            )
+            self._open_xsection_view_for_uid(xuid)
+
         create_btn.clicked.connect(create_grid_slices_sync)
         remove_btn.clicked.connect(remove_grid_slices)
+        create_xsection_btn.clicked.connect(create_section_from_slice)
 
         # Helper functions (shared between both modes)
         # ------------------------------------
@@ -1937,9 +2546,13 @@ class View3D(ViewVTK):
             if not entity_name:
                 return
 
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
-                return
+            # Use cached entity if available for better performance
+            if self._slicer_entity_cache['entity_name'] == entity_name:
+                entity = self._slicer_entity_cache['entity']
+            else:
+                entity = self.get_entity_by_name(entity_name)
+                if not entity:
+                    return
 
             # Get the right input field and value label
             input_field = None
@@ -1979,9 +2592,13 @@ class View3D(ViewVTK):
             if not entity_name or not u_slice_check.isChecked():
                 return
 
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
-                return
+            # Use cached entity if available
+            if self._slicer_entity_cache['entity_name'] == entity_name:
+                entity = self._slicer_entity_cache['entity']
+            else:
+                entity = self.get_entity_by_name(entity_name)
+                if not entity:
+                    return
 
             try:
                 # Store the original user input to preserve it
@@ -2012,9 +2629,13 @@ class View3D(ViewVTK):
             if not entity_name or not v_slice_check.isChecked():
                 return
 
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
-                return
+            # Use cached entity if available
+            if self._slicer_entity_cache['entity_name'] == entity_name:
+                entity = self._slicer_entity_cache['entity']
+            else:
+                entity = self.get_entity_by_name(entity_name)
+                if not entity:
+                    return
 
             try:
                 # Store the original user input to preserve it
@@ -2045,9 +2666,13 @@ class View3D(ViewVTK):
             if not entity_name or not w_slice_check.isChecked():
                 return
 
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
-                return
+            # Use cached entity if available
+            if self._slicer_entity_cache['entity_name'] == entity_name:
+                entity = self._slicer_entity_cache['entity']
+            else:
+                entity = self.get_entity_by_name(entity_name)
+                if not entity:
+                    return
 
             try:
                 # Store the original user input to preserve it
@@ -2073,6 +2698,27 @@ class View3D(ViewVTK):
             except Exception as e:
                 print(f"Error processing W input: {e}")
 
+        # Helper function to update entity cache
+        def update_entity_cache(entity_name):
+            """Update the entity cache for fast slice updates."""
+            if self._slicer_entity_cache['entity_name'] == entity_name:
+                return  # Already cached
+            
+            entity = self.get_entity_by_name(entity_name)
+            if not entity:
+                return
+            
+            pv_entity = pv.wrap(entity)
+            main_uid = self.get_entity_uid_by_name(entity_name)
+            
+            self._slicer_entity_cache = {
+                'entity_name': entity_name,
+                'entity': entity,
+                'pv_entity': pv_entity,
+                'bounds': pv_entity.bounds,
+                'main_uid': main_uid,
+            }
+
         # Event handlers
         def update_slice_visualization(
             entity_name,
@@ -2092,92 +2738,56 @@ class View3D(ViewVTK):
                 else f"{entity_name}_{slice_type}"
             )
 
-            # ... (rest of the existing update_slice_visualization logic remains the same) ...
-            # Get the entity
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
-                print(f"Entity {entity_name} not found")
-                return
-
-            # Determine and persist the current main-mesh property for this entity
-            try:
-                main_uid = self.get_entity_uid_by_name(entity_name)
-                if main_uid is not None:
-                    current_prop = self.actors_df.loc[
-                        self.actors_df["uid"] == main_uid, "show_property"
-                    ].values[0]
-                    if not hasattr(self, "slice_prop_by_entity"):
-                        self.slice_prop_by_entity = {}
-                    self.slice_prop_by_entity[entity_name] = current_prop
-            except Exception:
-                pass
-
-            try:
+            # Use cached entity for fast updates to avoid expensive lookups
+            if fast_update and self._slicer_entity_cache['entity_name'] == entity_name:
+                entity = self._slicer_entity_cache['entity']
+                pv_entity = self._slicer_entity_cache['pv_entity']
+                bounds = self._slicer_entity_cache['bounds']
+                main_uid = self._slicer_entity_cache['main_uid']
+            else:
+                # Full lookup for non-cached or non-fast updates
+                entity = self.get_entity_by_name(entity_name)
+                if not entity:
+                    print(f"Entity {entity_name} not found")
+                    return
+                
                 # Convert to PyVista object
                 pv_entity = pv.wrap(entity)
                 bounds = pv_entity.bounds
+                main_uid = self.get_entity_uid_by_name(entity_name)
+                
+                # Update cache for future fast updates
+                self._slicer_entity_cache = {
+                    'entity_name': entity_name,
+                    'entity': entity,
+                    'pv_entity': pv_entity,
+                    'bounds': bounds,
+                    'main_uid': main_uid,
+                }
 
-                # Calculate the position in world coordinates
-                if slice_type == "X":
-                    position = bounds[0] + normalized_position * (bounds[1] - bounds[0])
-                    slice_data = pv_entity.slice(
-                        normal=[1, 0, 0], origin=[position, 0, 0]
-                    )
-                elif slice_type == "Y":
-                    position = bounds[2] + normalized_position * (bounds[3] - bounds[2])
-                    slice_data = pv_entity.slice(
-                        normal=[0, 1, 0], origin=[0, position, 0]
-                    )
-                else:  # Z
-                    position = bounds[4] + normalized_position * (bounds[5] - bounds[4])
-                    slice_data = pv_entity.slice(
-                        normal=[0, 0, 1], origin=[0, 0, position]
-                    )
+            # Determine and persist the current main-mesh property for this entity (skip for fast updates)
+            if not fast_update:
+                try:
+                    if main_uid is not None:
+                        current_prop = self.actors_df.loc[
+                            self.actors_df["uid"] == main_uid, "show_property"
+                        ].values[0]
+                        if not hasattr(self, "slice_prop_by_entity"):
+                            self.slice_prop_by_entity = {}
+                        self.slice_prop_by_entity[entity_name] = current_prop
+                except Exception:
+                    pass
 
-                # If slice is empty at extremes, nudge inside bounds slightly to keep it visible
-                if slice_data.n_points <= 0:
-                    eps = getattr(self, "_slice_edge_epsilon", 1e-6)
-                    try:
-                        if slice_type == "X":
-                            if normalized_position <= 0.0:
-                                normalized_position = eps
-                            elif normalized_position >= 1.0:
-                                normalized_position = 1.0 - eps
-                            position = bounds[0] + normalized_position * (
-                                bounds[1] - bounds[0]
-                            )
-                            slice_data = pv_entity.slice(
-                                normal=[1, 0, 0], origin=[position, 0, 0]
-                            )
-                        elif slice_type == "Y":
-                            if normalized_position <= 0.0:
-                                normalized_position = eps
-                            elif normalized_position >= 1.0:
-                                normalized_position = 1.0 - eps
-                            position = bounds[2] + normalized_position * (
-                                bounds[3] - bounds[2]
-                            )
-                            slice_data = pv_entity.slice(
-                                normal=[0, 1, 0], origin=[0, position, 0]
-                            )
-                        else:
-                            if normalized_position <= 0.0:
-                                normalized_position = eps
-                            elif normalized_position >= 1.0:
-                                normalized_position = 1.0 - eps
-                            position = bounds[4] + normalized_position * (
-                                bounds[5] - bounds[4]
-                            )
-                            slice_data = pv_entity.slice(
-                                normal=[0, 0, 1], origin=[0, 0, position]
-                            )
-                    except Exception:
-                        pass
-                    # If still empty, do not hide; keep current actor visible and return
-                    if slice_data.n_points <= 0:
-                        if slice_uid in self.slice_actors:
-                            self.slice_actors[slice_uid].SetVisibility(True)
-                        return
+            try:
+                slice_data, _plane_info = self._extract_slice_data_for_slicer(
+                    dataset=pv_entity,
+                    slice_type=slice_type,
+                    normalized_position=normalized_position,
+                )
+                if slice_data is None or slice_data.n_points <= 0:
+                    if slice_uid in self.slice_actors:
+                        self.slice_actors[slice_uid].SetVisibility(True)
+                    return
 
                 # Store current visibility if the slice exists
                 current_visibility = True
@@ -2212,8 +2822,13 @@ class View3D(ViewVTK):
                     cmap = None
                     color_RGB = None
                     try:
-                        main_uid = self.get_entity_uid_by_name(entity_name)
-                        # Prefer persisted property (in case the UI reverts briefly)
+                        # Use cached main_uid if available
+                        if self._slicer_entity_cache['entity_name'] == entity_name:
+                            main_uid = self._slicer_entity_cache['main_uid']
+                        else:
+                            main_uid = self.get_entity_uid_by_name(entity_name)
+                        
+                        # Get current property - prefer persisted, then actors_df
                         current_prop = None
                         if (
                             hasattr(self, "slice_prop_by_entity")
@@ -2224,37 +2839,40 @@ class View3D(ViewVTK):
                             current_prop = self.actors_df.loc[
                                 self.actors_df["uid"] == main_uid, "show_property"
                             ].values[0]
-                            # If 'none' or None, keep scalars None
-                            if not current_prop or current_prop == "none":
-                                color_RGB = self._legend_color_for_uid(main_uid)
-                            elif current_prop in ["X", "Y", "Z"]:
-                                # derive from slice geometry
-                                idx = {"X": 0, "Y": 1, "Z": 2}[current_prop]
-                                scalar_array = slice_data.points[:, idx]
-                                if (
-                                    hasattr(self.parent, "prop_legend_df")
-                                    and self.parent.prop_legend_df is not None
-                                ):
-                                    row = self.parent.prop_legend_df[
-                                        self.parent.prop_legend_df["property_name"]
-                                        == current_prop
-                                    ]
-                                    if not row.empty:
-                                        cmap = row["colormap"].iloc[0]
-                            else:
-                                # named data property, rely on dataset arrays
-                                if current_prop in slice_data.array_names:
-                                    scalar_array = current_prop
-                                    if (
-                                        hasattr(self.parent, "prop_legend_df")
-                                        and self.parent.prop_legend_df is not None
-                                    ):
-                                        row = self.parent.prop_legend_df[
-                                            self.parent.prop_legend_df["property_name"]
-                                            == current_prop
-                                        ]
-                                        if not row.empty:
-                                            cmap = row["colormap"].iloc[0]
+                        
+                        # Now apply colormap based on current_prop
+                        if not current_prop or current_prop == "none":
+                            # No property - use legend color
+                            color_RGB = self._legend_color_for_uid(main_uid) if main_uid else None
+                        elif current_prop in ["X", "Y", "Z"]:
+                            # Coordinate property - derive from slice geometry
+                            idx = {"X": 0, "Y": 1, "Z": 2}[current_prop]
+                            scalar_array = slice_data.points[:, idx]
+                            if (
+                                hasattr(self.parent, "prop_legend_df")
+                                and self.parent.prop_legend_df is not None
+                            ):
+                                row = self.parent.prop_legend_df[
+                                    self.parent.prop_legend_df["property_name"]
+                                    == current_prop
+                                ]
+                                if not row.empty:
+                                    cmap = row["colormap"].iloc[0]
+                        else:
+                            # Named data property - use from dataset arrays
+                            if current_prop in slice_data.array_names:
+                                scalar_array = current_prop
+                            # Get colormap from prop_legend_df
+                            if (
+                                hasattr(self.parent, "prop_legend_df")
+                                and self.parent.prop_legend_df is not None
+                            ):
+                                row = self.parent.prop_legend_df[
+                                    self.parent.prop_legend_df["property_name"]
+                                    == current_prop
+                                ]
+                                if not row.empty:
+                                    cmap = row["colormap"].iloc[0]
                     except Exception:
                         pass
 
@@ -2289,10 +2907,9 @@ class View3D(ViewVTK):
                     except Exception:
                         pass
 
-                # Render only if NOT doing a fast update from manipulation callback
-                # Manipulation callbacks often trigger many updates quickly; render once at the end.
-                # Let the calling function (toggle_multi_manipulation or slider change) handle final render.
-                if not fast_update or not specific_slice_id:
+                # Skip render for fast updates - the calling function handles it
+                # This avoids double-rendering and improves performance
+                if not fast_update:
                     self.plotter.render()
 
             except Exception as e:
@@ -2364,10 +2981,30 @@ class View3D(ViewVTK):
             # Update slice visibility
             slice_uid = f"{entity_name}_{slice_type}"
             if slice_uid in self.slice_actors:
-                # Update existing slice
+                # Update existing slice - fast path
                 self.slice_actors[slice_uid].SetVisibility(checked)
+                self.plotter.render()
+                return  # Early return for fast visibility toggle
             elif checked:
-                # Create new slice
+                # Create new slice - ensure cache is populated first
+                if self._slicer_entity_cache['entity_name'] != entity_name:
+                    update_entity_cache(entity_name)
+                
+                # Use cached main_uid
+                main_uid = self._slicer_entity_cache.get('main_uid')
+                
+                # Persist the current property for colormap inheritance BEFORE creating slice
+                if main_uid is not None:
+                    try:
+                        current_prop = self.actors_df.loc[
+                            self.actors_df["uid"] == main_uid, "show_property"
+                        ].values[0]
+                        if not hasattr(self, "slice_prop_by_entity"):
+                            self.slice_prop_by_entity = {}
+                        self.slice_prop_by_entity[entity_name] = current_prop
+                    except Exception:
+                        pass
+                
                 norm_pos = None
                 if slice_type == "X":
                     norm_pos = u_slider.value() / 100.0
@@ -2376,67 +3013,19 @@ class View3D(ViewVTK):
                 else:  # Z
                     norm_pos = w_slider.value() / 100.0
 
+                # Create slice - update_slice_visualization will use slice_prop_by_entity for colormap
                 update_slice_visualization(entity_name, slice_type, norm_pos)
-                # After creation, enforce the current main property so all slices sync (no default viridis)
-                try:
-                    # Build labeled name and reuse helper
-                    main_uid = self.get_entity_uid_by_name(entity_name)
-                    if main_uid is not None:
-                        collection = getattr(
-                            self.parent,
-                            self.actors_df.loc[
-                                self.actors_df["uid"] == main_uid, "collection"
-                            ].values[0],
-                        )
-                        labeled_name = None
-                        # Rebuild labeled name using same logic as in on_property_toggled
-                        for coll_name, prefix in [
-                            ("mesh3d_coll", "Mesh"),
-                            ("geol_coll", "Geological"),
-                            ("xsect_coll", "Cross-section"),
-                            ("boundary_coll", "Boundary"),
-                            ("dom_coll", "DOM"),
-                            ("image_coll", "Image"),
-                            ("well_coll", "Well"),
-                            ("fluid_coll", "Fluid"),
-                            ("backgrnd_coll", "Background"),
-                        ]:
-                            if collection.collection_name == coll_name:
-                                labeled_name = (
-                                    f"{prefix}: {collection.get_uid_name(main_uid)}"
-                                )
-                                break
-                        if labeled_name:
-                            # Use persisted property if available, else current actors_df value
-                            prop_text = None
-                            if (
-                                hasattr(self, "slice_prop_by_entity")
-                                and labeled_name in self.slice_prop_by_entity
-                            ):
-                                prop_text = self.slice_prop_by_entity[labeled_name]
-                            else:
-                                prop_text = self.actors_df.loc[
-                                    self.actors_df["uid"] == main_uid, "show_property"
-                                ].values[0]
-                            self._rebuild_slice_actor(
-                                labeled_name, slice_type, enforced_prop=prop_text
-                            )
-                except Exception:
-                    pass
-
-                # Hide/uncheck main entity in collection when slicer is turned on for this entity
-                try:
-                    main_uid = self.get_entity_uid_by_name(entity_name)
-                    if main_uid:
-                        # Hide actor and update actors_df
+                
+                # Hide/uncheck main entity in collection when slicer is turned on
+                if main_uid:
+                    try:
                         self.hide_uids([main_uid])
-                        # Reflect in the associated tree checkbox
                         coll_name = self.actors_df.loc[
                             self.actors_df["uid"] == main_uid, "collection"
                         ].values[0]
                         self._set_tree_checked_for_uid(coll_name, main_uid, False)
-                except Exception:
-                    pass
+                    except Exception:
+                        pass
 
             # If direct manipulation is enabled, update plane widgets to match currently checked slices
             if enable_manipulation.isChecked():
@@ -2484,6 +3073,7 @@ class View3D(ViewVTK):
                 self._updating_visualization = True
 
                 normalized_pos = slider_type.value() / 100.0
+                needs_render = False
 
                 # Update the value displays (both normalized and real)
                 if slider_type == u_slider:
@@ -2492,19 +3082,26 @@ class View3D(ViewVTK):
                         update_slice_visualization(
                             entity_name, "X", normalized_pos, fast_update=True
                         )
+                        needs_render = True
                 elif slider_type == v_slider:
                     update_value_displays(entity_name, "Y", normalized_pos)
                     if v_slice_check.isChecked():
                         update_slice_visualization(
                             entity_name, "Y", normalized_pos, fast_update=True
                         )
+                        needs_render = True
                 else:  # w_slider
                     update_value_displays(entity_name, "Z", normalized_pos)
                     if w_slice_check.isChecked():
                         update_slice_visualization(
                             entity_name, "Z", normalized_pos, fast_update=True
                         )
+                        needs_render = True
 
+                # Single render call after fast update
+                if needs_render:
+                    self.plotter.render()
+                    
                 self.last_slider_update = current_time
 
             finally:
@@ -2515,8 +3112,11 @@ class View3D(ViewVTK):
             if not entity_name:
                 return
 
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
+            # Pre-cache the entity for fast slice updates (does the lookup once)
+            update_entity_cache(entity_name)
+            
+            # Check if cache was populated successfully
+            if self._slicer_entity_cache['entity'] is None:
                 return
 
             # Uncheck all checkboxes
@@ -2780,11 +3380,9 @@ class View3D(ViewVTK):
         try:
             # Split the prefix and actual name
             if ":" not in name:
-                print("Error: Name doesn't contain a prefix")
                 return None
 
             prefix, entity_name = name.split(": ", 1)
-            print(f"Looking for entity: {entity_name} in {prefix} collection")
 
             # Map prefix to collection attribute name
             collection_map = {
@@ -2801,7 +3399,6 @@ class View3D(ViewVTK):
 
             coll_name = collection_map.get(prefix)
             if not coll_name:
-                print(f"Error: Unknown prefix '{prefix}'")
                 return None
 
             # Get the collection and entity
@@ -2863,6 +3460,428 @@ class View3D(ViewVTK):
         except Exception:
             return None
         return None
+
+    def _unique_xsection_name(self, base_name):
+        """Return a unique cross-section name within the project."""
+        try:
+            existing = set(self.parent.xsect_coll.get_names)
+        except Exception:
+            existing = set()
+
+        name = base_name if base_name else "new_section"
+        if name not in existing:
+            return name
+
+        idx = 1
+        while f"{name}_{idx}" in existing:
+            idx += 1
+        return f"{name}_{idx}"
+
+    def _create_xsection_from_slicer_slice(
+        self, entity_name, slice_type, normalized_position, section_name=None
+    ):
+        """
+        Create one XSection aligned to the selected slicer plane and fit its frame
+        to the source entity extents projected onto that plane.
+        """
+        import numpy as np
+
+        entity = self.get_entity_by_name(entity_name)
+        if entity is None:
+            return None
+
+        pv_entity = pv.wrap(entity)
+        bounds = pv_entity.bounds
+        t = max(0.0, min(1.0, float(normalized_position)))
+
+        plane_info = self._slice_plane_from_dataset(
+            dataset=pv_entity,
+            slice_type=slice_type,
+            normalized_position=t,
+        )
+        if plane_info is None:
+            return None
+        origin = np.asarray(plane_info["center"], dtype=float)
+        normal = np.asarray(plane_info["normal"], dtype=float)
+
+        if slice_type == "Z" and normal[2] > 0:
+            # Keep geological convention (normal points downwards when possible).
+            normal = -normal
+
+        if normal[2] > 0:
+            normal = -normal
+
+        strike = (float(np.degrees(np.arctan2(normal[0], normal[1]))) + 90.0) % 360.0
+        dip = 90.0 - float(np.degrees(np.arcsin(float(-normal[2]))))
+
+        # Create base cross-section.
+        xs_dict = deepcopy(self.parent.xsect_coll.entity_dict)
+        xs_dict["name"] = self._unique_xsection_name(
+            section_name if section_name else f"XS_{slice_type}"
+        )
+        xs_dict["origin_x"] = float(origin[0])
+        xs_dict["origin_y"] = float(origin[1])
+        xs_dict["origin_z"] = float(origin[2])
+        xs_dict["strike"] = float(strike)
+        xs_dict["dip"] = float(dip)
+        xs_dict["length"] = 1.0
+        xs_dict["height"] = 1.0
+        xuid = self.parent.xsect_coll.add_entity_from_dict(entity_dict=xs_dict)
+
+        # Fit frame to source entity bounds projected to the section plane.
+        b = bounds
+        corners = np.array(
+            [
+                [b[0], b[2], b[4]],
+                [b[0], b[2], b[5]],
+                [b[0], b[3], b[4]],
+                [b[0], b[3], b[5]],
+                [b[1], b[2], b[4]],
+                [b[1], b[2], b[5]],
+                [b[1], b[3], b[4]],
+                [b[1], b[3], b[5]],
+            ],
+            dtype=float,
+        )
+        U, V = self.parent.xsect_coll.world2plane(
+            section_uid=xuid, X=corners[:, 0], Y=corners[:, 1], Z=corners[:, 2]
+        )
+        U = np.asarray(U).reshape(-1)
+        V = np.asarray(V).reshape(-1)
+
+        min_u = float(np.min(U))
+        max_u = float(np.max(U))
+        min_v = float(np.min(V))
+        max_v = float(np.max(V))
+
+        # Small padding avoids a frame touching data bounds exactly.
+        pad = 0.02 * max(max_u - min_u, max_v - min_v)
+        if pad <= 0.0:
+            pad = 1.0
+        min_u -= pad
+        max_u += pad
+        min_v -= pad
+        max_v += pad
+
+        fitted_origin = self.parent.xsect_coll.plane2world(
+            section_uid=xuid, U=min_u, V=min_v, as_arr=True
+        )
+        self.parent.xsect_coll.set_uid_length(xuid, float(max_u - min_u))
+        self.parent.xsect_coll.set_uid_width(xuid, float(max_v - min_v))
+        self.parent.xsect_coll.set_uid_origin_x(xuid, float(fitted_origin[0]))
+        self.parent.xsect_coll.set_uid_origin_y(xuid, float(fitted_origin[1]))
+        self.parent.xsect_coll.set_uid_origin_z(xuid, float(fitted_origin[2]))
+        self.parent.xsect_coll.set_geometry(uid=xuid)
+        self.parent.xsect_coll.modelReset.emit()
+        self.parent.signals.geom_modified.emit([xuid], self.parent.xsect_coll)
+        return xuid
+
+    def _open_xsection_view_for_uid(self, xuid):
+        """Open an XSection view focused on the provided cross-section uid."""
+        if not xuid:
+            return
+        try:
+            self.parent._next_xsection_uid = xuid
+            if hasattr(self.parent, "actionXSectionView"):
+                self.parent.actionXSectionView.trigger()
+                return
+        except Exception:
+            pass
+        try:
+            from .dock_window import DockWindow
+
+            self.parent._next_xsection_uid = xuid
+            DockWindow(parent=self.parent, window_type="ViewXsection")
+        except Exception:
+            pass
+
+    def _add_xsection_data_from_entity(self, entity_name, xuid):
+        """
+        Build and attach XSection data from a slicable entity.
+        Structured volumes are converted to XsVoxet; non-structured meshes fall back
+        to a cutter-based geologic section entity.
+        """
+        try:
+            import numpy as np
+            from scipy.interpolate import griddata as sp_griddata
+            from vtk import vtkImageData
+            from vtkmodules.vtkFiltersCore import vtkCleanPolyData, vtkCutter, vtkStripper
+            from ..entities_factory import TriSurf, XsPolyLine, XsVertexSet, XsVoxet
+
+            if ":" not in entity_name:
+                return None
+
+            prefix, plain_name = entity_name.split(": ", 1)
+            collection_map = {
+                "Mesh": "mesh3d_coll",
+                "Geological": "geol_coll",
+                "Cross-section": "xsect_coll",
+                "Boundary": "boundary_coll",
+                "DOM": "dom_coll",
+                "Image": "image_coll",
+                "Well": "well_coll",
+                "Fluid": "fluid_coll",
+                "Background": "backgrnd_coll",
+            }
+            coll_name = collection_map.get(prefix)
+            if not coll_name or not hasattr(self.parent, coll_name):
+                return None
+
+            source_coll = getattr(self.parent, coll_name)
+            src_uids = source_coll.get_name_uid(plain_name)
+            if not src_uids:
+                return None
+            src_uid = src_uids[0]
+
+            src_obj = source_coll.get_uid_vtk_obj(src_uid)
+            if src_obj is None:
+                return None
+
+            try:
+                src_topology = source_coll.get_uid_topology(src_uid)
+            except Exception:
+                src_topology = ""
+
+            try:
+                source_scenario = source_coll.get_uid_scenario(src_uid)
+            except Exception:
+                source_scenario = "undef"
+
+            try:
+                source_props = list(source_coll.get_uid_properties_names(src_uid))
+            except Exception:
+                source_props = []
+            try:
+                source_comps = list(source_coll.get_uid_properties_components(src_uid))
+            except Exception:
+                source_comps = []
+
+            def _unique_name(collection, base_name):
+                existing_names = set(collection.df["name"].tolist())
+                out_name = base_name
+                idx = 1
+                while out_name in existing_names:
+                    idx += 1
+                    out_name = f"{base_name}_{idx}"
+                return out_name
+
+            structured_topologies = {"Seismics", "Image3D", "Voxet", "XsVoxet"}
+            if src_topology in structured_topologies:
+                scalar_name = None
+                try:
+                    if (
+                        hasattr(self, "slice_prop_by_entity")
+                        and entity_name in self.slice_prop_by_entity
+                    ):
+                        cand = self.slice_prop_by_entity[entity_name]
+                        if cand and cand not in ["none", "X", "Y", "Z"] and not cand.endswith("]"):
+                            scalar_name = cand
+                except Exception:
+                    pass
+                if scalar_name is None and source_props:
+                    scalar_name = source_props[0]
+
+                plane = self.parent.xsect_coll.get_uid_vtk_plane(xuid)
+                cutter = vtkCutter()
+                cutter.SetCutFunction(plane)
+                cutter.SetInputData(src_obj)
+                cutter.Update()
+                cut_out = cutter.GetOutput()
+                if cut_out is None or cut_out.GetNumberOfPoints() <= 0:
+                    return None
+
+                point_data = cut_out.GetPointData()
+                arr = point_data.GetArray(scalar_name) if scalar_name else None
+                if arr is None:
+                    arr = point_data.GetArray(0)
+                    if arr is None:
+                        return None
+                    scalar_name = arr.GetName() if arr.GetName() else scalar_name
+                else:
+                    point_data.SetActiveScalars(scalar_name)
+
+                values = numpy_support.vtk_to_numpy(arr)
+                if values.ndim > 1:
+                    values = values[:, 0]
+                values = values.reshape((-1,))
+
+                cutter_bounds = np.array(cut_out.GetBounds(), dtype=float)
+                if np.any(~np.isfinite(cutter_bounds)):
+                    return None
+
+                try:
+                    src_dims = src_obj.GetDimensions()
+                    strike = float(self.parent.xsect_coll.get_uid_strike(xuid))
+                    normal = np.asarray(
+                        self.parent.xsect_coll.get_uid_normal_vect(section_uid=xuid),
+                        dtype=float,
+                    )
+                    normal_abs = np.abs(normal)
+                    axis_idx = int(np.argmax(normal_abs))
+                    if axis_idx == 0:  # X-normal slice
+                        dim_w = int(max(2, src_dims[1]))
+                        dim_z = int(max(2, src_dims[2]))
+                        spacing_z = abs(
+                            (src_obj.GetBounds()[5] - src_obj.GetBounds()[4])
+                            / max(src_dims[2] - 1, 1)
+                        )
+                    elif axis_idx == 1:  # Y-normal slice
+                        dim_w = int(max(2, src_dims[0]))
+                        dim_z = int(max(2, src_dims[2]))
+                        spacing_z = abs(
+                            (src_obj.GetBounds()[5] - src_obj.GetBounds()[4])
+                            / max(src_dims[2] - 1, 1)
+                        )
+                    else:  # Z-normal slice
+                        dim_w = int(max(2, src_dims[0]))
+                        dim_z = int(max(2, src_dims[1]))
+                        spacing_z = abs(
+                            (src_obj.GetBounds()[3] - src_obj.GetBounds()[2])
+                            / max(src_dims[1] - 1, 1)
+                        )
+                except Exception:
+                    strike = float(self.parent.xsect_coll.get_uid_strike(xuid))
+                    npts = int(cut_out.GetNumberOfPoints())
+                    dim_z = int(max(2, round(np.sqrt(max(npts, 4)))))
+                    dim_w = int(max(2, round(max(npts, 4) / dim_z)))
+                    spacing_z = abs(cutter_bounds[5] - cutter_bounds[4]) / max(dim_z - 1, 1)
+
+                spacing_w = np.sqrt(
+                    (cutter_bounds[1] - cutter_bounds[0]) ** 2
+                    + (cutter_bounds[3] - cutter_bounds[2]) ** 2
+                ) / max(dim_w - 1, 1)
+                if spacing_w <= 0:
+                    spacing_w = 1.0
+                if spacing_z <= 0:
+                    spacing_z = 1.0
+
+                if strike <= 90:
+                    origin = [cutter_bounds[0], cutter_bounds[2], cutter_bounds[4]]
+                    direction_matrix = [
+                        np.sin(strike * np.pi / 180), 0, -(np.cos(strike * np.pi / 180)),
+                        np.cos(strike * np.pi / 180), 0, np.sin(strike * np.pi / 180),
+                        0, 1, 0,
+                    ]
+                elif strike <= 180:
+                    origin = [cutter_bounds[1], cutter_bounds[2], cutter_bounds[4]]
+                    direction_matrix = [
+                        -(np.sin(strike * np.pi / 180)), 0, -(np.cos(strike * np.pi / 180)),
+                        -(np.cos(strike * np.pi / 180)), 0, np.sin(strike * np.pi / 180),
+                        0, 1, 0,
+                    ]
+                elif strike <= 270:
+                    origin = [cutter_bounds[0], cutter_bounds[2], cutter_bounds[4]]
+                    direction_matrix = [
+                        -(np.sin(strike * np.pi / 180)), 0, -(np.cos(strike * np.pi / 180)),
+                        -(np.cos(strike * np.pi / 180)), 0, np.sin(strike * np.pi / 180),
+                        0, 1, 0,
+                    ]
+                else:
+                    origin = [cutter_bounds[1], cutter_bounds[2], cutter_bounds[4]]
+                    direction_matrix = [
+                        np.sin(strike * np.pi / 180), 0, -(np.cos(strike * np.pi / 180)),
+                        np.cos(strike * np.pi / 180), 0, np.sin(strike * np.pi / 180),
+                        0, 1, 0,
+                    ]
+
+                probe_image = vtkImageData()
+                probe_image.SetOrigin(origin)
+                probe_image.SetSpacing([float(spacing_w), float(spacing_z), 0.0])
+                probe_image.SetDimensions([int(dim_w), int(dim_z), 1])
+                probe_image.SetDirectionMatrix(direction_matrix)
+
+                xyz_cutter = numpy_support.vtk_to_numpy(cut_out.GetPoints().GetData())
+                n_probe_pts = probe_image.GetNumberOfPoints()
+                xyz_probe = np.zeros((n_probe_pts, 3), dtype=float)
+                for i in range(n_probe_pts):
+                    xyz_probe[i, :] = probe_image.GetPoint(i)
+
+                regular_values = sp_griddata(
+                    points=xyz_cutter, values=values, xi=xyz_probe, method="nearest"
+                )
+                if regular_values is None:
+                    return None
+
+                vtk_vals = numpy_support.numpy_to_vtk(np.asarray(regular_values))
+                vtk_vals.SetName(scalar_name)
+                probe_image.GetPointData().AddArray(vtk_vals)
+                probe_image.GetPointData().SetActiveScalars(scalar_name)
+
+                obj_dict = deepcopy(self.parent.mesh3d_coll.entity_dict)
+                base_name = f"{plain_name}_xs_{self.parent.xsect_coll.get_uid_name(xuid)}"
+                obj_dict["name"] = _unique_name(self.parent.mesh3d_coll, base_name)
+                obj_dict["scenario"] = source_scenario
+                obj_dict["topology"] = "XsVoxet"
+                obj_dict["parent_uid"] = xuid
+                obj_dict["properties_names"] = [scalar_name]
+                obj_dict["properties_components"] = [1]
+                obj_dict["properties_types"] = ["float"]
+                obj_dict["vtk_obj"] = XsVoxet(x_section_uid=xuid, parent=self.parent)
+                obj_dict["vtk_obj"].ShallowCopy(probe_image)
+                if obj_dict["vtk_obj"].points_number <= 0:
+                    return None
+                return self.parent.mesh3d_coll.add_entity_from_dict(obj_dict)
+
+            # Generic mesh fallback: create section polyline/surface from cutter output.
+            plane = self.parent.xsect_coll.get_uid_vtk_plane(xuid)
+            cutter = vtkCutter()
+            cutter.SetCutFunction(plane)
+            cutter.SetInputData(src_obj)
+            cutter.Update()
+            cut_out = cutter.GetOutput()
+            if cut_out is None or cut_out.GetNumberOfPoints() <= 0:
+                return None
+
+            base_name = f"{plain_name}_xs_{self.parent.xsect_coll.get_uid_name(xuid)}"
+            obj_dict = deepcopy(self.parent.geol_coll.entity_dict)
+            obj_dict["name"] = _unique_name(self.parent.geol_coll, base_name)
+            obj_dict["scenario"] = source_scenario
+            obj_dict["role"] = "undef"
+            obj_dict["feature"] = "undef"
+            obj_dict["parent_uid"] = xuid
+            obj_dict["properties_names"] = source_props
+            obj_dict["properties_components"] = source_comps
+
+            line_data = None
+            if cut_out.GetNumberOfLines() > 0:
+                clean = vtkCleanPolyData()
+                clean.SetInputData(cut_out)
+                clean.SetTolerance(0.0)
+                clean.Update()
+                stripper = vtkStripper()
+                stripper.JoinContiguousSegmentsOn()
+                stripper.SetInputConnection(clean.GetOutputPort())
+                stripper.Update()
+                stripped = stripper.GetOutput()
+                if stripped and stripped.GetNumberOfPoints() > 0 and stripped.GetNumberOfLines() > 0:
+                    line_data = stripped
+
+            if line_data is not None:
+                obj_dict["topology"] = "XsPolyLine"
+                obj_dict["vtk_obj"] = XsPolyLine(x_section_uid=xuid, parent=self.parent)
+                obj_dict["vtk_obj"].DeepCopy(line_data)
+            elif cut_out.GetNumberOfPolys() > 0:
+                obj_dict["topology"] = "TriSurf"
+                obj_dict["vtk_obj"] = TriSurf()
+                obj_dict["vtk_obj"].DeepCopy(cut_out)
+            else:
+                obj_dict["topology"] = "XsVertexSet"
+                obj_dict["vtk_obj"] = XsVertexSet(x_section_uid=xuid, parent=self.parent)
+                obj_dict["vtk_obj"].DeepCopy(cut_out)
+
+            try:
+                for data_key in obj_dict["vtk_obj"].point_data_keys:
+                    if data_key not in obj_dict["properties_names"]:
+                        obj_dict["vtk_obj"].remove_point_data(data_key)
+            except Exception:
+                pass
+
+            if obj_dict["vtk_obj"].GetNumberOfPoints() <= 0:
+                return None
+            return self.parent.geol_coll.add_entity_from_dict(obj_dict)
+        except Exception:
+            self.print_terminal("Warning: could not attach section data for new X-Section.")
+            return None
 
     def _set_tree_checked_for_uid(self, coll_name, uid, checked: bool):
         """Programmatically set the checkbox state in the collection tree for a given uid."""
@@ -2979,34 +3998,12 @@ class View3D(ViewVTK):
                 bounds = pv_entity.bounds
 
                 # Calculate normalized position based on current origin
-                normalized_pos = 0
-                if slice_type == "X":  # U direction
-                    normalized_pos = (
-                        (origin[0] - bounds[0]) / (bounds[1] - bounds[0])
-                        if bounds[1] > bounds[0]
-                        else 0.5
-                    )
-                elif slice_type == "Y":  # V direction
-                    normalized_pos = (
-                        (origin[1] - bounds[2]) / (bounds[3] - bounds[2])
-                        if bounds[3] > bounds[2]
-                        else 0.5
-                    )
-                elif slice_type == "Z":  # W direction
-                    # For W slices with vertical exaggeration, adjust calculation
-                    if hasattr(self, "v_exaggeration") and self.v_exaggeration != 1.0:
-                        z_mid = (bounds[4] + bounds[5]) / 2
-                        # Adjust for vertical exaggeration
-                        adjusted_pos = z_mid + (origin[2] - z_mid) / self.v_exaggeration
-                        normalized_pos = (adjusted_pos - bounds[4]) / (
-                            bounds[5] - bounds[4]
-                        )
-                    else:
-                        normalized_pos = (
-                            (origin[2] - bounds[4]) / (bounds[5] - bounds[4])
-                            if bounds[5] > bounds[4]
-                            else 0.5
-                        )
+                normalized_pos = self._normalized_slicer_position_from_point(
+                    dataset=pv_entity,
+                    slice_type=slice_type,
+                    point=origin,
+                    display_coordinates=True,
+                )
 
                 # Clamp slightly inside [0,1] to prevent disappearing at exact bounds
                 eps = getattr(self, "_slice_edge_epsilon", 1e-6)
@@ -3117,7 +4114,7 @@ class View3D(ViewVTK):
 
                 # Create plane widget for U slice
                 widget = self.create_single_plane_widget(
-                    "X", normalized_positions["X"], bounds, callback_func
+                    "X", normalized_positions["X"], bounds, callback_func, entity=pv_entity
                 )
                 if widget:
                     self.plane_widgets.append(widget)
@@ -3143,7 +4140,7 @@ class View3D(ViewVTK):
 
                 # Create plane widget for V slice
                 widget = self.create_single_plane_widget(
-                    "Y", normalized_positions["Y"], bounds, callback_func
+                    "Y", normalized_positions["Y"], bounds, callback_func, entity=pv_entity
                 )
                 if widget:
                     self.plane_widgets.append(widget)
@@ -3169,7 +4166,7 @@ class View3D(ViewVTK):
 
                 # Create plane widget for W slice
                 widget = self.create_single_plane_widget(
-                    "Z", normalized_positions["Z"], bounds, callback_func
+                    "Z", normalized_positions["Z"], bounds, callback_func, entity=pv_entity
                 )
                 if widget:
                     self.plane_widgets.append(widget)
@@ -3292,38 +4289,22 @@ class View3D(ViewVTK):
 
             print(f"Updating slice {slice_uid} for property {property_name}")
             visible = actor.GetVisibility()
-            bounds = pv_entity.bounds
-            origin = actor.GetCenter()
-            if slice_type == "X":
-                normalized_pos = (
-                    (origin[0] - bounds[0]) / (bounds[1] - bounds[0])
-                    if bounds[1] > bounds[0]
-                    else 0.5
-                )
-                slice_data = pv_entity.slice(
-                    normal=[1, 0, 0],
-                    origin=[bounds[0] + normalized_pos * (bounds[1] - bounds[0]), 0, 0],
-                )
-            elif slice_type == "Y":
-                normalized_pos = (
-                    (origin[1] - bounds[2]) / (bounds[3] - bounds[2])
-                    if bounds[3] > bounds[2]
-                    else 0.5
-                )
-                slice_data = pv_entity.slice(
-                    normal=[0, 1, 0],
-                    origin=[0, bounds[2] + normalized_pos * (bounds[3] - bounds[2]), 0],
-                )
-            else:
-                normalized_pos = (
-                    (origin[2] - bounds[4]) / (bounds[5] - bounds[4])
-                    if bounds[5] > bounds[4]
-                    else 0.5
-                )
-                slice_data = pv_entity.slice(
-                    normal=[0, 0, 1],
-                    origin=[0, 0, bounds[4] + normalized_pos * (bounds[5] - bounds[4])],
-                )
+            normalized_pos = self._normalized_slicer_position_from_point(
+                dataset=pv_entity,
+                slice_type=slice_type,
+                point=actor.GetCenter(),
+                display_coordinates=True,
+            )
+            slice_data, _plane_info = self._extract_slice_data_for_slicer(
+                dataset=pv_entity,
+                slice_type=slice_type,
+                normalized_position=normalized_pos,
+            )
+
+            # Skip if slice is still empty
+            if slice_data is None or slice_data.n_points == 0:
+                print(f"Warning: Slice {slice_uid} is empty, skipping update")
+                continue
 
             scalar_array = property_name
             cmap = None
@@ -3353,7 +4334,7 @@ class View3D(ViewVTK):
         self.plotter.render()
 
     def create_single_plane_widget(
-        self, slice_type, normalized_position, bounds, update_callback
+        self, slice_type, normalized_position, bounds, update_callback, entity=None
     ):
         """Create a single plane widget for the given slice type and position."""
         try:
@@ -3366,60 +4347,44 @@ class View3D(ViewVTK):
                 f"Creating plane widget for {slice_type} slice with vertical exaggeration: {v_exag}"
             )
 
-            # Calculate world position
-            if slice_type == "X":
-                position = bounds[0] + normalized_position * (bounds[1] - bounds[0])
-                normal = [1, 0, 0]
-                origin = [position, 0, 0]
-            elif slice_type == "Y":
-                position = bounds[2] + normalized_position * (bounds[3] - bounds[2])
-                normal = [0, 1, 0]
-                origin = [0, position, 0]
-            else:  # Z
-                position = bounds[4] + normalized_position * (bounds[5] - bounds[4])
-                normal = [0, 0, 1]
-
-                # For Z planes, adjust the origin position for vertical exaggeration
-                if v_exag != 1.0:
-                    z_mid = (bounds[4] + bounds[5]) / 2
-                    # Apply vertical exaggeration from the middle
-                    adjusted_pos = z_mid + (position - z_mid) * v_exag
-                    origin = [0, 0, adjusted_pos]
-                else:
-                    origin = [0, 0, position]
-
-            # Constrain widget within bounds (account for vertical exaggeration on Z)
+            # Apply vertical exaggeration to Z bounds for ALL slice types
+            # PyVista's set_scale scales from origin (0,0,0), so we multiply Z by v_exag
             widget_bounds = list(bounds)
-            if slice_type == "Z" and v_exag != 1.0:
-                z_mid = (bounds[4] + bounds[5]) / 2
-                widget_bounds[4] = z_mid + (bounds[4] - z_mid) * v_exag
-                widget_bounds[5] = z_mid + (bounds[5] - z_mid) * v_exag
+            if v_exag != 1.0:
+                widget_bounds[4] = bounds[4] * v_exag  # z_min scaled
+                widget_bounds[5] = bounds[5] * v_exag  # z_max scaled
 
-            # Create the plane widget with minimal required parameters
+            plane_info = self._slice_plane_from_dataset(
+                dataset=entity,
+                slice_type=slice_type,
+                normalized_position=normalized_position,
+            )
+            if plane_info is None:
+                return None
+
+            origin = np.asarray(plane_info["center"], dtype=float).copy()
+            normal = np.asarray(plane_info["normal"], dtype=float).copy()
+
+            if v_exag != 1.0:
+                origin[2] = origin[2] * v_exag
+                normal[2] = normal[2] / v_exag
+                n_norm = float(np.linalg.norm(normal))
+                if n_norm > 0.0:
+                    normal = normal / n_norm
+
+            # Create the plane widget with the properly scaled bounds
             try:
                 plane_widget = self.plotter.add_plane_widget(
                     update_callback,
-                    normal=normal,
-                    origin=origin,
+                    normal=normal.tolist(),
+                    origin=origin.tolist(),
                     bounds=widget_bounds,
                     normal_rotation=False,  # Disable normal rotation on manipulator
                 )
                 return plane_widget
             except Exception as e:
                 print(f"Error creating plane widget with PyVista: {e}")
-                # Try one more approach with different parameters
-                try:
-                    plane_widget = self.plotter.add_plane_widget(
-                        update_callback,
-                        normal=normal,
-                        origin=origin,
-                        bounds=widget_bounds,
-                        normal_rotation=False,  # Disable normal rotation on manipulator
-                    )
-                    return plane_widget
-                except:
-                    print("Failed with alternate parameters too")
-                    return None
+                return None
 
         except Exception as e:
             print(f"Error creating plane widget for {slice_type} slice: {e}")
@@ -3484,36 +4449,23 @@ class View3D(ViewVTK):
                 # Get the entity
                 entity = self.get_entity_by_name(entity_name_from_slice)
                 if entity:
-                    # Get current slider positions
-                    normalized_position = 0.5  # Default position
-
                     # Force update the visualization (recompute actor with current cmap)
                     try:
                         pv_entity = pv.wrap(entity)
-                        bounds = pv_entity.bounds
-                        if slice_type == "X":
-                            position = bounds[0] + normalized_position * (
-                                bounds[1] - bounds[0]
-                            )
-                            slice_data = pv_entity.slice(
-                                normal=[1, 0, 0], origin=[position, 0, 0]
-                            )
-                        elif slice_type == "Y":
-                            position = bounds[2] + normalized_position * (
-                                bounds[3] - bounds[2]
-                            )
-                            slice_data = pv_entity.slice(
-                                normal=[0, 1, 0], origin=[0, position, 0]
-                            )
-                        else:
-                            position = bounds[4] + normalized_position * (
-                                bounds[5] - bounds[4]
-                            )
-                            slice_data = pv_entity.slice(
-                                normal=[0, 0, 1], origin=[0, 0, position]
-                            )
+                        actor = self.slice_actors.get(slice_uid)
+                        normalized_position = self._normalized_slicer_position_from_point(
+                            dataset=pv_entity,
+                            slice_type=slice_type,
+                            point=actor.GetCenter() if actor is not None else pv_entity.center,
+                            display_coordinates=True,
+                        )
+                        slice_data, _plane_info = self._extract_slice_data_for_slicer(
+                            dataset=pv_entity,
+                            slice_type=slice_type,
+                            normalized_position=normalized_position,
+                        )
 
-                        if slice_data.n_points > 0:
+                        if slice_data is not None and slice_data.n_points > 0:
                             # Mirror the main entity's current property choice for re-sliced view
                             scalar_array = None
                             cmap = None

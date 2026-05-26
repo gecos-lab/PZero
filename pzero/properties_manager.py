@@ -6,6 +6,69 @@ import cmocean as cmo
 import colorcet as cc
 
 from matplotlib.pyplot import colormaps as plt_colormaps
+from matplotlib.colors import LinearSegmentedColormap
+import matplotlib.cm as cm
+
+# Define custom Petrel-like seismic colormap (Blue-White-Red high contrast)
+# Colors: Dark Blue -> White -> Dark Red
+# This makes amplitudes "pop" more than the standard diluted seismic map.
+# Colors: Cyan -> Navy -> Blue -> Gray -> Light Gray -> Maroon -> Red -> Yellow
+# Detailed gradient for maximum contrast and Petrel-like appearance.
+#seismic_pzero_colors = [[255,0,0],"blue", "gray", "lightgray", "maroon", "red", "yellow"]
+#seismic_pzero_cmap = LinearSegmentedColormap.from_list("seismic_pzero", seismic_pzero_colors, N=256)
+
+# create a custom colormap from RGB values and their value positions
+# Normalize RGB values from 0-255 to 0-1 range
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+
+seismic_pzero_cmap = LinearSegmentedColormap.from_list(
+    "seismic_pzero",
+    [
+        (0.0, (255/255, 255/255, 0/255)),      # Yellow
+        (0.32, (191/255, 0/255, 0/255)),       # Dark Red
+        (0.4, (97/255, 69/255, 0/255)),        # Brown
+        (0.5, (204/255, 204/255, 204/255)),    # Light Gray
+        (0.6, (77/255, 77/255, 77/255)),       # Dark Gray
+        (0.68, (0/255, 0/255, 191/255)),       # Dark Blue
+        (1.0, (161/255, 255/255, 255/255)),    # Cyan
+    ],
+    N=256,
+)
+
+# Register the colormap with matplotlib
+try:
+    # Try modern Matplotlib API (3.5+)
+    if hasattr(mpl, 'colormaps') and hasattr(mpl.colormaps, 'register'):
+        mpl.colormaps.register(cmap=seismic_pzero_cmap)
+        # Also register with space in name for compatibility
+        seismic_pzero_cmap_space = LinearSegmentedColormap.from_list(
+            "seismic pzero",
+            [
+                (0.0, (255/255, 255/255, 0/255)),
+                (0.32, (191/255, 0/255, 0/255)),
+                (0.4, (97/255, 69/255, 0/255)),
+                (0.5, (204/255, 204/255, 204/255)),
+                (0.6, (77/255, 77/255, 77/255)),
+                (0.68, (0/255, 0/255, 191/255)),
+                (1.0, (161/255, 255/255, 255/255)),
+            ],
+            N=256,
+        )
+        mpl.colormaps.register(cmap=seismic_pzero_cmap_space)
+    # Try older API (via pyplot or cm)
+    elif hasattr(plt, 'register_cmap'):
+        plt.register_cmap(name="seismic_pzero", cmap=seismic_pzero_cmap)
+        plt.register_cmap(name="seismic pzero", cmap=seismic_pzero_cmap)
+    elif hasattr(cm, 'register_cmap'):
+        cm.register_cmap(name="seismic_pzero", cmap=seismic_pzero_cmap)
+        cm.register_cmap(name="seismic pzero", cmap=seismic_pzero_cmap)
+except ValueError:
+    # Already registered
+    pass
+except Exception as e:
+    print(f"Warning: Colormap registration failed: {e}")
+
 
 from PySide6.QtCore import QObject
 from PySide6.QtGui import QColor, QImage, QPixmap
@@ -15,6 +78,7 @@ from numpy import linspace as np_linspace
 
 from pandas import DataFrame as pd_DataFrame
 from pandas import concat as pd_concat
+from pandas import to_numeric as pd_to_numeric
 from pandas.core.common import flatten as pd_flatten
 
 from pyvista import get_cmap_safe as pv_get_cmap_safe
@@ -28,7 +92,19 @@ def cmap2qpixmap(cmap=None, steps=50):
     https://github.com/pyvista/pyvista/blob/6777a6a5fb4f3691b829edf6103401537faeb3cb/pyvista/plotting/colors.py#L397
     """
     inds = np_linspace(0, 1, steps)
-    colormap = pv_get_cmap_safe(cmap)  # maybe this is the problem with pyinstaller
+    try:
+        colormap = pv_get_cmap_safe(cmap)
+    except ValueError:
+        # Fallback if the colormap is invalid (e.g. removed or renamed custom map)
+        # This prevents the app from crashing due to persisted settings.
+        try:
+            # Try replacing space with underscore if that was the issue
+            if isinstance(cmap, str) and " " in cmap:
+                 colormap = pv_get_cmap_safe(cmap.replace(" ", "_"))
+            else:
+                 colormap = pv_get_cmap_safe("gray")
+        except:
+             colormap = pv_get_cmap_safe("gray")
     rgbas = colormap(inds)
     q_rgbas = [
         QColor(int(r * 255), int(g * 255), int(b * 255), int(a * 255)).rgba()
@@ -54,16 +130,171 @@ class PropertiesCMaps(QObject):
 
     prop_cmap_dict_types = {"property_name": str, "colormap": str}
 
-    # List of all  matplotlib, colorcet, or cmocean colormaps used by PyVista
+    # List of all matplotlib, colorcet, or cmocean colormaps used by PyVista
     # https://docs.pyvista.org/examples/02-plot/cmap.html
-    colormaps_list = (
-        plt_colormaps()
+    base_colormaps_list = (
+        ["seismic_pzero"]
+        + plt_colormaps()
         + ["cet_" + cmap for cmap in list(cc.cm.keys())]
         + cmo.cm.cmapnames
     )
 
+    custom_colormap_table_type = "colormap"
+    custom_colormap_columns = ["value", "color_R", "color_G", "color_B"]
+
     def __init__(self, parent=None, *args, **kwargs):
         QObject.__init__(self, parent)
+
+    @classmethod
+    def _safe_register_cmap(cls, cmap=None):
+        """Register a colormap across supported Matplotlib APIs."""
+        if cmap is None:
+            return
+
+        cmap_name = getattr(cmap, "name", None)
+        if not cmap_name:
+            return
+
+        try:
+            if (
+                hasattr(mpl, "colormaps")
+                and hasattr(mpl.colormaps, "unregister")
+            ):
+                try:
+                    mpl.colormaps.unregister(cmap_name)
+                except Exception:
+                    pass
+            elif hasattr(cm, "unregister_cmap"):
+                try:
+                    cm.unregister_cmap(cmap_name)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        try:
+            if hasattr(mpl, "colormaps") and hasattr(mpl.colormaps, "register"):
+                try:
+                    mpl.colormaps.register(cmap=cmap)
+                except TypeError:
+                    mpl.colormaps.register(cmap)
+            elif hasattr(plt, "register_cmap"):
+                plt.register_cmap(name=cmap_name, cmap=cmap)
+            elif hasattr(cm, "register_cmap"):
+                cm.register_cmap(name=cmap_name, cmap=cmap)
+        except ValueError:
+            pass
+        except Exception as exc:
+            print(f"Warning: Colormap registration failed for {cmap_name}: {exc}")
+
+    @classmethod
+    def get_colormaps_list(cls, parent=None):
+        """Return the full list of built-in and project custom colormaps."""
+        colormap_names = list(cls.base_colormaps_list)
+        if parent is not None:
+            colormap_names.extend(cls.get_custom_colormap_names(parent=parent))
+        return sorted(list(dict.fromkeys(colormap_names)))
+
+    @classmethod
+    def get_custom_colormap_names(cls, parent=None):
+        """Return the names of custom colormap tables stored in the project."""
+        if parent is None:
+            return []
+
+        custom_table_types = getattr(parent, "custom_table_types", {})
+        return [
+            table_name
+            for table_name, table_type in custom_table_types.items()
+            if table_type == cls.custom_colormap_table_type
+        ]
+
+    @classmethod
+    def build_custom_colormap(cls, table_name=None, parent=None):
+        """Build a matplotlib colormap from a custom colormap table."""
+        if parent is None or not table_name:
+            return None
+
+        dataframe = getattr(parent, "custom_tables", {}).get(table_name, None)
+        if dataframe is None or dataframe.empty:
+            return None
+
+        missing_columns = [
+            column_name
+            for column_name in cls.custom_colormap_columns
+            if column_name not in dataframe.columns
+        ]
+        if missing_columns:
+            return None
+
+        working_df = dataframe[cls.custom_colormap_columns].copy()
+        for column_name in cls.custom_colormap_columns:
+            working_df[column_name] = pd_to_numeric(
+                working_df[column_name], errors="coerce"
+            )
+        working_df.dropna(inplace=True)
+        if len(working_df) < 2:
+            return None
+
+        working_df = working_df.sort_values(by="value").drop_duplicates(
+            subset=["value"], keep="last"
+        )
+        if len(working_df) < 2:
+            return None
+
+        min_value = float(working_df["value"].min())
+        max_value = float(working_df["value"].max())
+        if max_value == min_value:
+            return None
+
+        mode = (
+            getattr(parent, "custom_table_options", {})
+            .get(table_name, {})
+            .get("mode", "continuous")
+        )
+
+        normalized_positions = (
+            (working_df["value"].astype(float) - min_value) / (max_value - min_value)
+        ).tolist()
+        color_rows = []
+        for _, row in working_df.iterrows():
+            color_rows.append(
+                (
+                    float(row["color_R"]) / 255.0,
+                    float(row["color_G"]) / 255.0,
+                    float(row["color_B"]) / 255.0,
+                )
+            )
+
+        if mode == "discrete":
+            step_stops = []
+            total_rows = len(normalized_positions)
+            for idx, position in enumerate(normalized_positions):
+                rgb = color_rows[idx]
+                if idx == 0:
+                    step_stops.append((position, rgb))
+                    continue
+                epsilon = min(1e-6, max((position - normalized_positions[idx - 1]) / 10.0, 1e-9))
+                step_stops.append((max(position - epsilon, 0.0), color_rows[idx - 1]))
+                step_stops.append((position, rgb))
+            cmap_stops = step_stops
+        else:
+            cmap_stops = list(zip(normalized_positions, color_rows))
+
+        if not cmap_stops:
+            return None
+
+        return LinearSegmentedColormap.from_list(table_name, cmap_stops, N=256)
+
+    @classmethod
+    def register_custom_colormaps(cls, parent=None):
+        """Register all custom colormaps available in the current project."""
+        if parent is None:
+            return
+
+        for table_name in cls.get_custom_colormap_names(parent=parent):
+            cmap = cls.build_custom_colormap(table_name=table_name, parent=parent)
+            if cmap is not None:
+                cls._safe_register_cmap(cmap=cmap)
 
     def update_widget(self, parent=None):
         """Update the properties colormap dataframe and widget. This is different from legend manager,
@@ -84,6 +315,7 @@ class PropertiesCMaps(QObject):
         WIDGETS HERE POINTING TO THE NEW COLUMNS.
         Note that at and iat can be used to access a single value in a cell directly (so values()
         is not required), but do not work with conditional indexing."""
+        self.register_custom_colormaps(parent=parent)
         # Update the prop_legend_df. X, Y Z are added to the list in order not to alter them.
         all_props = ["X", "Y", "Z"]
         add_props = []
@@ -165,7 +397,7 @@ class PropertiesCMaps(QObject):
                 index, 0, QTableWidgetItem(row["property_name"])
             )
             cmap_combo_box = QComboBox()
-            cmap_combo_box.addItems(self.colormaps_list)
+            cmap_combo_box.addItems(self.get_colormaps_list(parent=parent))
             cmap_combo_box.setCurrentText(row["colormap"])
             cmap_combo_box.this_property = row["property_name"]
             cmap_combo_box.index = index
@@ -198,7 +430,7 @@ class PropertiesCMaps(QObject):
 
         # this is to update the sender color
         label = QLabel()
-        label.setPixmap(cmap2qpixmap(row["colormap"]))
+        label.setPixmap(cmap2qpixmap(new_cmap))
         parent.PropertiesTableWidget.setCellWidget(index, 2, label)
         # Signal to update actors in windows. This is emitted only for the modified
         # uid under the 'line_thick' key.

@@ -18,6 +18,8 @@ class View2D(ViewVTK):
         super(View2D, self).__init__(*args, **kwargs)
 
         self.line_dict = None
+        # Borehole properties in 2D views are always rendered as traces.
+        self.trace_method = "trace"
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
         self._ctrl_suppression_observer_tag = None
