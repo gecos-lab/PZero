@@ -2367,14 +2367,18 @@ class MeshItWorkflowGUI(QWidget):
         btn_add_loc = QPushButton("+")
         btn_del_loc = QPushButton("-")
         btn_auto_loc = QPushButton("Auto")
+        btn_psc = QPushButton("PSC")
         btn_add_loc.setMaximumWidth(50)
         btn_del_loc.setMaximumWidth(50)
+        btn_psc.setToolTip("Build material mapping from a Structural Topology model")
         btn_add_loc.clicked.connect(self._add_location)
         btn_del_loc.clicked.connect(self._remove_location)
         btn_auto_loc.clicked.connect(self._auto_place_materials)
+        btn_psc.clicked.connect(self._open_psc_mapping_dialog)
         h_loc_btns.addWidget(btn_add_loc)
         h_loc_btns.addWidget(btn_del_loc)
         h_loc_btns.addWidget(btn_auto_loc)
+        h_loc_btns.addWidget(btn_psc)
         v_main.addLayout(h_loc_btns)
         
         # 3.2-ter  Interactive mouse placement controls (compact)
@@ -3433,6 +3437,273 @@ class MeshItWorkflowGUI(QWidget):
             del self.tetra_materials[row]
             self.material_list.setCurrentRow(max(0,len(self.tetra_materials)-1))
             self._refresh_material_list()
+
+    def _open_psc_mapping_dialog(self) -> None:
+        """Preview a Piecewise Structural Complex mapping from an STm table."""
+        stm_tables = self._available_stm_tables()
+        if not stm_tables:
+            QMessageBox.information(
+                self,
+                "No STm tables",
+                "No Structural Topology model tables are available in the current PZero project.",
+            )
+            return
+        if not getattr(self, "tetra_surface_data", None):
+            QMessageBox.information(
+                self,
+                "No tetra surfaces",
+                "Load conforming surfaces in the Tetra Mesh tab before building a PSC mapping.",
+            )
+            return
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Piecewise Structural Complex")
+        dialog.resize(920, 520)
+        layout = QVBoxLayout(dialog)
+
+        info_label = QLabel(
+            "Select an STm table. The preview maps STm unit-boundary connections "
+            "to the conforming surfaces loaded in the Tetra Mesh tab."
+        )
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+
+        selector_layout = QHBoxLayout()
+        selector_layout.addWidget(QLabel("STm table"))
+        table_combo = QComboBox(dialog)
+        table_combo.addItems(stm_tables)
+        selector_layout.addWidget(table_combo, 1)
+        layout.addLayout(selector_layout)
+
+        preview_table = QTableWidget(0, 5, dialog)
+        preview_table.setHorizontalHeaderLabels(
+            ["Unit", "Unit Role", "Boundaries", "Matched surfaces", "Missing"]
+        )
+        preview_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        preview_table.verticalHeader().setVisible(False)
+        preview_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        layout.addWidget(preview_table, 1)
+
+        status_label = QLabel("")
+        status_label.setWordWrap(True)
+        layout.addWidget(status_label)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        preview_state = {"psc_model": None, "mapping": None}
+
+        def refresh_preview():
+            table_name = table_combo.currentText()
+            psc_model = self._build_psc_model_from_stm(table_name)
+            mapping = self._map_psc_boundaries_to_tetra_surfaces(psc_model)
+            preview_state["psc_model"] = psc_model
+            preview_state["mapping"] = mapping
+
+            rows = list(mapping.get("units", []))
+            preview_table.setRowCount(len(rows))
+            missing_count = 0
+            for row_idx, unit_info in enumerate(rows):
+                boundaries = unit_info.get("boundaries", [])
+                matched_surfaces = unit_info.get("matched_surfaces", [])
+                missing_boundaries = unit_info.get("missing_boundaries", [])
+                missing_count += len(missing_boundaries)
+                values = [
+                    unit_info.get("feature", ""),
+                    unit_info.get("unit_role", ""),
+                    ", ".join(boundaries),
+                    ", ".join(matched_surfaces),
+                    ", ".join(missing_boundaries),
+                ]
+                for col_idx, value in enumerate(values):
+                    item = QTableWidgetItem(str(value))
+                    if col_idx == 4 and missing_boundaries:
+                        item.setForeground(QColor(190, 40, 40))
+                    preview_table.setItem(row_idx, col_idx, item)
+
+            status_label.setText(
+                f"Units: {len(rows)} | "
+                f"Known boundaries: {len(psc_model.get('boundary_features', set()))} | "
+                f"Missing matches: {missing_count}"
+            )
+
+        table_combo.currentTextChanged.connect(refresh_preview)
+        refresh_preview()
+
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        self.psc_model = preview_state["psc_model"]
+        self.psc_mapping = preview_state["mapping"]
+        self.statusBar().showMessage(
+            f"Loaded PSC mapping from STm table '{table_combo.currentText()}'."
+        )
+
+    def _available_stm_tables(self) -> List[str]:
+        """Return STm table names from the embedded PZero project."""
+        project = self._pzero_project()
+        if project is None:
+            return []
+        table_types = getattr(project, "custom_table_types", {}) or {}
+        return sorted(
+            [
+                table_name
+                for table_name, table_type in table_types.items()
+                if table_type == "stm"
+            ],
+            key=lambda value: str(value).casefold(),
+        )
+
+    def _pzero_project(self):
+        """Return the PZero project window, if PyMeshIt is embedded in PZero."""
+        bridge = getattr(self, "pzero_bridge", None)
+        return getattr(bridge, "_project", None)
+
+    @staticmethod
+    def _psc_key(value: Any) -> str:
+        """Return a normalized key for STm/PyMeshIt feature matching."""
+        return re.sub(r"\s+", " ", str(value or "").strip()).casefold()
+
+    def _build_psc_model_from_stm(self, table_name: str) -> Dict[str, Any]:
+        """Read units, boundaries, and generated connections from an STm table."""
+        project = self._pzero_project()
+        if project is None:
+            return {"units": {}, "boundary_features": set()}
+
+        table_df = getattr(project, "custom_tables", {}).get(table_name)
+        options = getattr(project, "custom_table_options", {}).get(table_name, {}) or {}
+        units: Dict[str, Dict[str, Any]] = {}
+        boundary_features = set()
+
+        if table_df is not None:
+            for _, row in table_df.iterrows():
+                feature = str(row.get("Feature", "")).strip()
+                unit_role = str(row.get("Unit Role", "NonVolumetric")).strip() or "NonVolumetric"
+                if not feature:
+                    continue
+                boundary_features.add(feature)
+                if unit_role == "NonVolumetric":
+                    continue
+                unit_key = f"unit:{feature}"
+                unit_name = f"{feature}_{unit_role}"
+                units[unit_key] = {
+                    "key": unit_key,
+                    "name": unit_name,
+                    "feature": feature,
+                    "unit_role": unit_role,
+                    "boundaries": {feature},
+                    "source": "table",
+                }
+
+        for unit_info in options.get("manual_units", []):
+            if not isinstance(unit_info, dict):
+                continue
+            unit_id = str(unit_info.get("id", "")).strip()
+            feature = str(unit_info.get("feature", "")).strip()
+            unit_role = str(unit_info.get("unit_role", "SU")).strip() or "SU"
+            if not unit_id or not feature:
+                continue
+            unit_key = f"unit:manual:{unit_id}"
+            units[unit_key] = {
+                "key": unit_key,
+                "name": f"{feature}_{unit_role}",
+                "feature": feature,
+                "unit_role": unit_role,
+                "boundaries": set(),
+                "source": "extra",
+            }
+
+        for connection in options.get("manual_connections", []):
+            if not isinstance(connection, dict):
+                continue
+            unit_key = str(connection.get("unit", "")).strip()
+            surface_key = str(connection.get("surface", "")).strip()
+            if unit_key not in units:
+                continue
+            boundary_feature = self._boundary_feature_from_psc_surface_key(surface_key)
+            if not boundary_feature:
+                continue
+            units[unit_key]["boundaries"].add(boundary_feature)
+            boundary_features.add(boundary_feature)
+
+        return {
+            "table_name": table_name,
+            "units": units,
+            "boundary_features": boundary_features,
+        }
+
+    @staticmethod
+    def _boundary_feature_from_psc_surface_key(surface_key: str) -> str:
+        """Convert an STm builder surface key into a boundary feature name."""
+        surface_key = str(surface_key or "").strip()
+        if surface_key == "surface:boundary":
+            return "Boundary"
+        prefix = "surface:"
+        if surface_key.startswith(prefix):
+            return surface_key[len(prefix):].strip()
+        return ""
+
+    def _map_psc_boundaries_to_tetra_surfaces(self, psc_model: Dict[str, Any]) -> Dict[str, Any]:
+        """Map PSC boundary features to loaded tetra-surface metadata."""
+        feature_to_surfaces: Dict[str, List[str]] = {}
+        boundary_surface_labels = []
+        try:
+            border_indices = set(self._get_border_surface_indices())
+        except Exception:
+            border_indices = set()
+
+        for surface_idx, surface_info in getattr(self, "tetra_surface_data", {}).items():
+            label = surface_info.get("name", f"Surface_{surface_idx}")
+            feature = str(surface_info.get("feature", "")).strip()
+            if feature:
+                feature_to_surfaces.setdefault(self._psc_key(feature), []).append(label)
+            fallback_name = str(surface_info.get("name", "")).strip()
+            if fallback_name:
+                feature_to_surfaces.setdefault(self._psc_key(fallback_name), []).append(label)
+            role_text = " ".join(
+                str(surface_info.get(field, "") or "").casefold()
+                for field in ("role", "name", "feature")
+            )
+            if surface_idx in border_indices or any(
+                token in role_text for token in ("border", "boundary", "outer")
+            ):
+                boundary_surface_labels.append(label)
+
+        mapped_units = []
+        for unit in psc_model.get("units", {}).values():
+            boundaries = sorted(unit.get("boundaries", set()), key=lambda value: str(value).casefold())
+            matched_surfaces = []
+            missing_boundaries = []
+            for boundary in boundaries:
+                if self._psc_key(boundary) == self._psc_key("Boundary"):
+                    matches = list(boundary_surface_labels)
+                else:
+                    matches = feature_to_surfaces.get(self._psc_key(boundary), [])
+                if matches:
+                    matched_surfaces.extend(matches)
+                else:
+                    missing_boundaries.append(boundary)
+            mapped_units.append(
+                {
+                    "name": unit.get("name", ""),
+                    "feature": unit.get("feature", ""),
+                    "unit_role": unit.get("unit_role", ""),
+                    "boundaries": boundaries,
+                    "matched_surfaces": sorted(set(matched_surfaces), key=str.casefold),
+                    "missing_boundaries": missing_boundaries,
+                    "source": unit.get("source", ""),
+                }
+            )
+
+        return {
+            "table_name": psc_model.get("table_name", ""),
+            "units": sorted(
+                mapped_units,
+                key=lambda item: str(item.get("feature", "")).casefold(),
+            ),
+        }
 
     def _add_location(self) -> None:
         """Append a new seed point to the currently selected material."""
@@ -8837,7 +9108,8 @@ class MeshItWorkflowGUI(QWidget):
                         'vertices': conforming_mesh['vertices'],
                         'triangles': conforming_mesh['triangles'],
                         'statistics': conforming_mesh.get('statistics', {}),
-                        'original_dataset': dataset
+                        'original_dataset': dataset,
+                        **self._dataset_pzero_metadata(dataset),
                     }
                     conforming_surfaces_found += 1
                     logger.info(f"Loaded conforming mesh for surface {dataset_idx}: "
@@ -15449,6 +15721,21 @@ segmentation, triangulation, and visualization.
         )
         return any(token in text for token in ("border", "boundary", "outer", "tube"))
 
+    @staticmethod
+    def _dataset_pzero_metadata(dataset: dict) -> Dict[str, Any]:
+        """Return PZero identity fields that should survive PyMeshIt workflow steps."""
+        dataset = dataset or {}
+        return {
+            "feature": dataset.get("feature", ""),
+            "role": dataset.get("role", ""),
+            "scenario": dataset.get("scenario", ""),
+            "uid": dataset.get("uid", ""),
+            "collection_key": dataset.get("collection_key", ""),
+            "collection": dataset.get("collection", ""),
+            "source_topology": dataset.get("source_topology", dataset.get("type", "")),
+            "source": dataset.get("source", ""),
+        }
+
     def _import_pzero_records(self, records):
         """
         Convert selected PZero entities to datasets.
@@ -20660,7 +20947,8 @@ segmentation, triangulation, and visualization.
                             'facet_markers': facet_markers,
                             'original_dataset_index': surface_idx,
                             'conforming_mesh_source': True,
-                            'mesh_metadata': conforming_mesh  # Store full metadata
+                            'mesh_metadata': conforming_mesh,  # Store full metadata
+                            **self._dataset_pzero_metadata(dataset),
                         }
                         
                         loaded_count += 1
