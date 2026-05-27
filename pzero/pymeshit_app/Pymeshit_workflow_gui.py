@@ -25245,6 +25245,46 @@ segmentation, triangulation, and visualization.
             view_form.addRow("", self.generic_fig_show_bounds)
             
             main_layout.addWidget(view_group)
+
+            if view_type == 'hulls':
+                hull_style_group = QGroupBox("Hull Appearance")
+                hull_style_form = QFormLayout(hull_style_group)
+
+                self.generic_hull_line_width = QDoubleSpinBox()
+                self.generic_hull_line_width.setRange(0.5, 40.0)
+                self.generic_hull_line_width.setSingleStep(0.5)
+                self.generic_hull_line_width.setDecimals(1)
+                self.generic_hull_line_width.setValue(7.0)
+                self.generic_hull_line_width.setToolTip(
+                    "Line width for convex hull outlines in the exported figure."
+                )
+                hull_style_form.addRow("Hull line width:", self.generic_hull_line_width)
+
+                self.generic_hull_point_size = QDoubleSpinBox()
+                self.generic_hull_point_size.setRange(0.0, 80.0)
+                self.generic_hull_point_size.setSingleStep(1.0)
+                self.generic_hull_point_size.setDecimals(1)
+                self.generic_hull_point_size.setValue(16.0)
+                self.generic_hull_point_size.setToolTip(
+                    "Marker size for convex hull vertices. Set to 0 to hide hull points."
+                )
+                hull_style_form.addRow("Hull point size:", self.generic_hull_point_size)
+
+                self.generic_hull_show_source_points = QCheckBox("Show source points")
+                self.generic_hull_show_source_points.setChecked(True)
+                hull_style_form.addRow("", self.generic_hull_show_source_points)
+
+                self.generic_hull_source_point_size = QDoubleSpinBox()
+                self.generic_hull_source_point_size.setRange(0.0, 40.0)
+                self.generic_hull_source_point_size.setSingleStep(0.5)
+                self.generic_hull_source_point_size.setDecimals(1)
+                self.generic_hull_source_point_size.setValue(5.0)
+                self.generic_hull_source_point_size.setToolTip(
+                    "Marker size for the original point cloud in the exported figure."
+                )
+                hull_style_form.addRow("Source point size:", self.generic_hull_source_point_size)
+
+                main_layout.addWidget(hull_style_group)
             
             # === Quality Settings ===
             quality_group = QGroupBox("Quality Settings")
@@ -25500,11 +25540,17 @@ segmentation, triangulation, and visualization.
             plotter.set_background('white')
         
         text_color = 'white' if is_dark_bg else 'black'
+        copied_source_actors = False
+
+        if view_type == "hulls":
+            copied_source_actors = self._add_hull_export_geometry_to_plotter(plotter)
         
         # Copy actors from source plotter to export plotter
         try:
             # Get all actors from the source plotter's renderer
-            if hasattr(source_plotter, 'renderer') and source_plotter.renderer is not None:
+            if (not copied_source_actors and
+                    hasattr(source_plotter, 'renderer') and
+                    source_plotter.renderer is not None):
                 for actor in source_plotter.renderer.actors.values():
                     try:
                         # Deep copy the actor's mapper and data
@@ -25520,6 +25566,8 @@ segmentation, triangulation, and visualization.
                                 color = prop.GetColor() if prop else (1, 1, 1)
                                 opacity = prop.GetOpacity() if prop else 1.0
                                 edge_visibility = prop.GetEdgeVisibility() if prop else False
+                                line_width = prop.GetLineWidth() if prop else 1.0
+                                point_size = prop.GetPointSize() if prop else 5.0
                                 
                                 # Add mesh with similar properties
                                 plotter.add_mesh(
@@ -25527,6 +25575,8 @@ segmentation, triangulation, and visualization.
                                     color=color,
                                     opacity=opacity,
                                     show_edges=edge_visibility,
+                                    line_width=line_width,
+                                    point_size=point_size,
                                 )
                     except Exception as e:
                         logger.debug(f"Could not copy actor: {e}")
@@ -25573,6 +25623,121 @@ segmentation, triangulation, and visualization.
                 font_size=self.generic_fig_font_size.value() + 4,
                 color=text_color,
             )
+
+    def _add_hull_export_geometry_to_plotter(self, plotter) -> bool:
+        """Add convex hull geometry using export-specific line and point sizes."""
+        import pyvista as pv
+        import numpy as np
+
+        try:
+            hull_line_width = float(self.generic_hull_line_width.value())
+        except Exception:
+            hull_line_width = 7.0
+        try:
+            hull_point_size = float(self.generic_hull_point_size.value())
+        except Exception:
+            hull_point_size = 16.0
+        try:
+            source_point_size = float(self.generic_hull_source_point_size.value())
+        except Exception:
+            source_point_size = 5.0
+        show_source_points = bool(
+            getattr(self, "generic_hull_show_source_points", None) is None
+            or self.generic_hull_show_source_points.isChecked()
+        )
+
+        hull_datasets = [
+            dataset
+            for dataset in getattr(self, "datasets", [])
+            if dataset.get("visible", True) and dataset.get("hull_points") is not None
+        ]
+        if not hull_datasets:
+            return False
+
+        plotter_has_geometry = False
+        for dataset in hull_datasets:
+            color = dataset.get("color", "#000000")
+            name = dataset.get("name", "Unnamed")
+
+            hull_points = dataset.get("hull_points")
+            if hull_points is None:
+                continue
+
+            hull_vertices = []
+            for point in hull_points:
+                try:
+                    if len(point) >= 3:
+                        hull_vertices.append([float(point[0]), float(point[1]), float(point[2])])
+                except Exception:
+                    continue
+
+            if len(hull_vertices) >= 2:
+                hull_3d = np.asarray(hull_vertices, dtype=np.float64)
+                num_hull_points = len(hull_3d)
+                line_segments = np.array(
+                    [[2, i, (i + 1) % num_hull_points] for i in range(num_hull_points)],
+                    dtype=np.int32,
+                ).ravel()
+                hull_mesh = pv.PolyData(hull_3d)
+                hull_mesh.lines = line_segments
+                plotter.add_mesh(
+                    hull_mesh,
+                    color=color,
+                    line_width=hull_line_width,
+                    label=f"{name} Hull",
+                )
+
+                if hull_point_size > 0.0:
+                    plotter.add_points(
+                        hull_3d,
+                        color=color,
+                        point_size=hull_point_size,
+                        render_points_as_spheres=True,
+                    )
+                plotter_has_geometry = True
+
+            if show_source_points and source_point_size > 0.0:
+                points = dataset.get("points")
+                if points is not None and len(points) > 0:
+                    try:
+                        points = np.asarray(points, dtype=float)
+                        if points.ndim == 2:
+                            if points.shape[1] >= 3:
+                                points_3d = points[:, :3].copy()
+                            else:
+                                points_3d = np.zeros((len(points), 3), dtype=float)
+                                points_3d[:, :points.shape[1]] = points
+
+                            max_points_for_viz = 5000
+                            if len(points_3d) > max_points_for_viz:
+                                step = max(1, len(points_3d) // max_points_for_viz)
+                                points_3d = points_3d[::step]
+
+                            point_cloud = pv.PolyData(points_3d)
+                            plotter.add_mesh(
+                                point_cloud,
+                                color=color,
+                                opacity=0.3,
+                                render_points_as_spheres=True,
+                                point_size=source_point_size,
+                            )
+                            plotter_has_geometry = True
+                    except Exception as exc:
+                        logger.debug("Could not add source points for hull export: %s", exc)
+
+        if plotter_has_geometry:
+            self._add_dataset_labels_to_plotter(
+                plotter,
+                hull_datasets,
+                view_type="hulls",
+                name="hulls_export_surface_labels",
+            )
+            try:
+                plotter.add_legend()
+            except Exception:
+                pass
+
+        return plotter_has_geometry
     
     def _on_figure_preset_changed(self, index):
         """Update resolution when preset is selected."""
