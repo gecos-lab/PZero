@@ -3473,6 +3473,16 @@ class MeshItWorkflowGUI(QWidget):
         table_combo = QComboBox(dialog)
         table_combo.addItems(stm_tables)
         selector_layout.addWidget(table_combo, 1)
+        swap_seed_button = QPushButton("Swap selected seeds", dialog)
+        swap_seed_button.setToolTip(
+            "Select two ambiguous units in the preview table and swap their seed coordinates."
+        )
+        selector_layout.addWidget(swap_seed_button)
+        clear_seed_swaps_button = QPushButton("Clear swaps", dialog)
+        clear_seed_swaps_button.setToolTip(
+            "Remove saved PSC seed swaps for the selected STm table."
+        )
+        selector_layout.addWidget(clear_seed_swaps_button)
         layout.addLayout(selector_layout)
 
         preview_table = QTableWidget(0, 6, dialog)
@@ -3482,11 +3492,18 @@ class MeshItWorkflowGUI(QWidget):
         preview_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         preview_table.verticalHeader().setVisible(False)
         preview_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        preview_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        preview_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         layout.addWidget(preview_table, 1)
 
         status_label = QLabel("")
         status_label.setWordWrap(True)
         layout.addWidget(status_label)
+
+        ambiguity_label = QLabel("")
+        ambiguity_label.setWordWrap(True)
+        ambiguity_label.setStyleSheet("color: rgb(160, 95, 0);")
+        layout.addWidget(ambiguity_label)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         assign_button = buttons.button(QDialogButtonBox.Ok)
@@ -3496,7 +3513,57 @@ class MeshItWorkflowGUI(QWidget):
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
 
-        preview_state = {"psc_model": None, "mapping": None}
+        preview_state = {"psc_model": None, "mapping": None, "rows": []}
+        seed_overrides: Dict[str, List[float]] = {}
+
+        def unit_seed_key(unit_info: Dict[str, Any]) -> str:
+            return str(
+                unit_info.get("key")
+                or unit_info.get("name")
+                or unit_info.get("feature")
+                or ""
+            )
+
+        def load_seed_overrides(table_name: str) -> None:
+            seed_overrides.clear()
+            project = self._pzero_project()
+            options = {}
+            if project is not None:
+                options = getattr(project, "custom_table_options", {}).get(table_name, {}) or {}
+            raw_overrides = options.get("psc_seed_overrides", {})
+            if not isinstance(raw_overrides, dict):
+                return
+            for unit_key, seed_point in raw_overrides.items():
+                try:
+                    coords = [float(value) for value in list(seed_point)[:3]]
+                except (TypeError, ValueError):
+                    continue
+                if len(coords) == 3 and all(np.isfinite(coords)):
+                    seed_overrides[str(unit_key)] = coords
+
+        def save_seed_overrides(table_name: str) -> None:
+            project = self._pzero_project()
+            if project is None:
+                return
+            table_options = getattr(project, "custom_table_options", None)
+            if table_options is None:
+                return
+            options = dict(table_options.get(table_name, {}) or {})
+            if seed_overrides:
+                options["psc_seed_overrides"] = {
+                    unit_key: [float(value) for value in seed_point[:3]]
+                    for unit_key, seed_point in seed_overrides.items()
+                }
+            else:
+                options.pop("psc_seed_overrides", None)
+            table_options[table_name] = options
+
+        def apply_seed_overrides(mapping: Dict[str, Any]) -> None:
+            for unit_info in mapping.get("units", []) or []:
+                unit_key = unit_seed_key(unit_info)
+                if unit_key in seed_overrides:
+                    unit_info["seed_point"] = list(seed_overrides[unit_key])
+                    unit_info["seed_override"] = True
 
         def refresh_preview():
             table_name = table_combo.currentText()
@@ -3506,41 +3573,129 @@ class MeshItWorkflowGUI(QWidget):
             preview_state["mapping"] = mapping
 
             rows = list(mapping.get("units", []))
+            preview_state["rows"] = rows
+            previous_side_context = getattr(self, "_psc_side_context", {})
+            self._psc_side_context = self._psc_prepare_topology_side_context(
+                psc_model,
+                rows,
+            )
             preview_table.setRowCount(len(rows))
             missing_count = 0
-            for row_idx, unit_info in enumerate(rows):
-                boundaries = unit_info.get("boundaries", [])
-                matched_surfaces = unit_info.get("matched_surfaces", [])
-                missing_boundaries = unit_info.get("missing_boundaries", [])
-                missing_count += len(missing_boundaries)
-                seed_point = self._psc_seed_point_for_unit(unit_info, psc_model)
-                unit_info["seed_point"] = seed_point
-                seed_text = (
-                    f"{seed_point[0]:.2f}, {seed_point[1]:.2f}, {seed_point[2]:.2f}"
-                    if seed_point is not None
-                    else ""
-                )
-                values = [
-                    unit_info.get("feature", ""),
-                    unit_info.get("unit_role", ""),
-                    ", ".join(boundaries),
-                    ", ".join(matched_surfaces),
-                    seed_text,
-                    ", ".join(missing_boundaries),
-                ]
-                for col_idx, value in enumerate(values):
-                    item = QTableWidgetItem(str(value))
-                    if col_idx == 5 and missing_boundaries:
-                        item.setForeground(QColor(190, 40, 40))
-                    preview_table.setItem(row_idx, col_idx, item)
+            try:
+                for row_idx, unit_info in enumerate(rows):
+                    boundaries = unit_info.get("boundaries", [])
+                    matched_surfaces = unit_info.get("matched_surfaces", [])
+                    missing_boundaries = unit_info.get("missing_boundaries", [])
+                    missing_count += len(missing_boundaries)
+                    unit_key = unit_seed_key(unit_info)
+                    if unit_key in seed_overrides:
+                        seed_point = list(seed_overrides[unit_key])
+                        unit_info["seed_point"] = seed_point
+                        unit_info["seed_override"] = True
+                    else:
+                        seed_point = self._psc_seed_point_for_unit(unit_info, psc_model)
+                        unit_info["seed_point"] = seed_point
+                    seed_text = (
+                        f"{seed_point[0]:.2f}, {seed_point[1]:.2f}, {seed_point[2]:.2f}"
+                        if seed_point is not None
+                        else ""
+                    )
+                    if unit_info.get("seed_override") and seed_text:
+                        seed_text += " *"
+                    values = [
+                        unit_info.get("feature", ""),
+                        unit_info.get("unit_role", ""),
+                        ", ".join(boundaries),
+                        ", ".join(matched_surfaces),
+                        seed_text,
+                        ", ".join(missing_boundaries),
+                    ]
+                    for col_idx, value in enumerate(values):
+                        item = QTableWidgetItem(str(value))
+                        if col_idx == 4 and unit_info.get("seed_override"):
+                            item.setToolTip("Seed swapped manually in this PSC dialog.")
+                            item.setForeground(QColor(40, 95, 170))
+                        if col_idx == 5 and missing_boundaries:
+                            item.setForeground(QColor(190, 40, 40))
+                        preview_table.setItem(row_idx, col_idx, item)
+            finally:
+                self._psc_side_context = previous_side_context
 
             status_label.setText(
                 f"Units: {len(rows)} | "
                 f"Known boundaries: {len(psc_model.get('boundary_features', set()))} | "
-                f"Missing matches: {missing_count}"
+                f"Missing matches: {missing_count} | "
+                f"Saved seed swaps: {len(seed_overrides)}"
             )
+            ambiguity_groups = self._psc_ambiguity_groups(rows)
+            if ambiguity_groups:
+                group_text = "; ".join(
+                    ", ".join(unit.get("name") or unit.get("feature", "") for unit in group)
+                    for group in ambiguity_groups
+                )
+                ambiguity_label.setText(
+                    "Potential ambiguous PSC units: "
+                    f"{group_text}. Select two rows and use Swap selected seeds if the "
+                    "preview coordinates are inverted."
+                )
+            else:
+                ambiguity_label.setText("")
 
-        table_combo.currentTextChanged.connect(refresh_preview)
+        def swap_selected_seeds():
+            selection_model = preview_table.selectionModel()
+            selected_rows = []
+            if selection_model is not None:
+                selected_rows = sorted(
+                    {index.row() for index in selection_model.selectedRows()}
+                )
+            if not selected_rows:
+                selected_rows = sorted(
+                    {item.row() for item in preview_table.selectedItems()}
+                )
+            if len(selected_rows) != 2:
+                QMessageBox.information(
+                    dialog,
+                    "Swap seeds",
+                    "Select exactly two unit rows before swapping seeds.",
+                )
+                return
+
+            rows = list(preview_state.get("rows", []))
+            if any(row_idx < 0 or row_idx >= len(rows) for row_idx in selected_rows):
+                return
+            first_unit = rows[selected_rows[0]]
+            second_unit = rows[selected_rows[1]]
+            first_seed = first_unit.get("seed_point")
+            second_seed = second_unit.get("seed_point")
+            if first_seed is None or second_seed is None:
+                QMessageBox.information(
+                    dialog,
+                    "Swap seeds",
+                    "Both selected units need a valid seed before swapping.",
+                )
+                return
+            first_key = unit_seed_key(first_unit)
+            second_key = unit_seed_key(second_unit)
+            seed_overrides[first_key] = [float(value) for value in second_seed[:3]]
+            seed_overrides[second_key] = [float(value) for value in first_seed[:3]]
+            save_seed_overrides(table_combo.currentText())
+            refresh_preview()
+
+        def clear_seed_overrides():
+            if not seed_overrides:
+                return
+            seed_overrides.clear()
+            save_seed_overrides(table_combo.currentText())
+            refresh_preview()
+
+        def on_table_changed():
+            load_seed_overrides(table_combo.currentText())
+            refresh_preview()
+
+        swap_seed_button.clicked.connect(swap_selected_seeds)
+        clear_seed_swaps_button.clicked.connect(clear_seed_overrides)
+        table_combo.currentTextChanged.connect(lambda _text: on_table_changed())
+        load_seed_overrides(table_combo.currentText())
         refresh_preview()
 
         if dialog.exec() != QDialog.Accepted:
@@ -3553,6 +3708,7 @@ class MeshItWorkflowGUI(QWidget):
             self._psc_debug(f"Assign pressed for STm table '{table_name}'")
             self.psc_model = self._build_psc_model_from_stm(table_name)
             self.psc_mapping = self._map_psc_boundaries_to_tetra_surfaces(self.psc_model)
+            apply_seed_overrides(self.psc_mapping)
             assigned_count, skipped_count = self._assign_psc_materials(
                 self.psc_model,
                 self.psc_mapping,
@@ -3637,6 +3793,30 @@ class MeshItWorkflowGUI(QWidget):
         if coords.size < 3:
             return str(point)
         return f"({coords[0]:.3f}, {coords[1]:.3f}, {coords[2]:.3f})"
+
+    def _psc_ambiguity_groups(
+        self,
+        mapped_units: List[Dict[str, Any]],
+    ) -> List[List[Dict[str, Any]]]:
+        """Return mapped PSC units that share the same boundary signature."""
+        groups: Dict[Tuple[Tuple[str, ...], bool], List[Dict[str, Any]]] = {}
+        boundary_key = self._psc_key("Boundary")
+        for unit_info in mapped_units or []:
+            keys = {
+                self._psc_key(boundary)
+                for boundary in unit_info.get("boundaries", []) or []
+                if self._psc_key(boundary)
+            }
+            structural_keys = tuple(sorted(key for key in keys if key != boundary_key))
+            if not structural_keys:
+                continue
+            signature = (structural_keys, boundary_key in keys)
+            groups.setdefault(signature, []).append(unit_info)
+        return [
+            group
+            for group in groups.values()
+            if len(group) > 1
+        ]
 
     @staticmethod
     def _psc_key(value: Any) -> str:
@@ -5357,7 +5537,21 @@ class MeshItWorkflowGUI(QWidget):
         )
 
         for unit_info in psc_mapping.get("units", []):
-            seed_point = self._psc_seed_point_for_unit(unit_info, psc_model)
+            if unit_info.get("seed_override") and unit_info.get("seed_point") is not None:
+                try:
+                    seed_point = [
+                        float(value)
+                        for value in list(unit_info.get("seed_point", []))[:3]
+                    ]
+                except (TypeError, ValueError):
+                    seed_point = None
+                self._psc_debug(
+                    f"  using dialog-swapped seed for "
+                    f"'{unit_info.get('name', unit_info.get('feature', ''))}': "
+                    f"{self._psc_format_point(seed_point)}"
+                )
+            else:
+                seed_point = self._psc_seed_point_for_unit(unit_info, psc_model)
             unit_info["seed_point"] = seed_point
             if seed_point is None:
                 skipped_count += 1
@@ -5381,6 +5575,7 @@ class MeshItWorkflowGUI(QWidget):
                     "boundaries": list(unit_info.get("boundaries", [])),
                     "matched_surface_indices": list(unit_info.get("matched_surface_indices", [])),
                     "missing_boundaries": list(unit_info.get("missing_boundaries", [])),
+                    "seed_override": bool(unit_info.get("seed_override", False)),
                 }
             )
             signature = unit_info.get("seed_topology_signature", {}) or {}
