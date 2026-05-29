@@ -3923,13 +3923,15 @@ class MeshItWorkflowGUI(QWidget):
                     {
                         "feature": feature,
                         "polarity": polarity,
+                        "row_index": len(boundary_order),
                         "unit_role": unit_role,
                         "domains": domains,
                     }
                 )
                 self._psc_debug(
                     f"STm row {row_idx}: feature='{feature}', role='{unit_role}', "
-                    f"polarity={polarity}, domains={domains}"
+                    f"polarity={polarity} (ignored by PSC seed placement), "
+                    f"domains={domains}"
                 )
                 if unit_role == "NonVolumetric":
                     continue
@@ -3975,7 +3977,8 @@ class MeshItWorkflowGUI(QWidget):
             }
             self._psc_debug(
                 f"Manual unit '{unit_key}': feature='{feature}', role='{unit_role}', "
-                f"polarity={units[unit_key]['polarity']}, domains={domains}"
+                f"polarity={units[unit_key]['polarity']} "
+                f"(ignored by PSC seed placement), domains={domains}"
             )
 
         for connection in options.get("manual_connections", []):
@@ -4004,15 +4007,12 @@ class MeshItWorkflowGUI(QWidget):
             "table_name": table_name,
             "units": units,
             "boundary_features": boundary_features,
-            "boundary_order": sorted(
-                boundary_order,
-                key=lambda item: (item.get("polarity", float("inf")), str(item.get("feature", "")).casefold()),
-            ),
+            "boundary_order": list(boundary_order),
         }
         self._psc_debug(
             f"STm model summary: units={len(units)}, "
             f"boundary_features={sorted(boundary_features, key=str.casefold)}, "
-            f"boundary_order={[row.get('feature', '') for row in model['boundary_order']]}"
+            f"table_boundary_order={[row.get('feature', '') for row in model['boundary_order']]}"
         )
         for unit_key, unit_info in sorted(units.items()):
             self._psc_debug(
@@ -4064,18 +4064,17 @@ class MeshItWorkflowGUI(QWidget):
             fallback_name = str(surface_info.get("name", "")).strip()
             if fallback_name:
                 feature_to_surfaces.setdefault(self._psc_key(fallback_name), []).append(entry)
-            role_text = " ".join(
+            identity_text = " ".join(
                 str(surface_info.get(field, "") or "").casefold()
-                for field in ("role", "name", "feature")
+                for field in ("name", "feature")
             )
             if surface_idx_value in border_indices or any(
-                token in role_text for token in ("border", "boundary", "outer")
+                token in identity_text for token in ("border", "boundary", "outer")
             ):
                 boundary_surface_entries.append(entry)
             self._psc_debug(
                 f"  tetra surface {surface_idx_value}: label='{label}', "
                 f"feature='{entry['feature']}', name='{entry['name']}', "
-                f"role='{surface_info.get('role', '')}', "
                 f"is_model_boundary={entry in boundary_surface_entries}"
             )
 
@@ -4128,12 +4127,26 @@ class MeshItWorkflowGUI(QWidget):
                 f"missing={missing_boundaries}"
             )
 
+        mapped_units = sorted(
+            mapped_units,
+            key=lambda item: str(item.get("feature", "")).casefold(),
+        )
+        for group_idx, group in enumerate(self._psc_ambiguity_groups(mapped_units)):
+            ordered_group = sorted(
+                group,
+                key=lambda item: (
+                    str(item.get("name", "")).casefold(),
+                    str(item.get("key", "")).casefold(),
+                ),
+            )
+            for unit_idx, unit_info in enumerate(ordered_group):
+                unit_info["ambiguity_group"] = group_idx
+                unit_info["ambiguity_group_index"] = unit_idx
+                unit_info["ambiguity_group_size"] = len(ordered_group)
+
         return {
             "table_name": psc_model.get("table_name", ""),
-            "units": sorted(
-                mapped_units,
-                key=lambda item: str(item.get("feature", "")).casefold(),
-            ),
+            "units": mapped_units,
         }
 
     def _psc_surface_indices_for_boundary(self, boundary_feature: str) -> List[int]:
@@ -4152,12 +4165,12 @@ class MeshItWorkflowGUI(QWidget):
                 continue
 
             if key == self._psc_key("Boundary"):
-                role_text = " ".join(
+                identity_text = " ".join(
                     str(surface_info.get(field, "") or "").casefold()
-                    for field in ("role", "name", "feature")
+                    for field in ("name", "feature")
                 )
                 if surface_idx_value in border_indices or any(
-                    token in role_text for token in ("border", "boundary", "outer")
+                    token in identity_text for token in ("border", "boundary", "outer")
                 ):
                     matches.append(surface_idx_value)
                 continue
@@ -4175,54 +4188,48 @@ class MeshItWorkflowGUI(QWidget):
         psc_model: Dict[str, Any],
         preferred_direction: int = 1,
     ) -> Tuple[List[int], str]:
-        """Find the next STM boundary surface by polarity for a one-sided unit."""
-        boundary_order = list(psc_model.get("boundary_order", []))
-        if not boundary_order:
-            return [], ""
-
+        """Find the nearest non-owned STM boundary surface for a one-sided unit."""
         unit_key = self._psc_key(unit_info.get("feature", ""))
-        unit_polarity = self._psc_sort_key(unit_info.get("polarity", float("inf")))
-        row_index = None
-        for idx, row_info in enumerate(boundary_order):
-            if self._psc_key(row_info.get("feature", "")) == unit_key:
-                row_index = idx
-                break
+        current_indices = self._psc_structural_surface_indices_for_unit(unit_info)
+        if not current_indices and unit_key:
+            current_indices = self._psc_surface_indices_for_boundary(unit_info.get("feature", ""))
+        current_centroids = [
+            self._psc_surface_centroid(surface_idx)
+            for surface_idx in current_indices
+        ]
+        current_centroids = [centroid for centroid in current_centroids if centroid is not None]
+        if current_centroids:
+            reference_point = np.mean(np.asarray(current_centroids, dtype=float), axis=0)
+        else:
+            bounds = self._psc_domain_bounds()
+            reference_point = (
+                (bounds[0] + bounds[1]) / 2.0
+                if bounds is not None
+                else np.zeros(3, dtype=float)
+            )
 
-        if row_index is None:
-            row_index = 0
-            for idx, row_info in enumerate(boundary_order):
-                if self._psc_sort_key(row_info.get("polarity", float("inf"))) <= unit_polarity:
-                    row_index = idx
-
-        direction = 1 if preferred_direction >= 0 else -1
-        offsets = []
-        for step in range(1, len(boundary_order) + 1):
-            offsets.extend([step * direction, -step * direction])
-
-        for offset in offsets:
-            candidate_index = row_index + offset
-            if candidate_index < 0 or candidate_index >= len(boundary_order):
-                continue
-            feature = boundary_order[candidate_index].get("feature", "")
-            if self._psc_key(feature) == unit_key:
+        candidates = []
+        for feature in psc_model.get("boundary_features", set()) or []:
+            feature_key = self._psc_key(feature)
+            if not feature_key or feature_key in {unit_key, self._psc_key("Boundary")}:
                 continue
             indices = self._psc_surface_indices_for_boundary(feature)
-            if indices:
-                return indices, feature
+            centroids = [
+                self._psc_surface_centroid(surface_idx)
+                for surface_idx in indices
+            ]
+            centroids = [centroid for centroid in centroids if centroid is not None]
+            if not centroids:
+                continue
+            candidate_point = np.mean(np.asarray(centroids, dtype=float), axis=0)
+            distance = float(np.linalg.norm(candidate_point - reference_point))
+            candidates.append((distance, str(feature), indices))
 
-        return [], ""
-
-    def _psc_boundary_order_index(
-        self,
-        feature: Any,
-        psc_model: Dict[str, Any],
-    ) -> Optional[int]:
-        """Return the structural-polarity row index for a boundary feature."""
-        feature_key = self._psc_key(feature)
-        for idx, row_info in enumerate(psc_model.get("boundary_order", [])):
-            if self._psc_key(row_info.get("feature", "")) == feature_key:
-                return idx
-        return None
+        if not candidates:
+            return [], ""
+        candidates.sort(key=lambda item: (item[0], item[1].casefold()))
+        _, feature, indices = candidates[0]
+        return indices, feature
 
     def _psc_domain_bounds(self) -> Optional[Tuple[np.ndarray, np.ndarray]]:
         """Return min/max XYZ bounds of the loaded PLC surfaces."""
@@ -4287,26 +4294,29 @@ class MeshItWorkflowGUI(QWidget):
         return np.mean(vertices, axis=0)
 
     def _psc_stacking_axis(self, psc_model: Dict[str, Any]) -> np.ndarray:
-        """Estimate the model stacking axis from STM boundary surface centroids."""
-        ordered_centroids = []
-        for row_info in psc_model.get("boundary_order", []):
-            surface_indices = self._psc_surface_indices_for_boundary(row_info.get("feature", ""))
-            centroids = [
+        """Estimate a geometric search axis without using STm structural polarity."""
+        centroids = []
+        normals = []
+        for feature in psc_model.get("boundary_features", set()) or []:
+            if self._psc_key(feature) == self._psc_key("Boundary"):
+                continue
+            surface_indices = self._psc_surface_indices_for_boundary(feature)
+            feature_centroids = [
                 self._psc_surface_centroid(surface_idx)
                 for surface_idx in surface_indices
             ]
-            centroids = [centroid for centroid in centroids if centroid is not None]
-            if centroids:
-                ordered_centroids.append(np.mean(np.asarray(centroids), axis=0))
+            feature_centroids = [
+                centroid for centroid in feature_centroids if centroid is not None
+            ]
+            if feature_centroids:
+                centroids.append(np.mean(np.asarray(feature_centroids), axis=0))
+            for surface_idx in surface_indices:
+                normal = self._psc_surface_normal(surface_idx)
+                if normal is not None:
+                    normals.append(normal)
 
-        if len(ordered_centroids) >= 2:
-            axis = np.asarray(ordered_centroids[-1], dtype=float) - np.asarray(ordered_centroids[0], dtype=float)
-            norm = np.linalg.norm(axis)
-            if norm > 1e-12:
-                return axis / norm
-
-        if len(ordered_centroids) > 2:
-            centered = np.asarray(ordered_centroids, dtype=float) - np.mean(ordered_centroids, axis=0)
+        if len(centroids) >= 2:
+            centered = np.asarray(centroids, dtype=float) - np.mean(centroids, axis=0)
             try:
                 _, _, vh = np.linalg.svd(centered, full_matrices=False)
                 axis = vh[0]
@@ -4315,6 +4325,17 @@ class MeshItWorkflowGUI(QWidget):
                     return axis / norm
             except np.linalg.LinAlgError:
                 pass
+
+        if normals:
+            reference = np.asarray(normals[0], dtype=float)
+            aligned = []
+            for normal in normals:
+                normal = np.asarray(normal, dtype=float)
+                aligned.append(normal if float(np.dot(normal, reference)) >= 0.0 else -normal)
+            axis = np.mean(np.asarray(aligned), axis=0)
+            norm = np.linalg.norm(axis)
+            if norm > 1e-12:
+                return axis / norm
 
         return np.array([0.0, 0.0, 1.0], dtype=float)
 
@@ -4650,6 +4671,7 @@ class MeshItWorkflowGUI(QWidget):
         target_surface_indices: List[int],
         bounds: Optional[Tuple[np.ndarray, np.ndarray]],
         side_constraints: Optional[List[Dict[str, Any]]] = None,
+        broad_sampling: bool = False,
     ) -> np.ndarray:
         """Generate candidate seed points in and around the expected STM unit."""
         if bounds is None:
@@ -4753,6 +4775,16 @@ class MeshItWorkflowGUI(QWidget):
             expanded_min = np.maximum(target_min, reference_seed - local_radius * 1.5)
             expanded_max = np.minimum(target_max, reference_seed + local_radius * 1.5)
             add_box_grid(expanded_min, expanded_max, 3)
+            if broad_sampling:
+                broad_min = np.maximum(
+                    target_min - domain_span * 0.05,
+                    bounds_min,
+                )
+                broad_max = np.minimum(
+                    target_max + domain_span * 0.05,
+                    bounds_max,
+                )
+                add_box_grid(broad_min, broad_max, 5)
 
         local_steps = [-0.08, -0.04, 0.0, 0.04, 0.08]
         for x_step in local_steps:
@@ -4788,11 +4820,6 @@ class MeshItWorkflowGUI(QWidget):
                 )
         return distances_by_feature
 
-    def _psc_surface_role(self, surface_idx: int) -> str:
-        """Return the geological role carried by a loaded representative surface."""
-        surface_info = getattr(self, "tetra_surface_data", {}).get(surface_idx, {}) or {}
-        return self._psc_text(surface_info.get("role", ""))
-
     def _psc_surface_feature(self, surface_idx: int) -> str:
         """Return the feature/name carried by a loaded representative surface."""
         surface_info = getattr(self, "tetra_surface_data", {}).get(surface_idx, {}) or {}
@@ -4802,43 +4829,59 @@ class MeshItWorkflowGUI(QWidget):
             or f"Surface_{surface_idx}"
         )
 
-    @staticmethod
-    def _psc_role_is_base(role_text: str) -> bool:
-        """Return True for stratigraphic representative/base surfaces."""
-        role_key = str(role_text or "").casefold()
-        return any(token in role_key for token in ("base", "strat", "horizon"))
-
-    @staticmethod
-    def _psc_role_is_tectonic(role_text: str) -> bool:
-        """Return True for tectonic/fault representative surfaces."""
-        role_key = str(role_text or "").casefold()
-        return any(token in role_key for token in ("tect", "fault", "fracture"))
-
     def _psc_oriented_surface_normal(self, surface_idx: int) -> Optional[np.ndarray]:
-        """Return a surface normal with base surfaces consistently pointing upward."""
-        normal = self._psc_surface_normal(surface_idx)
-        if normal is None:
-            return None
-        role_text = self._psc_surface_role(surface_idx)
-        if self._psc_role_is_base(role_text):
-            up = np.array([0.0, 0.0, 1.0], dtype=float)
-            if float(np.dot(normal, up)) < 0.0:
-                normal = -normal
-        return normal
+        """Return a geometric normal without using geological role metadata."""
+        return self._psc_surface_normal(surface_idx)
+
+    def _psc_signed_distances_to_surface(
+        self,
+        points: np.ndarray,
+        surface_idx: int,
+    ) -> np.ndarray:
+        """Return signed distances to a representative surface where available."""
+        points = np.asarray(points, dtype=float)
+        if points.ndim == 1:
+            points = points.reshape(1, 3)
+        if points.shape[0] == 0:
+            return np.empty((0,), dtype=float)
+
+        mesh = self._psc_surface_polydata(surface_idx)
+        if mesh is not None and getattr(mesh, "n_points", 0) > 0 and getattr(mesh, "n_cells", 0) > 0:
+            try:
+                probe = pv.PolyData(points)
+                result = probe.compute_implicit_distance(mesh, inplace=False)
+                distances = (
+                    np.asarray(result.point_data["implicit_distance"], dtype=float)
+                    if "implicit_distance" in result.point_data
+                    else np.empty((0,), dtype=float)
+                )
+                if distances.size == points.shape[0] and np.all(np.isfinite(distances)):
+                    return distances
+            except Exception as exc:
+                logger.debug("PSC signed implicit distance failed for surface %s: %s", surface_idx, exc)
+
+        centroid = self._psc_surface_centroid(surface_idx)
+        normal = self._psc_oriented_surface_normal(surface_idx)
+        if centroid is None or normal is None:
+            return np.full(points.shape[0], np.nan, dtype=float)
+        return (points - centroid).dot(normal)
 
     def _psc_signed_distance_to_surface(
         self,
         point: np.ndarray,
         surface_idx: int,
     ) -> Optional[float]:
-        """Return signed distance to a representative surface plane."""
-        centroid = self._psc_surface_centroid(surface_idx)
-        normal = self._psc_oriented_surface_normal(surface_idx)
-        if centroid is None or normal is None:
-            return None
+        """Return signed distance to a representative surface."""
         try:
             point_array = np.asarray(point, dtype=float).reshape(3)
         except (TypeError, ValueError):
+            return None
+        distances = self._psc_signed_distances_to_surface(point_array, surface_idx)
+        if distances.size and np.isfinite(distances[0]):
+            return float(distances[0])
+        centroid = self._psc_surface_centroid(surface_idx)
+        normal = self._psc_oriented_surface_normal(surface_idx)
+        if centroid is None or normal is None:
             return None
         return float(np.dot(point_array - centroid, normal))
 
@@ -4858,15 +4901,15 @@ class MeshItWorkflowGUI(QWidget):
         psc_model: Dict[str, Any],
         mapped_units: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """Infer global sides for tectonic representative surfaces."""
-        context: Dict[str, Any] = {"tectonic_unit_signs": {}}
+        """Infer owner/opposite sides for representative surfaces from STm topology."""
+        context: Dict[str, Any] = {"representative_unit_signs": {}}
         bounds = self._psc_domain_bounds()
         diagonal = 1.0
         if bounds is not None:
             diagonal = max(float(np.linalg.norm(bounds[1] - bounds[0])), 1e-9)
         tolerance = max(diagonal * 0.002, 1e-8)
 
-        tectonic_surfaces: Dict[Tuple[str, int], Dict[str, Any]] = {}
+        representative_surfaces: Dict[Tuple[str, int], Dict[str, Any]] = {}
         for unit_info in mapped_units:
             boundary_indices = unit_info.get("boundary_surface_indices", {}) or {}
             for boundary, surface_indices in boundary_indices.items():
@@ -4878,15 +4921,12 @@ class MeshItWorkflowGUI(QWidget):
                         surface_idx = int(surface_idx)
                     except (TypeError, ValueError):
                         continue
-                    role_text = self._psc_surface_role(surface_idx)
-                    if not self._psc_role_is_tectonic(role_text):
-                        continue
-                    tectonic_surfaces[(boundary_key, surface_idx)] = {
+                    representative_surfaces[(boundary_key, surface_idx)] = {
                         "boundary": self._psc_text(boundary),
                         "surface_idx": surface_idx,
                     }
 
-        for (boundary_key, surface_idx), surface_info in tectonic_surfaces.items():
+        for (boundary_key, surface_idx), surface_info in representative_surfaces.items():
             matching_signs = []
             non_matching_signs = []
             for unit_info in mapped_units:
@@ -4906,23 +4946,23 @@ class MeshItWorkflowGUI(QWidget):
                 else:
                     non_matching_signs.append(sign_value)
 
-            tect_unit_sign = 0
-            if non_matching_signs:
-                non_matching_sum = sum(non_matching_signs)
-                if non_matching_sum != 0:
-                    tect_unit_sign = -1 if non_matching_sum > 0 else 1
-            if tect_unit_sign == 0 and matching_signs:
+            owner_sign = 0
+            if matching_signs:
                 matching_sum = sum(matching_signs)
                 if matching_sum != 0:
-                    tect_unit_sign = 1 if matching_sum > 0 else -1
+                    owner_sign = 1 if matching_sum > 0 else -1
+            if owner_sign == 0 and non_matching_signs:
+                non_matching_sum = sum(non_matching_signs)
+                if non_matching_sum != 0:
+                    owner_sign = -1 if non_matching_sum > 0 else 1
 
-            if tect_unit_sign:
-                context["tectonic_unit_signs"][(boundary_key, surface_idx)] = tect_unit_sign
+            if owner_sign:
+                context["representative_unit_signs"][(boundary_key, surface_idx)] = owner_sign
                 self._psc_debug(
-                    f"Tectonic side context '{surface_info['boundary']}' "
+                    f"Representative side context '{surface_info['boundary']}' "
                     f"surface={self._psc_surface_label(surface_idx)}: "
-                    f"tect_unit_sign={tect_unit_sign}, "
-                    f"non_tect_signs={non_matching_signs}, tect_ref_signs={matching_signs}"
+                    f"owner_sign={owner_sign}, "
+                    f"other_ref_signs={non_matching_signs}, owner_ref_signs={matching_signs}"
                 )
 
         return context
@@ -4937,74 +4977,38 @@ class MeshItWorkflowGUI(QWidget):
         """Return signed side constraints implied by STm representative surfaces."""
         constraints = []
         unit_feature_key = self._psc_key(unit_info.get("feature", ""))
-        base_entries = []
-        tectonic_context = getattr(self, "_psc_side_context", {}) or {}
-        tectonic_signs = tectonic_context.get("tectonic_unit_signs", {}) or {}
+        side_context = getattr(self, "_psc_side_context", {}) or {}
+        representative_signs = side_context.get("representative_unit_signs", {}) or {}
 
         for boundary_key, boundary_info in target_surface_map.items():
+            if boundary_key == self._psc_key("Boundary"):
+                continue
             for surface_idx in boundary_info.get("indices", []):
                 try:
                     surface_idx = int(surface_idx)
                 except (TypeError, ValueError):
                     continue
-                role_text = self._psc_surface_role(surface_idx)
-                surface_feature_key = self._psc_key(self._psc_surface_feature(surface_idx))
                 centroid = self._psc_surface_centroid(surface_idx)
                 if centroid is None:
                     continue
-                if self._psc_role_is_base(role_text):
-                    base_entries.append(
-                        {
-                            "boundary_key": boundary_key,
-                            "boundary": boundary_info.get("label", boundary_key),
-                            "surface_idx": surface_idx,
-                            "feature_key": surface_feature_key,
-                            "z": float(centroid[2]),
-                        }
+                owner_sign = representative_signs.get((boundary_key, surface_idx))
+                if owner_sign is None:
+                    owner_sign = self._psc_sign(
+                        self._psc_signed_distance_to_surface(reference_seed, surface_idx)
                     )
+                if owner_sign == 0:
                     continue
-                if self._psc_role_is_tectonic(role_text):
-                    tect_sign = tectonic_signs.get((boundary_key, surface_idx))
-                    if tect_sign is None:
-                        tect_sign = self._psc_sign(
-                            self._psc_signed_distance_to_surface(reference_seed, surface_idx)
-                        )
-                    if tect_sign == 0:
-                        continue
-                    desired_sign = tect_sign if unit_feature_key == boundary_key else -tect_sign
-                    constraints.append(
-                        {
-                            "surface_idx": surface_idx,
-                            "sign": desired_sign,
-                            "label": boundary_info.get("label", boundary_key),
-                            "reason": "tectonic-unit-side"
-                            if unit_feature_key == boundary_key
-                            else "tectonic-opposite-side",
-                        }
-                    )
-
-        matching_bases = [
-            entry for entry in base_entries if entry.get("feature_key") == unit_feature_key
-        ]
-        matching_z = matching_bases[0]["z"] if matching_bases else None
-        for entry in base_entries:
-            if matching_z is None:
-                desired_sign = -1
-                reason = "below-representative-base"
-            elif entry.get("feature_key") == unit_feature_key:
-                desired_sign = 1
-                reason = "above-own-base"
-            else:
-                desired_sign = -1 if entry.get("z", matching_z) >= matching_z else 1
-                reason = "below-overlying-base" if desired_sign < 0 else "above-underlying-base"
-            constraints.append(
-                {
-                    "surface_idx": entry["surface_idx"],
-                    "sign": desired_sign,
-                    "label": entry.get("boundary", entry.get("boundary_key", "")),
-                    "reason": reason,
-                }
-            )
+                desired_sign = owner_sign if unit_feature_key == boundary_key else -owner_sign
+                constraints.append(
+                    {
+                        "surface_idx": surface_idx,
+                        "sign": desired_sign,
+                        "label": boundary_info.get("label", boundary_key),
+                        "reason": "representative-own-side"
+                        if unit_feature_key == boundary_key
+                        else "representative-opposite-side",
+                    }
+                )
 
         if constraints:
             self._psc_debug(
@@ -5144,6 +5148,7 @@ class MeshItWorkflowGUI(QWidget):
             target_surface_indices,
             bounds,
             side_constraints,
+            broad_sampling=int(unit_info.get("ambiguity_group_size", 1) or 1) > 1,
         )
         if candidate_points.shape[0] == 0:
             return reference_seed
@@ -5401,12 +5406,9 @@ class MeshItWorkflowGUI(QWidget):
             else:
                 unit_info["topology_direction_reference_boundary"] = adjacent_feature
         else:
-            row_index = self._psc_boundary_order_index(unit_info.get("feature", ""), psc_model)
-            row_count = len(psc_model.get("boundary_order", []))
-            if row_index is not None and row_count > 1 and row_index >= row_count - 1:
-                cap_t = axis_bounds[1]
-            else:
-                cap_t = axis_bounds[0]
+            lower_space = abs(surface_t - axis_bounds[0])
+            upper_space = abs(axis_bounds[1] - surface_t)
+            cap_t = axis_bounds[1] if upper_space >= lower_space else axis_bounds[0]
 
         if abs(cap_t - surface_t) < 1e-9:
             diagonal = 0.0
