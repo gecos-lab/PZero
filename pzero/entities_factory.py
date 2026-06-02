@@ -11,6 +11,8 @@ from numpy import asarray as np_asarray
 from numpy import column_stack as np_column_stack
 from numpy import cos as np_cos
 from numpy import cross as np_cross
+from numpy import cumsum as np_cumsum
+from numpy import diff as np_diff
 from numpy import dot as np_dot
 from numpy import empty as np_empty
 from numpy import hstack as np_hstack
@@ -2988,13 +2990,22 @@ class WellTrace(PolyLine):
         return [prop_pos, prop_data]
 
     def create_trace(self, xyz_trace, name=None):
-        # lines = pv_helpers.lines_from_points(xyz_trace)
-        lines = pv_spline(xyz_trace)
-        lines.rename_array("arc_length", "MD")
-        # lines = lines.compute_arc_length()
-        lines.field_data["pname"] = [name]
-        lines.field_data["MD"] = lines["MD"]
-        self.ShallowCopy(lines)
+        xyz_trace = np_asarray(xyz_trace, dtype=float)
+        if xyz_trace.ndim != 2 or xyz_trace.shape[1] != 3:
+            return
+
+        self.points = xyz_trace
+        self.auto_cells()
+
+        if xyz_trace.shape[0] > 1:
+            segment_lengths = np_linalg_norm(np_diff(xyz_trace, axis=0), axis=1)
+            md = np_append([0.0], np_cumsum(segment_lengths))
+        else:
+            md = np_array([0.0], dtype=float)
+
+        self.set_point_data(data_key="MD", attribute_matrix=md)
+        self.set_field_data(name="pname", data=np_array([name]))
+        self.set_field_data(name="MD", data=md)
 
     def set_head(self, xyz_head=None):
         self.set_field_data(name="pmarker_head", data=xyz_head)

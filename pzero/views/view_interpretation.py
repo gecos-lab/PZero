@@ -176,6 +176,8 @@ class ViewInterpretation(ViewMap):
         # Format: {uid: {'seismic_uid': str, 'axis': str, 'slice_indices': list, 'slice_to_cell_index': dict}}
         self.multipart_horizons = {}
         self.multipart_faults = {}
+        self.slice_well_actors = {}
+        self.slice_well_label_actors = {}
 
         # Flag to batch updates during propagation
         self._is_propagating = False
@@ -458,6 +460,10 @@ class ViewInterpretation(ViewMap):
                 self.update_multipart_fault_visibility(uid)
                 return
 
+        if coll_name == "well_coll" and uid:
+            self.update_well_visibility(uid=uid)
+            return
+
         # For all other entities, use normal display
         this_actor = super().show_actor_with_property(
             uid=uid, coll_name=coll_name, show_property=show_property, visible=visible
@@ -691,6 +697,13 @@ class ViewInterpretation(ViewMap):
                         )
                 except Exception as e:
                     self.print_terminal(f"Error displaying new entity {uid}: {e}")
+        elif collection == getattr(self.parent, "well_coll", None):
+            self.print_terminal(f"New well entities added: {incoming_uids}")
+            for uid in incoming_uids:
+                try:
+                    self.update_well_visibility(uid=uid)
+                except Exception as e:
+                    self.print_terminal(f"Error displaying new well {uid}: {e}")
 
     def _append_actor_rows_for_uids(self, uids=None, collection_name=None):
         """Append placeholder actor rows for newly added entities without creating raw actors."""
@@ -1388,6 +1401,9 @@ class ViewInterpretation(ViewMap):
 
             # Update visibility of multipart faults
             self.update_all_multipart_faults_visibility()
+
+            # Update wells as slice-projected traces.
+            self.update_all_well_visibility()
 
         except Exception as e:
             self.print_terminal(f"Error updating slice: {e}")
@@ -6435,6 +6451,312 @@ class ViewInterpretation(ViewMap):
         for uid in list(self.multipart_faults.keys()):
             self.update_multipart_fault_visibility(uid)
 
+    def _remove_slice_well_actor(self, uid=None):
+        """Remove slice-specific well trace and label actors."""
+        if not uid:
+            return
+        actor_names = [
+            f"well_slice_{uid}",
+            f"well_slice_label_{uid}",
+            f"{uid}_prop",
+            f"well_coll_{uid}",
+            f"well_{uid}",
+            uid,
+        ]
+        for actor_name in actor_names:
+            try:
+                self.plotter.remove_actor(actor_name)
+            except Exception:
+                pass
+        try:
+            self.slice_well_actors.pop(uid, None)
+        except Exception:
+            pass
+        try:
+            self.slice_well_label_actors.pop(uid, None)
+        except Exception:
+            pass
+        self._invalidate_actor_cache(uid)
+
+    def _get_well_slice_tolerance(self):
+        """Return a practical slice-plane tolerance for deciding well visibility."""
+        try:
+            affine = self._get_seismic_axis_vectors()
+            if affine is not None:
+                _origin, a0, a1, a2, _dims = affine
+                axis_vec = {
+                    "Inline": a0,
+                    "Crossline": a1,
+                    "Z-slice": a2,
+                }.get(self.current_axis)
+                if axis_vec is not None:
+                    spacing = float(np.linalg.norm(axis_vec))
+                    if spacing > 0:
+                        return max(spacing * 3.0, 1e-9)
+        except Exception:
+            pass
+
+        try:
+            spacing = abs(float(self._get_axis_spacing(axis=self.current_axis)))
+            if spacing > 0:
+                return max(spacing * 3.0, 1e-9)
+        except Exception:
+            pass
+        return 1.0
+
+    def _extract_well_slice_polydata(self, vtk_obj=None):
+        """Build a projected well trace for the current seismic slice."""
+        if vtk_obj is None or vtk_obj.GetNumberOfPoints() < 1:
+            return None, None
+
+        try:
+            points = np.asarray(vtk_obj.points, dtype=np.float64)
+        except Exception:
+            try:
+                points = np.array(
+                    [vtk_obj.GetPoint(i) for i in range(vtk_obj.GetNumberOfPoints())],
+                    dtype=np.float64,
+                )
+            except Exception:
+                return None, None
+
+        if points.ndim != 2 or points.shape[1] != 3 or points.shape[0] < 1:
+            return None, None
+
+        plane_center = getattr(self, "current_slice_plane_center", None)
+        plane_normal = getattr(self, "current_slice_plane_normal", None)
+        tolerance = self._get_well_slice_tolerance()
+
+        if plane_center is not None and plane_normal is not None:
+            center = np.asarray(plane_center, dtype=np.float64)
+            normal = np.asarray(plane_normal, dtype=np.float64)
+            normal_norm = float(np.linalg.norm(normal))
+            if normal_norm <= 0:
+                return None, None
+            normal = normal / normal_norm
+            signed_dist = np.dot(points - center[None, :], normal)
+            on_slice = np.abs(signed_dist) <= tolerance
+            projected = points - signed_dist[:, None] * normal[None, :]
+        else:
+            coord_idx = {"Inline": 0, "Crossline": 1, "Z-slice": 2}.get(
+                self.current_axis
+            )
+            if coord_idx is None:
+                return None, None
+            signed_dist = points[:, coord_idx] - float(self.current_slice_position)
+            on_slice = np.abs(signed_dist) <= tolerance
+            projected = points.copy()
+            projected[:, coord_idx] = float(self.current_slice_position)
+
+        from vtk import vtkCellArray, vtkLine, vtkPoints, vtkPolyData, vtkVertex
+
+        vtk_points = vtkPoints()
+        vtk_lines = vtkCellArray()
+        vtk_verts = vtkCellArray()
+
+        def add_point(point):
+            pid = vtk_points.InsertNextPoint(float(point[0]), float(point[1]), float(point[2]))
+            return pid
+
+        def add_vertex(point):
+            pid = add_point(point)
+            vertex = vtkVertex()
+            vertex.GetPointIds().SetId(0, pid)
+            vtk_verts.InsertNextCell(vertex)
+
+        def add_line(point_a, point_b):
+            if np.linalg.norm(np.asarray(point_b) - np.asarray(point_a)) <= 1e-9:
+                add_vertex(point_a)
+                return
+            pid0 = add_point(point_a)
+            pid1 = add_point(point_b)
+            line = vtkLine()
+            line.GetPointIds().SetId(0, pid0)
+            line.GetPointIds().SetId(1, pid1)
+            vtk_lines.InsertNextCell(line)
+
+        def projected_at(idx_a, idx_b, fraction):
+            return projected[idx_a] + fraction * (projected[idx_b] - projected[idx_a])
+
+        def clipped_fractions(d0, d1):
+            """Return the segment fraction inside the well display corridor."""
+            delta = d1 - d0
+            if abs(delta) <= 1e-12:
+                if abs(d0) <= tolerance:
+                    return 0.0, 1.0
+                return None
+
+            cuts = [0.0, 1.0]
+            for boundary in (-tolerance, tolerance):
+                t = (boundary - d0) / delta
+                if 0.0 < t < 1.0:
+                    cuts.append(float(t))
+
+            inside_ranges = []
+            cuts = sorted(cuts)
+            for start, end in zip(cuts[:-1], cuts[1:]):
+                mid = d0 + delta * ((start + end) * 0.5)
+                if abs(mid) <= tolerance:
+                    inside_ranges.append((start, end))
+
+            if inside_ranges:
+                return inside_ranges[0][0], inside_ranges[-1][1]
+
+            if abs(d0) <= tolerance:
+                return 0.0, 0.0
+            if abs(d1) <= tolerance:
+                return 1.0, 1.0
+            return None
+
+        # Build clipped projected segments wherever the well passes through the
+        # section display corridor. This keeps sparse deviated wells as lines,
+        # instead of isolated station dots.
+        for idx in range(points.shape[0] - 1):
+            clipped = clipped_fractions(
+                float(signed_dist[idx]), float(signed_dist[idx + 1])
+            )
+            if clipped is None:
+                continue
+            f0, f1 = clipped
+            add_line(projected_at(idx, idx + 1, f0), projected_at(idx, idx + 1, f1))
+
+        # Keep standalone stations only when no line segment could be drawn.
+        if vtk_lines.GetNumberOfCells() == 0:
+            for idx, is_on in enumerate(on_slice):
+                if is_on:
+                    add_vertex(projected[idx])
+
+        # If a deviated well crosses the exact plane between samples, keep the
+        # crossing marker visible even when the clipped segment is very short.
+        for idx in range(points.shape[0] - 1):
+            d0 = float(signed_dist[idx])
+            d1 = float(signed_dist[idx + 1])
+            if d0 == 0.0 or d1 == 0.0 or d0 * d1 >= 0.0:
+                continue
+            denom = d0 - d1
+            if abs(denom) <= 0:
+                continue
+            t = d0 / denom
+            if 0.0 <= t <= 1.0:
+                p = points[idx] + t * (points[idx + 1] - points[idx])
+                if plane_center is not None and plane_normal is not None:
+                    p = p - np.dot(p - center, normal) * normal
+                else:
+                    p = p.copy()
+                    p[coord_idx] = float(self.current_slice_position)
+                add_vertex(p)
+
+        if vtk_points.GetNumberOfPoints() <= 0:
+            return None, None
+
+        out = vtkPolyData()
+        out.SetPoints(vtk_points)
+        if vtk_lines.GetNumberOfCells() > 0:
+            out.SetLines(vtk_lines)
+        if vtk_verts.GetNumberOfCells() > 0:
+            out.SetVerts(vtk_verts)
+        out.Modified()
+        label_point = np.array(out.GetPoint(0), dtype=float)
+        return out, label_point
+
+    def update_well_visibility(self, uid=None):
+        """Show a well only when it intersects or lies near the current seismic slice."""
+        if not uid or not hasattr(self.parent, "well_coll"):
+            return
+
+        self._remove_slice_well_actor(uid)
+
+        if not self.current_seismic_uid:
+            return
+        if not self._is_uid_enabled_in_tree(uid):
+            return
+
+        try:
+            vtk_obj = self.parent.well_coll.get_uid_vtk_obj(uid)
+        except Exception:
+            return
+        if vtk_obj is None:
+            return
+
+        try:
+            slice_polydata, label_point = self._extract_well_slice_polydata(vtk_obj)
+        except Exception:
+            slice_polydata, label_point = None, None
+        if slice_polydata is None or slice_polydata.GetNumberOfPoints() <= 0:
+            return
+
+        try:
+            style = self.parent.well_coll.get_uid_legend(uid=uid)
+            color = [
+                style["color_R"] / 255.0,
+                style["color_G"] / 255.0,
+                style["color_B"] / 255.0,
+            ]
+            line_width = max(float(style.get("line_thick", 2.0)) * 1.8, 3.0)
+            opacity = float(style.get("opacity", 100.0)) / 100.0
+        except Exception:
+            color = [1.0, 0.85, 0.2]
+            line_width = 4.0
+            opacity = 1.0
+
+        actor_name = f"well_slice_{uid}"
+        try:
+            actor = self.plotter.add_mesh(
+                pv.wrap(slice_polydata),
+                name=actor_name,
+                color=color,
+                line_width=line_width,
+                point_size=10,
+                render_lines_as_tubes=True,
+                render_points_as_spheres=True,
+                opacity=opacity,
+                pickable=True,
+                reset_camera=False,
+                lighting=False,
+            )
+            self._apply_coplanar_interpretation_offset(actor=actor)
+            self.slice_well_actors[uid] = actor
+        except Exception:
+            return
+
+        if label_point is not None:
+            try:
+                well_name = self.parent.well_coll.get_uid_well_name(uid)
+            except Exception:
+                well_name = str(uid)[:8]
+            try:
+                label_actor = self.plotter.add_point_labels(
+                    np.asarray([label_point], dtype=float),
+                    [well_name],
+                    name=f"well_slice_label_{uid}",
+                    font_size=10,
+                    text_color="white",
+                    point_color=color,
+                    point_size=0,
+                    shape_opacity=0.35,
+                    always_visible=True,
+                    pickable=False,
+                    reset_camera=False,
+                )
+                self.slice_well_label_actors[uid] = label_actor
+            except Exception:
+                pass
+
+    def update_all_well_visibility(self):
+        """Refresh all wells for the current slice."""
+        if not hasattr(self.parent, "well_coll"):
+            return
+        try:
+            uid_list = list(self.parent.well_coll.get_uids)
+        except Exception:
+            uid_list = []
+        active = set(uid_list)
+        for uid in list(getattr(self, "slice_well_actors", {}).keys()):
+            if uid not in active:
+                self._remove_slice_well_actor(uid)
+        for uid in uid_list:
+            self.update_well_visibility(uid=uid)
+
     def _register_multipart_from_slice_index(self, uid=None, vtk_obj=None, emit_updates=True):
         """Fast path for multipart lines already carrying `slice_index` cell data."""
         if uid is None or vtk_obj is None:
@@ -11060,6 +11382,15 @@ class ViewInterpretation(ViewMap):
                 self.print_terminal(
                     f"Removed multipart fault {uid[:8]}... from tracking"
                 )
+
+            if hasattr(self, "slice_well_actors") and (
+                uid in self.slice_well_actors
+                or uid in getattr(self, "slice_well_label_actors", {})
+            ):
+                try:
+                    self._remove_slice_well_actor(uid)
+                except Exception:
+                    pass
 
         # Force a visibility refresh after removals (even if slice key didn't change)
         self._visibility_dirty = True
