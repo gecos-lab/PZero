@@ -3581,6 +3581,7 @@ class MeshItWorkflowGUI(QWidget):
             )
             preview_table.setRowCount(len(rows))
             missing_count = 0
+            seed_location_count = 0
             try:
                 for row_idx, unit_info in enumerate(rows):
                     boundaries = unit_info.get("boundaries", [])
@@ -3589,17 +3590,20 @@ class MeshItWorkflowGUI(QWidget):
                     missing_count += len(missing_boundaries)
                     unit_key = unit_seed_key(unit_info)
                     if unit_key in seed_overrides:
-                        seed_point = list(seed_overrides[unit_key])
-                        unit_info["seed_point"] = seed_point
+                        seed_points = [list(seed_overrides[unit_key])]
+                        unit_info["seed_point"] = seed_points[0]
+                        unit_info["seed_points"] = seed_points
                         unit_info["seed_override"] = True
                     else:
-                        seed_point = self._psc_seed_point_for_unit(unit_info, psc_model)
-                        unit_info["seed_point"] = seed_point
-                    seed_text = (
-                        f"{seed_point[0]:.2f}, {seed_point[1]:.2f}, {seed_point[2]:.2f}"
-                        if seed_point is not None
-                        else ""
-                    )
+                        seed_points = self._psc_seed_points_for_unit(
+                            unit_info,
+                            psc_model,
+                            rows,
+                        )
+                        unit_info["seed_points"] = seed_points
+                        unit_info["seed_point"] = seed_points[0] if seed_points else None
+                    seed_location_count += len(seed_points or [])
+                    seed_text = self._psc_format_seed_list(seed_points)
                     if unit_info.get("seed_override") and seed_text:
                         seed_text += " *"
                     values = [
@@ -3623,6 +3627,7 @@ class MeshItWorkflowGUI(QWidget):
 
             status_label.setText(
                 f"Units: {len(rows)} | "
+                f"Seed locations: {seed_location_count} | "
                 f"Known boundaries: {len(psc_model.get('boundary_features', set()))} | "
                 f"Missing matches: {missing_count} | "
                 f"Saved seed swaps: {len(seed_overrides)}"
@@ -3723,13 +3728,16 @@ class MeshItWorkflowGUI(QWidget):
             )
             return
 
+        seed_count = int(getattr(self, "_psc_last_seed_count", assigned_count))
         self.statusBar().showMessage(
-            f"Assigned {assigned_count} PSC material(s) from STm table '{table_name}'."
+            f"Assigned {assigned_count} PSC material(s), "
+            f"{seed_count} seed location(s), from STm table '{table_name}'."
         )
         QMessageBox.information(
             self,
             "PSC assignment",
-            f"Assigned {assigned_count} material seed(s) from the STm topology."
+            f"Assigned {assigned_count} material(s) with "
+            f"{seed_count} seed location(s) from the STm topology."
             + (f"\nSkipped {skipped_count} unit(s) without a valid seed." if skipped_count else ""),
         )
 
@@ -3794,6 +3802,25 @@ class MeshItWorkflowGUI(QWidget):
             return str(point)
         return f"({coords[0]:.3f}, {coords[1]:.3f}, {coords[2]:.3f})"
 
+    def _psc_format_seed_list(self, seed_points: Any) -> str:
+        """Format one or more PSC seed points for the preview table."""
+        if not seed_points:
+            return ""
+        points = list(seed_points)
+        if len(points) == 1:
+            point = np.asarray(points[0], dtype=float).reshape(-1)
+            if point.size >= 3:
+                return f"{point[0]:.2f}, {point[1]:.2f}, {point[2]:.2f}"
+            return str(points[0])
+        formatted = []
+        for point in points:
+            coords = np.asarray(point, dtype=float).reshape(-1)
+            if coords.size >= 3:
+                formatted.append(f"{coords[0]:.2f}, {coords[1]:.2f}, {coords[2]:.2f}")
+            else:
+                formatted.append(str(point))
+        return f"{len(points)} pts: " + "; ".join(formatted)
+
     def _psc_ambiguity_groups(
         self,
         mapped_units: List[Dict[str, Any]],
@@ -3817,6 +3844,128 @@ class MeshItWorkflowGUI(QWidget):
             for group in groups.values()
             if len(group) > 1
         ]
+
+    def _psc_structural_boundary_keys_for_unit(
+        self,
+        unit_info: Dict[str, Any],
+    ) -> set:
+        """Return normalized non-Boundary STm boundary keys for one mapped unit."""
+        boundary_key = self._psc_key("Boundary")
+        return {
+            self._psc_key(boundary)
+            for boundary in unit_info.get("boundaries", []) or []
+            if self._psc_key(boundary) and self._psc_key(boundary) != boundary_key
+        }
+
+    def _psc_boundary_labels_by_key(
+        self,
+        unit_info: Dict[str, Any],
+    ) -> Dict[str, str]:
+        """Return display labels keyed by normalized STm boundary key."""
+        labels = {}
+        for boundary in unit_info.get("boundaries", []) or []:
+            boundary_text = self._psc_text(boundary)
+            boundary_key = self._psc_key(boundary_text)
+            if boundary_key and boundary_key not in labels:
+                labels[boundary_key] = boundary_text
+        return labels
+
+    def _psc_local_boundary_sets_for_unit(
+        self,
+        unit_info: Dict[str, Any],
+        mapped_units: List[Dict[str, Any]],
+    ) -> List[List[str]]:
+        """Infer local boundary subsets for a globally bounded PSC unit."""
+        unit_keys = self._psc_structural_boundary_keys_for_unit(unit_info)
+        if len(unit_keys) < 3:
+            return []
+
+        boundary_key = self._psc_key("Boundary")
+        has_model_boundary = any(
+            self._psc_key(boundary) == boundary_key
+            for boundary in unit_info.get("boundaries", []) or []
+        )
+        unit_labels = self._psc_boundary_labels_by_key(unit_info)
+        candidates: Dict[Tuple[str, ...], List[str]] = {}
+
+        for other_info in mapped_units or []:
+            if other_info is unit_info:
+                continue
+            other_keys = self._psc_structural_boundary_keys_for_unit(other_info)
+            if len(other_keys) < 2 or not other_keys < unit_keys:
+                continue
+            other_labels = self._psc_boundary_labels_by_key(other_info)
+            key_tuple = tuple(sorted(other_keys))
+            labels = [
+                unit_labels.get(key) or other_labels.get(key) or key
+                for key in key_tuple
+            ]
+            if has_model_boundary:
+                labels.append("Boundary")
+            candidates.setdefault(key_tuple, labels)
+
+        return [
+            candidates[key_tuple]
+            for key_tuple in sorted(candidates, key=lambda item: (-len(item), item))
+        ]
+
+    def _psc_unit_with_local_boundaries(
+        self,
+        unit_info: Dict[str, Any],
+        local_boundaries: List[str],
+        component_index: int,
+    ) -> Dict[str, Any]:
+        """Return a unit-info copy restricted to one local boundary subset."""
+        local_info = dict(unit_info)
+        local_info["boundaries"] = list(local_boundaries)
+        base_name = unit_info.get("name") or unit_info.get("feature") or "PSC unit"
+        structural_labels = [
+            boundary
+            for boundary in local_boundaries
+            if self._psc_key(boundary) != self._psc_key("Boundary")
+        ]
+        local_info["name"] = (
+            f"{base_name} component {component_index + 1}"
+            f" ({', '.join(structural_labels)})"
+        )
+        local_info["component_name"] = base_name
+        local_info["component_index"] = component_index
+
+        source_indices = unit_info.get("boundary_surface_indices", {}) or {}
+        source_by_key = {
+            self._psc_key(boundary): (boundary, indices)
+            for boundary, indices in source_indices.items()
+        }
+        filtered_indices = {}
+        for boundary in local_boundaries:
+            boundary_key = self._psc_key(boundary)
+            source_entry = source_by_key.get(boundary_key)
+            if source_entry is None:
+                continue
+            source_boundary, indices = source_entry
+            filtered_indices[source_boundary] = list(indices or [])
+        local_info["boundary_surface_indices"] = filtered_indices
+
+        structural_indices = []
+        model_boundary_indices = []
+        for boundary, indices in filtered_indices.items():
+            target = (
+                model_boundary_indices
+                if self._psc_key(boundary) == self._psc_key("Boundary")
+                else structural_indices
+            )
+            for surface_idx in indices or []:
+                try:
+                    target.append(int(surface_idx))
+                except (TypeError, ValueError):
+                    continue
+        local_info["matched_surface_indices"] = sorted(set(structural_indices))
+        local_info["model_boundary_indices"] = sorted(set(model_boundary_indices))
+        local_info.pop("seed_topology_signature", None)
+        local_info.pop("seed_topology_signatures", None)
+        local_info.pop("seed_point", None)
+        local_info.pop("seed_points", None)
+        return local_info
 
     @staticmethod
     def _psc_key(value: Any) -> str:
@@ -4896,6 +5045,19 @@ class MeshItWorkflowGUI(QWidget):
             return -1
         return 0
 
+    def _psc_volumetric_feature_keys(self, psc_model: Dict[str, Any]) -> set:
+        """Return feature keys that own a volumetric STm unit."""
+        units = psc_model.get("units", {}) or {}
+        unit_values = units.values() if isinstance(units, dict) else units
+        boundary_key = self._psc_key("Boundary")
+        return {
+            self._psc_key(unit_info.get("feature", ""))
+            for unit_info in unit_values
+            if isinstance(unit_info, dict)
+            and self._psc_key(unit_info.get("feature", ""))
+            and self._psc_key(unit_info.get("feature", "")) != boundary_key
+        }
+
     def _psc_prepare_topology_side_context(
         self,
         psc_model: Dict[str, Any],
@@ -4909,12 +5071,17 @@ class MeshItWorkflowGUI(QWidget):
             diagonal = max(float(np.linalg.norm(bounds[1] - bounds[0])), 1e-9)
         tolerance = max(diagonal * 0.002, 1e-8)
 
+        volumetric_feature_keys = self._psc_volumetric_feature_keys(psc_model)
         representative_surfaces: Dict[Tuple[str, int], Dict[str, Any]] = {}
+        skipped_nonvolumetric = {}
         for unit_info in mapped_units:
             boundary_indices = unit_info.get("boundary_surface_indices", {}) or {}
             for boundary, surface_indices in boundary_indices.items():
                 boundary_key = self._psc_key(boundary)
                 if not boundary_key or boundary_key == self._psc_key("Boundary"):
+                    continue
+                if boundary_key not in volumetric_feature_keys:
+                    skipped_nonvolumetric.setdefault(boundary_key, self._psc_text(boundary))
                     continue
                 for surface_idx in surface_indices or []:
                     try:
@@ -4925,6 +5092,16 @@ class MeshItWorkflowGUI(QWidget):
                         "boundary": self._psc_text(boundary),
                         "surface_idx": surface_idx,
                     }
+
+        if skipped_nonvolumetric:
+            self._psc_debug(
+                "Non-volumetric boundaries used only as topology limits, "
+                "not side constraints: "
+                + ", ".join(
+                    skipped_nonvolumetric[key]
+                    for key in sorted(skipped_nonvolumetric)
+                )
+            )
 
         for (boundary_key, surface_idx), surface_info in representative_surfaces.items():
             matching_signs = []
@@ -4979,9 +5156,14 @@ class MeshItWorkflowGUI(QWidget):
         unit_feature_key = self._psc_key(unit_info.get("feature", ""))
         side_context = getattr(self, "_psc_side_context", {}) or {}
         representative_signs = side_context.get("representative_unit_signs", {}) or {}
+        volumetric_feature_keys = self._psc_volumetric_feature_keys(psc_model)
+        skipped_nonvolumetric = []
 
         for boundary_key, boundary_info in target_surface_map.items():
             if boundary_key == self._psc_key("Boundary"):
+                continue
+            if boundary_key not in volumetric_feature_keys:
+                skipped_nonvolumetric.append(boundary_info.get("label", boundary_key))
                 continue
             for surface_idx in boundary_info.get("indices", []):
                 try:
@@ -5010,6 +5192,14 @@ class MeshItWorkflowGUI(QWidget):
                     }
                 )
 
+        if skipped_nonvolumetric:
+            self._psc_debug(
+                f"Side constraints skipped non-volumetric boundaries "
+                f"'{unit_info.get('name', unit_info.get('feature', ''))}': "
+                + ", ".join(
+                    sorted(set(skipped_nonvolumetric), key=lambda value: str(value).casefold())
+                )
+            )
         if constraints:
             self._psc_debug(
                 f"Side constraints '{unit_info.get('name', unit_info.get('feature', ''))}': "
@@ -5074,6 +5264,7 @@ class MeshItWorkflowGUI(QWidget):
         unit_info: Dict[str, Any],
         psc_model: Dict[str, Any],
         reference_seed: np.ndarray,
+        require_side_match: bool = False,
     ) -> np.ndarray:
         """Choose a seed whose nearest-boundary signature matches the STM unit topology."""
         bounds = self._psc_domain_bounds()
@@ -5228,6 +5419,8 @@ class MeshItWorkflowGUI(QWidget):
                 side_constraints,
                 side_tolerance,
             )
+            if require_side_match and side_checked > 0 and side_mismatches > 0:
+                continue
 
             clearance_term = min(min_target_distance / diagonal, 0.25)
             separation_term = min((nearest_non_target - max_target_distance) / diagonal, 1.0)
@@ -5483,6 +5676,7 @@ class MeshItWorkflowGUI(QWidget):
         self,
         unit_info: Dict[str, Any],
         psc_model: Dict[str, Any],
+        require_side_match: bool = False,
     ) -> Optional[List[float]]:
         """Compute a material seed point from STM topology and loaded PLC surfaces."""
         surface_indices = self._psc_structural_surface_indices_for_unit(unit_info)
@@ -5514,12 +5708,141 @@ class MeshItWorkflowGUI(QWidget):
             unit_info,
             psc_model,
             np.asarray(reference_seed, dtype=float),
+            require_side_match=require_side_match,
         )
+        if require_side_match and not unit_info.get("seed_topology_signature"):
+            self._psc_debug(
+                f"Seed failed '{unit_info.get('name', unit_info.get('feature', ''))}': "
+                "no candidate satisfied the required local side constraints."
+            )
+            return None
         self._psc_debug(
             f"Seed final '{unit_info.get('name', unit_info.get('feature', ''))}': "
             f"{self._psc_format_point(refined_seed)}"
         )
         return [float(refined_seed[0]), float(refined_seed[1]), float(refined_seed[2])]
+
+    def _psc_seed_points_for_unit(
+        self,
+        unit_info: Dict[str, Any],
+        psc_model: Dict[str, Any],
+        mapped_units: Optional[List[Dict[str, Any]]] = None,
+    ) -> List[List[float]]:
+        """Compute one or more PSC seed points for a mapped STm unit."""
+        if unit_info.get("seed_override") and unit_info.get("seed_point") is not None:
+            try:
+                seed_point = [
+                    float(value)
+                    for value in list(unit_info.get("seed_point", []))[:3]
+                ]
+            except (TypeError, ValueError):
+                return []
+            if len(seed_point) == 3 and all(np.isfinite(seed_point)):
+                unit_info["seed_points"] = [seed_point]
+                return [seed_point]
+            return []
+
+        local_boundary_sets = self._psc_local_boundary_sets_for_unit(
+            unit_info,
+            mapped_units or [],
+        )
+        seed_points: List[List[float]] = []
+        seed_signatures = []
+        bounds = self._psc_domain_bounds()
+        duplicate_tolerance = 1e-6
+        if bounds is not None:
+            duplicate_tolerance = max(
+                float(np.linalg.norm(bounds[1] - bounds[0])) * 1e-6,
+                1e-6,
+            )
+
+        def add_seed(
+            seed_point: Optional[List[float]],
+            signature: Dict[str, Any],
+            local_boundaries: List[str],
+        ) -> None:
+            if seed_point is None:
+                return
+            try:
+                coords = [float(value) for value in list(seed_point)[:3]]
+            except (TypeError, ValueError):
+                return
+            if len(coords) != 3 or not all(np.isfinite(coords)):
+                return
+            candidate = np.asarray(coords, dtype=float)
+            for existing in seed_points:
+                if np.linalg.norm(candidate - np.asarray(existing, dtype=float)) <= duplicate_tolerance:
+                    self._psc_debug(
+                        f"  duplicate local PSC seed ignored for "
+                        f"'{unit_info.get('name', unit_info.get('feature', ''))}': "
+                        f"{self._psc_format_point(coords)}"
+                    )
+                    return
+            seed_points.append(coords)
+            seed_signatures.append(
+                {
+                    "boundaries": list(local_boundaries),
+                    "signature": dict(signature or {}),
+                }
+            )
+
+        if local_boundary_sets:
+            self._psc_debug(
+                f"Local PSC components '{unit_info.get('name', unit_info.get('feature', ''))}': "
+                + "; ".join(
+                    "[" + ", ".join(boundaries) + "]"
+                    for boundaries in local_boundary_sets
+                )
+            )
+            for component_idx, local_boundaries in enumerate(local_boundary_sets):
+                local_info = self._psc_unit_with_local_boundaries(
+                    unit_info,
+                    local_boundaries,
+                    component_idx,
+                )
+                local_seed = self._psc_seed_point_for_unit(
+                    local_info,
+                    psc_model,
+                    require_side_match=True,
+                )
+                add_seed(
+                    local_seed,
+                    local_info.get("seed_topology_signature", {}) or {},
+                    local_boundaries,
+                )
+
+            if seed_points:
+                unit_info["seed_points"] = seed_points
+                unit_info["seed_point"] = seed_points[0]
+                unit_info["seed_topology_signatures"] = seed_signatures
+                unit_info["seed_topology_signature"] = seed_signatures[0].get("signature", {})
+                self._psc_debug(
+                    f"Local PSC components '{unit_info.get('name', unit_info.get('feature', ''))}': "
+                    f"accepted {len(seed_points)} seed(s)."
+                )
+                return seed_points
+
+            self._psc_debug(
+                f"Local PSC components '{unit_info.get('name', unit_info.get('feature', ''))}': "
+                "no valid local seed satisfied side constraints; skipping global fallback."
+            )
+            unit_info["seed_points"] = []
+            unit_info["seed_topology_signatures"] = []
+            return []
+
+        seed_point = self._psc_seed_point_for_unit(unit_info, psc_model)
+        if seed_point is None:
+            unit_info["seed_points"] = []
+            return []
+        unit_info["seed_points"] = [seed_point]
+        unit_info["seed_point"] = seed_point
+        unit_info["seed_topology_signatures"] = [
+            {
+                "boundaries": list(unit_info.get("boundaries", []) or []),
+                "signature": dict(unit_info.get("seed_topology_signature", {}) or {}),
+            }
+        ]
+        return [seed_point]
 
     def _assign_psc_materials(
         self,
@@ -5538,24 +5861,30 @@ class MeshItWorkflowGUI(QWidget):
             list(psc_mapping.get("units", [])),
         )
 
+        mapped_units = list(psc_mapping.get("units", []))
         for unit_info in psc_mapping.get("units", []):
             if unit_info.get("seed_override") and unit_info.get("seed_point") is not None:
-                try:
-                    seed_point = [
-                        float(value)
-                        for value in list(unit_info.get("seed_point", []))[:3]
-                    ]
-                except (TypeError, ValueError):
-                    seed_point = None
+                seed_points = self._psc_seed_points_for_unit(
+                    unit_info,
+                    psc_model,
+                    mapped_units,
+                )
+                seed_point = seed_points[0] if seed_points else None
                 self._psc_debug(
                     f"  using dialog-swapped seed for "
                     f"'{unit_info.get('name', unit_info.get('feature', ''))}': "
                     f"{self._psc_format_point(seed_point)}"
                 )
             else:
-                seed_point = self._psc_seed_point_for_unit(unit_info, psc_model)
+                seed_points = self._psc_seed_points_for_unit(
+                    unit_info,
+                    psc_model,
+                    mapped_units,
+                )
+                seed_point = seed_points[0] if seed_points else None
+            unit_info["seed_points"] = seed_points
             unit_info["seed_point"] = seed_point
-            if seed_point is None:
+            if not seed_points:
                 skipped_count += 1
                 self._psc_debug(
                     f"  skipped '{unit_info.get('name', unit_info.get('feature', ''))}': "
@@ -5567,7 +5896,7 @@ class MeshItWorkflowGUI(QWidget):
             assigned_materials.append(
                 {
                     "name": unit_info.get("name") or unit_info.get("feature") or f"PSC_Unit_{material_id}",
-                    "locations": [seed_point],
+                    "locations": [list(seed) for seed in seed_points],
                     "attribute": material_id,
                     "type": "FORMATION",
                     "source": "PSC",
@@ -5578,12 +5907,17 @@ class MeshItWorkflowGUI(QWidget):
                     "matched_surface_indices": list(unit_info.get("matched_surface_indices", [])),
                     "missing_boundaries": list(unit_info.get("missing_boundaries", [])),
                     "seed_override": bool(unit_info.get("seed_override", False)),
+                    "psc_seed_count": len(seed_points),
+                    "seed_topology_signatures": list(
+                        unit_info.get("seed_topology_signatures", []) or []
+                    ),
                 }
             )
             signature = unit_info.get("seed_topology_signature", {}) or {}
             self._psc_debug(
                 f"  material {material_id}: '{assigned_materials[-1]['name']}', "
-                f"seed={self._psc_format_point(seed_point)}, "
+                f"seeds={len(seed_points)} "
+                f"{', '.join(self._psc_format_point(seed) for seed in seed_points)}, "
                 f"boundaries={unit_info.get('boundaries', [])}, "
                 f"closest={signature.get('closest', [])}, "
                 f"exact_signature={signature.get('exact', False)}, "
@@ -5598,11 +5932,16 @@ class MeshItWorkflowGUI(QWidget):
                 "PSC assignment from STm table '%s' produced no material seeds",
                 psc_model.get("table_name", ""),
             )
+            self._psc_last_seed_count = 0
             self._psc_debug(
                 f"PSC assignment summary: assigned=0, skipped={skipped_count}"
             )
             return 0, skipped_count
 
+        self._psc_last_seed_count = sum(
+            len(material.get("locations", []) or [])
+            for material in assigned_materials
+        )
         fault_materials = [
             dict(material)
             for material in getattr(self, "tetra_materials", [])
@@ -5630,7 +5969,8 @@ class MeshItWorkflowGUI(QWidget):
             skipped_count,
         )
         self._psc_debug(
-            f"PSC assignment summary: assigned={len(assigned_materials)}, skipped={skipped_count}"
+            f"PSC assignment summary: assigned_materials={len(assigned_materials)}, "
+            f"seed_locations={self._psc_last_seed_count}, skipped={skipped_count}"
         )
         return len(assigned_materials), skipped_count
 
