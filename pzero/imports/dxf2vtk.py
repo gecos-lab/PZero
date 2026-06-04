@@ -6,6 +6,7 @@ from ezdxf import new as ezdxf_new
 from pandas import DataFrame as pd_DataFrame
 
 from vtkmodules.util import numpy_support
+from vtkmodules.vtkFiltersGeometry import vtkDataSetSurfaceFilter
 
 from pzero.entities_factory import TriSurf
 
@@ -143,6 +144,48 @@ def vtk2dxf(self=None, out_dir_name=None):
             #     border_points = numpy_support.vtk_to_numpy(vtk_border.GetCell(cell).GetPoints().GetData())
             #     dxf_model.add_polyline3d(border_points, dxfattribs={'layer': layer})
             print("entity exported\n")
+    for uid in self.mesh3d_coll.df["uid"]:
+        legend = self.mesh3d_coll.get_uid_legend(uid=uid)
+        R = legend["color_R"]
+        G = legend["color_G"]
+        B = legend["color_B"]
+        dxf_out = ezdxf_new()
+        dxf_model = dxf_out.modelspace()
+        df = pd_DataFrame()
+        layer = f'{self.mesh3d_coll.df.loc[self.mesh3d_coll.df["uid"] == uid, "name"].values[0]}'
+
+        surface_filter = vtkDataSetSurfaceFilter()
+        surface_filter.SetInputData(self.mesh3d_coll.get_uid_vtk_obj(uid))
+        surface_filter.Update()
+        vtk_entity = surface_filter.GetOutput()
+
+        xyz = numpy_support.vtk_to_numpy(vtk_entity.GetPoints().GetData())
+
+        df["x"] = xyz[:, 0]
+        df["y"] = xyz[:, 1]
+        df["z"] = xyz[:, 2]
+
+        dxf_out.layers.add(name=layer)
+
+        mesh_layer = dxf_out.layers.get(layer)
+        mesh_layer.rgb = (R, G, B)
+
+        for cell in range(vtk_entity.GetNumberOfCells()):
+            face_points = numpy_support.vtk_to_numpy(
+                vtk_entity.GetCell(cell).GetPoints().GetData()
+            )
+            dxf_model.add_3dface(
+                face_points, dxfattribs={"layer": layer, "color": 256}
+            )
+
+        out_file_name = f"{uid}_{layer}"
+        list_uids.append(uid)
+        list_names.append(layer)
+
+        df.to_csv(f"{out_dir_name}/csv/{out_file_name}.csv", index=False)
+
+        dxf_out.saveas(f"{out_dir_name}/dxf/{out_file_name}.dxf")
+
     for uid in self.well_coll.df["uid"]:
         legend = self.well_coll.get_uid_legend(uid=uid)
         vtk_entity = self.well_coll.get_uid_vtk_obj(uid)
