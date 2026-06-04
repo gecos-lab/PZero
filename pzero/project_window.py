@@ -4179,8 +4179,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             os_mkdir(out_dir_name)
         if cad_format == "DXF":
             print("is DXF")
-            os_mkdir(f"{out_dir_name}/csv")
-            os_mkdir(f"{out_dir_name}/dxf")
+            if not os_path.isdir(f"{out_dir_name}/csv"):
+                os_mkdir(f"{out_dir_name}/csv")
+            if not os_path.isdir(f"{out_dir_name}/dxf"):
+                os_mkdir(f"{out_dir_name}/dxf")
             vtk2dxf(self=self, out_dir_name=out_dir_name)
         elif cad_format == "GOCAD":
             if not self.selected_uids:
