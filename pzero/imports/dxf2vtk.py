@@ -5,9 +5,67 @@ from ezdxf import new as ezdxf_new
 
 from pandas import DataFrame as pd_DataFrame
 
+from vtk import vtkDataSetSurfaceFilter, vtkTriangleFilter
 from vtkmodules.util import numpy_support
 
 from pzero.entities_factory import TriSurf
+
+
+def _clean_dxf_name(name):
+    """Return a DXF-safe layer/file name fragment."""
+    invalid_chars = '<>:"/\\|?*'
+    clean_name = str(name)
+    for char in invalid_chars:
+        clean_name = clean_name.replace(char, "_")
+    return clean_name.strip() or "undef"
+
+
+def _write_surface_dxf(
+    vtk_entity=None,
+    out_dir_name=None,
+    out_file_name=None,
+    layer=None,
+    rgb=(255, 255, 255),
+):
+    """Write a VTK surface-like dataset to DXF 3DFACE entities and point CSV."""
+    surface_filter = vtkDataSetSurfaceFilter()
+    surface_filter.SetInputData(vtk_entity)
+    surface_filter.Update()
+
+    triangle_filter = vtkTriangleFilter()
+    triangle_filter.SetInputConnection(surface_filter.GetOutputPort())
+    triangle_filter.Update()
+    surface = triangle_filter.GetOutput()
+
+    if surface.GetNumberOfPoints() == 0 or surface.GetNumberOfCells() == 0:
+        return False
+
+    dxf_out = ezdxf_new()
+    dxf_model = dxf_out.modelspace()
+    dxf_out.layers.add(name=layer)
+    dxf_layer = dxf_out.layers.get(layer)
+    dxf_layer.rgb = rgb
+
+    xyz = numpy_support.vtk_to_numpy(surface.GetPoints().GetData())
+    df = pd_DataFrame()
+    df["x"] = xyz[:, 0]
+    df["y"] = xyz[:, 1]
+    df["z"] = xyz[:, 2]
+
+    for cell_id in range(surface.GetNumberOfCells()):
+        face_points = numpy_support.vtk_to_numpy(
+            surface.GetCell(cell_id).GetPoints().GetData()
+        )
+        if len(face_points) < 3:
+            print(f"problem with cell {cell_id} in {layer}, skipping cell")
+            continue
+        dxf_model.add_3dface(
+            face_points[:3], dxfattribs={"layer": layer, "color": 256}
+        )
+
+    df.to_csv(f"{out_dir_name}/csv/{out_file_name}.csv", index=False)
+    dxf_out.saveas(f"{out_dir_name}/dxf/{out_file_name}.dxf")
+    return True
 
 
 def vtk2dxf(self=None, out_dir_name=None):
@@ -183,6 +241,32 @@ def vtk2dxf(self=None, out_dir_name=None):
         df.to_csv(f"{out_dir_name}/csv/{out_file_name}.csv", index=False)
 
         dxf_out.saveas(f"{out_dir_name}/dxf/{out_file_name}.dxf")
+
+    for uid in self.mesh3d_coll.df["uid"]:
+        vtk_entity = self.mesh3d_coll.get_uid_vtk_obj(uid)
+        if vtk_entity is None:
+            continue
+
+        legend = self.mesh3d_coll.get_uid_legend(uid=uid)
+        rgb = (legend["color_R"], legend["color_G"], legend["color_B"])
+        topology = self.mesh3d_coll.get_uid_topology(uid=uid)
+        mesh_name = _clean_dxf_name(self.mesh3d_coll.get_uid_name(uid))
+        layer = _clean_dxf_name(f"{mesh_name}_mesh")
+        out_file_name = _clean_dxf_name(f"{uid}_{mesh_name}_mesh")
+
+        exported = _write_surface_dxf(
+            vtk_entity=vtk_entity,
+            out_dir_name=out_dir_name,
+            out_file_name=out_file_name,
+            layer=layer,
+            rgb=rgb,
+        )
+        if exported:
+            list_uids.append(uid)
+            list_names.append(f"{mesh_name}_mesh")
+            self.print_terminal(f"Mesh3D {topology} exported to DXF: {mesh_name}_mesh")
+        else:
+            self.print_terminal(f"Mesh3D {topology} has no exportable surface: {mesh_name}")
 
     complete_list = pd_DataFrame({"uids": list_uids, "features": list_names})
     complete_list.to_csv(f"{out_dir_name}/exported_object_list.csv", index=False)
