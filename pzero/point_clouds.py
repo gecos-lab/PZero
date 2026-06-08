@@ -182,6 +182,9 @@ def cut_pc(self, method="both"):
             )
             entity_dict["vtk_obj"] = clip_out
             self.parent.dom_coll.add_entity_from_dict(entity_dict)
+        else:
+            print("Error, selected method not valid")
+            return
 
         scissors.EnabledOff()
         # self.enable_actions()
@@ -246,7 +249,7 @@ def segment_pc(self):
     if isinstance(vtk_obj, PCDom):
         if "dip direction" not in self.parent.dom_coll.get_uid_properties_names(uid):
             print(
-                "dip directio/dip data not present in the dataset. Calculate from Normals using the specific function."
+                "dip direction/dip data not present in the dataset. Calculate from Normals using the specific function."
             )
             return
         input_dict = {
@@ -285,7 +288,7 @@ def segment_pc(self):
         connectivity_filter_dip.ScalarConnectivityOn()
         connectivity_filter_dip.SetScalarRange(dialog["d1"], dialog["d2"])
 
-        _update_alg(connectivity_filter_dip, True, "Segmenting dips")
+        pv_update_alg(connectivity_filter_dip, True, "Segmenting dips")
 
         # n_clusters = connectivity_filter_dip.GetNumberOfExtractedClusters()
 
@@ -297,7 +300,7 @@ def segment_pc(self):
         r.SetNumberOfNeighbors(dialog["nn"])
         r.GenerateOutliersOff()
 
-        _update_alg(r, True, "Cleaning pc")
+        pv_update_alg(r, True, "Cleaning pc")
         pc = PCDom()
         pc.ShallowCopy(r.GetOutput())
         pc.GetPointData().SetActiveScalars("ClusterId")

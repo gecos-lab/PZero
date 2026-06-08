@@ -350,8 +350,6 @@ def get_aligned_bounds_from_obb(boundary_coll, boundary_uid, obb_info):
     max_z = np_max(points[:, 2])
     
     return origin_x, origin_y, origin_z, max_x, max_y, max_z
-    
-    return origin_x, origin_y, origin_z, max_x, max_y, max_z
 
 
 @freeze_gui_onoff
