@@ -83,6 +83,20 @@ class ViewXsection(View2D):
         self.fitFrameButton.triggered.connect(self.fit_frame)
         self.menuModify.addAction(self.fitFrameButton)
 
+        self.buildPscSectionAreasButton = QAction("Build PSC section areas", self)
+        self.buildPscSectionAreasButton.triggered.connect(
+            self.build_psc_section_areas
+        )
+        self.menuCreate.addAction(self.buildPscSectionAreasButton)
+
+    def build_psc_section_areas(self):
+        """Build PSC-derived seeds and filled areas for the active Xsection."""
+        from ..pymeshit_app.PiecewiseStructuralComplex import (
+            TwoDPiecewiseStructuralComplex,
+        )
+
+        TwoDPiecewiseStructuralComplex(self).open_section_areas_dialog()
+
     # # --- AGGIUNTA: funzione di slot per sincronizzazione selezione ---
     # def on_selection_changed(self, collection):
     #     print("DEBUG SLOT: selection_changed ricevuto per collection:", collection)

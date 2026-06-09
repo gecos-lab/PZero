@@ -9,16 +9,22 @@ PZero bridge access, and visualization refresh methods remain owned by the GUI.
 
 import logging
 import re
+from copy import deepcopy
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pyvista as pv
+from vtk import vtkCellArray, vtkPoints, vtkTriangle
+from vtkmodules.util.numpy_support import vtk_to_numpy
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -2582,3 +2588,741 @@ class PiecewiseStructuralComplex:
             f"seed_locations={self._psc_last_seed_count}, skipped={skipped_count}"
         )
         return len(assigned_materials), skipped_count
+
+
+class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
+    """Build PSC-derived editable seeds and section fill polygons in Xsection views."""
+
+    FRAME_BOUNDARY_KEY = "__xsection_frame__"
+
+    def _pzero_project(self):
+        """Return the owning PZero project window for a 2D Xsection view."""
+        return getattr(self.host, "parent", None)
+
+    def _psc_debug(self, message: str) -> None:
+        """Keep inherited STm parsing quiet unless explicit 2D debug is enabled."""
+        if bool(getattr(self, "_psc2d_debug_active", False)):
+            self._psc2d_print(message)
+
+    def _psc2d_print(self, message: str) -> None:
+        """Emit concise 2D PSC diagnostics to the PZero terminal."""
+        text = f"[PSC 2D] {message}"
+        for receiver in (self.host, self._pzero_project()):
+            printer = getattr(receiver, "print_terminal", None)
+            if not callable(printer):
+                continue
+            try:
+                printer(text)
+                return
+            except Exception:
+                try:
+                    printer(string=text)
+                    return
+                except Exception:
+                    continue
+        logger.info(text)
+
+    def open_section_areas_dialog(self) -> None:
+        """Open the Build PSC section areas dialog for the active Xsection."""
+        project = self._pzero_project()
+        if project is None:
+            self._psc2d_print("No PZero project is available.")
+            return
+
+        stm_tables = self._available_stm_tables()
+        if not stm_tables:
+            self._psc2d_print(
+                "No Structural Topology model tables are available in the current project."
+            )
+            return
+
+        section_uid = getattr(self.host, "this_x_section_uid", "")
+        if not section_uid:
+            self._psc2d_print("No active Xsection is available.")
+            return
+
+        section_line_uids = self._section_polyline_uids(use_selected=False)
+        selected_line_uids = self._section_polyline_uids(use_selected=True)
+        if not section_line_uids:
+            self._psc2d_print(
+                "No XsPolyLine entities are available in the active Xsection."
+            )
+            return
+
+        dialog = QDialog(self.host)
+        dialog.setWindowTitle("Build PSC section areas")
+        dialog.resize(520, 220)
+        layout = QVBoxLayout(dialog)
+
+        info_label = QLabel(
+            "Build PSC seeds and filled section areas from a watertight Xsection line network."
+        )
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+
+        form_layout = QFormLayout()
+        table_combo = QComboBox(dialog)
+        table_combo.addItems(stm_tables)
+        form_layout.addRow("STm table", table_combo)
+
+        boundary_combo = QComboBox(dialog)
+        for label, uid in self._available_boundary_options():
+            boundary_combo.addItem(label, uid)
+        form_layout.addRow("Boundary", boundary_combo)
+
+        use_selected_check = QCheckBox("Use selected XsPolyLine entities only")
+        use_selected_check.setChecked(bool(selected_line_uids))
+        use_selected_check.setEnabled(bool(selected_line_uids))
+        use_selected_check.setToolTip(
+            "When unchecked, all XsPolyLine entities in the active Xsection are used."
+        )
+        form_layout.addRow("Lines", use_selected_check)
+
+        tolerance_spin = QDoubleSpinBox(dialog)
+        tolerance_spin.setDecimals(4)
+        tolerance_spin.setRange(0.0, 1.0e9)
+        tolerance_spin.setSingleStep(0.1)
+        tolerance_spin.setValue(self._default_section_tolerance(section_uid))
+        form_layout.addRow("Tolerance", tolerance_spin)
+
+        layout.addLayout(form_layout)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        ok_button = buttons.button(QDialogButtonBox.Ok)
+        if ok_button is not None:
+            ok_button.setText("Build")
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+
+        if dialog.exec() != QDialog.Accepted:
+            return
+
+        self.build_section_areas(
+            table_name=table_combo.currentText(),
+            boundary_uid=boundary_combo.currentData(),
+            use_selected=use_selected_check.isChecked(),
+            tolerance=float(tolerance_spin.value()),
+        )
+
+    def build_section_areas(
+        self,
+        table_name: str,
+        boundary_uid: str = FRAME_BOUNDARY_KEY,
+        use_selected: bool = False,
+        tolerance: float = 0.0,
+    ) -> None:
+        """Build PSC section-area seeds and triangulated fills."""
+        try:
+            from shapely.geometry import LineString, Polygon
+            from shapely.ops import polygonize_full, triangulate, unary_union
+        except Exception as exc:
+            message = f"Build PSC section areas requires Shapely: {exc}"
+            self._psc2d_print(message)
+            return
+
+        project = self._pzero_project()
+        section_uid = getattr(self.host, "this_x_section_uid", "")
+        tolerance = max(float(tolerance or 0.0), 0.0)
+
+        line_uids = self._section_polyline_uids(use_selected=use_selected)
+        if not line_uids:
+            self._psc2d_print("No section XsPolyLine entities selected or available.")
+            return
+
+        boundary_polygon = self._boundary_polygon_2d(
+            boundary_uid=boundary_uid,
+            polygon_cls=Polygon,
+            line_cls=LineString,
+            polygonize_full=polygonize_full,
+            unary_union=unary_union,
+        )
+        if boundary_polygon is None or boundary_polygon.is_empty:
+            self._psc2d_print("Could not build a valid section boundary polygon.")
+            return
+
+        line_entries = self._section_line_entries(
+            line_uids=line_uids,
+            boundary_polygon=boundary_polygon,
+            line_cls=LineString,
+        )
+        if not line_entries:
+            self._psc2d_print("No usable XsPolyLine segment falls inside the selected boundary.")
+            return
+
+        network_geometries = [boundary_polygon.boundary] + [
+            entry["geometry"] for entry in line_entries
+        ]
+        noded_network = unary_union(network_geometries)
+        polygons_geom, dangles_geom, cuts_geom, invalids_geom = polygonize_full(noded_network)
+
+        dangle_count = self._problem_edge_count(dangles_geom, tolerance)
+        cut_count = self._problem_edge_count(cuts_geom, tolerance)
+        invalid_count = len(self._iter_geometries(invalids_geom))
+        raw_polygons = [
+            polygon
+            for polygon in self._iter_geometries(polygons_geom)
+            if polygon.geom_type == "Polygon" and polygon.area > 0.0
+        ]
+        section_polygons = [
+            polygon
+            for polygon in raw_polygons
+            if boundary_polygon.covers(polygon.representative_point())
+        ]
+        section_polygons = self._unique_polygons(section_polygons)
+
+        coverage_ok = False
+        if section_polygons:
+            try:
+                covered = unary_union(section_polygons)
+                area_tolerance = max(boundary_polygon.area * 1.0e-6, tolerance * tolerance)
+                coverage_ok = (
+                    boundary_polygon.difference(covered).area <= area_tolerance
+                    and covered.difference(boundary_polygon).area <= area_tolerance
+                )
+            except Exception:
+                coverage_ok = False
+
+        if dangle_count or cut_count or invalid_count or not coverage_ok:
+            self._psc2d_print(
+                "Section lines are not watertight "
+                f"(dangles={dangle_count}, cuts={cut_count}, invalid rings={invalid_count}). "
+                "Clean the section with Snap to intersection and retry."
+            )
+            return
+
+        psc_model = self._build_psc_model_from_stm(table_name)
+        created_seed_count = 0
+        created_area_count = 0
+        unmatched_count = 0
+
+        for area_idx, polygon in enumerate(section_polygons, start=1):
+            boundary_labels = self._polygon_boundary_labels(
+                polygon=polygon,
+                boundary_polygon=boundary_polygon,
+                line_entries=line_entries,
+                tolerance=tolerance,
+            )
+            unit_info = self._unit_for_boundary_labels(psc_model, boundary_labels)
+            if unit_info is None:
+                unmatched_count += 1
+                role = "undef"
+                feature = "PSC_unassigned"
+                unit_name = f"Area_{area_idx}"
+                self._psc2d_print(
+                    f"Unmatched area {area_idx}: boundaries={', '.join(boundary_labels) or '-'}"
+                )
+            else:
+                role = self._psc_text(unit_info.get("unit_role", "")) or "undef"
+                feature = self._psc_text(unit_info.get("feature", "")) or "PSC_unit"
+                unit_name = self._psc_text(unit_info.get("name", "")) or feature
+
+            color = self._legend_color_for_feature(feature)
+            seed_point = polygon.representative_point()
+            seed_xyz = project.xsect_coll.plane2world(
+                section_uid=section_uid,
+                U=float(seed_point.x),
+                V=float(seed_point.y),
+                as_arr=True,
+            )
+
+            seed_uid = self._create_seed_vertex(
+                name=f"PSC_seed_{unit_name}",
+                role=role,
+                feature=feature,
+                xyz=np.asarray(seed_xyz, dtype=float).reshape(3),
+                color=color,
+            )
+            if seed_uid:
+                created_seed_count += 1
+
+            trisurf = self._triangulated_polygon_surface(
+                polygon=polygon,
+                triangulate_func=triangulate,
+            )
+            if trisurf is not None and trisurf.points_number > 0:
+                area_uid = self._create_area_surface(
+                    name=f"PSC_area_{unit_name}",
+                    role=role,
+                    feature=feature,
+                    vtk_obj=trisurf,
+                    color=color,
+                )
+                if area_uid:
+                    created_area_count += 1
+
+        self._psc2d_print(
+            f"Build PSC section areas completed: created {created_seed_count} seed(s), "
+            f"{created_area_count} filled area(s), unmatched areas={unmatched_count}."
+        )
+        status_bar = getattr(self.host, "statusBar", None)
+        if callable(status_bar):
+            status_bar().showMessage(
+                f"Built {created_seed_count} PSC section seed(s) and "
+                f"{created_area_count} filled area(s)."
+            )
+
+    def _default_section_tolerance(self, section_uid: str) -> float:
+        project = self._pzero_project()
+        try:
+            length = float(project.xsect_coll.get_uid_length(section_uid))
+            height = float(project.xsect_coll.get_uid_width(section_uid))
+            diagonal = float(np.linalg.norm([length, height]))
+        except Exception:
+            diagonal = 1.0
+        return max(diagonal * 1.0e-6, 0.001)
+
+    def _available_boundary_options(self) -> List[Tuple[str, str]]:
+        project = self._pzero_project()
+        options = [("Xsection frame", self.FRAME_BOUNDARY_KEY)]
+        boundary_coll = getattr(project, "boundary_coll", None)
+        if boundary_coll is None:
+            return options
+        for uid in getattr(boundary_coll, "get_uids", []) or []:
+            try:
+                name = boundary_coll.get_uid_name(uid)
+                topology = boundary_coll.get_uid_topology(uid)
+            except Exception:
+                continue
+            if topology in {"TriSurf", "PolyLine", "XsPolyLine"}:
+                options.append((f"{name} ({topology})", uid))
+        return options
+
+    def _section_polyline_uids(self, use_selected: bool = False) -> List[str]:
+        project = self._pzero_project()
+        section_uid = getattr(self.host, "this_x_section_uid", "")
+        geol_coll = getattr(project, "geol_coll", None)
+        if geol_coll is None or not section_uid:
+            return []
+        section_uids = []
+        for uid in getattr(geol_coll, "get_uids", []) or []:
+            try:
+                if (
+                    geol_coll.get_uid_topology(uid) == "XsPolyLine"
+                    and geol_coll.get_uid_x_section(uid) == section_uid
+                ):
+                    section_uids.append(uid)
+            except Exception:
+                continue
+        if not use_selected:
+            return section_uids
+
+        selected = set(getattr(self.host, "selected_uids", []) or [])
+        selected.update(getattr(project, "selected_uids", []) or [])
+        return [uid for uid in section_uids if uid in selected]
+
+    def _boundary_polygon_2d(
+        self,
+        boundary_uid: str,
+        polygon_cls,
+        line_cls,
+        polygonize_full,
+        unary_union,
+    ):
+        project = self._pzero_project()
+        section_uid = getattr(self.host, "this_x_section_uid", "")
+        if boundary_uid == self.FRAME_BOUNDARY_KEY:
+            length = float(project.xsect_coll.get_uid_length(section_uid))
+            height = float(project.xsect_coll.get_uid_width(section_uid))
+            if abs(length) <= 1.0e-12 or abs(height) <= 1.0e-12:
+                self._psc2d_print(
+                    "Xsection frame boundary is invalid: "
+                    f"length={length:.6g}, height={height:.6g}."
+                )
+                return None
+            return polygon_cls(
+                [
+                    (0.0, 0.0),
+                    (length, 0.0),
+                    (length, height),
+                    (0.0, height),
+                    (0.0, 0.0),
+                ]
+            )
+
+        boundary_coll = getattr(project, "boundary_coll", None)
+        if boundary_coll is None or boundary_uid not in boundary_coll.get_uids:
+            self._psc2d_print("Selected boundary is not available in boundary_coll.")
+            return None
+        vtk_obj = boundary_coll.get_uid_vtk_obj(boundary_uid)
+        topology = boundary_coll.get_uid_topology(boundary_uid)
+        boundary_name = self._psc_text(boundary_coll.get_uid_name(boundary_uid))
+        self._psc2d_print(
+            f"Building section boundary from '{boundary_name}' ({topology})."
+        )
+
+        if topology == "TriSurf":
+            try:
+                from pzero.three_d_surfaces import xsection_intersection_polyline_parts
+
+                line_parts = xsection_intersection_polyline_parts(
+                    vtk_obj=vtk_obj,
+                    vtk_plane=project.xsect_coll.get_uid_vtk_plane(section_uid),
+                )
+                if not line_parts:
+                    self._psc2d_print(
+                        "Selected TriSurf boundary does not intersect the active Xsection "
+                        "as a closed polyline."
+                    )
+                    return None
+                line_strings = []
+                for line_part in line_parts:
+                    line_strings.extend(
+                        self._line_strings_from_polydata(line_part, line_cls)
+                    )
+            except Exception as exc:
+                self._psc2d_print(f"Boundary slice failed: {exc}")
+                return None
+        else:
+            line_strings = self._line_strings_from_polydata(vtk_obj, line_cls)
+
+        if not line_strings:
+            self._psc2d_print(
+                "Selected boundary produced no usable projected line strings. "
+                "Use the Xsection frame or a boundary that intersects the active section."
+            )
+            return None
+        if len(line_strings) == 1:
+            coords = list(line_strings[0].coords)
+            if len(coords) >= 4 and np.linalg.norm(np.asarray(coords[0]) - np.asarray(coords[-1])) <= 1.0e-9:
+                candidate = polygon_cls(coords)
+                if candidate.is_valid and candidate.area > 0.0:
+                    return candidate
+            self._psc2d_print(
+                "Selected boundary produced one line, but it is not a valid closed polygon."
+            )
+
+        polygons_geom, _dangles, _cuts, _invalids = polygonize_full(unary_union(line_strings))
+        polygons = [
+            polygon
+            for polygon in self._iter_geometries(polygons_geom)
+            if polygon.geom_type == "Polygon" and polygon.area > 0.0
+        ]
+        if not polygons:
+            self._psc2d_print(
+                f"Selected boundary produced {len(line_strings)} line part(s), "
+                "but polygonize found no closed boundary loop."
+            )
+            return None
+        return max(polygons, key=lambda polygon: polygon.area)
+
+    def _line_strings_from_polydata(self, vtk_obj, line_cls) -> List[Any]:
+        project = self._pzero_project()
+        section_uid = getattr(self.host, "this_x_section_uid", "")
+        if vtk_obj is None:
+            return []
+        try:
+            if hasattr(vtk_obj, "points"):
+                points = np.asarray(vtk_obj.points, dtype=float)
+            elif hasattr(vtk_obj, "GetPoints") and vtk_obj.GetPoints() is not None:
+                points = vtk_to_numpy(vtk_obj.GetPoints().GetData()).astype(
+                    float, copy=False
+                )
+            else:
+                return []
+        except Exception:
+            return []
+        if points.ndim != 2 or points.shape[0] < 2 or points.shape[1] < 3:
+            return []
+
+        try:
+            uv_points = project.xsect_coll.world2plane(
+                section_uid=section_uid,
+                X=points[:, 0],
+                Y=points[:, 1],
+                Z=points[:, 2],
+                as_arr=True,
+            )
+        except Exception:
+            return []
+        uv_points = np.asarray(uv_points, dtype=float)
+
+        line_ids = []
+        try:
+            vtk_lines = vtk_obj.GetLines() if hasattr(vtk_obj, "GetLines") else None
+            if (
+                vtk_lines is None
+                or vtk_lines.GetNumberOfCells() <= 0
+                or vtk_lines.GetData() is None
+            ):
+                flat_lines = np.asarray([], dtype=int)
+            else:
+                flat_lines = vtk_to_numpy(vtk_lines.GetData()).astype(int, copy=False)
+            cursor = 0
+            while cursor < flat_lines.size:
+                n_ids = int(flat_lines[cursor])
+                cursor += 1
+                ids = flat_lines[cursor : cursor + n_ids]
+                cursor += n_ids
+                ids = ids[(ids >= 0) & (ids < uv_points.shape[0])]
+                if ids.size >= 2:
+                    line_ids.append(ids)
+        except Exception:
+            line_ids = []
+        if not line_ids:
+            line_ids = [np.arange(uv_points.shape[0], dtype=int)]
+
+        line_strings = []
+        for ids in line_ids:
+            coords = uv_points[np.asarray(ids, dtype=int)]
+            coords = self._drop_consecutive_duplicate_coords(coords)
+            if coords.shape[0] < 2:
+                continue
+            try:
+                line = line_cls(coords[:, :2])
+            except Exception:
+                continue
+            if not line.is_empty and line.length > 0.0:
+                line_strings.append(line)
+        return line_strings
+
+    @staticmethod
+    def _drop_consecutive_duplicate_coords(coords: np.ndarray) -> np.ndarray:
+        coords = np.asarray(coords, dtype=float)
+        if coords.shape[0] <= 1:
+            return coords
+        keep = [coords[0]]
+        for coord in coords[1:]:
+            if np.linalg.norm(coord[:2] - keep[-1][:2]) > 1.0e-9:
+                keep.append(coord)
+        return np.asarray(keep, dtype=float)
+
+    def _section_line_entries(self, line_uids, boundary_polygon, line_cls) -> List[Dict[str, Any]]:
+        project = self._pzero_project()
+        geol_coll = project.geol_coll
+        entries = []
+        for uid in line_uids:
+            vtk_obj = geol_coll.get_uid_vtk_obj(uid)
+            feature = self._psc_text(geol_coll.get_uid_feature(uid))
+            if not feature or self._psc_key(feature) == self._psc_key("undef"):
+                feature = self._psc_text(geol_coll.get_uid_name(uid))
+            if not feature:
+                continue
+            for line in self._line_strings_from_polydata(vtk_obj, line_cls):
+                try:
+                    clipped = line.intersection(boundary_polygon)
+                except Exception:
+                    continue
+                for clipped_line in self._iter_line_geometries(clipped):
+                    if clipped_line.length > 0.0:
+                        entries.append(
+                            {
+                                "uid": uid,
+                                "feature": feature,
+                                "geometry": clipped_line,
+                            }
+                        )
+        return entries
+
+    def _polygon_boundary_labels(
+        self,
+        polygon,
+        boundary_polygon,
+        line_entries: List[Dict[str, Any]],
+        tolerance: float,
+    ) -> List[str]:
+        min_length = max(float(tolerance or 0.0), 1.0e-9)
+        labels = []
+        if self._geometry_length(polygon.boundary.intersection(boundary_polygon.boundary)) > min_length:
+            labels.append("Boundary")
+        seen = {self._psc_key(label) for label in labels}
+        for entry in line_entries:
+            feature = self._psc_text(entry.get("feature", ""))
+            feature_key = self._psc_key(feature)
+            if not feature_key or feature_key in seen:
+                continue
+            if self._geometry_length(polygon.boundary.intersection(entry["geometry"])) > min_length:
+                labels.append(feature)
+                seen.add(feature_key)
+        return labels
+
+    def _unit_for_boundary_labels(self, psc_model: Dict[str, Any], labels: List[str]):
+        target_keys = {
+            self._psc_key(label)
+            for label in labels
+            if self._psc_key(label)
+        }
+        if not target_keys:
+            return None
+        for unit_info in (psc_model.get("units", {}) or {}).values():
+            unit_keys = {
+                self._psc_key(boundary)
+                for boundary in unit_info.get("boundaries", set()) or set()
+                if self._psc_key(boundary)
+            }
+            if unit_keys == target_keys:
+                return unit_info
+        return None
+
+    def _legend_color_for_feature(self, feature: str) -> Optional[List[float]]:
+        project = self._pzero_project()
+        legend_df = getattr(project.geol_coll, "legend_df", None)
+        if legend_df is None or legend_df.empty:
+            return None
+        feature_key = self._psc_key(feature)
+        for _, row in legend_df.iterrows():
+            if self._psc_key(row.get("feature", "")) != feature_key:
+                continue
+            try:
+                return [
+                    float(row.get("color_R", 255)),
+                    float(row.get("color_G", 255)),
+                    float(row.get("color_B", 255)),
+                ]
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    def _create_seed_vertex(
+        self,
+        name: str,
+        role: str,
+        feature: str,
+        xyz: np.ndarray,
+        color: Optional[List[float]] = None,
+    ) -> Optional[str]:
+        from pzero.entities_factory import XsVertexSet
+
+        project = self._pzero_project()
+        section_uid = getattr(self.host, "this_x_section_uid", "")
+        seed_dict = deepcopy(project.geol_coll.entity_dict)
+        seed_dict["name"] = name
+        seed_dict["parent_uid"] = section_uid
+        seed_dict["topology"] = "XsVertexSet"
+        seed_dict["role"] = role
+        seed_dict["feature"] = feature
+        seed_dict["vtk_obj"] = XsVertexSet(x_section_uid=section_uid, parent=project)
+        seed_dict["vtk_obj"].points = np.asarray([xyz], dtype=float)
+        seed_dict["vtk_obj"].auto_cells()
+        return project.geol_coll.add_entity_from_dict(entity_dict=seed_dict, color=color)
+
+    def _create_area_surface(
+        self,
+        name: str,
+        role: str,
+        feature: str,
+        vtk_obj,
+        color: Optional[List[float]] = None,
+    ) -> Optional[str]:
+        project = self._pzero_project()
+        section_uid = getattr(self.host, "this_x_section_uid", "")
+        area_dict = deepcopy(project.geol_coll.entity_dict)
+        area_dict["name"] = name
+        area_dict["parent_uid"] = section_uid
+        area_dict["topology"] = "TriSurf"
+        area_dict["role"] = role
+        area_dict["feature"] = feature
+        area_dict["vtk_obj"] = vtk_obj
+        area_dict["properties_names"] = list(getattr(vtk_obj, "point_data_keys", []) or [])
+        area_dict["properties_components"] = [
+            vtk_obj.get_point_data_shape(key)[1] for key in area_dict["properties_names"]
+        ]
+        return project.geol_coll.add_entity_from_dict(entity_dict=area_dict, color=color)
+
+    def _triangulated_polygon_surface(self, polygon, triangulate_func):
+        from pzero.entities_factory import TriSurf
+
+        project = self._pzero_project()
+        section_uid = getattr(self.host, "this_x_section_uid", "")
+        triangles_uv = []
+        for triangle in triangulate_func(polygon):
+            if triangle.is_empty:
+                continue
+            if not polygon.covers(triangle.representative_point()):
+                continue
+            coords = np.asarray(list(triangle.exterior.coords)[:3], dtype=float)
+            if coords.shape == (3, 2):
+                triangles_uv.append(coords)
+        if not triangles_uv:
+            return None
+
+        vertex_keys: Dict[Tuple[float, float], int] = {}
+        vertices_uv = []
+        triangles = []
+        for coords in triangles_uv:
+            tri_ids = []
+            for coord in coords:
+                key = (round(float(coord[0]), 8), round(float(coord[1]), 8))
+                if key not in vertex_keys:
+                    vertex_keys[key] = len(vertices_uv)
+                    vertices_uv.append([float(coord[0]), float(coord[1])])
+                tri_ids.append(vertex_keys[key])
+            if len(set(tri_ids)) == 3:
+                triangles.append(tri_ids)
+        if not vertices_uv or not triangles:
+            return None
+
+        vertices_uv = np.asarray(vertices_uv, dtype=float)
+        vertices_xyz = project.xsect_coll.plane2world(
+            section_uid=section_uid,
+            U=vertices_uv[:, 0],
+            V=vertices_uv[:, 1],
+            as_arr=True,
+        )
+        vertices_xyz = np.asarray(vertices_xyz, dtype=float)
+
+        trisurf = TriSurf()
+        vtk_points = vtkPoints()
+        for point in vertices_xyz:
+            vtk_points.InsertNextPoint(float(point[0]), float(point[1]), float(point[2]))
+        vtk_cells = vtkCellArray()
+        for tri_ids in triangles:
+            vtk_triangle = vtkTriangle()
+            vtk_triangle.GetPointIds().SetId(0, int(tri_ids[0]))
+            vtk_triangle.GetPointIds().SetId(1, int(tri_ids[1]))
+            vtk_triangle.GetPointIds().SetId(2, int(tri_ids[2]))
+            vtk_cells.InsertNextCell(vtk_triangle)
+        trisurf.SetPoints(vtk_points)
+        trisurf.SetPolys(vtk_cells)
+        try:
+            trisurf.vtk_set_normals()
+        except Exception:
+            pass
+        return trisurf
+
+    def _problem_edge_count(self, geometry, tolerance: float) -> int:
+        min_length = max(float(tolerance or 0.0), 1.0e-9)
+        return sum(
+            1
+            for line in self._iter_line_geometries(geometry)
+            if getattr(line, "length", 0.0) > min_length
+        )
+
+    def _iter_geometries(self, geometry) -> List[Any]:
+        if geometry is None or getattr(geometry, "is_empty", True):
+            return []
+        if hasattr(geometry, "geoms"):
+            out = []
+            for child in geometry.geoms:
+                out.extend(self._iter_geometries(child))
+            return out
+        return [geometry]
+
+    def _iter_line_geometries(self, geometry) -> List[Any]:
+        return [
+            geom
+            for geom in self._iter_geometries(geometry)
+            if geom.geom_type in {"LineString", "LinearRing"}
+        ]
+
+    def _geometry_length(self, geometry) -> float:
+        if geometry is None or getattr(geometry, "is_empty", True):
+            return 0.0
+        try:
+            return float(geometry.length)
+        except Exception:
+            return sum(float(getattr(geom, "length", 0.0)) for geom in self._iter_geometries(geometry))
+
+    def _unique_polygons(self, polygons: List[Any]) -> List[Any]:
+        seen = set()
+        unique = []
+        for polygon in polygons:
+            try:
+                key = polygon.wkb
+            except Exception:
+                key = repr(polygon)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(polygon)
+        return sorted(unique, key=lambda poly: (-poly.area, poly.bounds))

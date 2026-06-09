@@ -1595,6 +1595,71 @@ def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
             return
 
 
+def xsection_intersection_polyline_parts(vtk_obj=None, vtk_plane=None):
+    """Return cleaned polyline parts from cutting a polydata object with an XSection plane."""
+    if vtk_obj is None or vtk_plane is None:
+        return []
+
+    cutter = vtkCutter()
+    cutter.SetCutFunction(vtk_plane)
+    cutter.SetInputData(vtk_obj)
+    cutter.Update()
+
+    cutter_clean = vtkCleanPolyData()
+    cutter_clean.ConvertLinesToPointsOff()
+    cutter_clean.ConvertPolysToLinesOff()
+    cutter_clean.ConvertStripsToPolysOff()
+    cutter_clean.SetTolerance(0.0)
+    cutter_clean.SetInputConnection(cutter.GetOutputPort())
+    cutter_clean.Update()
+
+    cutter_clean_strips = vtkStripper()
+    cutter_clean_strips.JoinContiguousSegmentsOn()
+    cutter_clean_strips.SetInputConnection(cutter_clean.GetOutputPort())
+    cutter_clean_strips.Update()
+
+    cutter_clean_strips_clean = vtkCleanPolyData()
+    cutter_clean_strips_clean.ConvertLinesToPointsOff()
+    cutter_clean_strips_clean.ConvertPolysToLinesOff()
+    cutter_clean_strips_clean.ConvertStripsToPolysOff()
+    cutter_clean_strips_clean.SetTolerance(0.0)
+    cutter_clean_strips_clean.SetInputConnection(cutter_clean_strips.GetOutputPort())
+    cutter_clean_strips_clean.Update()
+
+    cutter_clean_strips_clean_triangle = vtkTriangleFilter()
+    cutter_clean_strips_clean_triangle.SetInputConnection(
+        cutter_clean_strips_clean.GetOutputPort()
+    )
+    cutter_clean_strips_clean_triangle.Update()
+    if cutter_clean_strips_clean_triangle.GetOutput().GetNumberOfPoints() <= 0:
+        return []
+
+    connectivity = vtkPolyDataConnectivityFilter()
+    connectivity.SetInputConnection(cutter_clean_strips_clean_triangle.GetOutputPort())
+    connectivity.SetExtractionModeToAllRegions()
+    connectivity.Update()
+    n_regions = connectivity.GetNumberOfExtractedRegions()
+    connectivity.SetExtractionModeToSpecifiedRegions()
+    connectivity.Update()
+
+    out_parts = []
+    for region in range(n_regions):
+        connectivity.InitializeSpecifiedRegionList()
+        connectivity.AddSpecifiedRegion(region)
+        connectivity.Update()
+
+        connectivity_clean = vtkCleanPolyData()
+        connectivity_clean.SetInputConnection(connectivity.GetOutputPort())
+        connectivity_clean.Update()
+        if connectivity_clean.GetOutput().GetNumberOfPoints() <= 0:
+            continue
+
+        part = vtkPolyData()
+        part.DeepCopy(connectivity_clean.GetOutput())
+        out_parts.append(part)
+    return out_parts
+
+
 @freeze_gui_onoff
 def intersection_xs(self):
     """vtkCutter is a filter to cut through data using any subclass of vtkImplicitFunction.
@@ -1674,106 +1739,40 @@ def intersection_xs(self):
                             " -- no intersection of XsPolyLine with its own XSection -- "
                         )
                 elif self.geol_coll.get_uid_topology(uid) == "TriSurf":
-                    # cutter
-                    cutter = vtkCutter()
-                    cutter.SetCutFunction(self.xsect_coll.get_uid_vtk_plane(xsect_uid))
-                    cutter.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
-                    cutter.Update()
-                    # cutter_clean
-                    cutter_clean = vtkCleanPolyData()
-                    cutter_clean.ConvertLinesToPointsOff()
-                    cutter_clean.ConvertPolysToLinesOff()
-                    cutter_clean.ConvertStripsToPolysOff()
-                    cutter_clean.SetTolerance(0.0)
-                    cutter_clean.SetInputConnection(cutter.GetOutputPort())
-                    cutter_clean.Update()
-                    # cutter_clean_strips
-                    cutter_clean_strips = vtkStripper()
-                    cutter_clean_strips.JoinContiguousSegmentsOn()
-                    cutter_clean_strips.SetInputConnection(cutter_clean.GetOutputPort())
-                    cutter_clean_strips.Update()
-                    # cutter_clean_strips_clean, needed to sort the nodes and cells in the right order
-                    cutter_clean_strips_clean = vtkCleanPolyData()
-                    cutter_clean_strips_clean.ConvertLinesToPointsOff()
-                    cutter_clean_strips_clean.ConvertPolysToLinesOff()
-                    cutter_clean_strips_clean.ConvertStripsToPolysOff()
-                    cutter_clean_strips_clean.SetTolerance(0.0)
-                    cutter_clean_strips_clean.SetInputConnection(
-                        cutter_clean_strips.GetOutputPort()
+                    line_parts = xsection_intersection_polyline_parts(
+                        vtk_obj=self.geol_coll.get_uid_vtk_obj(uid),
+                        vtk_plane=self.xsect_coll.get_uid_vtk_plane(xsect_uid),
                     )
-                    cutter_clean_strips_clean.Update()
-                    # cutter_clean_strips_clean_triangle, used to convert polyline cells back to lines
-                    cutter_clean_strips_clean_triangle = vtkTriangleFilter()
-                    cutter_clean_strips_clean_triangle.SetInputConnection(
-                        cutter_clean_strips_clean.GetOutputPort()
-                    )
-                    cutter_clean_strips_clean_triangle.Update()
-                    # connectivity, split multiple part polylines, first using .SetExtractionModeToAllRegions()
-                    # to get the number of parts/regions, then switching to .SetExtractionModeToSpecifiedRegions()
-                    # to extract the parts/regions sequentially
-                    if (
-                        cutter_clean_strips_clean_triangle.GetOutput().GetNumberOfPoints()
-                        > 0
-                    ):
-                        connectivity = vtkPolyDataConnectivityFilter()
-                        connectivity.SetInputConnection(
-                            cutter_clean_strips_clean_triangle.GetOutputPort()
-                        )
-                        connectivity.SetExtractionModeToAllRegions()
-                        connectivity.Update()
-                        n_regions = connectivity.GetNumberOfExtractedRegions()
-                        connectivity.SetExtractionModeToSpecifiedRegions()
-                        connectivity.Update()
-                        for region in range(n_regions):
-                            connectivity.InitializeSpecifiedRegionList()
-                            connectivity.AddSpecifiedRegion(region)
-                            connectivity.Update()
-                            # connectivity_clean, used to remove orphan points left behind by connectivity
-                            connectivity_clean = vtkCleanPolyData()
-                            connectivity_clean.SetInputConnection(
-                                connectivity.GetOutputPort()
-                            )
-                            connectivity_clean.Update()
-                            # Check if polyline really exists then create entity
-                            if connectivity_clean.GetOutput().GetNumberOfPoints() > 0:
-                                # Create new dict for the new XsPolyLine
-                                obj_dict = deepcopy(self.geol_coll.entity_dict)
-                                obj_dict["parent_uid"] = xsect_uid
-                                obj_dict["topology"] = "XsPolyLine"
-                                obj_dict["vtk_obj"] = XsPolyLine(
-                                    x_section_uid=xsect_uid, parent=self
-                                )
-                                obj_dict["name"] = (
-                                    f"{self.geol_coll.get_uid_name(uid)}{postfix}"
-                                )
-                                obj_dict["role"] = self.geol_coll.get_uid_role(uid)
-                                obj_dict["feature"] = self.geol_coll.get_uid_feature(
-                                    uid
-                                )
-                                obj_dict["scenario"] = self.geol_coll.get_uid_scenario(
-                                    uid
-                                )
-                                obj_dict["properties_names"] = (
-                                    self.geol_coll.get_uid_properties_names(uid)
-                                )
-                                obj_dict["properties_components"] = (
-                                    self.geol_coll.get_uid_properties_components(uid)
-                                )
-                                obj_dict["vtk_obj"].DeepCopy(
-                                    connectivity_clean.GetOutput()
-                                )
-                                for data_key in obj_dict["vtk_obj"].point_data_keys:
-                                    if not data_key in obj_dict["properties_names"]:
-                                        obj_dict["vtk_obj"].remove_point_data(data_key)
-                                self.geol_coll.add_entity_from_dict(obj_dict)
-                            else:
-                                self.print_terminal(
-                                    " -- empty object from connectivity_clean-- "
-                                )
-                    else:
+                    if not line_parts:
                         self.print_terminal(
                             " -- empty object from cutter_clean_strips_clean_triangle -- "
                         )
+                        continue
+                    for line_part in line_parts:
+                        # Create new dict for the new XsPolyLine
+                        obj_dict = deepcopy(self.geol_coll.entity_dict)
+                        obj_dict["parent_uid"] = xsect_uid
+                        obj_dict["topology"] = "XsPolyLine"
+                        obj_dict["vtk_obj"] = XsPolyLine(
+                            x_section_uid=xsect_uid, parent=self
+                        )
+                        obj_dict["name"] = (
+                            f"{self.geol_coll.get_uid_name(uid)}{postfix}"
+                        )
+                        obj_dict["role"] = self.geol_coll.get_uid_role(uid)
+                        obj_dict["feature"] = self.geol_coll.get_uid_feature(uid)
+                        obj_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
+                        obj_dict["properties_names"] = (
+                            self.geol_coll.get_uid_properties_names(uid)
+                        )
+                        obj_dict["properties_components"] = (
+                            self.geol_coll.get_uid_properties_components(uid)
+                        )
+                        obj_dict["vtk_obj"].DeepCopy(line_part)
+                        for data_key in obj_dict["vtk_obj"].point_data_keys:
+                            if not data_key in obj_dict["properties_names"]:
+                                obj_dict["vtk_obj"].remove_point_data(data_key)
+                        self.geol_coll.add_entity_from_dict(obj_dict)
         elif self.shown_table == "tabMeshes":
             for uid in input_uids:
                 if self.mesh3d_coll.get_uid_mesh3d_type(uid) == "Voxet":
