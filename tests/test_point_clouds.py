@@ -17,8 +17,9 @@ Or together with all other tests:
 import pytest
 import numpy as np
 from unittest.mock import MagicMock
+from pzero.entities_factory import PCDom
 
-from pzero.point_clouds import normals2dd
+from pzero.point_clouds import normals2dd, cut_pc, decimate_pc
 
 
 # =============================================================================
@@ -45,7 +46,7 @@ def _make_normals(n_points: int = 30, seed: int = 0) -> np.ndarray:
     return np.tile(normal, (n_points, 1))
 
 
-def _make_vtk_obj(with_normals: bool = True, n_points: int = 30) -> MagicMock:
+def _make_vtk_obj(with_points: bool = True, with_normals: bool = True, n_points: int = 30) -> MagicMock:
     """
     Build a MagicMock that behaves like a PCDom vtk object.
 
@@ -53,6 +54,9 @@ def _make_vtk_obj(with_normals: bool = True, n_points: int = 30) -> MagicMock:
     with_normals=False -> simulates one that is missing normal data
     """
     vtk_obj = MagicMock()
+
+    if with_points:
+        vtk_obj.points = np.random.randint(0, 1000, size=(n_points, 3))
 
     if with_normals:
         normals = _make_normals(n_points)
@@ -76,6 +80,7 @@ def _make_vtk_obj(with_normals: bool = True, n_points: int = 30) -> MagicMock:
     vtk_obj.init_point_data.side_effect = _init
     vtk_obj.set_point_data.side_effect  = _set
     vtk_obj._written = _written
+    vtk_obj.GetNumberOfPoints.return_value = n_points
 
     return vtk_obj
 
@@ -127,7 +132,7 @@ class TestNormals2dd:
         If the selected point cloud has no normal vectors yet,
         the function should print a warning and NOT write any data.
         """
-        vtk_obj   = _make_vtk_obj(with_normals=False)
+        vtk_obj   = _make_vtk_obj(with_points=False, with_normals=False)
         self_mock = _make_self(vtk_obj)
 
         normals2dd(self_mock)
@@ -200,7 +205,6 @@ class TestNormals2dd:
             err_msg="Written dip direction values differ from points_map_dip_direction"
         )
         
-
     def test_with_real_dat_file(self, request):
         """
         Optional integration test using a real .dat point cloud file.
@@ -248,3 +252,90 @@ class TestNormals2dd:
         print(f"\n[.dat] dip:           mean={dip.mean():.1f}  std={dip.std():.1f}")
         print(f"[.dat] dip direction: mean={dd.mean():.1f}  std={dd.std():.1f}")
 
+class TestCutPC:
+   """
+   Tests for cut_pc() defined in point_clouds.py.
+
+   cut_pc add a new entry to the pc's dictionnary with 3 different methods.
+ "Inner" and "Outer" add entries for the inside and outside of the selection
+ of the scissors helper. "Both" do both at the same time. And these methods then
+write the cropped data in the corresponding propreties_components
+
+   Because cut_pc() needs a running PZero application to work normally and is using
+   an internal function as a callback of the scissors helper, we can only test 
+   the warning if no data are selected.
+   Note that the callback function (end_digitize()) should work properly if the
+   scissor helper and the function extract_pc() in point_clouds.py are working well.
+   """
+   
+   def test_no_selection_prints_warning(self, capsys):
+       """
+       If the user forgot to select a point cloud in the GUI,
+       selected_uids is empty. The function should print a clear warning
+       and return immediately without touching anything else.
+       """
+       self_mock = MagicMock()
+       self_mock.selected_uids = []
+       cut_pc(self_mock)
+
+       printed = capsys.readouterr().out
+       assert " -- No input data selected -- " in printed
+
+       self_mock.plotter.track_click_position.assert_not_called()
+
+class TestDecimatePC:
+    """
+    Tests for decimate_pc() defined in point_clouds.py.
+
+    decimate_pc returns a randomly decimate PCDom by a decimation factor defined
+    in argument of the function.
+    """
+    
+    def test_wrong_factor_prints_warning(self, capsys):
+        """
+        If the user used a wrong decimation factor (ie not in [0:1]). 
+        The function should print a clear warning and return
+        immediately without touching anything else.
+        """
+        vtk_obj = _make_vtk_obj(with_points=True, with_normals=False, n_points=100)
+        decimate_pc(vtk_obj, 2)
+
+        printed = capsys.readouterr().out
+        assert "Decimation factor to large, you can not decimate by a factor not in [0%:100%]" in printed
+
+        vtk_obj.GetNumberOfPoints.assert_not_called()
+        
+    def test_decimated_pc_size(self):
+        """
+        Size of the decimated pc must be 
+        size_orignial_pc * decimation_factor
+        """        
+        
+        # vtk_obj = _make_vtk_obj(with_points=True, with_normals=False, n_points=100)
+        vtk_obj = PCDom()
+        vtk_obj.points = np.random.choice(np.arange(0, 1000), size=(100, 3))
+         
+        decimated_pc = decimate_pc(vtk_obj, 0.5)
+        
+        assert decimated_pc.GetNumberOfPoints() != 0 and decimated_pc.GetNumberOfPoints() is not None, "Problem, size is 0"
+        np.testing.assert_allclose(decimated_pc.GetNumberOfPoints(),
+            vtk_obj.GetNumberOfPoints()*0.5 , atol=1,
+            err_msg="Decimated pc size not correct")
+        
+    def test_decimation(self):
+        """
+        Decimated_pc should be contain in original_pc.
+        If all the points of decimate_pc are in original_pc, means
+        extract_id is working well.
+        """
+        
+        # vtk_obj = _make_vtk_obj(with_points=True, with_normals=False, n_points=100)
+        vtk_obj = PCDom()
+        vtk_obj.points = np.random.choice(np.arange(0, 1000), size=(100, 3))
+         
+        decimated_pc = decimate_pc(vtk_obj, 0.5)
+        
+        assert set(decimated_pc.points[:, 0]).issubset(vtk_obj.points[:, 0])
+        assert set(decimated_pc.points[:, 1]).issubset(vtk_obj.points[:, 1])
+
+# class TestExtractPC:

@@ -24,6 +24,7 @@ from numpy import random as np_random
 from numpy import std as np_std
 from numpy import zeros as np_zeros
 from numpy import zeros_like as np_zeros_like
+from numpy import arange as np_arange
 
 from pyvista.core.filters import _update_alg as pv_update_alg
 
@@ -183,7 +184,7 @@ def cut_pc(self, method="both"):
             entity_dict["vtk_obj"] = clip_out
             self.parent.dom_coll.add_entity_from_dict(entity_dict)
         else:
-            print("Error, selected method not valid")
+            print("Error, invalid selected method")
             return
 
         scissors.EnabledOff()
@@ -203,14 +204,19 @@ def cut_pc(self, method="both"):
 
 def decimate_pc(vtk_obj, fac):
     """Function used to decimate (randomly) a given point cloud"""
-    dec_fac = int(vtk_obj.GetNumberOfPoints() * fac)
-    random = np_random.choice(vtk_obj.GetNumberOfPoints(), dec_fac)
+    
+    if (fac > 1) or (fac < 0):
+        print("Decimation factor to large, you can not decimate by a factor not in [0%:100%]")
+        return
 
+    dec_fac = int(vtk_obj.GetNumberOfPoints() * fac)
+    random = np_random.choice(vtk_obj.GetNumberOfPoints(), size=dec_fac, replace=False)
+    
     ids = vtkIdTypeArray()
 
     for i in random:
         ids.InsertNextValue(i)
-
+        
     selection = extract_id(vtk_obj, ids)
 
     return selection
