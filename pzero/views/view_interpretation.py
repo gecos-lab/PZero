@@ -2375,6 +2375,709 @@ class ViewInterpretation(ViewMap):
             pts[:, 2] = target_coord
         return pts
 
+    def _get_slice_as_2d_array_for_index(self, slice_idx=None, axis=None):
+        """Extract a seismic slice by index without changing the visible slice state."""
+        if not hasattr(self, "_cached_seismic") or self._cached_seismic is None:
+            return None, None, None, None
+
+        dims = getattr(self, "_cached_dims", None)
+        bounds = getattr(self, "_cached_bounds", None)
+        if dims is None or bounds is None:
+            return None, None, None, None
+
+        data_3d, _scalar_name = self._get_cached_volume_data_3d()
+        if data_3d is None:
+            return None, None, None, None
+
+        axis = axis or self.current_axis
+        spacing = [
+            (bounds[1] - bounds[0]) / max(int(dims[0]) - 1, 1),
+            (bounds[3] - bounds[2]) / max(int(dims[1]) - 1, 1),
+            (bounds[5] - bounds[4]) / max(int(dims[2]) - 1, 1),
+        ]
+        axis_info = {
+            "axis": axis,
+            "slice_index": int(slice_idx),
+            "bounds": bounds,
+            "dims": dims,
+            "spacing": spacing,
+            "affine": self._get_seismic_axis_vectors(),
+        }
+
+        if axis == "Inline":
+            idx = int(np.clip(int(slice_idx), 0, int(dims[0]) - 1))
+            data_2d = data_3d[idx, :, :]
+            origin = (bounds[0] + idx * spacing[0], bounds[2], bounds[4])
+            axis_info["plane"] = "YZ"
+            axis_info["row_axis"] = "Y"
+            axis_info["col_axis"] = "Z"
+        elif axis == "Crossline":
+            idx = int(np.clip(int(slice_idx), 0, int(dims[1]) - 1))
+            data_2d = data_3d[:, idx, :]
+            origin = (bounds[0], bounds[2] + idx * spacing[1], bounds[4])
+            axis_info["plane"] = "XZ"
+            axis_info["row_axis"] = "X"
+            axis_info["col_axis"] = "Z"
+        else:
+            idx = int(np.clip(int(slice_idx), 0, int(dims[2]) - 1))
+            data_2d = data_3d[:, :, idx]
+            origin = (bounds[0], bounds[2], bounds[4] + idx * spacing[2])
+            axis_info["plane"] = "XY"
+            axis_info["row_axis"] = "X"
+            axis_info["col_axis"] = "Y"
+
+        return data_2d, origin, spacing, axis_info
+
+    def _get_multipart_slice_points(
+        self, vtk_obj=None, slice_idx=None, slice_to_cell_index=None
+    ):
+        """Return the line points for one slice cell of a multipart interpretation."""
+        if vtk_obj is None or slice_idx is None:
+            return None
+
+        cell_data = vtk_obj.GetCellData()
+        if cell_data is None or not cell_data.HasArray("slice_index"):
+            return None
+
+        slice_idx = int(slice_idx)
+        slice_array = cell_data.GetArray("slice_index")
+        preferred_cell_id = None
+        try:
+            if slice_to_cell_index and slice_idx in slice_to_cell_index:
+                preferred_cell_id = int(slice_to_cell_index[slice_idx])
+        except Exception:
+            preferred_cell_id = None
+
+        cell_ids = []
+        if preferred_cell_id is not None:
+            cell_ids.append(preferred_cell_id)
+        for cell_id in range(vtk_obj.GetNumberOfCells()):
+            if cell_id == preferred_cell_id:
+                continue
+            try:
+                if int(slice_array.GetValue(cell_id)) == slice_idx:
+                    cell_ids.append(cell_id)
+            except Exception:
+                continue
+
+        best_points = None
+        best_count = 0
+        for cell_id in cell_ids:
+            try:
+                if cell_id < 0 or cell_id >= vtk_obj.GetNumberOfCells():
+                    continue
+                cell = vtk_obj.GetCell(cell_id)
+                if cell is None:
+                    continue
+                n_pts = cell.GetNumberOfPoints()
+                if n_pts < 2:
+                    continue
+                points = np.asarray(
+                    [vtk_obj.GetPoint(cell.GetPointId(i)) for i in range(n_pts)],
+                    dtype=float,
+                )
+                if preferred_cell_id is not None and cell_id == preferred_cell_id:
+                    return points
+                if n_pts > best_count:
+                    best_points = points
+                    best_count = n_pts
+            except Exception:
+                continue
+
+        return best_points
+
+    def _dedupe_consecutive_points(self, points=None, tolerance=1.0e-9):
+        """Remove consecutive duplicate vertices while preserving polyline order."""
+        if points is None:
+            return None
+        pts = np.asarray(points, dtype=float)
+        if pts.ndim != 2 or pts.shape[0] == 0:
+            return pts
+        if pts.shape[0] == 1:
+            return pts
+
+        distances = np.linalg.norm(np.diff(pts, axis=0), axis=1)
+        keep = np.concatenate([[True], distances > float(tolerance)])
+        cleaned = pts[keep]
+        return cleaned if cleaned.shape[0] >= 2 else pts[: min(pts.shape[0], 2)]
+
+    def _polyline_points_and_fractions(self, points=None):
+        """Return cleaned points and normalized cumulative arclength fractions."""
+        pts = self._dedupe_consecutive_points(points)
+        if pts is None or pts.ndim != 2 or pts.shape[0] == 0:
+            return None, None
+        if pts.shape[0] == 1:
+            return pts, np.asarray([0.0], dtype=float)
+
+        seg_lengths = np.linalg.norm(np.diff(pts, axis=0), axis=1)
+        cumulative = np.concatenate([[0.0], np.cumsum(seg_lengths)])
+        total = float(cumulative[-1])
+        if total <= 1.0e-12:
+            fractions = np.linspace(0.0, 1.0, pts.shape[0])
+        else:
+            fractions = cumulative / total
+        return pts, fractions
+
+    def _sample_polyline_by_fraction(self, points=None, fractions=None):
+        """Sample a 2D or 3D polyline at normalized arclength fractions."""
+        pts, point_fractions = self._polyline_points_and_fractions(points)
+        if pts is None or point_fractions is None or pts.shape[0] == 0:
+            return None
+
+        sample_fractions = np.asarray(fractions, dtype=float)
+        if sample_fractions.ndim == 0:
+            sample_fractions = sample_fractions.reshape(1)
+        sample_fractions = np.clip(sample_fractions, 0.0, 1.0)
+
+        if pts.shape[0] == 1:
+            return np.repeat(pts, sample_fractions.shape[0], axis=0)
+
+        sampled = np.column_stack(
+            [
+                np.interp(sample_fractions, point_fractions, pts[:, comp])
+                for comp in range(pts.shape[1])
+            ]
+        )
+        return sampled
+
+    def _polyline_prefix_to_fraction(self, points=None, fraction=0.0):
+        """Return original polyline geometry from the start through a fraction."""
+        pts, point_fractions = self._polyline_points_and_fractions(points)
+        if pts is None or point_fractions is None or pts.shape[0] < 2:
+            return None
+
+        fraction = float(np.clip(fraction, 0.0, 1.0))
+        if fraction <= 0.0:
+            return self._sample_polyline_by_fraction(pts, [0.0])
+        if fraction >= 1.0:
+            return pts
+
+        boundary = self._sample_polyline_by_fraction(pts, [fraction])
+        keep = pts[point_fractions < fraction]
+        if keep.size == 0:
+            return boundary
+        return self._dedupe_consecutive_points(np.vstack([keep, boundary]))
+
+    def _polyline_suffix_from_fraction(self, points=None, fraction=1.0):
+        """Return original polyline geometry from a fraction through the end."""
+        pts, point_fractions = self._polyline_points_and_fractions(points)
+        if pts is None or point_fractions is None or pts.shape[0] < 2:
+            return None
+
+        fraction = float(np.clip(fraction, 0.0, 1.0))
+        if fraction <= 0.0:
+            return pts
+        if fraction >= 1.0:
+            return self._sample_polyline_by_fraction(pts, [1.0])
+
+        boundary = self._sample_polyline_by_fraction(pts, [fraction])
+        keep = pts[point_fractions > fraction]
+        if keep.size == 0:
+            return boundary
+        return self._dedupe_consecutive_points(np.vstack([boundary, keep]))
+
+    def _detect_multipart_edit_interval(
+        self, original_points=None, edited_points=None, slice_idx=None, axis=None, affine=None
+    ):
+        """
+        Infer the arclength interval changed by the editor.
+
+        The editor returns a complete line. Comparing both lines in slice sample
+        coordinates lets us preserve each target slice outside the changed interval.
+        """
+        if original_points is None or edited_points is None:
+            return 0.0, 1.0, False
+
+        axis = axis or self.current_axis
+        original_uv = self._world_points_to_slice_uv(
+            points=original_points,
+            slice_idx=slice_idx,
+            axis=axis,
+            affine=affine,
+        )
+        edited_uv = self._world_points_to_slice_uv(
+            points=edited_points,
+            slice_idx=slice_idx,
+            axis=axis,
+            affine=affine,
+        )
+        if original_uv is None or edited_uv is None:
+            return 0.0, 1.0, True
+
+        sample_count = int(
+            np.clip(max(len(original_uv), len(edited_uv)) * 4, 80, 400)
+        )
+        fractions = np.linspace(0.0, 1.0, sample_count)
+        original_sampled = self._sample_polyline_by_fraction(original_uv, fractions)
+        edited_sampled = self._sample_polyline_by_fraction(edited_uv, fractions)
+        if original_sampled is None or edited_sampled is None:
+            return 0.0, 1.0, True
+
+        deltas = np.linalg.norm(edited_sampled - original_sampled, axis=1)
+        finite = np.isfinite(deltas)
+        if not np.any(finite):
+            return 0.0, 1.0, True
+        deltas = deltas[finite]
+        finite_fractions = fractions[finite]
+
+        baseline = float(np.percentile(deltas, 20))
+        mad = float(np.median(np.abs(deltas - np.median(deltas))))
+        threshold = max(0.5, baseline + 6.0 * mad)
+        changed = deltas > threshold
+
+        if not np.any(changed):
+            max_delta = float(np.max(deltas))
+            if max_delta <= 0.15:
+                return 0.0, 1.0, False
+            changed = deltas >= max(0.15, max_delta * 0.5)
+
+        changed_idx = np.flatnonzero(changed)
+        if changed_idx.size == 0:
+            return 0.0, 1.0, False
+
+        pad = max(2, sample_count // 50)
+        start_idx = max(0, int(changed_idx[0]) - pad)
+        end_idx = min(len(finite_fractions) - 1, int(changed_idx[-1]) + pad)
+        t0 = float(finite_fractions[start_idx])
+        t1 = float(finite_fractions[end_idx])
+
+        if t1 - t0 < 0.02:
+            center = 0.5 * (t0 + t1)
+            t0 = max(0.0, center - 0.01)
+            t1 = min(1.0, center + 0.01)
+        if t0 < 0.04:
+            t0 = 0.0
+        if t1 > 0.96:
+            t1 = 1.0
+
+        return t0, t1, True
+
+    def _locally_snap_rc_to_cost_min(self, cost_map=None, rc=None, radius=3):
+        """Move a row/col point to the lowest cost pixel in a small neighborhood."""
+        if cost_map is None or rc is None:
+            return rc
+
+        rows, cols = cost_map.shape
+        row = int(np.clip(int(rc[0]), 0, rows - 1))
+        col = int(np.clip(int(rc[1]), 0, cols - 1))
+        radius = max(0, int(radius))
+        if radius <= 0:
+            return row, col
+
+        r0 = max(0, row - radius)
+        r1 = min(rows - 1, row + radius)
+        c0 = max(0, col - radius)
+        c1 = min(cols - 1, col + radius)
+        window = cost_map[r0 : r1 + 1, c0 : c1 + 1]
+        if window.size == 0:
+            return row, col
+
+        try:
+            local_idx = np.unravel_index(int(np.nanargmin(window)), window.shape)
+        except Exception:
+            return row, col
+
+        return int(r0 + local_idx[0]), int(c0 + local_idx[1])
+
+    def _trace_polyline_to_edges_on_slice(
+        self,
+        points=None,
+        slice_idx=None,
+        axis=None,
+        entity_kind="horizon",
+        lock_first=False,
+        lock_last=False,
+    ):
+        """Trace a replacement segment onto nearby seismic edges on a specific slice."""
+        pts = self._dedupe_consecutive_points(points)
+        if pts is None or pts.ndim != 2 or pts.shape[0] < 2:
+            return points
+
+        axis = axis or self.current_axis
+        slice_idx = int(slice_idx)
+        slice_data, origin, spacing, axis_info = self._get_slice_as_2d_array_for_index(
+            slice_idx=slice_idx,
+            axis=axis,
+        )
+        if slice_data is None or axis_info is None:
+            return pts
+
+        try:
+            cost_map = (
+                self.compute_fault_edge_cost_map(slice_data)
+                if entity_kind == "fault"
+                else self.compute_edge_cost_map(slice_data)
+            )
+        except Exception:
+            return pts
+
+        affine = axis_info.get("affine")
+        rc_points = []
+        rows, cols = cost_map.shape
+        for idx, point in enumerate(pts):
+            rc = self._world_to_slice_rc(
+                point,
+                slice_idx=slice_idx,
+                affine=affine,
+                axis=axis,
+            )
+            if rc is None:
+                rc = self._world_to_slice_rc_unclipped(
+                    point,
+                    slice_idx=slice_idx,
+                    affine=affine,
+                    axis=axis,
+                )
+            if rc is None:
+                return pts
+            rc = (
+                int(np.clip(int(round(rc[0])), 0, rows - 1)),
+                int(np.clip(int(round(rc[1])), 0, cols - 1)),
+            )
+            if not ((idx == 0 and lock_first) or (idx == len(pts) - 1 and lock_last)):
+                rc = self._locally_snap_rc_to_cost_min(cost_map, rc, radius=3)
+            rc_points.append(rc)
+
+        max_edge_trace_anchors = 32
+        if len(rc_points) > max_edge_trace_anchors:
+            anchor_ids = np.unique(
+                np.round(
+                    np.linspace(0, len(rc_points) - 1, max_edge_trace_anchors)
+                ).astype(int)
+            )
+            anchors = [rc_points[int(i)] for i in anchor_ids]
+        else:
+            anchors = rc_points
+
+        traced_rc = []
+        for seg_idx in range(len(anchors) - 1):
+            start = anchors[seg_idx]
+            end = anchors[seg_idx + 1]
+            if start == end:
+                path = [start]
+            elif entity_kind == "fault":
+                horizontal_diff = abs(start[0] - end[0])
+                corridor = min(8, max(2, horizontal_diff // 3 + 2))
+                path = self.astar_pathfind_fault(
+                    cost_map, start, end, corridor_width=corridor
+                )
+            else:
+                vertical_diff = abs(start[1] - end[1])
+                corridor = min(6, max(2, vertical_diff // 3 + 2))
+                path = self.astar_pathfind(cost_map, start, end, corridor_width=corridor)
+
+            if path is None:
+                path = [start, end]
+            if seg_idx > 0 and path:
+                path = path[1:]
+            traced_rc.extend(path)
+
+        if not traced_rc:
+            traced_rc = anchors
+
+        traced_points = []
+        for row, col in traced_rc:
+            world_point = self._slice_rc_to_world(
+                slice_idx=slice_idx,
+                row=int(row),
+                col=int(col),
+                affine=affine,
+                axis=axis,
+            )
+            if world_point is None:
+                world_point = self._slice_rc_to_world_float(
+                    slice_idx=slice_idx,
+                    row=float(row),
+                    col=float(col),
+                    affine=affine,
+                    axis=axis,
+                )
+            if world_point is not None:
+                traced_points.append(world_point)
+
+        if len(traced_points) < 2:
+            return pts
+
+        traced_points = np.asarray(traced_points, dtype=float)
+        if traced_points.shape[0] > 1200:
+            step = max(1, traced_points.shape[0] // 1200)
+            sampled = traced_points[::step]
+            if not np.allclose(sampled[-1], traced_points[-1]):
+                sampled = np.vstack([sampled, traced_points[-1]])
+            traced_points = sampled
+
+        if lock_first:
+            traced_points[0] = pts[0]
+        if lock_last:
+            traced_points[-1] = pts[-1]
+
+        return self._dedupe_consecutive_points(traced_points)
+
+    def _merge_polyline_fraction_interval(
+        self, original_points=None, replacement_points=None, t0=0.0, t1=1.0
+    ):
+        """Merge a replacement segment into an original polyline arclength interval."""
+        replacement = self._dedupe_consecutive_points(replacement_points)
+        if replacement is None or replacement.shape[0] < 2:
+            return original_points
+
+        t0 = float(np.clip(t0, 0.0, 1.0))
+        t1 = float(np.clip(t1, 0.0, 1.0))
+        if t0 > t1:
+            t0, t1 = t1, t0
+
+        if t0 <= 0.0 and t1 >= 1.0:
+            return replacement
+
+        pieces = []
+        if t0 > 0.0:
+            prefix = self._polyline_prefix_to_fraction(original_points, t0)
+            if prefix is not None and prefix.shape[0] > 0:
+                pieces.append(prefix)
+
+        pieces.append(replacement)
+
+        if t1 < 1.0:
+            suffix = self._polyline_suffix_from_fraction(original_points, t1)
+            if suffix is not None and suffix.shape[0] > 0:
+                pieces.append(suffix)
+
+        merged = np.vstack(pieces)
+        return self._dedupe_consecutive_points(merged)
+
+    def _build_partial_multipart_edit_for_slice(
+        self,
+        original_current_points=None,
+        edited_current_points=None,
+        target_original_points=None,
+        target_slice_idx=None,
+        axis=None,
+        entity_kind="horizon",
+        edit_interval=None,
+        affine=None,
+    ):
+        """Apply the current-slice edit interval to another slice without replacing unchanged parts."""
+        if (
+            original_current_points is None
+            or edited_current_points is None
+            or target_original_points is None
+            or edit_interval is None
+        ):
+            return None
+
+        axis = axis or self.current_axis
+        t0, t1 = edit_interval
+        target_slice_idx = int(target_slice_idx)
+
+        current_slice_idx = int(self.current_slice_index)
+        original_current_uv = self._world_points_to_slice_uv(
+            points=original_current_points,
+            slice_idx=current_slice_idx,
+            axis=axis,
+            affine=affine,
+        )
+        edited_current_uv = self._world_points_to_slice_uv(
+            points=edited_current_points,
+            slice_idx=current_slice_idx,
+            axis=axis,
+            affine=affine,
+        )
+        target_original_uv = self._world_points_to_slice_uv(
+            points=target_original_points,
+            slice_idx=target_slice_idx,
+            axis=axis,
+            affine=affine,
+        )
+        if (
+            original_current_uv is None
+            or edited_current_uv is None
+            or target_original_uv is None
+        ):
+            return None
+
+        _edited_pts, edited_fractions = self._polyline_points_and_fractions(
+            edited_current_uv
+        )
+        interval_fraction_count = max(
+            2,
+            int(
+                np.ceil(
+                    max(len(edited_current_uv), len(target_original_uv))
+                    * max(float(t1) - float(t0), 0.02)
+                )
+            )
+            + 2,
+        )
+        interval_fraction_count = min(interval_fraction_count, 300)
+        fractions = np.linspace(float(t0), float(t1), interval_fraction_count)
+        if edited_fractions is not None:
+            interior = edited_fractions[
+                (edited_fractions > float(t0)) & (edited_fractions < float(t1))
+            ]
+            if interior.size > 0:
+                fractions = np.unique(np.concatenate([fractions, interior]))
+        fractions = np.clip(np.sort(fractions), 0.0, 1.0)
+
+        original_current_sampled = self._sample_polyline_by_fraction(
+            original_current_uv, fractions
+        )
+        edited_current_sampled = self._sample_polyline_by_fraction(
+            edited_current_uv, fractions
+        )
+        target_original_sampled = self._sample_polyline_by_fraction(
+            target_original_uv, fractions
+        )
+        if (
+            original_current_sampled is None
+            or edited_current_sampled is None
+            or target_original_sampled is None
+        ):
+            return None
+
+        replacement_uv = target_original_sampled + (
+            edited_current_sampled - original_current_sampled
+        )
+        replacement_points = self._slice_uv_to_world_points(
+            slice_uv=replacement_uv,
+            slice_idx=target_slice_idx,
+            axis=axis,
+            affine=affine,
+        )
+        if replacement_points is None:
+            return None
+
+        if float(t0) > 0.0:
+            start_anchor = self._sample_polyline_by_fraction(
+                target_original_points, [float(t0)]
+            )
+            if start_anchor is not None and len(start_anchor) > 0:
+                replacement_points[0] = start_anchor[0]
+        if float(t1) < 1.0:
+            end_anchor = self._sample_polyline_by_fraction(
+                target_original_points, [float(t1)]
+            )
+            if end_anchor is not None and len(end_anchor) > 0:
+                replacement_points[-1] = end_anchor[0]
+
+        replacement_points = self._trace_polyline_to_edges_on_slice(
+            points=replacement_points,
+            slice_idx=target_slice_idx,
+            axis=axis,
+            entity_kind=entity_kind,
+            lock_first=float(t0) > 0.0,
+            lock_last=float(t1) < 1.0,
+        )
+
+        return self._merge_polyline_fraction_interval(
+            original_points=target_original_points,
+            replacement_points=replacement_points,
+            t0=t0,
+            t1=t1,
+        )
+
+    def _build_partial_multipart_edit_replacements(
+        self,
+        vtk_obj=None,
+        selection=None,
+        edited_points=None,
+        target_slices=None,
+    ):
+        """Build per-slice replacements for a multipart edit while preserving unchanged geometry."""
+        if vtk_obj is None or selection is None or edited_points is None:
+            return {}, {}
+
+        entity_kind = selection.get("entity_kind", "horizon")
+        entity_info = selection.get("entity_info", {})
+        axis = entity_info.get("axis", self.current_axis)
+        slice_to_cell_index = entity_info.get("slice_to_cell_index", {})
+        current_slice_idx = int(self.current_slice_index)
+        affine = self._get_seismic_axis_vectors()
+
+        original_current_points = self._get_multipart_slice_points(
+            vtk_obj=vtk_obj,
+            slice_idx=current_slice_idx,
+            slice_to_cell_index=slice_to_cell_index,
+        )
+        if original_current_points is None:
+            traced_current = self._trace_polyline_to_edges_on_slice(
+                points=edited_points,
+                slice_idx=current_slice_idx,
+                axis=axis,
+                entity_kind=entity_kind,
+            )
+            return {current_slice_idx: traced_current}, {
+                "mode": "full",
+                "has_changes": True,
+                "interval": (0.0, 1.0),
+            }
+
+        t0, t1, has_changes = self._detect_multipart_edit_interval(
+            original_points=original_current_points,
+            edited_points=edited_points,
+            slice_idx=current_slice_idx,
+            axis=axis,
+            affine=affine,
+        )
+        if not has_changes:
+            traced_current = self._trace_polyline_to_edges_on_slice(
+                points=edited_points,
+                slice_idx=current_slice_idx,
+                axis=axis,
+                entity_kind=entity_kind,
+            )
+            return {current_slice_idx: traced_current}, {
+                "mode": "edge_snap_only",
+                "has_changes": False,
+                "interval": (0.0, 1.0),
+            }
+
+        all_target_slices = sorted(
+            {current_slice_idx}
+            | {int(slice_idx) for slice_idx in (target_slices or [])}
+        )
+        replacements = {}
+        skipped_slices = []
+        for target_slice_idx in all_target_slices:
+            target_original_points = self._get_multipart_slice_points(
+                vtk_obj=vtk_obj,
+                slice_idx=target_slice_idx,
+                slice_to_cell_index=slice_to_cell_index,
+            )
+            if target_original_points is None:
+                skipped_slices.append(target_slice_idx)
+                continue
+
+            merged_points = self._build_partial_multipart_edit_for_slice(
+                original_current_points=original_current_points,
+                edited_current_points=edited_points,
+                target_original_points=target_original_points,
+                target_slice_idx=target_slice_idx,
+                axis=axis,
+                entity_kind=entity_kind,
+                edit_interval=(t0, t1),
+                affine=affine,
+            )
+            if merged_points is None or len(merged_points) < 2:
+                skipped_slices.append(target_slice_idx)
+                continue
+            replacements[int(target_slice_idx)] = merged_points
+
+        if current_slice_idx not in replacements:
+            traced_current = self._trace_polyline_to_edges_on_slice(
+                points=edited_points,
+                slice_idx=current_slice_idx,
+                axis=axis,
+                entity_kind=entity_kind,
+            )
+            replacements[current_slice_idx] = traced_current
+
+        return replacements, {
+            "mode": "partial",
+            "has_changes": True,
+            "interval": (float(t0), float(t1)),
+            "skipped_slices": skipped_slices,
+        }
+
     def _build_multipart_vtk_with_replaced_slices(
         self, vtk_obj=None, edited_points_by_slice=None
     ):
@@ -2710,42 +3413,27 @@ class ViewInterpretation(ViewMap):
             points, points_are_display_coords=True
         )
         current_vtk = self.parent.geol_coll.get_uid_vtk_obj(uid)
-        replacement_points_by_slice = {slice_idx: snapped_points}
 
         target_slices = self._prompt_multipart_edit_propagation_slices(
             selection=selection,
             current_slice_idx=slice_idx,
         )
         target_slices = sorted({int(idx) for idx in target_slices})
-        if target_slices:
-            affine = self._get_seismic_axis_vectors()
-            template_uv = self._world_points_to_slice_uv(
-                points=snapped_points,
-                slice_idx=slice_idx,
-                axis=entity_info.get("axis", self.current_axis),
-                affine=affine,
+        replacement_points_by_slice, edit_stats = (
+            self._build_partial_multipart_edit_replacements(
+                vtk_obj=current_vtk,
+                selection=selection,
+                edited_points=snapped_points,
+                target_slices=target_slices,
             )
-            if template_uv is None:
-                message_dialog(
-                    title="Edit line",
-                    message=(
-                        "The edited line was saved on the current slice, but it could not be "
-                        "projected to the requested slice range."
-                    ),
-                )
-            else:
-                for target_slice_idx in target_slices:
-                    if target_slice_idx == slice_idx:
-                        continue
-                    target_points = self._slice_uv_to_world_points(
-                        slice_uv=template_uv,
-                        slice_idx=target_slice_idx,
-                        axis=entity_info.get("axis", self.current_axis),
-                        affine=affine,
-                    )
-                    if target_points is None:
-                        continue
-                    replacement_points_by_slice[int(target_slice_idx)] = target_points
+        )
+        if not replacement_points_by_slice:
+            replacement_points_by_slice = {slice_idx: snapped_points}
+            edit_stats = {
+                "mode": "full",
+                "has_changes": True,
+                "interval": (0.0, 1.0),
+            }
 
         new_vtk, slice_indices, _slice_to_cell_index = self._build_multipart_vtk_with_replaced_slices(
             vtk_obj=current_vtk,
@@ -2786,11 +3474,35 @@ class ViewInterpretation(ViewMap):
             f"Edited multipart {entity_kind} {uid[:8]}... on slice {slice_idx}: "
             f"{len(points)} control points updated."
         )
+        try:
+            interval = edit_stats.get("interval", (0.0, 1.0))
+            mode = edit_stats.get("mode", "partial")
+            if mode == "partial":
+                self.print_terminal(
+                    "Preserved unchanged propagated geometry outside edited interval "
+                    f"{interval[0]:.2f}-{interval[1]:.2f} and snapped the replacement to nearby edges."
+                )
+            elif mode == "edge_snap_only":
+                self.print_terminal(
+                    "No clear edited interval was detected; snapped the current line to nearby edges only."
+                )
+        except Exception:
+            pass
         if len(replacement_points_by_slice) > 1:
             propagated_slices = sorted(replacement_points_by_slice.keys())
             self.print_terminal(
-                f"Applied the same edit to slices {propagated_slices[0]}-{propagated_slices[-1]} "
+                f"Applied the edited interval to slices {propagated_slices[0]}-{propagated_slices[-1]} "
                 f"({len(propagated_slices)} slices total)."
+            )
+        skipped_slices = []
+        try:
+            skipped_slices = list(edit_stats.get("skipped_slices", []))
+        except Exception:
+            skipped_slices = []
+        if skipped_slices:
+            self.print_terminal(
+                "Skipped slices that could not be partially matched: "
+                + ", ".join(str(int(idx)) for idx in skipped_slices)
             )
         self.clear_selection()
         freeze_gui_off(self)
