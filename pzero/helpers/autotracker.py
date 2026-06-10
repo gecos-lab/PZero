@@ -24,6 +24,7 @@ class TrackingAttribute(Flag):
     PHASE = auto()          # Track by phase continuity
     SIMILARITY = auto()     # Track by trace-to-trace similarity
     DIP = auto()            # Track by dip direction consistency
+    WAVEFORM = auto()       # Track same wavelet/template character
     
     @classmethod
     def from_strings(cls, attr_list: List[str]) -> 'TrackingAttribute':
@@ -35,6 +36,9 @@ class TrackingAttribute(Flag):
             'phase': cls.PHASE,
             'similarity': cls.SIMILARITY,
             'dip': cls.DIP,
+            'waveform': cls.WAVEFORM,
+            'template': cls.WAVEFORM,
+            'correlation': cls.WAVEFORM,
         }
         for attr in attr_list:
             if attr.lower() in mapping:
@@ -54,6 +58,8 @@ class TrackingAttribute(Flag):
             result.append('similarity')
         if self & TrackingAttribute.DIP:
             result.append('dip')
+        if self & TrackingAttribute.WAVEFORM:
+            result.append('waveform')
         return result
 
 
@@ -85,9 +91,18 @@ class Autotracker:
             'smoothness_weight': 0.3,   # Weight for path smoothness (0-1)
             'amplitude_weight': 0.3,    # Weight for amplitude
             'edge_weight': 0.2,         # Weight for edge strength
-            'phase_weight': 0.2,        # Weight for phase
-            'similarity_weight': 0.15,  # Weight for similarity
+            'phase_weight': 0.25,       # Weight for phase
+            'similarity_weight': 0.25,  # Weight for similarity
             'dip_weight': 0.15,         # Weight for dip direction
+            # Event identity tracking: reduces cycle skipping to parallel events.
+            'waveform_weight': 0.45,    # Local wavelet/template correlation weight
+            'waveform_half_window': 5,  # Samples above/below candidate for NCC
+            'reference_template_weight': 0.35,  # Keep tied to the original seed event
+            'phase_lock_weight': 0.35,  # Same instantaneous phase as seed/previous event
+            'polarity_weight': 0.20,    # Penalize peak/trough polarity flips
+            # Dynamic-programming path terms along the horizon on one slice.
+            'horizon_dip_weight': 0.35,       # Preserve local slope from previous horizon
+            'horizon_curvature_weight': 0.15, # Dampen row-to-row zig-zags
             # Fault-aware horizon tracking
             # Penalize picking too close to fault traces (prevents horizons snapping onto faults)
             'fault_barrier_width': 2,   # Pixels (row) around fault to penalize
@@ -116,10 +131,95 @@ class Autotracker:
 
         # Store previous dip for consistency tracking
         self._prev_dip = None
+        self._reference_horizon = {}
 
     def set_tracking_parameters(self, **params):
         """Update tracking parameters."""
         self.tracking_params.update(params)
+
+    @staticmethod
+    def _extract_slice_data(data_3d: np.ndarray, slice_idx: int, axis: str) -> np.ndarray:
+        """Extract a seismic slice using the same axis convention as the view."""
+        if axis == 'Inline':
+            return data_3d[slice_idx, :, :]
+        if axis == 'Crossline':
+            return data_3d[:, slice_idx, :]
+        return data_3d[:, :, slice_idx]
+
+    def _build_reference_horizon(
+        self,
+        slice_data: np.ndarray,
+        positions: List[Tuple[int, int]],
+    ) -> Dict[int, Dict[str, object]]:
+        """
+        Capture seed event identity per lateral row.
+
+        The reference is intentionally keyed by row because propagation keeps the
+        same sampled lateral rows across slices. These templates prevent gradual
+        drift from the picked event onto a parallel cycle.
+        """
+        reference: Dict[int, Dict[str, object]] = {}
+        if slice_data.size == 0 or not positions:
+            return reference
+
+        h, w = slice_data.shape
+        half_window = int(self.tracking_params.get('waveform_half_window', 5))
+        try:
+            phase = self.attributes_processor.compute_phase(slice_data, depth_axis=1)
+        except Exception:
+            phase = None
+
+        for row, col in positions:
+            row_i = int(np.clip(row, 0, h - 1))
+            col_i = int(np.clip(col, 0, w - 1))
+            sample_value = float(slice_data[row_i, col_i])
+            polarity = 0 if abs(sample_value) < 1e-10 else int(np.sign(sample_value))
+
+            reference[row_i] = {
+                'col': col_i,
+                'waveform': self._sample_depth_window(
+                    slice_data, row_i, col_i, half_window
+                ),
+                'phase': None if phase is None else float(phase[row_i, col_i]),
+                'polarity': polarity,
+                'sample': sample_value,
+            }
+
+        return reference
+
+    @staticmethod
+    def _sample_depth_window(
+        data: np.ndarray,
+        row: int,
+        col: int,
+        half_window: int,
+    ) -> np.ndarray:
+        """Return a fixed-length seismic waveform window centered on row/col."""
+        h, w = data.shape
+        row_i = int(np.clip(row, 0, h - 1))
+        col_i = int(np.clip(col, 0, w - 1))
+        half = max(0, int(half_window))
+        idx = np.clip(np.arange(col_i - half, col_i + half + 1), 0, w - 1)
+        return data[row_i, idx].astype(np.float64, copy=False)
+
+    @staticmethod
+    def _normalized_correlation(a: np.ndarray, b: np.ndarray) -> float:
+        """Normalized cross-correlation for two equal-length waveform windows."""
+        if a.size == 0 or b.size == 0 or a.size != b.size:
+            return 0.0
+        a_dm = a.astype(np.float64, copy=False) - float(np.mean(a))
+        b_dm = b.astype(np.float64, copy=False) - float(np.mean(b))
+        denom = float(np.linalg.norm(a_dm) * np.linalg.norm(b_dm))
+        if denom <= 1e-12:
+            return 0.0
+        return float(np.clip(np.dot(a_dm, b_dm) / denom, -1.0, 1.0))
+
+    @staticmethod
+    def _phase_difference_cost(a: float, b: float) -> float:
+        """Angular phase difference normalized to 0..1."""
+        diff = abs(float(a) - float(b))
+        diff = min(diff, 2 * np.pi - diff)
+        return float(diff / np.pi)
 
     @staticmethod
     def _regularize_horizon_positions(
@@ -163,15 +263,21 @@ class Autotracker:
         seed_slice_idx: int,
         axis: str,
         slices_to_track: List[int],
-        attributes: TrackingAttribute = TrackingAttribute.AMPLITUDE | TrackingAttribute.EDGE,
+        attributes: TrackingAttribute = (
+            TrackingAttribute.AMPLITUDE |
+            TrackingAttribute.EDGE |
+            TrackingAttribute.PHASE |
+            TrackingAttribute.SIMILARITY |
+            TrackingAttribute.WAVEFORM
+        ),
         search_window: int = 15,
         smooth_sigma: float = 2.0,
         max_jump: int = 3,
         smoothness_weight: float = 0.3,
         amplitude_weight: float = 0.3,
         edge_weight: float = 0.2,
-        phase_weight: float = 0.2,
-        similarity_weight: float = 0.15,
+        phase_weight: float = 0.25,
+        similarity_weight: float = 0.25,
         dip_weight: float = 0.15,
         fault_snap_weight: float = 2.0,
         fault_attach_depth_tolerance: int = 2,
@@ -235,6 +341,10 @@ class Autotracker:
         current_positions = self._regularize_horizon_positions(list(seed_positions))
         horizons[seed_slice_idx] = list(current_positions)
 
+        seed_slice_data = self._extract_slice_data(data_3d, seed_slice_idx, axis)
+        self._reference_horizon = self._build_reference_horizon(seed_slice_data, current_positions)
+        previous_slice_data = seed_slice_data
+
         total_slices = len(slices_to_track)
 
         if total_slices == 0:
@@ -246,13 +356,7 @@ class Autotracker:
         try:
             prev_slice_idx_for_fault = seed_slice_idx
             for i, slice_idx in enumerate(slices_to_track):
-                # Extract slice data based on axis
-                if axis == 'Inline':
-                    slice_data = data_3d[slice_idx, :, :]
-                elif axis == 'Crossline':
-                    slice_data = data_3d[:, slice_idx, :]
-                else:  # Z-slice
-                    slice_data = data_3d[:, :, slice_idx]
+                slice_data = self._extract_slice_data(data_3d, slice_idx, axis)
 
                 faults_on_slice = None
                 prev_faults_on_slice = None
@@ -265,6 +369,7 @@ class Autotracker:
                     slice_data,
                     current_positions,
                     attributes,
+                    previous_slice_data=previous_slice_data,
                     fault_traces=faults_on_slice,
                     prev_fault_traces=prev_faults_on_slice,
                 )
@@ -288,6 +393,7 @@ class Autotracker:
 
                 horizons[slice_idx] = new_positions
                 current_positions = new_positions
+                previous_slice_data = slice_data
                 prev_slice_idx_for_fault = slice_idx
 
                 # Progress update every 10 slices
@@ -307,6 +413,7 @@ class Autotracker:
         slice_data: np.ndarray,
         seed_positions: List[Tuple[int, int]],
         attributes: TrackingAttribute,
+        previous_slice_data: Optional[np.ndarray] = None,
         fault_traces: Optional[List[List[Tuple[int, int]]]] = None,
         prev_fault_traces: Optional[List[List[Tuple[int, int]]]] = None,
     ) -> List[Tuple[int, int]]:
@@ -323,6 +430,7 @@ class Autotracker:
         """
         h, w = slice_data.shape
         search_window = self.tracking_params['search_window']
+        seed_positions = self._regularize_horizon_positions(seed_positions)
 
         # Determine which attributes to compute based on selected flags
         attr_types = []
@@ -336,13 +444,16 @@ class Autotracker:
             attr_types.append('similarity')
         if attributes & TrackingAttribute.DIP:
             attr_types.extend(['dip_azimuth', 'dip_magnitude'])
+        if attributes & TrackingAttribute.WAVEFORM:
+            if 'phase' not in attr_types:
+                attr_types.append('phase')
 
         # Ensure at least amplitude is computed
         if not attr_types:
             attr_types = ['amplitude']
 
         computed_attrs = self.attributes_processor.compute_slice_attributes(
-            slice_data, attr_types
+            slice_data, attr_types, depth_axis=1
         )
 
         fault_models = self._prepare_fault_models(fault_traces, w=w) if fault_traces else []
@@ -350,7 +461,10 @@ class Autotracker:
         if not prev_fault_models:
             prev_fault_models = fault_models
 
-        new_positions = []
+        rows: List[int] = []
+        expected_cols: List[int] = []
+        candidate_cols_by_row: List[np.ndarray] = []
+        node_costs_by_row: List[np.ndarray] = []
 
         for row, expected_col in seed_positions:
             # Ensure indices are within bounds
@@ -369,10 +483,8 @@ class Autotracker:
 
             col_min = max(0, expected_col - effective_search)
             col_max = min(w, expected_col + effective_search + 1)
-
-            # Compute cost for each candidate position
-            best_col = expected_col
-            best_cost = float('inf')
+            candidate_cols = np.arange(col_min, col_max, dtype=np.int32)
+            candidate_costs = np.zeros(candidate_cols.shape[0], dtype=np.float64)
 
             preferred_side = self._fault_side_sign(row=row, col=expected_col, fault_models=prev_fault_models)
 
@@ -414,9 +526,18 @@ class Autotracker:
                         )
                         snap_active = fault_snap_target_col is not None
 
-            for candidate_col in range(col_min, col_max):
+            reference_info = self._reference_horizon.get(row)
+
+            for j, candidate_col in enumerate(candidate_cols.tolist()):
                 cost = self._compute_tracking_cost(
-                    computed_attrs, row, candidate_col, expected_col, attributes
+                    computed_attrs,
+                    row,
+                    candidate_col,
+                    expected_col,
+                    attributes,
+                    slice_data=slice_data,
+                    previous_slice_data=previous_slice_data,
+                    reference_info=reference_info,
                 )
 
                 # Fault terms
@@ -440,11 +561,20 @@ class Autotracker:
                     if snap_active:
                         cost += self._fault_proximity_cost(row=row, col=candidate_col, fault_models=fault_models)
 
-                if cost < best_cost:
-                    best_cost = cost
-                    best_col = candidate_col
+                candidate_costs[j] = cost
 
-            new_positions.append((row, best_col))
+            rows.append(row)
+            expected_cols.append(expected_col)
+            candidate_cols_by_row.append(candidate_cols)
+            node_costs_by_row.append(candidate_costs)
+
+        new_positions = self._solve_horizon_path_dp(
+            rows=rows,
+            expected_cols=expected_cols,
+            candidate_cols_by_row=candidate_cols_by_row,
+            node_costs_by_row=node_costs_by_row,
+            fault_models=fault_models,
+        )
 
         # Update previous dip for next slice
         if attributes & TrackingAttribute.DIP and 'dip_azimuth' in computed_attrs:
@@ -464,7 +594,10 @@ class Autotracker:
         row: int,
         col: int,
         expected_col: int,
-        tracking_attrs: TrackingAttribute
+        tracking_attrs: TrackingAttribute,
+        slice_data: Optional[np.ndarray] = None,
+        previous_slice_data: Optional[np.ndarray] = None,
+        reference_info: Optional[Dict[str, object]] = None,
     ) -> float:
         """
         Compute cost for a candidate position based on selected attributes.
@@ -479,9 +612,6 @@ class Autotracker:
         distance = abs(col - expected_col)
         distance_cost = (distance / max(search_window, 1)) ** 2
         cost += distance_cost * smoothness_weight
-
-        # Count active attributes for normalization
-        active_count = bin(tracking_attrs.value).count('1') if tracking_attrs != TrackingAttribute.NONE else 1
 
         # Amplitude-based cost (higher amplitude = lower cost)
         if tracking_attrs & TrackingAttribute.AMPLITUDE:
@@ -513,15 +643,36 @@ class Autotracker:
             if 'phase' in attributes:
                 phase = attributes['phase']
                 w = phase.shape[1]
+                phase_terms = []
+
+                # Prefer the same instantaneous phase as the original seed event.
+                if reference_info is not None and reference_info.get('phase') is not None:
+                    phase_terms.append(
+                        self._phase_difference_cost(
+                            float(phase[row, col]), float(reference_info['phase'])
+                        )
+                    )
+
                 if 0 < col < w - 1:
-                    # Prefer positions where phase gradient is high (horizon boundary)
+                    # Weak fallback: prefer positions where phase changes rapidly.
                     phase_grad = abs(phase[row, col+1] - phase[row, col-1])
-                    # Normalize by max gradient in row
                     phase_grads = np.abs(np.diff(phase[row, :]))
                     max_grad = phase_grads.max() if len(phase_grads) > 0 else 1.0
                     if max_grad > 0:
-                        phase_cost = 1.0 - phase_grad / (2 * max_grad)
-                        cost += phase_cost * weight
+                        phase_terms.append(0.25 * (1.0 - phase_grad / (2 * max_grad)))
+
+                if phase_terms:
+                    phase_lock_w = float(self.tracking_params.get('phase_lock_weight', 0.35))
+                    phase_cost = float(np.mean(phase_terms))
+                    cost += phase_cost * weight * (1.0 + phase_lock_w)
+
+                if slice_data is not None and reference_info is not None:
+                    ref_polarity = int(reference_info.get('polarity', 0))
+                    if ref_polarity != 0:
+                        sample_value = float(slice_data[row, col])
+                        polarity = 0 if abs(sample_value) < 1e-10 else int(np.sign(sample_value))
+                        if polarity != 0 and polarity != ref_polarity:
+                            cost += float(self.tracking_params.get('polarity_weight', 0.2)) * weight
 
         # Similarity-based cost (higher similarity = lower cost)
         if tracking_attrs & TrackingAttribute.SIMILARITY:
@@ -531,6 +682,27 @@ class Autotracker:
                 sim_val = sim[row, col]
                 sim_cost = 1.0 - (sim_val + 1) / 2  # Normalize [-1,1] to [0,1]
                 cost += sim_cost * weight
+
+        # Waveform/template identity cost. Similarity enables this too because
+        # both terms are testing whether the candidate belongs to the same event.
+        if (
+            (tracking_attrs & TrackingAttribute.SIMILARITY) or
+            (tracking_attrs & TrackingAttribute.WAVEFORM)
+        ) and slice_data is not None:
+            waveform_cost = self._compute_waveform_identity_cost(
+                slice_data=slice_data,
+                previous_slice_data=previous_slice_data,
+                row=row,
+                col=col,
+                expected_col=expected_col,
+                reference_info=reference_info,
+            )
+            if waveform_cost is not None:
+                if tracking_attrs & TrackingAttribute.WAVEFORM:
+                    waveform_weight = float(self.tracking_params.get('waveform_weight', 0.45))
+                else:
+                    waveform_weight = 2.0 * float(self.tracking_params.get('similarity_weight', 0.25))
+                cost += waveform_cost * waveform_weight
 
         # Dip-based cost (prefer consistent dip direction)
         if tracking_attrs & TrackingAttribute.DIP:
@@ -557,6 +729,135 @@ class Autotracker:
                         cost += mag_cost * weight * 0.5
 
         return cost
+
+    def _compute_waveform_identity_cost(
+        self,
+        slice_data: np.ndarray,
+        previous_slice_data: Optional[np.ndarray],
+        row: int,
+        col: int,
+        expected_col: int,
+        reference_info: Optional[Dict[str, object]],
+    ) -> Optional[float]:
+        """
+        Cost based on local wavelet/template correlation.
+
+        This is the main anti-cycle-skip term: candidates that look like the same
+        wavelet as the previous propagated pick and the original seed get lower
+        cost than merely bright neighboring events.
+        """
+        half_window = int(self.tracking_params.get('waveform_half_window', 5))
+        current_window = self._sample_depth_window(slice_data, row, col, half_window)
+        costs = []
+
+        if previous_slice_data is not None:
+            previous_window = self._sample_depth_window(
+                previous_slice_data, row, expected_col, half_window
+            )
+            corr = self._normalized_correlation(current_window, previous_window)
+            costs.append((1.0 - corr) * 0.5)
+
+        if reference_info is not None and reference_info.get('waveform') is not None:
+            ref_window = np.asarray(reference_info['waveform'], dtype=np.float64)
+            corr = self._normalized_correlation(current_window, ref_window)
+            ref_weight = float(self.tracking_params.get('reference_template_weight', 0.35))
+            costs.append(ref_weight * ((1.0 - corr) * 0.5))
+
+        if not costs:
+            return None
+
+        return float(np.mean(costs))
+
+    def _solve_horizon_path_dp(
+        self,
+        rows: List[int],
+        expected_cols: List[int],
+        candidate_cols_by_row: List[np.ndarray],
+        node_costs_by_row: List[np.ndarray],
+        fault_models: List[Tuple[int, int, np.ndarray]],
+    ) -> List[Tuple[int, int]]:
+        """
+        Solve one coherent horizon path through all row candidates.
+
+        Node costs score seismic evidence. Transition costs preserve the local
+        slope/shape of the previous horizon, which prevents isolated rows from
+        jumping onto a parallel reflector unless the seismic match justifies it.
+        """
+        if not rows:
+            return []
+        if len(rows) == 1:
+            idx = int(np.argmin(node_costs_by_row[0]))
+            return [(int(rows[0]), int(candidate_cols_by_row[0][idx]))]
+
+        prev_costs = node_costs_by_row[0].astype(np.float64, copy=True)
+        backptrs: List[np.ndarray] = []
+
+        dip_weight = float(self.tracking_params.get('horizon_dip_weight', 0.35))
+        curvature_weight = float(self.tracking_params.get('horizon_curvature_weight', 0.15))
+        max_jump = max(float(self.tracking_params.get('max_jump', 3)), 1.0)
+
+        for i in range(1, len(rows)):
+            prev_candidates = candidate_cols_by_row[i - 1].astype(np.float64)
+            curr_candidates = candidate_cols_by_row[i].astype(np.float64)
+            curr_node_costs = node_costs_by_row[i].astype(np.float64)
+
+            row_gap = max(abs(int(rows[i]) - int(rows[i - 1])), 1)
+            expected_step = float(expected_cols[i] - expected_cols[i - 1])
+            allowed_step = max(max_jump * float(row_gap), 1.0)
+
+            candidate_step = curr_candidates[:, None] - prev_candidates[None, :]
+            step_mismatch = candidate_step - expected_step
+            transition = dip_weight * (step_mismatch / allowed_step) ** 2
+
+            # Penalize sharp kinks relative to the previous horizon shape.
+            if i >= 2:
+                prev_expected_step = float(expected_cols[i - 1] - expected_cols[i - 2])
+                transition += curvature_weight * (
+                    (candidate_step - prev_expected_step) / allowed_step
+                ) ** 2
+
+            if fault_models:
+                transition *= self._fault_transition_scale(
+                    row0=int(rows[i - 1]),
+                    row1=int(rows[i]),
+                    expected_col0=int(expected_cols[i - 1]),
+                    expected_col1=int(expected_cols[i]),
+                    fault_models=fault_models,
+                )
+
+            scores = transition + prev_costs[None, :]
+            best_prev = np.argmin(scores, axis=1).astype(np.int32)
+            best_scores = scores[np.arange(curr_candidates.shape[0]), best_prev]
+
+            curr_costs = curr_node_costs + best_scores
+            backptrs.append(best_prev)
+            prev_costs = curr_costs
+
+        path_indices = [0] * len(rows)
+        path_indices[-1] = int(np.argmin(prev_costs))
+        for i in range(len(rows) - 1, 0, -1):
+            path_indices[i - 1] = int(backptrs[i - 1][path_indices[i]])
+
+        return [
+            (int(rows[i]), int(candidate_cols_by_row[i][path_indices[i]]))
+            for i in range(len(rows))
+        ]
+
+    def _fault_transition_scale(
+        self,
+        row0: int,
+        row1: int,
+        expected_col0: int,
+        expected_col1: int,
+        fault_models: List[Tuple[int, int, np.ndarray]],
+    ) -> float:
+        """Relax path-shape penalties when the segment is close to a fault."""
+        influence_w = int(self.tracking_params.get('fault_influence_width', 4))
+        d0 = self._fault_distance_abs(row=row0, col=expected_col0, fault_models=fault_models)
+        d1 = self._fault_distance_abs(row=row1, col=expected_col1, fault_models=fault_models)
+        if (np.isfinite(d0) and d0 <= influence_w) or (np.isfinite(d1) and d1 <= influence_w):
+            return 0.35
+        return 1.0
 
     def _smooth_positions(
         self,
@@ -627,8 +928,10 @@ class Autotracker:
         max_jump = self.tracking_params['max_jump']
         for j in range(1, len(cols_smoothed)):
             diff = cols_smoothed[j] - cols_smoothed[j - 1]
-            if abs(diff) > max_jump:
-                cols_smoothed[j] = cols_smoothed[j - 1] + np.sign(diff) * max_jump
+            row_gap = max(abs(int(rows[j]) - int(rows[j - 1])), 1)
+            allowed_jump = max_jump * row_gap
+            if abs(diff) > allowed_jump:
+                cols_smoothed[j] = cols_smoothed[j - 1] + np.sign(diff) * allowed_jump
 
         return [(int(rows[j]), int(round(cols_smoothed[j]))) for j in range(len(rows))]
 
@@ -1156,8 +1459,8 @@ def propagate_horizon(
     smoothness_weight: float = 0.3,
     amplitude_weight: float = 0.3,
     edge_weight: float = 0.2,
-    phase_weight: float = 0.2,
-    similarity_weight: float = 0.15,
+    phase_weight: float = 0.25,
+    similarity_weight: float = 0.25,
     dip_weight: float = 0.15,
     fault_snap_weight: float = 2.0,
     fault_attach_depth_tolerance: int = 2,
@@ -1177,7 +1480,7 @@ def propagate_horizon(
         axis: 'Inline', 'Crossline', or 'Z-slice'
         slices_to_track: List of slice indices to propagate to
         attributes: List of attributes to use for tracking. Options:
-                   ['amplitude', 'edge', 'phase', 'similarity', 'dip']
+                   ['amplitude', 'edge', 'phase', 'similarity', 'dip', 'waveform']
                    Can combine multiple (e.g., ['amplitude', 'edge', 'dip'])
         search_window: Vertical search range on each new slice (samples)
         smooth_sigma: Gaussian smoothing sigma for horizon smoothing
@@ -1193,9 +1496,9 @@ def propagate_horizon(
     Returns:
         (success, horizons_dict, message)
     """
-    # Default to amplitude + edge if nothing specified
+    # Default to event-identity tracking, not just strong-event tracking.
     if attributes is None or len(attributes) == 0:
-        attributes = ['amplitude', 'edge']
+        attributes = ['amplitude', 'edge', 'phase', 'similarity', 'waveform']
 
     # Convert string list to flag
     tracking_attrs = TrackingAttribute.from_strings(attributes)

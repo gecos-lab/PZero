@@ -10265,7 +10265,9 @@ class ViewInterpretation(ViewMap):
         check_edge = QCheckBox("Edge")
         check_edge.setChecked(True)
         check_phase = QCheckBox("Phase")
+        check_phase.setChecked(True)
         check_similarity = QCheckBox("Similarity")
+        check_similarity.setChecked(True)
         check_dip = QCheckBox("Dip")
         self._apply_control_tooltip(
             check_amplitude,
@@ -10281,7 +10283,7 @@ class ViewInterpretation(ViewMap):
         )
         self._apply_control_tooltip(
             check_similarity,
-            "Favor lateral coherence from trace to trace. Helps reject noisy or isolated picks.",
+            "Favor local waveform correlation and lateral coherence. Helps keep the pick on the same seismic event.",
         )
         self._apply_control_tooltip(
             check_dip,
@@ -10561,7 +10563,7 @@ class ViewInterpretation(ViewMap):
 
         spin_phase_weight = QDoubleSpinBox()
         spin_phase_weight.setRange(0.0, 1.0)
-        spin_phase_weight.setValue(0.2)
+        spin_phase_weight.setValue(0.25)
         spin_phase_weight.setSingleStep(0.1)
         self._apply_control_tooltip(
             spin_phase_weight,
@@ -10583,7 +10585,7 @@ class ViewInterpretation(ViewMap):
 
         spin_sim_weight = QDoubleSpinBox()
         spin_sim_weight.setRange(0.0, 1.0)
-        spin_sim_weight.setValue(0.15)
+        spin_sim_weight.setValue(0.25)
         spin_sim_weight.setSingleStep(0.05)
         self._apply_control_tooltip(
             spin_sim_weight,
@@ -10675,9 +10677,9 @@ class ViewInterpretation(ViewMap):
         if check_dip.isChecked():
             selected_attributes.append("dip")
 
-        # Default to amplitude+edge if nothing selected
+        # Default to event identity constraints if nothing selected
         if not selected_attributes:
-            selected_attributes = ["amplitude", "edge"]
+            selected_attributes = ["amplitude", "edge", "phase", "similarity", "waveform"]
 
         # Get tracking parameters
         search_window = spin_search.value()
@@ -10701,8 +10703,8 @@ class ViewInterpretation(ViewMap):
             smoothness_weight = 0.3
             amplitude_weight = 0.3
             edge_weight = 0.2
-            phase_weight = 0.2
-            similarity_weight = 0.15
+            phase_weight = 0.25
+            similarity_weight = 0.25
             dip_weight = 0.15
 
         self.print_terminal(f"=== Propagating Horizon ===")
@@ -10763,8 +10765,8 @@ class ViewInterpretation(ViewMap):
         smoothness_weight=0.3,
         amplitude_weight=0.3,
         edge_weight=0.2,
-        phase_weight=0.2,
-        similarity_weight=0.15,
+        phase_weight=0.25,
+        similarity_weight=0.25,
         dip_weight=0.15,
         fault_snap_weight=2.0,
         fault_attach_depth_tolerance=2,
@@ -10781,7 +10783,7 @@ class ViewInterpretation(ViewMap):
             seed_uid: UID of the seed horizon line
             direction: 0=forward, 1=backward, 2=both
             num_slices: Number of slices to propagate
-            attributes: List of attributes to use ['amplitude', 'edge', 'phase', 'similarity', 'dip']
+            attributes: List of attributes to use ['amplitude', 'edge', 'phase', 'similarity', 'dip', 'waveform']
             search_window: Search window size (samples)
             smooth_sigma: Gaussian smoothing sigma (0=no smoothing)
             max_jump: Maximum allowed jump between slices (samples)
@@ -10799,7 +10801,7 @@ class ViewInterpretation(ViewMap):
             seed_slice_index: Index of the seed slice
         """
         if attributes is None:
-            attributes = ["amplitude", "edge"]
+            attributes = ["amplitude", "edge", "phase", "similarity", "waveform"]
         from vtk import vtkPoints, vtkCellArray, vtkIntArray
         from ..helpers.autotracker import propagate_horizon
 
@@ -10862,22 +10864,26 @@ class ViewInterpretation(ViewMap):
 
         # Determine which slices to propagate to
         slices_to_track = []
+        backward_slices = []
+        forward_slices = []
         if direction == 0:  # Forward
-            slices_to_track = list(
+            forward_slices = list(
                 range(current_idx + 1, min(current_idx + num_slices + 1, max_slice + 1))
             )
+            slices_to_track = forward_slices
         elif direction == 1:  # Backward
-            slices_to_track = list(
+            backward_slices = list(
                 range(current_idx - 1, max(current_idx - num_slices - 1, -1), -1)
             )
+            slices_to_track = backward_slices
         else:  # Both
-            forward = list(
+            forward_slices = list(
                 range(current_idx + 1, min(current_idx + num_slices + 1, max_slice + 1))
             )
-            backward = list(
+            backward_slices = list(
                 range(current_idx - 1, max(current_idx - num_slices - 1, -1), -1)
             )
-            slices_to_track = backward[::-1] + forward  # Process in order
+            slices_to_track = backward_slices + forward_slices
 
         self.print_terminal(f"Will propagate to {len(slices_to_track)} slices")
 
@@ -11015,30 +11021,52 @@ class ViewInterpretation(ViewMap):
             except Exception:
                 fault_traces_by_slice = None
 
-            success, horizons, result_msg = propagate_horizon(
-                data_3d=data_3d,
-                seed_positions=seed_indices,
-                seed_slice_idx=current_idx,
-                axis=self.current_axis,
-                slices_to_track=slices_to_track,
-                attributes=attributes,
-                search_window=search_window,
-                smooth_sigma=smooth_sigma,
-                max_jump=max_jump,
-                smoothness_weight=smoothness_weight,
-                amplitude_weight=amplitude_weight,
-                edge_weight=edge_weight,
-                phase_weight=phase_weight,
-                similarity_weight=similarity_weight,
-                dip_weight=dip_weight,
-                fault_snap_weight=fault_snap_weight,
-                fault_attach_depth_tolerance=fault_attach_depth_tolerance,
-                fault_attach_apply_row_tolerance=fault_attach_apply_row_tolerance,
-                fault_attach_apply_col_tolerance=fault_attach_apply_col_tolerance,
-                fault_attach_blend_rows=fault_attach_blend_rows,
-                progress_callback=progress_callback,
-                fault_traces_by_slice=fault_traces_by_slice,
-            )
+            def run_tracking(slices):
+                return propagate_horizon(
+                    data_3d=data_3d,
+                    seed_positions=seed_indices,
+                    seed_slice_idx=current_idx,
+                    axis=self.current_axis,
+                    slices_to_track=slices,
+                    attributes=attributes,
+                    search_window=search_window,
+                    smooth_sigma=smooth_sigma,
+                    max_jump=max_jump,
+                    smoothness_weight=smoothness_weight,
+                    amplitude_weight=amplitude_weight,
+                    edge_weight=edge_weight,
+                    phase_weight=phase_weight,
+                    similarity_weight=similarity_weight,
+                    dip_weight=dip_weight,
+                    fault_snap_weight=fault_snap_weight,
+                    fault_attach_depth_tolerance=fault_attach_depth_tolerance,
+                    fault_attach_apply_row_tolerance=fault_attach_apply_row_tolerance,
+                    fault_attach_apply_col_tolerance=fault_attach_apply_col_tolerance,
+                    fault_attach_blend_rows=fault_attach_blend_rows,
+                    progress_callback=progress_callback,
+                    fault_traces_by_slice=fault_traces_by_slice,
+                )
+
+            if direction == 2:
+                horizons = {}
+                messages = []
+                success = True
+
+                if backward_slices:
+                    success_b, horizons_b, result_msg_b = run_tracking(backward_slices)
+                    success = success and success_b
+                    messages.append(result_msg_b)
+                    horizons.update(horizons_b)
+
+                if forward_slices:
+                    success_f, horizons_f, result_msg_f = run_tracking(forward_slices)
+                    success = success and success_f
+                    messages.append(result_msg_f)
+                    horizons.update(horizons_f)
+
+                result_msg = "; ".join(messages)
+            else:
+                success, horizons, result_msg = run_tracking(slices_to_track)
 
             if not success:
                 self.print_terminal(f"Tracking failed: {result_msg}")

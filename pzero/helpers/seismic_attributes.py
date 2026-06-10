@@ -40,13 +40,15 @@ class SeismicAttributes:
             self.device = None
 
     def compute_slice_attributes(self, slice_data: np.ndarray,
-                                 attribute_types: List[str] = None) -> Dict[str, np.ndarray]:
+                                 attribute_types: List[str] = None,
+                                 depth_axis: int = 1) -> Dict[str, np.ndarray]:
         """
         Compute multiple seismic attributes for a single slice.
 
         Args:
             slice_data: 2D seismic slice
             attribute_types: List of attributes to compute. If None, computes all.
+            depth_axis: Axis representing seismic time/depth samples.
 
         Returns:
             Dictionary of computed attributes
@@ -58,16 +60,18 @@ class SeismicAttributes:
 
         # Compute each attribute
         if 'amplitude' in attribute_types:
-            attributes['amplitude'] = self.compute_amplitude(slice_data)
+            attributes['amplitude'] = self.compute_amplitude(slice_data, depth_axis=depth_axis)
 
         if 'phase' in attribute_types:
-            attributes['phase'] = self.compute_phase(slice_data)
+            attributes['phase'] = self.compute_phase(slice_data, depth_axis=depth_axis)
 
         if 'frequency' in attribute_types:
-            attributes['frequency'] = self.compute_instantaneous_frequency(slice_data)
+            attributes['frequency'] = self.compute_instantaneous_frequency(
+                slice_data, depth_axis=depth_axis
+            )
 
         if 'similarity' in attribute_types:
-            attributes['similarity'] = self.compute_similarity(slice_data)
+            attributes['similarity'] = self.compute_similarity(slice_data, depth_axis=depth_axis)
 
         if 'edge_strength' in attribute_types:
             attributes['edge_strength'] = self.compute_edge_strength(slice_data)
@@ -81,70 +85,103 @@ class SeismicAttributes:
 
         return attributes
 
-    def compute_amplitude(self, data: np.ndarray) -> np.ndarray:
+    def compute_amplitude(self, data: np.ndarray, depth_axis: int = 1) -> np.ndarray:
         """Compute amplitude attribute (envelope/reflection strength)."""
-        # Apply Hilbert transform for envelope
-        analytic_signal = signal.hilbert(data, axis=0)
+        # Apply Hilbert transform along seismic time/depth, not lateral trace direction.
+        analytic_signal = signal.hilbert(data, axis=depth_axis)
         amplitude = np.abs(analytic_signal)
         return amplitude.astype(np.float32)
 
-    def compute_phase(self, data: np.ndarray) -> np.ndarray:
+    def compute_phase(self, data: np.ndarray, depth_axis: int = 1) -> np.ndarray:
         """Compute instantaneous phase."""
-        analytic_signal = signal.hilbert(data, axis=0)
+        analytic_signal = signal.hilbert(data, axis=depth_axis)
         phase = np.angle(analytic_signal)
         return phase.astype(np.float32)
 
-    def compute_instantaneous_frequency(self, data: np.ndarray) -> np.ndarray:
+    def compute_instantaneous_frequency(self, data: np.ndarray, depth_axis: int = 1) -> np.ndarray:
         """Compute instantaneous frequency."""
-        phase = self.compute_phase(data)
+        phase = self.compute_phase(data, depth_axis=depth_axis)
 
-        # Compute frequency as derivative of phase
-        freq = np.zeros_like(phase)
-
-        # Central difference for interior points
-        freq[1:-1] = (phase[2:] - phase[:-2]) / (2 * np.pi)
-
-        # Forward/backward difference for boundaries
-        freq[0] = (phase[1] - phase[0]) / np.pi
-        freq[-1] = (phase[-1] - phase[-2]) / np.pi
+        # Compute frequency as the derivative of unwrapped phase along depth/time.
+        phase_unwrapped = np.unwrap(phase, axis=depth_axis)
+        freq = np.gradient(phase_unwrapped, axis=depth_axis) / (2 * np.pi)
 
         return freq.astype(np.float32)
 
-    def compute_similarity(self, data: np.ndarray, window_size: int = 5) -> np.ndarray:
-        """Compute trace-to-trace similarity (coherence-like attribute)."""
-        h, w = data.shape
-        similarity = np.zeros((h, w), dtype=np.float32)
+    def compute_similarity(
+        self,
+        data: np.ndarray,
+        window_size: int = 5,
+        trace_window: int = 2,
+        depth_axis: int = 1,
+    ) -> np.ndarray:
+        """
+        Compute local trace-to-trace similarity.
 
-        # Vectorized similarity computation
-        for offset in range(1, min(window_size + 1, w)):
-            if offset < w:
-                trace1 = data[:, :-offset]
-                trace2 = data[:, offset:]
+        The returned value is a local normalized correlation between neighboring
+        lateral traces over a short depth/time window. This is more useful for
+        horizon tracking than full-trace correlation because it tests coherence at
+        the candidate event, not over the whole slice.
+        """
+        if depth_axis not in (0, 1):
+            raise ValueError("depth_axis must be 0 or 1")
 
-                # Remove mean
-                trace1_dm = trace1 - np.mean(trace1, axis=0, keepdims=True)
-                trace2_dm = trace2 - np.mean(trace2, axis=0, keepdims=True)
+        transposed = depth_axis == 0
+        arr = data.T if transposed else data
+        arr = arr.astype(np.float64, copy=False)
 
-                # Correlation coefficient
-                numerator = np.sum(trace1_dm * trace2_dm, axis=0)
-                denominator = np.sqrt(np.sum(trace1_dm**2, axis=0) * np.sum(trace2_dm**2, axis=0))
+        n_lateral, n_depth = arr.shape
+        similarity = np.zeros((n_lateral, n_depth), dtype=np.float64)
+        count = np.zeros((n_lateral, n_depth), dtype=np.float64)
 
-                mask = denominator > 1e-10
-                corr = np.zeros(numerator.shape)
-                corr[mask] = numerator[mask] / denominator[mask]
+        if n_lateral < 2 or n_depth < 2:
+            out = np.zeros_like(arr, dtype=np.float32)
+            return out.T if transposed else out
 
-                # Add to similarity
-                similarity[:, :-offset] += corr
-                similarity[:, offset:] += corr
+        sample_window = max(3, int(window_size))
+        if sample_window % 2 == 0:
+            sample_window += 1
 
-        # Average by number of neighbors
-        count = np.zeros(w)
-        for i in range(w):
-            neighbors = min(i + window_size + 1, w) - max(0, i - window_size)
-            count[i] = max(1, neighbors - 1)
+        for offset in range(1, min(int(trace_window), n_lateral - 1) + 1):
+            trace_a = arr[:-offset, :]
+            trace_b = arr[offset:, :]
 
-        similarity = similarity / count[np.newaxis, :]
-        return np.clip(similarity, -1, 1).astype(np.float32)
+            mean_a = ndimage.uniform_filter1d(
+                trace_a, size=sample_window, axis=1, mode="nearest"
+            )
+            mean_b = ndimage.uniform_filter1d(
+                trace_b, size=sample_window, axis=1, mode="nearest"
+            )
+            mean_ab = ndimage.uniform_filter1d(
+                trace_a * trace_b, size=sample_window, axis=1, mode="nearest"
+            )
+            mean_aa = ndimage.uniform_filter1d(
+                trace_a * trace_a, size=sample_window, axis=1, mode="nearest"
+            )
+            mean_bb = ndimage.uniform_filter1d(
+                trace_b * trace_b, size=sample_window, axis=1, mode="nearest"
+            )
+
+            cov = mean_ab - mean_a * mean_b
+            var_a = np.maximum(mean_aa - mean_a * mean_a, 0.0)
+            var_b = np.maximum(mean_bb - mean_b * mean_b, 0.0)
+            denom = np.sqrt(var_a * var_b)
+
+            corr = np.zeros_like(cov)
+            mask = denom > 1e-10
+            corr[mask] = cov[mask] / denom[mask]
+            corr = np.clip(corr, -1.0, 1.0)
+
+            similarity[:-offset, :] += corr
+            similarity[offset:, :] += corr
+            count[:-offset, :] += 1.0
+            count[offset:, :] += 1.0
+
+        mask = count > 0
+        similarity[mask] /= count[mask]
+
+        out = np.clip(similarity, -1, 1).astype(np.float32)
+        return out.T if transposed else out
 
     def compute_dip_attributes(self, data: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Compute dip azimuth and magnitude."""
