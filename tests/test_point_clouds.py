@@ -17,9 +17,10 @@ Or together with all other tests:
 import pytest
 import numpy as np
 from unittest.mock import MagicMock
+from unittest.mock import patch
 from pzero.entities_factory import PCDom
 
-from pzero.point_clouds import normals2dd, cut_pc, decimate_pc
+from pzero.point_clouds import normals2dd, cut_pc, decimate_pc, segment_pc
 
 
 # =============================================================================
@@ -45,6 +46,36 @@ def _make_normals(n_points: int = 30, seed: int = 0) -> np.ndarray:
 
     return np.tile(normal, (n_points, 1))
 
+def _make_real_pc(with_points: bool=True, with_normals: bool=True, with_dip: bool=True, with_dip_dir: bool=True) -> PCDom:
+    """
+    Return a synthetic PCDom to run properly the tests below.
+    """
+    pc = PCDom()
+    
+    if with_points:
+        #Create the points
+        pc.points = np.random.uniform(0, 50, size=(10000, 3))
+        
+        if with_normals:
+            #Create and add the normals
+            pc.init_point_data("Normals", 1)
+            pc.vtk_set_normals
+            
+            if with_dip:
+                #Create and add the dip and dip direction
+                dip = pc.points_map_dip
+                pc.init_point_data("dip", 1)
+                pc.set_point_data("dip", dip)
+            if with_dip_dir:
+                dip_dir = pc.points_map_dip_direction
+                pc.init_point_data("dip direction", 1)
+                pc.set_point_data("dip direction", dip_dir)
+        else:
+            pc.point_data_keys = []
+    
+    return pc
+#_make_real_pc(with_points=True, with_normals=True, with_dip=True, with_dip_dir=True)
+
 
 def _make_vtk_obj(with_points: bool = True, with_normals: bool = True, n_points: int = 30) -> MagicMock:
     """
@@ -53,6 +84,7 @@ def _make_vtk_obj(with_points: bool = True, with_normals: bool = True, n_points:
     with_normals=True  -> simulates a point cloud that already has normals
     with_normals=False -> simulates one that is missing normal data
     """
+    
     vtk_obj = MagicMock()
 
     if with_points:
@@ -84,14 +116,19 @@ def _make_vtk_obj(with_points: bool = True, with_normals: bool = True, n_points:
 
     return vtk_obj
 
-
-def _make_self(vtk_obj: MagicMock, uid: str = "uid_001") -> MagicMock:
+def _false_make_self(vtk_obj: MagicMock, uid: str = "uid_001", dip_data: bool = True) -> MagicMock:
     """
     Build a MagicMock that behaves like 'self' inside a PZero tool/widget.
     """
     self_mock = MagicMock()
     self_mock.selected_uids = [uid]
     self_mock.parent.dom_coll.get_uid_vtk_obj.return_value = vtk_obj
+    
+    if dip_data:
+        self_mock.parent.dom_coll.get_uid_properties_names.return_value = ["dip", "dip direction"]
+    else:
+        self_mock.parent.dom_coll.get_uid_properties_names.return_value = ["Normals"]
+        
     return self_mock
 
 
@@ -133,7 +170,7 @@ class TestNormals2dd:
         the function should print a warning and NOT write any data.
         """
         vtk_obj   = _make_vtk_obj(with_points=False, with_normals=False)
-        self_mock = _make_self(vtk_obj)
+        self_mock = _false_make_self(vtk_obj)
 
         normals2dd(self_mock)
 
@@ -148,7 +185,7 @@ class TestNormals2dd:
         It must always be between 0 degrees (flat) and 90 degrees (vertical).
         """
         vtk_obj   = _make_vtk_obj()
-        self_mock = _make_self(vtk_obj)
+        self_mock = _false_make_self(vtk_obj)
         normals2dd(self_mock)
 
         dip = vtk_obj._written.get("dip")
@@ -163,7 +200,7 @@ class TestNormals2dd:
         It must always be between 0 and 360 degrees.
         """
         vtk_obj   = _make_vtk_obj()
-        self_mock = _make_self(vtk_obj)
+        self_mock = _false_make_self(vtk_obj)
         normals2dd(self_mock)
 
         dd = vtk_obj._written.get("dip direction")
@@ -179,7 +216,7 @@ class TestNormals2dd:
         reading from the right property and not transforming it incorrectly.
         """
         vtk_obj   = _make_vtk_obj()
-        self_mock = _make_self(vtk_obj)
+        self_mock = _false_make_self(vtk_obj)
         normals2dd(self_mock)
 
         written  = vtk_obj._written.get("dip")
@@ -195,7 +232,7 @@ class TestNormals2dd:
         what points_map_dip_direction returned.
         """
         vtk_obj   = _make_vtk_obj()
-        self_mock = _make_self(vtk_obj)
+        self_mock = _false_make_self(vtk_obj)
         normals2dd(self_mock)
 
         written  = vtk_obj._written.get("dip direction")
@@ -242,7 +279,7 @@ class TestNormals2dd:
         vtk_obj.set_point_data.side_effect  = lambda k, v: _written.update({k: v})
         vtk_obj._written = _written
 
-        self_mock = _make_self(vtk_obj)
+        self_mock = _false_make_self(vtk_obj)
         normals2dd(self_mock)
 
         dip = _written.get("dip")
@@ -311,7 +348,6 @@ class TestDecimatePC:
         size_orignial_pc * decimation_factor
         """        
         
-        # vtk_obj = _make_vtk_obj(with_points=True, with_normals=False, n_points=100)
         vtk_obj = PCDom()
         vtk_obj.points = np.random.choice(np.arange(0, 1000), size=(100, 3))
          
@@ -329,13 +365,94 @@ class TestDecimatePC:
         extract_id is working well.
         """
         
-        # vtk_obj = _make_vtk_obj(with_points=True, with_normals=False, n_points=100)
-        vtk_obj = PCDom()
-        vtk_obj.points = np.random.choice(np.arange(0, 1000), size=(100, 3))
+        vtk_obj = _make_real_pc()
          
         decimated_pc = decimate_pc(vtk_obj, 0.5)
         
         assert set(decimated_pc.points[:, 0]).issubset(vtk_obj.points[:, 0])
         assert set(decimated_pc.points[:, 1]).issubset(vtk_obj.points[:, 1])
 
-# class TestExtractPC:
+class TestSegmentPC:
+    """
+    Tests for segment_pc() defined in point_clouds.py.
+
+    segment_pc is using a graph-based approach to segment a point cloud into
+    multiple clusters corresponding to the different factes orientations within
+    the object. It filters in a user specified range points depending on their
+    dip direction, then it cluster depending on points dips and finally
+    it filter the outlier values.
+
+    Because segment_pc() needs a running PZero application to work normally,
+    we replace all of those parts with MagicMocks. That way we can test the
+    logic of the function in isolation, without starting the whole application.
+    """
+
+    @pytest.fixture(autouse=True)   # autouse=True means it runs for every test in this class automatically
+    def mock_dialog(self):
+        """
+        Small helper to mimic the dialog box in the segment_pc script
+        """    
+        with patch("pzero.point_clouds.multiple_input_dialog") as m:
+            m.return_value = {
+            "name": "test_result",
+            "dd1": 0,
+            "dd2": 360,    # wide range to keep all points
+            "d1":  0,
+            "d2":  90,     # wide range to keep all points
+            "rad": 1.0,
+            "nn":  2,      # low threshold so small test clouds pass
+            }
+            yield m                 # tests run here, inside the patch
+             
+    def test_no_selection_prints_warning(self, capsys):
+        """
+        If the user forgot to select a point cloud in the GUI,
+        selected_uids is empty. The function should print a clear warning
+        and return immediately without touching anything else.
+        """
+        self_mock = MagicMock()
+        self_mock.selected_uids = []
+        segment_pc(self_mock)
+
+        printed = capsys.readouterr().out
+        assert "No entities selected, make sure to have the right tab open" in printed
+
+        self_mock.parent.dom_coll.get_uid_vtk_obj.assert_not_called() 
+        
+    def test_missing_dip_dir_prints_warning(self, capsys):
+        """
+        If the user selected a point cloud that has no dip direction,
+        the function should print a clear warning and return immediatly 
+        whitout touching anything else.
+        """
+        
+        vtk_obj = PCDom()
+        self_mock = _false_make_self(vtk_obj, dip_data=False)
+        segment_pc(self_mock)
+
+        printed = capsys.readouterr().out
+        assert "dip direction/dip data not present in the dataset. Calculate from Normals using the specific function." in printed
+
+        self_mock.parent.dom_coll.add_entity_from_dict.assert_not_called() 
+        
+    def test_vtk_not_PD_Dom(self, capsys):
+        """
+        If the user selected an object that is not a PCDom,
+        the function should print a clear warning and return immediatly 
+        whitout touching anything else.
+        """
+        
+        vtk_obj   = _make_vtk_obj(with_points=False, with_normals=False)
+        self_mock = _false_make_self(vtk_obj)
+        segment_pc(self_mock)
+
+        printed = capsys.readouterr().out
+        assert "Entity not point cloud or multiple entities visible" in printed
+
+        self_mock.parent.dom_coll.add_entity_from_dict.assert_not_called() 
+        
+        
+# call_args = self_mock.parent.dom_coll.add_entity_from_dict.call_args
+# entity_dict = call_args[1]["entity_dict"]   # or call_args.kwargs["entity_dict"]
+# seg_pc = entity_dict["vtk_obj"]             # this is the real PCDom result
+# .points, .get_point_data("ClusterID") .GetNumberOfPoints()

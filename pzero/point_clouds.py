@@ -271,8 +271,6 @@ def segment_pc(self):
             title="Segmentation filter", input_dict=input_dict
         )
 
-        # print(dialog)
-
         vtk_obj.GetPointData().SetActiveScalars("dip direction")
         connectivity_filter_dd = vtkEuclideanClusterExtraction()
         connectivity_filter_dd.SetInputData(vtk_obj)
@@ -281,11 +279,9 @@ def segment_pc(self):
         connectivity_filter_dd.ScalarConnectivityOn()
         connectivity_filter_dd.SetScalarRange(dialog["dd1"], dialog["dd2"])
         pv_update_alg(connectivity_filter_dd, True, "Segmenting on dip directions")
+        
         f1 = connectivity_filter_dd.GetOutput()
-        # print(f1)
-        f1.GetPointData().SetActiveScalars("dip")
-        # print(f1.GetNumberOfPoints())
-        #
+        f1.GetPointData().SetActiveScalars("dip") 
         connectivity_filter_dip = vtkEuclideanClusterExtraction()
         connectivity_filter_dip.SetInputData(f1)
         connectivity_filter_dip.SetRadius(dialog["rad"])
