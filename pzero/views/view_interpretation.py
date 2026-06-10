@@ -23,6 +23,7 @@ import heapq
 from time import perf_counter
 from uuid import uuid4
 from shapely.geometry import LineString as shp_linestring
+from shapely.geometry import Point as shp_point
 from scipy import ndimage
 from scipy.optimize import linear_sum_assignment
 
@@ -2500,6 +2501,301 @@ class ViewInterpretation(ViewMap):
         keep = np.concatenate([[True], distances > float(tolerance)])
         cleaned = pts[keep]
         return cleaned if cleaned.shape[0] >= 2 else pts[: min(pts.shape[0], 2)]
+
+    def _dedupe_consecutive_uv(self, coords=None, tolerance=1.0e-8):
+        """Remove consecutive duplicate 2D slice coordinates."""
+        if coords is None:
+            return None
+        uv = np.asarray(coords, dtype=float)
+        if uv.ndim != 2 or uv.shape[1] != 2:
+            return None
+        if uv.shape[0] <= 1:
+            return uv
+        distances = np.linalg.norm(np.diff(uv, axis=0), axis=1)
+        keep = np.concatenate([[True], distances > float(tolerance)])
+        cleaned = uv[keep]
+        return cleaned if cleaned.shape[0] >= 2 else uv[: min(uv.shape[0], 2)]
+
+    def _uv_coords_changed(self, coords_a=None, coords_b=None, tolerance=1.0e-8):
+        """Return True when two 2D line coordinate arrays differ."""
+        if coords_a is None or coords_b is None:
+            return True
+        a = np.asarray(coords_a, dtype=float)
+        b = np.asarray(coords_b, dtype=float)
+        if a.shape != b.shape:
+            return True
+        if a.size == 0 and b.size == 0:
+            return False
+        return bool(np.linalg.norm(a - b) > float(tolerance))
+
+    def _extract_intersection_uv_points(self, geometry=None):
+        """Extract representative 2D points from a Shapely intersection geometry."""
+        if geometry is None or geometry.is_empty:
+            return []
+        gtype = geometry.geom_type
+        if gtype == "Point":
+            return [np.asarray(geometry.coords[0], dtype=float)]
+        if gtype == "MultiPoint":
+            return [np.asarray(point.coords[0], dtype=float) for point in geometry.geoms]
+        if gtype in ("LineString", "LinearRing"):
+            coords = list(geometry.coords)
+            return [
+                np.asarray(coords[0], dtype=float),
+                np.asarray(coords[-1], dtype=float),
+            ]
+        if gtype == "MultiLineString":
+            points = []
+            for line in geometry.geoms:
+                coords = list(line.coords)
+                if coords:
+                    points.append(np.asarray(coords[0], dtype=float))
+                    points.append(np.asarray(coords[-1], dtype=float))
+            return points
+        if hasattr(geometry, "geoms"):
+            points = []
+            for geom in geometry.geoms:
+                points.extend(self._extract_intersection_uv_points(geometry=geom))
+            return points
+        return []
+
+    def _insert_uv_point_on_line(self, line_uv=None, point=None, tolerance=1.0e-8):
+        """Insert a 2D point as a vertex if it lies on a line segment."""
+        uv = np.asarray(line_uv, dtype=float)
+        point = np.asarray(point, dtype=float).reshape(2)
+        for vertex in uv:
+            if np.linalg.norm(vertex - point) <= float(tolerance):
+                return uv
+
+        point_geom = shp_point(float(point[0]), float(point[1]))
+        for idx in range(len(uv) - 1):
+            segment = shp_linestring([uv[idx], uv[idx + 1]])
+            if segment.distance(point_geom) <= float(tolerance):
+                return np.concatenate(
+                    (uv[: idx + 1], point.reshape(1, 2), uv[idx + 1 :]),
+                    axis=0,
+                )
+        return uv
+
+    def _trim_uv_terminal_branch(self, line_uv=None, point=None, max_distance=0.0, tolerance=1.0e-8):
+        """Trim a short overshooting terminal branch back to an intersection point."""
+        uv = np.asarray(line_uv, dtype=float)
+        point = np.asarray(point, dtype=float).reshape(2)
+        if uv.shape[0] < 2:
+            return uv, False
+
+        out = self._insert_uv_point_on_line(uv, point, tolerance=tolerance)
+        out = self._dedupe_consecutive_uv(out, tolerance=tolerance)
+        if out is None or out.shape[0] < 2:
+            return uv, False
+
+        start_dist = float(np.linalg.norm(point - out[0]))
+        end_dist = float(np.linalg.norm(point - out[-1]))
+        if (
+            start_dist > float(max_distance) + float(tolerance)
+            and end_dist > float(max_distance) + float(tolerance)
+        ):
+            return out, self._uv_coords_changed(uv, out, tolerance=tolerance)
+
+        distances = np.linalg.norm(out - point, axis=1)
+        point_idx = int(distances.argmin())
+        if distances[point_idx] > float(tolerance):
+            return out, self._uv_coords_changed(uv, out, tolerance=tolerance)
+
+        if start_dist <= end_dist:
+            if point_idx == 0:
+                return out, self._uv_coords_changed(uv, out, tolerance=tolerance)
+            trimmed = out[point_idx:, :]
+        else:
+            if point_idx >= out.shape[0] - 1:
+                return out, self._uv_coords_changed(uv, out, tolerance=tolerance)
+            trimmed = out[: point_idx + 1, :]
+
+        trimmed = self._dedupe_consecutive_uv(trimmed, tolerance=tolerance)
+        if trimmed is None or trimmed.shape[0] < 2:
+            return out, self._uv_coords_changed(uv, out, tolerance=tolerance)
+        return trimmed, True
+
+    def _uv_endpoint_extension_candidates(self, line_uv=None, tolerance=1.0e-12):
+        """Return start/end ray candidates for endpoint snapping."""
+        uv = np.asarray(line_uv, dtype=float)
+        candidates = []
+        if uv.shape[0] < 2:
+            return candidates
+
+        end_anchor = uv[-1]
+        for idx in range(uv.shape[0] - 2, -1, -1):
+            vec = end_anchor - uv[idx]
+            vec_len = float(np.linalg.norm(vec))
+            if vec_len > float(tolerance):
+                candidates.append(("append", end_anchor, vec / vec_len))
+                break
+
+        start_anchor = uv[0]
+        for idx in range(1, uv.shape[0]):
+            vec = start_anchor - uv[idx]
+            vec_len = float(np.linalg.norm(vec))
+            if vec_len > float(tolerance):
+                candidates.append(("prepend", start_anchor, vec / vec_len))
+                break
+        return candidates
+
+    def _snap_two_uv_lines_to_intersection(
+        self, line_a_uv=None, line_b_uv=None, max_distance=10.0, tolerance=1.0e-8
+    ):
+        """
+        Snap two same-slice 2D polylines to exact shared intersection vertices.
+
+        Returns updated coordinates for both lines plus per-slice stats.
+        """
+        from ..helpers.multipart_snap import snap_two_uv_lines_to_intersection
+
+        return snap_two_uv_lines_to_intersection(
+            line_a_uv=line_a_uv,
+            line_b_uv=line_b_uv,
+            max_distance=max_distance,
+            tolerance=tolerance,
+        )
+
+        line_uv = {
+            "a": self._dedupe_consecutive_uv(line_a_uv, tolerance=tolerance),
+            "b": self._dedupe_consecutive_uv(line_b_uv, tolerance=tolerance),
+        }
+        if (
+            line_uv["a"] is None
+            or line_uv["b"] is None
+            or line_uv["a"].shape[0] < 2
+            or line_uv["b"].shape[0] < 2
+        ):
+            return line_a_uv, line_b_uv, {
+                "changed_a": False,
+                "changed_b": False,
+                "intersection_count": 0,
+                "trim_count": 0,
+                "endpoint_snap_count": 0,
+            }
+
+        changed = {"a": False, "b": False}
+        trim_count = 0
+        endpoint_snap_count = 0
+        intersection_count = 0
+
+        line_a = shp_linestring(line_uv["a"])
+        line_b = shp_linestring(line_uv["b"])
+        if line_a.intersects(line_b):
+            raw_points = self._extract_intersection_uv_points(line_a.intersection(line_b))
+            intersection_points = []
+            for point in raw_points:
+                if any(
+                    np.linalg.norm(point - saved) <= float(tolerance)
+                    for saved in intersection_points
+                ):
+                    continue
+                intersection_points.append(point)
+
+            for point in intersection_points:
+                intersection_count += 1
+                before_a = line_uv["a"]
+                before_b = line_uv["b"]
+                out_a = self._insert_uv_point_on_line(before_a, point, tolerance=tolerance)
+                out_a = self._dedupe_consecutive_uv(out_a, tolerance=tolerance)
+                out_b = self._insert_uv_point_on_line(before_b, point, tolerance=tolerance)
+                out_b = self._dedupe_consecutive_uv(out_b, tolerance=tolerance)
+                if self._uv_coords_changed(before_a, out_a, tolerance=tolerance):
+                    changed["a"] = True
+                if self._uv_coords_changed(before_b, out_b, tolerance=tolerance):
+                    changed["b"] = True
+                line_uv["a"] = out_a
+                line_uv["b"] = out_b
+
+                for key in ("a", "b"):
+                    before = line_uv[key]
+                    nearest_endpoint_dist = min(
+                        float(np.linalg.norm(point - before[0])),
+                        float(np.linalg.norm(point - before[-1])),
+                    )
+                    if nearest_endpoint_dist > float(max_distance) + float(tolerance):
+                        continue
+                    trimmed, did_trim = self._trim_uv_terminal_branch(
+                        before,
+                        point,
+                        max_distance=max_distance,
+                        tolerance=tolerance,
+                    )
+                    line_uv[key] = trimmed
+                    if did_trim:
+                        changed[key] = True
+                        trim_count += 1
+
+        # Extend endpoints that nearly meet the other line, then add the same node
+        # to the target line. This handles small interpretation gaps.
+        for key, target_key in (("a", "b"), ("b", "a")):
+            current_uv = line_uv[key]
+            if current_uv is None or current_uv.shape[0] < 2:
+                continue
+            for mode, anchor, direction in self._uv_endpoint_extension_candidates(
+                current_uv
+            ):
+                ray_end = anchor + direction * float(max_distance)
+                ray = shp_linestring([anchor, ray_end])
+                other_line = shp_linestring(line_uv[target_key])
+                candidates = self._extract_intersection_uv_points(ray.intersection(other_line))
+
+                best_point = None
+                best_dist = None
+                for candidate in candidates:
+                    vec = candidate - anchor
+                    proj = float(vec[0] * direction[0] + vec[1] * direction[1])
+                    if proj < -float(tolerance) or proj > float(max_distance) + float(tolerance):
+                        continue
+                    if best_dist is None or proj < best_dist:
+                        best_dist = proj
+                        best_point = candidate
+
+                if best_point is None or best_dist is None:
+                    continue
+
+                active_before = line_uv[key]
+                if mode == "append":
+                    if best_dist > float(tolerance) and np.linalg.norm(best_point - active_before[-1]) > float(tolerance):
+                        active_after = np.concatenate(
+                            (active_before, best_point.reshape(1, 2)), axis=0
+                        )
+                        line_uv[key] = self._dedupe_consecutive_uv(
+                            active_after, tolerance=tolerance
+                        )
+                        changed[key] = True
+                        endpoint_snap_count += 1
+                else:
+                    if best_dist > float(tolerance) and np.linalg.norm(best_point - active_before[0]) > float(tolerance):
+                        active_after = np.concatenate(
+                            (best_point.reshape(1, 2), active_before), axis=0
+                        )
+                        line_uv[key] = self._dedupe_consecutive_uv(
+                            active_after, tolerance=tolerance
+                        )
+                        changed[key] = True
+                        endpoint_snap_count += 1
+
+                target_before = line_uv[target_key]
+                target_after = self._insert_uv_point_on_line(
+                    target_before, best_point, tolerance=tolerance
+                )
+                target_after = self._dedupe_consecutive_uv(
+                    target_after, tolerance=tolerance
+                )
+                if self._uv_coords_changed(
+                    target_before, target_after, tolerance=tolerance
+                ):
+                    line_uv[target_key] = target_after
+                    changed[target_key] = True
+
+        return line_uv["a"], line_uv["b"], {
+            "changed_a": bool(changed["a"]),
+            "changed_b": bool(changed["b"]),
+            "intersection_count": int(intersection_count),
+            "trim_count": int(trim_count),
+            "endpoint_snap_count": int(endpoint_snap_count),
+        }
 
     def _polyline_points_and_fractions(self, points=None):
         """Return cleaned points and normalized cumulative arclength fractions."""
@@ -5170,6 +5466,602 @@ class ViewInterpretation(ViewMap):
         if entity_name:
             return f"{entity_kind}: {entity_name}"
         return f"{entity_kind}: {uid[:8]}..." if uid else entity_kind
+
+    def _replace_multipart_entity_geometry(
+        self, selection=None, edited_points_by_slice=None
+    ):
+        """Replace slices on one multipart entity and refresh interpretation state."""
+        if selection is None or not edited_points_by_slice:
+            return False, 0
+
+        uid = selection["uid"]
+        entity_info = selection["entity_info"]
+        axis = entity_info.get("axis", self.current_axis)
+        seed_slice = entity_info.get("seed_slice")
+
+        new_vtk, slice_indices, slice_to_cell_index = (
+            self._build_multipart_vtk_with_replaced_slices(
+                vtk_obj=selection["vtk_obj"],
+                edited_points_by_slice=edited_points_by_slice,
+            )
+        )
+        if new_vtk is None or not slice_indices:
+            return False, 0
+
+        self._remove_filtered_actor(f"multipart_slice_{uid}")
+        self._remove_filtered_actor(f"multipart_fault_slice_{uid}")
+        self._remove_raw_actor_for_uid(uid)
+
+        self._register_multipart_interpretation_entity(
+            uid=uid,
+            axis=axis,
+            slice_indices=slice_indices,
+            slice_to_cell_index=slice_to_cell_index,
+        )
+        if uid in getattr(self, "multipart_horizons", {}):
+            self.multipart_horizons[uid]["seed_slice"] = (
+                int(seed_slice) if seed_slice in slice_indices else slice_indices[0]
+            )
+        if uid in getattr(self, "multipart_faults", {}):
+            self.multipart_faults[uid]["seed_slice"] = (
+                int(seed_slice) if seed_slice in slice_indices else slice_indices[0]
+            )
+
+        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=new_vtk)
+        return True, len(edited_points_by_slice)
+
+    def _build_multipart_vtk_from_slice_parts(
+        self, source_vtk=None, parts_by_slice=None
+    ):
+        """Build a multipart PolyLine from one or more replacement parts per slice."""
+        if source_vtk is None or not parts_by_slice:
+            return None, [], {}
+
+        from vtk import vtkCellArray, vtkIntArray, vtkPoints
+
+        source_cell_data = source_vtk.GetCellData()
+        source_point_data = source_vtk.GetPointData()
+        source_field_data = source_vtk.GetFieldData()
+        source_slice_array = (
+            source_cell_data.GetArray("slice_index")
+            if source_cell_data is not None and source_cell_data.HasArray("slice_index")
+            else None
+        )
+
+        reference_by_slice = {}
+        if source_slice_array is not None:
+            for cell_id in range(source_vtk.GetNumberOfCells()):
+                slice_idx = int(source_slice_array.GetValue(cell_id))
+                if slice_idx in reference_by_slice:
+                    continue
+                cell = source_vtk.GetCell(cell_id)
+                point_id = cell.GetPointId(0) if cell is not None and cell.GetNumberOfPoints() else None
+                reference_by_slice[slice_idx] = {
+                    "cell_id": int(cell_id),
+                    "point_id": point_id,
+                }
+
+        point_builders = self._prepare_numeric_array_builders(
+            source_data=source_point_data,
+            skip_names={"slice_index"},
+            skip_prefixes=("slices_",),
+        )
+        cell_builders = self._prepare_numeric_array_builders(
+            source_data=source_cell_data,
+            skip_names={"slice_index"},
+            skip_prefixes=("slices_",),
+        )
+
+        new_points = vtkPoints()
+        new_lines = vtkCellArray()
+        point_slice_values = []
+        cell_slice_values = []
+
+        for raw_slice_idx in sorted(parts_by_slice.keys()):
+            try:
+                slice_idx = int(raw_slice_idx)
+            except Exception:
+                continue
+            reference = reference_by_slice.get(slice_idx, {})
+            reference_point_id = reference.get("point_id")
+            reference_cell_id = reference.get("cell_id")
+
+            for raw_points in parts_by_slice.get(raw_slice_idx, []):
+                points = np.asarray(raw_points, dtype=float)
+                if points.ndim != 2 or points.shape[0] < 2 or points.shape[1] != 3:
+                    continue
+
+                start_idx = new_points.GetNumberOfPoints()
+                for point in points:
+                    new_points.InsertNextPoint(
+                        float(point[0]), float(point[1]), float(point[2])
+                    )
+                    point_slice_values.append(slice_idx)
+                    self._append_numeric_tuple(
+                        builders=point_builders,
+                        source_idx=None,
+                        default_idx=reference_point_id,
+                    )
+
+                new_lines.InsertNextCell(int(points.shape[0]))
+                for point_id in range(start_idx, start_idx + int(points.shape[0])):
+                    new_lines.InsertCellPoint(point_id)
+
+                cell_slice_values.append(slice_idx)
+                self._append_numeric_tuple(
+                    builders=cell_builders,
+                    source_idx=None,
+                    default_idx=reference_cell_id,
+                )
+
+        if new_points.GetNumberOfPoints() == 0 or new_lines.GetNumberOfCells() == 0:
+            return None, [], {}
+
+        out_vtk = PolyLine()
+        out_vtk.SetPoints(new_points)
+        out_vtk.SetLines(new_lines)
+
+        for _source_array, target_array in point_builders:
+            out_vtk.GetPointData().AddArray(target_array)
+        for _source_array, target_array in cell_builders:
+            out_vtk.GetCellData().AddArray(target_array)
+        self._copy_field_data_arrays(
+            source_data=source_field_data,
+            target_data=out_vtk.GetFieldData(),
+        )
+
+        point_slice_out = vtkIntArray()
+        point_slice_out.SetName("slice_index")
+        point_slice_out.SetNumberOfComponents(1)
+        for value in point_slice_values:
+            point_slice_out.InsertNextValue(int(value))
+        out_vtk.GetPointData().AddArray(point_slice_out)
+
+        cell_slice_out = vtkIntArray()
+        cell_slice_out.SetName("slice_index")
+        cell_slice_out.SetNumberOfComponents(1)
+        for value in cell_slice_values:
+            cell_slice_out.InsertNextValue(int(value))
+        out_vtk.GetCellData().AddArray(cell_slice_out)
+
+        slice_indices = sorted({int(value) for value in cell_slice_values if int(value) >= 0})
+        slice_to_cell_index = {}
+        for cell_idx, slice_idx in enumerate(cell_slice_values):
+            slice_idx = int(slice_idx)
+            if slice_idx not in slice_to_cell_index:
+                slice_to_cell_index[slice_idx] = cell_idx
+
+        self._ensure_slice_index_property_metadata(
+            vtk_obj=out_vtk,
+            slice_indices=slice_indices,
+        )
+        out_vtk.Modified()
+        return out_vtk, slice_indices, slice_to_cell_index
+
+    def split_multipart_line_by_line(self):
+        """
+        Split selected multipart horizons/faults with the last selected multipart line.
+
+        This mirrors the map-view Split line-line workflow: select the paper line(s)
+        first and the scissors/splitter line last.
+        """
+        action_title = "Split line"
+        selections = self._get_selected_multipart_entities_for_edit(
+            action_title=action_title
+        )
+        if not selections:
+            return
+        if len(selections) < 2:
+            message_dialog(
+                title=action_title,
+                message="Select at least two propagated multipart horizons or faults. Select the splitter line last.",
+            )
+            return
+
+        from ..helpers.multipart_snap import split_uv_line_by_line
+
+        scissor = selections[-1]
+        paper_selections = selections[:-1]
+        scissor_info = scissor["entity_info"]
+        scissor_axis = scissor_info.get("axis", self.current_axis)
+        scissor_seismic = scissor_info.get("seismic_uid")
+        affine = self._get_seismic_axis_vectors()
+
+        split_paper_count = 0
+        created_count = 0
+        changed_slice_count = 0
+        skipped_count = 0
+        replaced_uids = []
+        new_uids = []
+
+        for paper in paper_selections:
+            paper_info = paper["entity_info"]
+            paper_axis = paper_info.get("axis", self.current_axis)
+            paper_seismic = paper_info.get("seismic_uid")
+
+            if paper_axis != scissor_axis or (
+                paper_seismic and scissor_seismic and paper_seismic != scissor_seismic
+            ):
+                skipped_count += 1
+                continue
+
+            common_slices = sorted(
+                set(int(idx) for idx in paper["available_slices"])
+                & set(int(idx) for idx in scissor["available_slices"])
+            )
+            if not common_slices:
+                skipped_count += 1
+                continue
+
+            primary_replacements = {}
+            extra_parts_by_slice = {}
+
+            for slice_idx in common_slices:
+                paper_points = self._get_multipart_slice_points(
+                    vtk_obj=paper["vtk_obj"],
+                    slice_idx=slice_idx,
+                    slice_to_cell_index=paper_info.get("slice_to_cell_index", {}),
+                )
+                scissor_points = self._get_multipart_slice_points(
+                    vtk_obj=scissor["vtk_obj"],
+                    slice_idx=slice_idx,
+                    slice_to_cell_index=scissor_info.get("slice_to_cell_index", {}),
+                )
+                if paper_points is None or scissor_points is None:
+                    continue
+
+                paper_uv = self._world_points_to_slice_uv(
+                    points=paper_points,
+                    slice_idx=slice_idx,
+                    axis=paper_axis,
+                    affine=affine,
+                )
+                scissor_uv = self._world_points_to_slice_uv(
+                    points=scissor_points,
+                    slice_idx=slice_idx,
+                    axis=paper_axis,
+                    affine=affine,
+                )
+                pieces_uv = split_uv_line_by_line(
+                    paper_uv=paper_uv,
+                    scissors_uv=scissor_uv,
+                )
+                if len(pieces_uv) < 2:
+                    continue
+
+                primary_world = self._slice_uv_to_world_points(
+                    slice_uv=pieces_uv[0],
+                    slice_idx=slice_idx,
+                    axis=paper_axis,
+                    affine=affine,
+                )
+                if primary_world is None or len(primary_world) < 2:
+                    continue
+
+                extra_world_parts = []
+                for piece_uv in pieces_uv[1:]:
+                    piece_world = self._slice_uv_to_world_points(
+                        slice_uv=piece_uv,
+                        slice_idx=slice_idx,
+                        axis=paper_axis,
+                        affine=affine,
+                    )
+                    if piece_world is not None and len(piece_world) >= 2:
+                        extra_world_parts.append(piece_world)
+
+                if not extra_world_parts:
+                    continue
+
+                primary_replacements[int(slice_idx)] = primary_world
+                extra_parts_by_slice[int(slice_idx)] = extra_world_parts
+
+            if not primary_replacements:
+                continue
+
+            ok, _slice_count = self._replace_multipart_entity_geometry(
+                selection=paper,
+                edited_points_by_slice=primary_replacements,
+            )
+            if not ok:
+                skipped_count += 1
+                continue
+
+            extra_vtk, extra_slices, extra_map = self._build_multipart_vtk_from_slice_parts(
+                source_vtk=paper["vtk_obj"],
+                parts_by_slice=extra_parts_by_slice,
+            )
+            if extra_vtk is None or not extra_slices:
+                skipped_count += 1
+                continue
+
+            fallback_name = "fault" if paper["entity_kind"] == "fault" else "multipart"
+            new_entity_dict = self._build_multipart_entity_dict_from_source(
+                source_uid=paper["uid"],
+                vtk_obj=extra_vtk,
+                slice_indices=extra_slices,
+                fallback_name=fallback_name,
+            )
+            if new_entity_dict is None:
+                skipped_count += 1
+                continue
+            try:
+                base_name = str(self.parent.geol_coll.get_uid_name(paper["uid"]))
+            except Exception:
+                base_name = fallback_name
+            new_entity_dict["name"] = f"{base_name} split"
+
+            new_uid = self.parent.geol_coll.add_entity_from_dict(new_entity_dict)
+            self._register_multipart_interpretation_entity(
+                uid=new_uid,
+                axis=paper_axis,
+                slice_indices=extra_slices,
+                slice_to_cell_index=extra_map,
+            )
+            seed_slice = paper_info.get("seed_slice")
+            if new_uid in getattr(self, "multipart_horizons", {}):
+                self.multipart_horizons[new_uid]["seed_slice"] = (
+                    int(seed_slice) if seed_slice in extra_slices else extra_slices[0]
+                )
+            if new_uid in getattr(self, "multipart_faults", {}):
+                self.multipart_faults[new_uid]["seed_slice"] = (
+                    int(seed_slice) if seed_slice in extra_slices else extra_slices[0]
+                )
+
+            replaced_uids.append(paper["uid"])
+            new_uids.append(new_uid)
+            split_paper_count += 1
+            created_count += 1
+            changed_slice_count += len(primary_replacements)
+
+        if not replaced_uids:
+            self.print_terminal(
+                "Split line completed: no selected multipart paper line was split by the selected splitter."
+            )
+            self.clear_selection()
+            return
+
+        self._mark_slice_visibility_dirty()
+        for uid in replaced_uids + new_uids:
+            if uid in getattr(self, "multipart_horizons", {}):
+                self.update_multipart_horizon_visibility(uid)
+            if uid in getattr(self, "multipart_faults", {}):
+                self.update_multipart_fault_visibility(uid)
+
+        try:
+            self.parent.signals.metadata_modified.emit(
+                replaced_uids + new_uids,
+                self.parent.geol_coll,
+            )
+        except Exception:
+            pass
+
+        self.plotter.render()
+        skipped_suffix = f", skipped {skipped_count}" if skipped_count else ""
+        self.print_terminal(
+            "Split line completed: split "
+            f"{split_paper_count} multipart line(s), changed {changed_slice_count} "
+            f"slice(s), created {created_count} split multipart line(s)"
+            f"{skipped_suffix}."
+        )
+        self.clear_selection()
+
+    def snap_multipart_to_intersection(self):
+        """
+        Snap two selected multipart horizons/faults at their same-slice intersections.
+
+        The operation inserts exact shared intersection nodes, trims short terminal
+        overshoots, and extends close endpoints to the opposite line per slice.
+        """
+        action_title = "Snap to Intersection"
+        selections = self._get_selected_multipart_entities_for_edit(
+            action_title=action_title
+        )
+        if not selections:
+            return
+        if len(selections) != 2:
+            message_dialog(
+                title=action_title,
+                message="Select exactly two propagated multipart horizons or faults.",
+            )
+            return
+
+        sel_a, sel_b = selections
+        info_a = sel_a["entity_info"]
+        info_b = sel_b["entity_info"]
+        axis_a = info_a.get("axis", self.current_axis)
+        axis_b = info_b.get("axis", self.current_axis)
+        seismic_a = info_a.get("seismic_uid")
+        seismic_b = info_b.get("seismic_uid")
+
+        if axis_a != axis_b:
+            message_dialog(
+                title=action_title,
+                message="The selected multipart entities must use the same interpretation axis.",
+            )
+            return
+        if seismic_a and seismic_b and seismic_a != seismic_b:
+            message_dialog(
+                title=action_title,
+                message="The selected multipart entities must belong to the same seismic volume.",
+            )
+            return
+
+        common_slices = sorted(
+            set(int(idx) for idx in sel_a["available_slices"])
+            & set(int(idx) for idx in sel_b["available_slices"])
+        )
+        if not common_slices:
+            message_dialog(
+                title=action_title,
+                message="The selected multipart entities do not share any slice indices.",
+            )
+            return
+
+        tolerance = input_one_value_dialog(
+            parent=self,
+            title="Snap max extension distance",
+            label="Insert max extension distance in slice samples",
+            default_value=10,
+        )
+        if tolerance is None:
+            self.print_terminal(" -- Snap to intersection cancelled by user -- ")
+            return
+        try:
+            max_distance = float(tolerance)
+        except Exception:
+            message_dialog(
+                title=action_title,
+                message="Max extension distance must be a positive number.",
+            )
+            return
+        if max_distance <= 0:
+            message_dialog(
+                title=action_title,
+                message="Max extension distance must be greater than zero.",
+            )
+            return
+
+        affine = self._get_seismic_axis_vectors()
+        replacements = {sel_a["uid"]: {}, sel_b["uid"]: {}}
+        stats = {
+            "processed_slices": 0,
+            "changed_slices": 0,
+            "intersection_count": 0,
+            "trim_count": 0,
+            "endpoint_snap_count": 0,
+            "skipped_slices": 0,
+        }
+
+        for slice_idx in common_slices:
+            points_a = self._get_multipart_slice_points(
+                vtk_obj=sel_a["vtk_obj"],
+                slice_idx=slice_idx,
+                slice_to_cell_index=info_a.get("slice_to_cell_index", {}),
+            )
+            points_b = self._get_multipart_slice_points(
+                vtk_obj=sel_b["vtk_obj"],
+                slice_idx=slice_idx,
+                slice_to_cell_index=info_b.get("slice_to_cell_index", {}),
+            )
+            if points_a is None or points_b is None:
+                stats["skipped_slices"] += 1
+                continue
+
+            uv_a = self._world_points_to_slice_uv(
+                points=points_a,
+                slice_idx=slice_idx,
+                axis=axis_a,
+                affine=affine,
+            )
+            uv_b = self._world_points_to_slice_uv(
+                points=points_b,
+                slice_idx=slice_idx,
+                axis=axis_a,
+                affine=affine,
+            )
+            if uv_a is None or uv_b is None or len(uv_a) < 2 or len(uv_b) < 2:
+                stats["skipped_slices"] += 1
+                continue
+
+            out_a_uv, out_b_uv, slice_stats = self._snap_two_uv_lines_to_intersection(
+                line_a_uv=uv_a,
+                line_b_uv=uv_b,
+                max_distance=max_distance,
+            )
+            stats["processed_slices"] += 1
+            stats["intersection_count"] += slice_stats["intersection_count"]
+            stats["trim_count"] += slice_stats["trim_count"]
+            stats["endpoint_snap_count"] += slice_stats["endpoint_snap_count"]
+
+            changed_a = bool(slice_stats["changed_a"])
+            changed_b = bool(slice_stats["changed_b"])
+            if not changed_a and not changed_b:
+                continue
+
+            if changed_a:
+                out_a_world = self._slice_uv_to_world_points(
+                    slice_uv=out_a_uv,
+                    slice_idx=slice_idx,
+                    axis=axis_a,
+                    affine=affine,
+                )
+                if out_a_world is not None and len(out_a_world) >= 2:
+                    replacements[sel_a["uid"]][slice_idx] = out_a_world
+            if changed_b:
+                out_b_world = self._slice_uv_to_world_points(
+                    slice_uv=out_b_uv,
+                    slice_idx=slice_idx,
+                    axis=axis_a,
+                    affine=affine,
+                )
+                if out_b_world is not None and len(out_b_world) >= 2:
+                    replacements[sel_b["uid"]][slice_idx] = out_b_world
+
+            if (
+                (changed_a and slice_idx in replacements[sel_a["uid"]])
+                or (changed_b and slice_idx in replacements[sel_b["uid"]])
+            ):
+                stats["changed_slices"] += 1
+
+        if not replacements[sel_a["uid"]] and not replacements[sel_b["uid"]]:
+            self.print_terminal(
+                "Snap to intersection completed: no multipart slice intersections or endpoint snaps found within distance."
+            )
+            self.clear_selection()
+            return
+
+        replaced_uids = []
+        failed_uids = []
+        for selection in (sel_a, sel_b):
+            uid = selection["uid"]
+            if not replacements[uid]:
+                continue
+            ok, _slice_count = self._replace_multipart_entity_geometry(
+                selection=selection,
+                edited_points_by_slice=replacements[uid],
+            )
+            if ok:
+                replaced_uids.append(uid)
+            else:
+                failed_uids.append(uid)
+
+        if failed_uids:
+            message_dialog(
+                title=action_title,
+                message=(
+                    "Could not rewrite one or more multipart entities after snapping: "
+                    + ", ".join(uid[:8] + "..." for uid in failed_uids)
+                ),
+            )
+
+        if replaced_uids:
+            self._mark_slice_visibility_dirty()
+            for uid in replaced_uids:
+                if uid in getattr(self, "multipart_horizons", {}):
+                    self.update_multipart_horizon_visibility(uid)
+                if uid in getattr(self, "multipart_faults", {}):
+                    self.update_multipart_fault_visibility(uid)
+            try:
+                self.parent.signals.metadata_modified.emit(
+                    replaced_uids, self.parent.geol_coll
+                )
+            except Exception:
+                pass
+            self.plotter.render()
+
+        skipped_suffix = (
+            f", skipped slices {stats['skipped_slices']}"
+            if stats["skipped_slices"]
+            else ""
+        )
+        self.print_terminal(
+            "Snap to intersection completed: updated "
+            f"{len(replaced_uids)} multipart line(s), changed {stats['changed_slices']} "
+            f"slice-pair(s), intersections {stats['intersection_count']}, "
+            f"trimmed branches {stats['trim_count']}, endpoint snaps {stats['endpoint_snap_count']}"
+            f"{skipped_suffix}."
+        )
+        self.clear_selection()
 
     def _regularize_single_multipart_entity(
         self, selection=None, action_title="Regularize Multipart Sampling"
@@ -11972,6 +12864,18 @@ class ViewInterpretation(ViewMap):
         self.simplifyLineButton = QAction("Simplify line", self)
         self.simplifyLineButton.triggered.connect(self.simplify_selected_lines)
         self.menuModify.addAction(self.simplifyLineButton)
+
+        self.snapMultipartIntersectionButton = QAction("Snap to intersection", self)
+        self.snapMultipartIntersectionButton.triggered.connect(
+            self.snap_multipart_to_intersection
+        )
+        self.menuModify.addAction(self.snapMultipartIntersectionButton)
+
+        self.splitMultipartLineButton = QAction("Split line", self)
+        self.splitMultipartLineButton.triggered.connect(
+            self.split_multipart_line_by_line
+        )
+        self.menuModify.addAction(self.splitMultipartLineButton)
 
         self.menuModify.addAction(self.regularizeMultipartSamplingButton)
 
