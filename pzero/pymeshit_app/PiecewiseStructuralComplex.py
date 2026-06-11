@@ -7,7 +7,6 @@ so the refactor is organizational: existing tetra-surface data, material state,
 PZero bridge access, and visualization refresh methods remain owned by the GUI.
 """
 
-import logging
 import re
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Tuple
@@ -28,14 +27,12 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
 )
 
-logger = logging.getLogger("MeshIt-Workflow")
 
 
 class PiecewiseStructuralComplex:
@@ -55,19 +52,19 @@ class PiecewiseStructuralComplex:
 
     def open_mapping_dialog(self) -> None:
         """Preview a Piecewise Structural Complex mapping from an STm table."""
+        project = self._pzero_project()
+        if project is None:
+            return
+
         stm_tables = self._available_stm_tables()
         if not stm_tables:
-            QMessageBox.information(
-                self.host,
-                "No STm tables",
-                "No Structural Topology model tables are available in the current PZero project.",
+            self.print_terminal(
+                "No Structural Topology model tables are available in the current PZero project."
             )
             return
         if not getattr(self, "tetra_surface_data", None):
-            QMessageBox.information(
-                self.host,
-                "No tetra surfaces",
-                "Load conforming surfaces in the Tetra Mesh tab before building a PSC mapping.",
+            self.print_terminal(
+                "Load conforming surfaces in the Tetra Mesh tab before building a PSC mapping."
             )
             return
     
@@ -273,11 +270,7 @@ class PiecewiseStructuralComplex:
                     {item.row() for item in preview_table.selectedItems()}
                 )
             if len(selected_rows) != 2:
-                QMessageBox.information(
-                    dialog,
-                    "Swap seeds",
-                    "Select exactly two unit rows before swapping seeds.",
-                )
+                self.print_terminal("Select exactly two unit rows before swapping seeds.")
                 return
     
             rows = list(preview_state.get("rows", []))
@@ -288,11 +281,7 @@ class PiecewiseStructuralComplex:
             first_seed = first_unit.get("seed_point")
             second_seed = second_unit.get("seed_point")
             if first_seed is None or second_seed is None:
-                QMessageBox.information(
-                    dialog,
-                    "Swap seeds",
-                    "Both selected units need a valid seed before swapping.",
-                )
+                self.print_terminal("Both selected units need a valid seed before swapping.")
                 return
             first_key = unit_seed_key(first_unit)
             second_key = unit_seed_key(second_unit)
@@ -322,38 +311,24 @@ class PiecewiseStructuralComplex:
             return
     
         table_name = table_combo.currentText()
-        previous_debug_state = bool(getattr(self, "_psc_debug_active", False))
-        self._psc_debug_active = True
-        try:
-            self._psc_debug(f"Assign pressed for STm table '{table_name}'")
-            self.psc_model = self._build_psc_model_from_stm(table_name)
-            self.psc_mapping = self._map_psc_boundaries_to_tetra_surfaces(self.psc_model)
-            apply_seed_overrides(self.psc_mapping)
-            assigned_count, skipped_count = self._assign_psc_materials(
-                self.psc_model,
-                self.psc_mapping,
-            )
-        finally:
-            self._psc_debug_active = previous_debug_state
+        self.psc_model = self._build_psc_model_from_stm(table_name)
+        self.psc_mapping = self._map_psc_boundaries_to_tetra_surfaces(self.psc_model)
+        apply_seed_overrides(self.psc_mapping)
+        assigned_count, skipped_count = self._assign_psc_materials(
+            self.psc_model,
+            self.psc_mapping,
+        )
         if assigned_count == 0:
-            QMessageBox.warning(
-                self.host,
-                "PSC assignment",
-                "No PSC unit could be assigned. Check that STM boundaries match the loaded tetra surfaces.",
+            self.print_terminal(
+                "No PSC unit could be assigned. Check that STm boundaries match the loaded tetra surfaces."
             )
             return
     
         seed_count = int(getattr(self, "_psc_last_seed_count", assigned_count))
-        self.statusBar().showMessage(
-            f"Assigned {assigned_count} PSC material(s), "
-            f"{seed_count} seed location(s), from STm table '{table_name}'."
-        )
-        QMessageBox.information(
-            self.host,
-            "PSC assignment",
+        self.print_terminal(
             f"Assigned {assigned_count} material(s) with "
-            f"{seed_count} seed location(s) from the STm topology."
-            + (f"\nSkipped {skipped_count} unit(s) without a valid seed." if skipped_count else ""),
+            f"{seed_count} seed location(s) from STm table '{table_name}'."
+            + (f" Skipped {skipped_count} unit(s) without a valid seed." if skipped_count else "")
         )
     
     def _available_stm_tables(self) -> List[str]:
@@ -375,34 +350,6 @@ class PiecewiseStructuralComplex:
         """Return the PZero project window, if PyMeshIt is embedded in PZero."""
         bridge = getattr(self, "pzero_bridge", None)
         return getattr(bridge, "_project", None)
-    
-    def _psc_debug(self, message: str) -> None:
-        """Emit PSC diagnostics to the PZero terminal when assignment debugging is active."""
-        text = f"[PSC] {message}"
-        if not bool(getattr(self, "_psc_debug_active", False)):
-            return
-    
-        emitted = False
-        for receiver in (self, self._pzero_project()):
-            if receiver is None:
-                continue
-            printer = getattr(receiver, "print_terminal", None)
-            if not callable(printer):
-                continue
-            try:
-                printer(text)
-                emitted = True
-                break
-            except Exception:
-                try:
-                    printer(string=text)
-                    emitted = True
-                    break
-                except Exception:
-                    continue
-    
-        if not emitted:
-            logger.info(text)
     
     @staticmethod
     def _psc_format_point(point: Any) -> str:
@@ -648,7 +595,6 @@ class PiecewiseStructuralComplex:
         """Read units, boundaries, and generated connections from an STm table."""
         project = self._pzero_project()
         if project is None:
-            self._psc_debug("No PZero project is connected; PSC model is empty.")
             return {"units": {}, "boundary_features": set(), "boundary_order": []}
     
         table_df = getattr(project, "custom_tables", {}).get(table_name)
@@ -656,20 +602,9 @@ class PiecewiseStructuralComplex:
         units: Dict[str, Dict[str, Any]] = {}
         boundary_features = set()
         boundary_order = []
-        row_count = 0 if table_df is None else int(getattr(table_df, "shape", [0])[0])
-        columns = [] if table_df is None else [str(column) for column in table_df.columns.tolist()]
-        self._psc_debug(
-            f"Reading STm table '{table_name}': rows={row_count}, columns={columns}"
-        )
-        self._psc_debug(
-            "STm build options: "
-            f"manual_units={len(options.get('manual_units', []) or [])}, "
-            f"manual_connections={len(options.get('manual_connections', []) or [])}"
-        )
     
         if table_df is not None:
             domain_columns = self._psc_domain_columns(table_df)
-            self._psc_debug(f"Domain columns detected: {domain_columns}")
             for row_idx, row in table_df.iterrows():
                 feature = self._psc_text(row.get("Feature", ""))
                 unit_role = self._psc_text(row.get("Unit Role", "NonVolumetric")) or "NonVolumetric"
@@ -680,7 +615,6 @@ class PiecewiseStructuralComplex:
                     if self._psc_text(row.get(column_name, ""))
                 ]
                 if not feature:
-                    self._psc_debug(f"STm row {row_idx}: skipped empty feature")
                     continue
                 boundary_features.add(feature)
                 boundary_order.append(
@@ -691,11 +625,6 @@ class PiecewiseStructuralComplex:
                         "unit_role": unit_role,
                         "domains": domains,
                     }
-                )
-                self._psc_debug(
-                    f"STm row {row_idx}: feature='{feature}', role='{unit_role}', "
-                    f"polarity={polarity} (ignored by PSC seed placement), "
-                    f"domains={domains}"
                 )
                 if unit_role == "NonVolumetric":
                     continue
@@ -711,9 +640,6 @@ class PiecewiseStructuralComplex:
                     "boundaries": {feature},
                     "source": "table",
                 }
-                self._psc_debug(
-                    f"  -> table unit '{unit_name}' starts with boundary '{feature}'"
-                )
     
         for unit_info in options.get("manual_units", []):
             if not isinstance(unit_info, dict):
@@ -739,11 +665,6 @@ class PiecewiseStructuralComplex:
                 "boundaries": set(),
                 "source": "extra",
             }
-            self._psc_debug(
-                f"Manual unit '{unit_key}': feature='{feature}', role='{unit_role}', "
-                f"polarity={units[unit_key]['polarity']} "
-                f"(ignored by PSC seed placement), domains={domains}"
-            )
     
         for connection in options.get("manual_connections", []):
             if not isinstance(connection, dict):
@@ -751,21 +672,12 @@ class PiecewiseStructuralComplex:
             unit_key = str(connection.get("unit", "")).strip()
             surface_key = str(connection.get("surface", "")).strip()
             if unit_key not in units:
-                self._psc_debug(
-                    f"Manual connection ignored: unknown unit='{unit_key}', surface='{surface_key}'"
-                )
                 continue
             boundary_feature = self._boundary_feature_from_psc_surface_key(surface_key)
             if not boundary_feature:
-                self._psc_debug(
-                    f"Manual connection ignored: unsupported surface key '{surface_key}'"
-                )
                 continue
             units[unit_key]["boundaries"].add(boundary_feature)
             boundary_features.add(boundary_feature)
-            self._psc_debug(
-                f"Manual connection: unit='{unit_key}' -> boundary='{boundary_feature}'"
-            )
     
         model = {
             "table_name": table_name,
@@ -773,16 +685,6 @@ class PiecewiseStructuralComplex:
             "boundary_features": boundary_features,
             "boundary_order": list(boundary_order),
         }
-        self._psc_debug(
-            f"STm model summary: units={len(units)}, "
-            f"boundary_features={sorted(boundary_features, key=str.casefold)}, "
-            f"table_boundary_order={[row.get('feature', '') for row in model['boundary_order']]}"
-        )
-        for unit_key, unit_info in sorted(units.items()):
-            self._psc_debug(
-                f"  unit '{unit_key}': boundaries="
-                f"{sorted(unit_info.get('boundaries', set()), key=str.casefold)}"
-            )
         return model
     
     @staticmethod
@@ -804,11 +706,6 @@ class PiecewiseStructuralComplex:
             border_indices = set(self._get_border_surface_indices())
         except Exception:
             border_indices = set()
-        self._psc_debug(
-            f"Mapping STm boundaries to tetra surfaces: "
-            f"loaded_surfaces={len(getattr(self, 'tetra_surface_data', {}) or {})}, "
-            f"border_indices={sorted(border_indices)}"
-        )
     
         for surface_idx, surface_info in getattr(self, "tetra_surface_data", {}).items():
             try:
@@ -836,11 +733,6 @@ class PiecewiseStructuralComplex:
                 token in identity_text for token in ("border", "boundary", "outer")
             ):
                 boundary_surface_entries.append(entry)
-            self._psc_debug(
-                f"  tetra surface {surface_idx_value}: label='{label}', "
-                f"feature='{entry['feature']}', name='{entry['name']}', "
-                f"is_model_boundary={entry in boundary_surface_entries}"
-            )
     
         mapped_units = []
         for unit in psc_model.get("units", {}).values():
@@ -882,13 +774,6 @@ class PiecewiseStructuralComplex:
                     "missing_boundaries": missing_boundaries,
                     "source": unit.get("source", ""),
                 }
-            )
-            self._psc_debug(
-                f"Unit mapping '{unit.get('name', unit.get('feature', ''))}': "
-                f"boundaries={boundaries}, "
-                f"structural_surface_indices={sorted(set(matched_surface_indices), key=lambda value: str(value))}, "
-                f"model_boundary_indices={sorted(set(model_boundary_indices), key=lambda value: str(value))}, "
-                f"missing={missing_boundaries}"
             )
     
         mapped_units = sorted(
@@ -1250,8 +1135,7 @@ class PiecewiseStructuralComplex:
                 mesh = pv.PolyData(vertices, faces.ravel())
             else:
                 mesh = pv.PolyData(vertices)
-        except Exception as exc:
-            logger.debug("PSC surface PolyData build failed for %s: %s", surface_idx, exc)
+        except Exception:
             return None
     
         cache[surface_idx] = (signature, mesh)
@@ -1306,8 +1190,7 @@ class PiecewiseStructuralComplex:
             return None
         try:
             mesh = pv.PolyData(np.vstack(all_vertices), np.vstack(all_faces).ravel())
-        except Exception as exc:
-            logger.debug("PSC model Boundary PolyData build failed: %s", exc)
+        except Exception:
             return None
     
         self._psc_model_boundary_polydata_cache = (signature, mesh)
@@ -1334,8 +1217,8 @@ class PiecewiseStructuralComplex:
             selected = np.asarray(enclosed.point_data["SelectedPoints"], dtype=bool)
             if selected.size == points.shape[0]:
                 return selected
-        except Exception as exc:
-            logger.debug("PSC model Boundary inside test failed: %s", exc)
+        except Exception:
+            pass
         return None
     
     def _psc_points_to_surface_distances(
@@ -1362,8 +1245,8 @@ class PiecewiseStructuralComplex:
                 )
                 if distances.size == points.shape[0] and np.all(np.isfinite(distances)):
                     return np.abs(distances)
-            except Exception as exc:
-                logger.debug("PSC implicit distance failed for surface %s: %s", surface_idx, exc)
+            except Exception:
+                pass
     
         normal = self._psc_surface_normal(surface_idx)
         centroid = self._psc_surface_centroid(surface_idx)
@@ -1621,8 +1504,8 @@ class PiecewiseStructuralComplex:
                 )
                 if distances.size == points.shape[0] and np.all(np.isfinite(distances)):
                     return distances
-            except Exception as exc:
-                logger.debug("PSC signed implicit distance failed for surface %s: %s", surface_idx, exc)
+            except Exception:
+                pass
     
         centroid = self._psc_surface_centroid(surface_idx)
         normal = self._psc_oriented_surface_normal(surface_idx)
@@ -1688,7 +1571,6 @@ class PiecewiseStructuralComplex:
     
         volumetric_feature_keys = self._psc_volumetric_feature_keys(psc_model)
         representative_surfaces: Dict[Tuple[str, int], Dict[str, Any]] = {}
-        skipped_nonvolumetric = {}
         for unit_info in mapped_units:
             boundary_indices = unit_info.get("boundary_surface_indices", {}) or {}
             for boundary, surface_indices in boundary_indices.items():
@@ -1696,7 +1578,6 @@ class PiecewiseStructuralComplex:
                 if not boundary_key or boundary_key == self._psc_key("Boundary"):
                     continue
                 if boundary_key not in volumetric_feature_keys:
-                    skipped_nonvolumetric.setdefault(boundary_key, self._psc_text(boundary))
                     continue
                 for surface_idx in surface_indices or []:
                     try:
@@ -1707,16 +1588,6 @@ class PiecewiseStructuralComplex:
                         "boundary": self._psc_text(boundary),
                         "surface_idx": surface_idx,
                     }
-    
-        if skipped_nonvolumetric:
-            self._psc_debug(
-                "Non-volumetric boundaries used only as topology limits, "
-                "not side constraints: "
-                + ", ".join(
-                    skipped_nonvolumetric[key]
-                    for key in sorted(skipped_nonvolumetric)
-                )
-            )
     
         for (boundary_key, surface_idx), surface_info in representative_surfaces.items():
             matching_signs = []
@@ -1750,12 +1621,6 @@ class PiecewiseStructuralComplex:
     
             if owner_sign:
                 context["representative_unit_signs"][(boundary_key, surface_idx)] = owner_sign
-                self._psc_debug(
-                    f"Representative side context '{surface_info['boundary']}' "
-                    f"surface={self._psc_surface_label(surface_idx)}: "
-                    f"owner_sign={owner_sign}, "
-                    f"other_ref_signs={non_matching_signs}, owner_ref_signs={matching_signs}"
-                )
     
         return context
     
@@ -1772,13 +1637,11 @@ class PiecewiseStructuralComplex:
         side_context = getattr(self, "_psc_side_context", {}) or {}
         representative_signs = side_context.get("representative_unit_signs", {}) or {}
         volumetric_feature_keys = self._psc_volumetric_feature_keys(psc_model)
-        skipped_nonvolumetric = []
     
         for boundary_key, boundary_info in target_surface_map.items():
             if boundary_key == self._psc_key("Boundary"):
                 continue
             if boundary_key not in volumetric_feature_keys:
-                skipped_nonvolumetric.append(boundary_info.get("label", boundary_key))
                 continue
             for surface_idx in boundary_info.get("indices", []):
                 try:
@@ -1807,23 +1670,6 @@ class PiecewiseStructuralComplex:
                     }
                 )
     
-        if skipped_nonvolumetric:
-            self._psc_debug(
-                f"Side constraints skipped non-volumetric boundaries "
-                f"'{unit_info.get('name', unit_info.get('feature', ''))}': "
-                + ", ".join(
-                    sorted(set(skipped_nonvolumetric), key=lambda value: str(value).casefold())
-                )
-            )
-        if constraints:
-            self._psc_debug(
-                f"Side constraints '{unit_info.get('name', unit_info.get('feature', ''))}': "
-                + ", ".join(
-                    f"{item['label']}:{'+' if item['sign'] > 0 else '-'}"
-                    f" ({item['reason']})"
-                    for item in constraints
-                )
-            )
         return constraints
     
     def _psc_target_side_mismatch_count(
@@ -1903,17 +1749,8 @@ class PiecewiseStructuralComplex:
                 for boundary in unit_boundaries
             )
         )
-        if boundary_as_context_only:
-            self._psc_debug(
-                f"Seed refine '{unit_info.get('name', unit_info.get('feature', ''))}': "
-                "Boundary is used as model cap/context, not in nearest-surface scoring."
-            )
         target_surface_map = self._psc_surface_indices_for_boundaries(target_boundaries)
         if not target_surface_map:
-            self._psc_debug(
-                f"Seed refine '{unit_info.get('name', unit_info.get('feature', ''))}': "
-                "no matched target boundaries; using reference seed."
-            )
             return reference_seed
     
         feature_candidates = list(psc_model.get("boundary_features", set()) or [])
@@ -1932,10 +1769,6 @@ class PiecewiseStructuralComplex:
     
         target_keys = [key for key in target_surface_map if key in feature_surface_map]
         if not target_keys:
-            self._psc_debug(
-                f"Seed refine '{unit_info.get('name', unit_info.get('feature', ''))}': "
-                f"target boundaries {target_boundaries} have no PLC surfaces; using reference seed."
-            )
             return reference_seed
     
         target_surface_indices = [
@@ -1961,10 +1794,6 @@ class PiecewiseStructuralComplex:
     
         distance_arrays = self._psc_feature_distance_arrays(candidate_points, feature_surface_map)
         if not distance_arrays:
-            self._psc_debug(
-                f"Seed refine '{unit_info.get('name', unit_info.get('feature', ''))}': "
-                "distance query failed; using reference seed."
-            )
             return reference_seed
     
         target_set = set(target_keys)
@@ -1983,13 +1812,6 @@ class PiecewiseStructuralComplex:
             and inside_model_mask.size == candidate_points.shape[0]
             and bool(np.any(inside_model_mask))
         )
-        if inside_model_mask is not None:
-            self._psc_debug(
-                f"Boundary inside test '{unit_info.get('name', unit_info.get('feature', ''))}': "
-                f"inside={int(np.count_nonzero(inside_model_mask))}/"
-                f"{int(candidate_points.shape[0])}"
-            )
-    
         best_index = None
         best_score = -float("inf")
         best_details: Dict[str, Any] = {}
@@ -2105,18 +1927,6 @@ class PiecewiseStructuralComplex:
                 for item in side_constraints
             ],
         }
-        self._psc_debug(
-            f"Seed refine '{unit_info.get('name', unit_info.get('feature', ''))}': "
-            f"target={target_labels}, closest={closest_labels}, "
-            f"exact={best_details.get('exact_signature', False)}, "
-            f"candidates={best_details.get('candidate_count', 0)}, "
-            f"score={best_score:.3f}, "
-            f"side_mismatches={best_details.get('side_mismatches', 0)}/"
-            f"{best_details.get('side_checked', 0)}, "
-            f"inside_model={best_details.get('inside_model', True)}, "
-            f"min_target_dist={best_details.get('min_target_distance', 0.0):.3f}, "
-            f"seed={self._psc_format_point(best_seed)}"
-        )
         return best_seed
     
     def _psc_structural_surface_indices_for_unit(self, unit_info: Dict[str, Any]) -> List[int]:
@@ -2299,26 +2109,11 @@ class PiecewiseStructuralComplex:
             self._psc_key(boundary) == self._psc_key("Boundary")
             for boundary in unit_info.get("boundaries", [])
         )
-        self._psc_debug(
-            f"Seed start '{unit_info.get('name', unit_info.get('feature', ''))}': "
-            f"boundaries={unit_info.get('boundaries', [])}, "
-            f"structural_surfaces={surface_indices}, has_model_boundary={has_model_boundary}"
-        )
     
         reference_seed = self._psc_reference_seed_point_for_unit(unit_info, psc_model)
         if reference_seed is None or not np.all(np.isfinite(reference_seed)):
-            self._psc_debug(
-                f"Seed failed '{unit_info.get('name', unit_info.get('feature', ''))}': "
-                "no valid reference seed could be computed."
-            )
             return None
     
-        self._psc_debug(
-            f"Seed reference '{unit_info.get('name', unit_info.get('feature', ''))}': "
-            f"{self._psc_format_point(reference_seed)}, "
-            f"inferred_boundary='{unit_info.get('topology_inferred_boundary', '')}', "
-            f"direction_reference='{unit_info.get('topology_direction_reference_boundary', '')}'"
-        )
         refined_seed = self._psc_refine_seed_by_topology_signature(
             unit_info,
             psc_model,
@@ -2326,15 +2121,7 @@ class PiecewiseStructuralComplex:
             require_side_match=require_side_match,
         )
         if require_side_match and not unit_info.get("seed_topology_signature"):
-            self._psc_debug(
-                f"Seed failed '{unit_info.get('name', unit_info.get('feature', ''))}': "
-                "no candidate satisfied the required local side constraints."
-            )
             return None
-        self._psc_debug(
-            f"Seed final '{unit_info.get('name', unit_info.get('feature', ''))}': "
-            f"{self._psc_format_point(refined_seed)}"
-        )
         return [float(refined_seed[0]), float(refined_seed[1]), float(refined_seed[2])]
     
     def _psc_seed_points_for_unit(
@@ -2387,11 +2174,6 @@ class PiecewiseStructuralComplex:
             candidate = np.asarray(coords, dtype=float)
             for existing in seed_points:
                 if np.linalg.norm(candidate - np.asarray(existing, dtype=float)) <= duplicate_tolerance:
-                    self._psc_debug(
-                        f"  duplicate local PSC seed ignored for "
-                        f"'{unit_info.get('name', unit_info.get('feature', ''))}': "
-                        f"{self._psc_format_point(coords)}"
-                    )
                     return
             seed_points.append(coords)
             seed_signatures.append(
@@ -2402,13 +2184,6 @@ class PiecewiseStructuralComplex:
             )
     
         if local_boundary_sets:
-            self._psc_debug(
-                f"Local PSC components '{unit_info.get('name', unit_info.get('feature', ''))}': "
-                + "; ".join(
-                    "[" + ", ".join(boundaries) + "]"
-                    for boundaries in local_boundary_sets
-                )
-            )
             for component_idx, local_boundaries in enumerate(local_boundary_sets):
                 local_info = self._psc_unit_with_local_boundaries(
                     unit_info,
@@ -2431,16 +2206,8 @@ class PiecewiseStructuralComplex:
                 unit_info["seed_point"] = seed_points[0]
                 unit_info["seed_topology_signatures"] = seed_signatures
                 unit_info["seed_topology_signature"] = seed_signatures[0].get("signature", {})
-                self._psc_debug(
-                    f"Local PSC components '{unit_info.get('name', unit_info.get('feature', ''))}': "
-                    f"accepted {len(seed_points)} seed(s)."
-                )
                 return seed_points
     
-            self._psc_debug(
-                f"Local PSC components '{unit_info.get('name', unit_info.get('feature', ''))}': "
-                "no valid local seed satisfied side constraints; skipping global fallback."
-            )
             unit_info["seed_points"] = []
             unit_info["seed_topology_signatures"] = []
             return []
@@ -2467,10 +2234,6 @@ class PiecewiseStructuralComplex:
         """Replace formation materials with PSC-derived unit materials."""
         assigned_materials = []
         skipped_count = 0
-        self._psc_debug(
-            f"Assigning PSC materials from table '{psc_model.get('table_name', '')}' "
-            f"for {len(psc_mapping.get('units', []))} mapped unit(s)."
-        )
         self._psc_side_context = self._psc_prepare_topology_side_context(
             psc_model,
             list(psc_mapping.get("units", [])),
@@ -2485,11 +2248,6 @@ class PiecewiseStructuralComplex:
                     mapped_units,
                 )
                 seed_point = seed_points[0] if seed_points else None
-                self._psc_debug(
-                    f"  using dialog-swapped seed for "
-                    f"'{unit_info.get('name', unit_info.get('feature', ''))}': "
-                    f"{self._psc_format_point(seed_point)}"
-                )
             else:
                 seed_points = self._psc_seed_points_for_unit(
                     unit_info,
@@ -2501,10 +2259,6 @@ class PiecewiseStructuralComplex:
             unit_info["seed_point"] = seed_point
             if not seed_points:
                 skipped_count += 1
-                self._psc_debug(
-                    f"  skipped '{unit_info.get('name', unit_info.get('feature', ''))}': "
-                    f"missing={unit_info.get('missing_boundaries', [])}"
-                )
                 continue
     
             material_id = len(assigned_materials)
@@ -2528,29 +2282,9 @@ class PiecewiseStructuralComplex:
                     ),
                 }
             )
-            signature = unit_info.get("seed_topology_signature", {}) or {}
-            self._psc_debug(
-                f"  material {material_id}: '{assigned_materials[-1]['name']}', "
-                f"seeds={len(seed_points)} "
-                f"{', '.join(self._psc_format_point(seed) for seed in seed_points)}, "
-                f"boundaries={unit_info.get('boundaries', [])}, "
-                f"closest={signature.get('closest', [])}, "
-                f"exact_signature={signature.get('exact', False)}, "
-                f"side_mismatches={signature.get('side_mismatches', 0)}/"
-                f"{signature.get('side_checked', 0)}, "
-                f"inside_model={signature.get('inside_model', True)}, "
-                f"missing={unit_info.get('missing_boundaries', [])}"
-            )
     
         if not assigned_materials:
-            logger.warning(
-                "PSC assignment from STm table '%s' produced no material seeds",
-                psc_model.get("table_name", ""),
-            )
             self._psc_last_seed_count = 0
-            self._psc_debug(
-                f"PSC assignment summary: assigned=0, skipped={skipped_count}"
-            )
             return 0, skipped_count
     
         self._psc_last_seed_count = sum(
@@ -2564,9 +2298,6 @@ class PiecewiseStructuralComplex:
         ]
         for offset, material in enumerate(fault_materials):
             material["attribute"] = len(assigned_materials) + offset
-        self._psc_debug(
-            f"Preserving {len(fault_materials)} existing FAULT material(s) after PSC formations."
-        )
     
         self.tetra_materials = assigned_materials + fault_materials
         self._refresh_material_list()
@@ -2577,16 +2308,6 @@ class PiecewiseStructuralComplex:
         if hasattr(self, "_update_material_dropdown"):
             self._update_material_dropdown()
     
-        logger.info(
-            "PSC assignment from STm table '%s': %d material(s), %d skipped",
-            psc_model.get("table_name", ""),
-            len(assigned_materials),
-            skipped_count,
-        )
-        self._psc_debug(
-            f"PSC assignment summary: assigned_materials={len(assigned_materials)}, "
-            f"seed_locations={self._psc_last_seed_count}, skipped={skipped_count}"
-        )
         return len(assigned_materials), skipped_count
 
 
@@ -2599,52 +2320,28 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         """Return the owning PZero project window for a 2D Xsection view."""
         return getattr(self.host, "parent", None)
 
-    def _psc_debug(self, message: str) -> None:
-        """Keep inherited STm parsing quiet unless explicit 2D debug is enabled."""
-        if bool(getattr(self, "_psc2d_debug_active", False)):
-            self._psc2d_print(message)
-
-    def _psc2d_print(self, message: str) -> None:
-        """Emit concise 2D PSC diagnostics to the PZero terminal."""
-        text = f"[PSC 2D] {message}"
-        for receiver in (self.host, self._pzero_project()):
-            printer = getattr(receiver, "print_terminal", None)
-            if not callable(printer):
-                continue
-            try:
-                printer(text)
-                return
-            except Exception:
-                try:
-                    printer(string=text)
-                    return
-                except Exception:
-                    continue
-        logger.info(text)
-
     def open_section_areas_dialog(self) -> None:
         """Open the Build PSC section areas dialog for the active Xsection."""
         project = self._pzero_project()
         if project is None:
-            self._psc2d_print("No PZero project is available.")
             return
 
         stm_tables = self._available_stm_tables()
         if not stm_tables:
-            self._psc2d_print(
+            self.print_terminal(
                 "No Structural Topology model tables are available in the current project."
             )
             return
 
         section_uid = getattr(self.host, "this_x_section_uid", "")
         if not section_uid:
-            self._psc2d_print("No active Xsection is available.")
+            self.print_terminal("No active Xsection is available.")
             return
 
         section_line_uids = self._section_polyline_uids(use_selected=False)
         selected_line_uids = self._section_polyline_uids(use_selected=True)
         if not section_line_uids:
-            self._psc2d_print(
+            self.print_terminal(
                 "No XsPolyLine entities are available in the active Xsection."
             )
             return
@@ -2717,17 +2414,20 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             from shapely.geometry import LineString, Polygon
             from shapely.ops import polygonize_full, triangulate, unary_union
         except Exception as exc:
-            message = f"Build PSC section areas requires Shapely: {exc}"
-            self._psc2d_print(message)
+            project = self._pzero_project()
+            if project is not None:
+                self.print_terminal(f"Build PSC section areas requires Shapely: {exc}")
             return
 
         project = self._pzero_project()
+        if project is None:
+            return
         section_uid = getattr(self.host, "this_x_section_uid", "")
         tolerance = max(float(tolerance or 0.0), 0.0)
 
         line_uids = self._section_polyline_uids(use_selected=use_selected)
         if not line_uids:
-            self._psc2d_print("No section XsPolyLine entities selected or available.")
+            self.print_terminal("No section XsPolyLine entities selected or available.")
             return
 
         boundary_polygon = self._boundary_polygon_2d(
@@ -2738,7 +2438,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             unary_union=unary_union,
         )
         if boundary_polygon is None or boundary_polygon.is_empty:
-            self._psc2d_print("Could not build a valid section boundary polygon.")
+            self.print_terminal("Could not build a valid section boundary polygon.")
             return
 
         line_entries = self._section_line_entries(
@@ -2747,7 +2447,9 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             line_cls=LineString,
         )
         if not line_entries:
-            self._psc2d_print("No usable XsPolyLine segment falls inside the selected boundary.")
+            self.print_terminal(
+                "No usable XsPolyLine segment falls inside the selected boundary."
+            )
             return
 
         network_geometries = [boundary_polygon.boundary] + [
@@ -2784,7 +2486,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 coverage_ok = False
 
         if dangle_count or cut_count or invalid_count or not coverage_ok:
-            self._psc2d_print(
+            self.print_terminal(
                 "Section lines are not watertight "
                 f"(dangles={dangle_count}, cuts={cut_count}, invalid rings={invalid_count}). "
                 "Clean the section with Snap to intersection and retry."
@@ -2809,8 +2511,9 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 role = "undef"
                 feature = "PSC_unassigned"
                 unit_name = f"Area_{area_idx}"
-                self._psc2d_print(
-                    f"Unmatched area {area_idx}: boundaries={', '.join(boundary_labels) or '-'}"
+                self.print_terminal(
+                    f"Unmatched area {area_idx}: "
+                    f"boundaries={', '.join(boundary_labels) or '-'}"
                 )
             else:
                 role = self._psc_text(unit_info.get("unit_role", "")) or "undef"
@@ -2851,16 +2554,10 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 if area_uid:
                     created_area_count += 1
 
-        self._psc2d_print(
+        self.print_terminal(
             f"Build PSC section areas completed: created {created_seed_count} seed(s), "
             f"{created_area_count} filled area(s), unmatched areas={unmatched_count}."
         )
-        status_bar = getattr(self.host, "statusBar", None)
-        if callable(status_bar):
-            status_bar().showMessage(
-                f"Built {created_seed_count} PSC section seed(s) and "
-                f"{created_area_count} filled area(s)."
-            )
 
     def _default_section_tolerance(self, section_uid: str) -> float:
         project = self._pzero_project()
@@ -2925,7 +2622,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             length = float(project.xsect_coll.get_uid_length(section_uid))
             height = float(project.xsect_coll.get_uid_width(section_uid))
             if abs(length) <= 1.0e-12 or abs(height) <= 1.0e-12:
-                self._psc2d_print(
+                self.print_terminal(
                     "Xsection frame boundary is invalid: "
                     f"length={length:.6g}, height={height:.6g}."
                 )
@@ -2942,12 +2639,12 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
 
         boundary_coll = getattr(project, "boundary_coll", None)
         if boundary_coll is None or boundary_uid not in boundary_coll.get_uids:
-            self._psc2d_print("Selected boundary is not available in boundary_coll.")
+            self.print_terminal("Selected boundary is not available in boundary_coll.")
             return None
         vtk_obj = boundary_coll.get_uid_vtk_obj(boundary_uid)
         topology = boundary_coll.get_uid_topology(boundary_uid)
         boundary_name = self._psc_text(boundary_coll.get_uid_name(boundary_uid))
-        self._psc2d_print(
+        self.print_terminal(
             f"Building section boundary from '{boundary_name}' ({topology})."
         )
 
@@ -2960,7 +2657,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                     vtk_plane=project.xsect_coll.get_uid_vtk_plane(section_uid),
                 )
                 if not line_parts:
-                    self._psc2d_print(
+                    self.print_terminal(
                         "Selected TriSurf boundary does not intersect the active Xsection "
                         "as a closed polyline."
                     )
@@ -2971,13 +2668,13 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                         self._line_strings_from_polydata(line_part, line_cls)
                     )
             except Exception as exc:
-                self._psc2d_print(f"Boundary slice failed: {exc}")
+                self.print_terminal(f"Boundary slice failed: {exc}")
                 return None
         else:
             line_strings = self._line_strings_from_polydata(vtk_obj, line_cls)
 
         if not line_strings:
-            self._psc2d_print(
+            self.print_terminal(
                 "Selected boundary produced no usable projected line strings. "
                 "Use the Xsection frame or a boundary that intersects the active section."
             )
@@ -2988,7 +2685,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 candidate = polygon_cls(coords)
                 if candidate.is_valid and candidate.area > 0.0:
                     return candidate
-            self._psc2d_print(
+            self.print_terminal(
                 "Selected boundary produced one line, but it is not a valid closed polygon."
             )
 
@@ -2999,7 +2696,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             if polygon.geom_type == "Polygon" and polygon.area > 0.0
         ]
         if not polygons:
-            self._psc2d_print(
+            self.print_terminal(
                 f"Selected boundary produced {len(line_strings)} line part(s), "
                 "but polygonize found no closed boundary loop."
             )
