@@ -310,7 +310,7 @@ def segment_pc(self):
         n_clusters = len(rid)
         appender_pc = vtkAppendPolyData()
         for i, region in enumerate(rid):
-            print(f"{i}/{n_clusters}", end="\r")
+            print(f"{i}/{n_clusters-1}", end="\r")
 
             thresh = vtkThresholdPoints()
 
@@ -324,13 +324,19 @@ def segment_pc(self):
 
         seg_pc = PCDom()
         seg_pc.ShallowCopy(appender_pc.GetOutput())
+        
+        if seg_pc.GetNumberOfPoints() == 0:
+            print("No clusters found after filtering")
+            self.clear_selection()
+            return
+        
         seg_pc.generate_cells()
         properties_name = seg_pc.point_data_keys
         properties_components = [
             seg_pc.get_point_data_shape(c)[1] for c in properties_name
         ]
 
-        curr_obj_dict = deepcopy(DomCollection.entity_dict)
+        curr_obj_dict = deepcopy(self.parent.dom_coll.entity_dict)
         curr_obj_dict["uid"] = str(uuid4())
         curr_obj_dict["name"] = f'pc_{dialog["name"]}'
         curr_obj_dict["topology"] = "PCDom"
