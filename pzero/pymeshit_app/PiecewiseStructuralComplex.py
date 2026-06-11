@@ -2315,6 +2315,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
     """Build PSC-derived editable seeds and section fill polygons in Xsection views."""
 
     FRAME_BOUNDARY_KEY = "__xsection_frame__"
+    MAX_RELAXED_MISSING_BOUNDARIES = 1
 
     def _pzero_project(self):
         """Return the owning PZero project window for a 2D Xsection view."""
@@ -2348,7 +2349,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
 
         dialog = QDialog(self.host)
         dialog.setWindowTitle("Build PSC section areas")
-        dialog.resize(520, 220)
+        dialog.resize(520, 190)
         layout = QVBoxLayout(dialog)
 
         info_label = QLabel(
@@ -2375,12 +2376,14 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         )
         form_layout.addRow("Lines", use_selected_check)
 
-        tolerance_spin = QDoubleSpinBox(dialog)
-        tolerance_spin.setDecimals(4)
-        tolerance_spin.setRange(0.0, 1.0e9)
-        tolerance_spin.setSingleStep(0.1)
-        tolerance_spin.setValue(self._default_section_tolerance(section_uid))
-        form_layout.addRow("Tolerance", tolerance_spin)
+        # Advanced numeric safeguard for non-perfect linework. Hidden for now
+        # because section networks are expected to be watertight.
+        # tolerance_spin = QDoubleSpinBox(dialog)
+        # tolerance_spin.setDecimals(4)
+        # tolerance_spin.setRange(0.0, 1.0e9)
+        # tolerance_spin.setSingleStep(0.1)
+        # tolerance_spin.setValue(self._default_section_tolerance(section_uid))
+        # form_layout.addRow("Tolerance", tolerance_spin)
 
         layout.addLayout(form_layout)
 
@@ -2399,7 +2402,8 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             table_name=table_combo.currentText(),
             boundary_uid=boundary_combo.currentData(),
             use_selected=use_selected_check.isChecked(),
-            tolerance=float(tolerance_spin.value()),
+            tolerance=self._default_section_tolerance(section_uid),
+            # tolerance=float(tolerance_spin.value()),
         )
 
     def build_section_areas(
@@ -2496,7 +2500,15 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         psc_model = self._build_psc_model_from_stm(table_name)
         created_seed_count = 0
         created_area_count = 0
-        unmatched_count = 0
+        status_counts = {
+            "CERTAIN": 0,
+            "LIKELY": 0,
+            "AMBIGUOUS": 0,
+            "POSSIBLE_REPEAT": 0,
+            "UNASSIGNED": 0,
+        }
+        assigned_counts: Dict[str, int] = {}
+        area_infos = []
 
         for area_idx, polygon in enumerate(section_polygons, start=1):
             boundary_labels = self._polygon_boundary_labels(
@@ -2505,16 +2517,73 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 line_entries=line_entries,
                 tolerance=tolerance,
             )
-            unit_info = self._unit_for_boundary_labels(psc_model, boundary_labels)
+            area_infos.append(
+                {
+                    "area_idx": area_idx,
+                    "polygon": polygon,
+                    "boundary_labels": boundary_labels,
+                    "candidates": self._section_unit_candidates_for_boundary_labels(
+                        psc_model=psc_model,
+                        labels=boundary_labels,
+                    ),
+                }
+            )
+
+        assignments = [None for _area_info in area_infos]
+        for info_idx, area_info in enumerate(area_infos):
+            exact_candidates = [
+                candidate
+                for candidate in area_info.get("candidates", [])
+                if candidate.get("exact")
+            ]
+            if len(exact_candidates) != 1:
+                continue
+            candidate = exact_candidates[0]
+            status = (
+                "POSSIBLE_REPEAT"
+                if assigned_counts.get(candidate["unit_key"], 0)
+                else "CERTAIN"
+            )
+            assignments[info_idx] = self._section_assignment_payload(
+                candidate=candidate,
+                status=status,
+                candidate_pool=exact_candidates,
+                assigned_counts=assigned_counts,
+            )
+            assigned_counts[candidate["unit_key"]] = (
+                assigned_counts.get(candidate["unit_key"], 0) + 1
+            )
+
+        for info_idx, area_info in enumerate(area_infos):
+            if assignments[info_idx] is not None:
+                continue
+            assignment = self._section_best_area_assignment(
+                area_info=area_info,
+                assigned_counts=assigned_counts,
+            )
+            assignments[info_idx] = assignment
+            unit_key = assignment.get("unit_key", "")
+            if unit_key:
+                assigned_counts[unit_key] = assigned_counts.get(unit_key, 0) + 1
+
+        for area_info, assignment in zip(area_infos, assignments):
+            polygon = area_info["polygon"]
+            area_idx = int(area_info["area_idx"])
+            boundary_labels = area_info.get("boundary_labels", [])
+            assignment = assignment or {"status": "UNASSIGNED"}
+            status = str(assignment.get("status", "UNASSIGNED"))
+            status_counts[status] = status_counts.get(status, 0) + 1
+            self._print_section_area_assignment(
+                area_idx=area_idx,
+                boundary_labels=boundary_labels,
+                assignment=assignment,
+            )
+
+            unit_info = assignment.get("unit_info")
             if unit_info is None:
-                unmatched_count += 1
                 role = "undef"
                 feature = "PSC_unassigned"
                 unit_name = f"Area_{area_idx}"
-                self.print_terminal(
-                    f"Unmatched area {area_idx}: "
-                    f"boundaries={', '.join(boundary_labels) or '-'}"
-                )
             else:
                 role = self._psc_text(unit_info.get("unit_role", "")) or "undef"
                 feature = self._psc_text(unit_info.get("feature", "")) or "PSC_unit"
@@ -2556,7 +2625,14 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
 
         self.print_terminal(
             f"Build PSC section areas completed: created {created_seed_count} seed(s), "
-            f"{created_area_count} filled area(s), unmatched areas={unmatched_count}."
+            f"{created_area_count} filled area(s), "
+            f"unmatched areas={status_counts.get('UNASSIGNED', 0)}. "
+            "Assignments: "
+            f"CERTAIN={status_counts.get('CERTAIN', 0)}, "
+            f"LIKELY={status_counts.get('LIKELY', 0)}, "
+            f"AMBIGUOUS={status_counts.get('AMBIGUOUS', 0)}, "
+            f"POSSIBLE_REPEAT={status_counts.get('POSSIBLE_REPEAT', 0)}, "
+            f"UNASSIGNED={status_counts.get('UNASSIGNED', 0)}."
         )
 
     def _default_section_tolerance(self, section_uid: str) -> float:
@@ -2850,6 +2926,196 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             if unit_keys == target_keys:
                 return unit_info
         return None
+
+    def _section_unit_candidates_for_boundary_labels(
+        self,
+        psc_model: Dict[str, Any],
+        labels: List[str],
+    ) -> List[Dict[str, Any]]:
+        target_labels_by_key: Dict[str, str] = {}
+        for label in labels or []:
+            label_text = self._psc_text(label)
+            label_key = self._psc_key(label_text)
+            if label_key and label_key not in target_labels_by_key:
+                target_labels_by_key[label_key] = label_text
+        target_keys = set(target_labels_by_key)
+        if not target_keys:
+            return []
+
+        candidates = []
+        for unit_info in (psc_model.get("units", {}) or {}).values():
+            unit_labels_by_key: Dict[str, str] = {}
+            for boundary in unit_info.get("boundaries", set()) or set():
+                boundary_text = self._psc_text(boundary)
+                boundary_key = self._psc_key(boundary_text)
+                if boundary_key and boundary_key not in unit_labels_by_key:
+                    unit_labels_by_key[boundary_key] = boundary_text
+            unit_keys = set(unit_labels_by_key)
+            if not unit_keys:
+                continue
+
+            extra_keys = target_keys - unit_keys
+            if extra_keys:
+                continue
+            missing_keys = unit_keys - target_keys
+            if len(missing_keys) > self.MAX_RELAXED_MISSING_BOUNDARIES:
+                continue
+
+            unit_key = str(
+                unit_info.get("key")
+                or unit_info.get("feature")
+                or unit_info.get("name")
+                or ""
+            )
+            if not unit_key:
+                continue
+            candidates.append(
+                {
+                    "unit_info": unit_info,
+                    "unit_key": unit_key,
+                    "exact": not missing_keys,
+                    "missing_count": len(missing_keys),
+                    "missing_labels": [
+                        unit_labels_by_key.get(key, key)
+                        for key in sorted(missing_keys)
+                    ],
+                    "observed_count": len(target_keys),
+                    "polarity": self._psc_sort_key(unit_info.get("polarity", "")),
+                    "feature": self._psc_text(unit_info.get("feature", "")),
+                    "name": self._psc_text(unit_info.get("name", "")),
+                }
+            )
+
+        return sorted(
+            candidates,
+            key=lambda candidate: (
+                0 if candidate.get("exact") else 1,
+                int(candidate.get("missing_count", 0)),
+                -int(candidate.get("observed_count", 0)),
+                float(candidate.get("polarity", float("inf"))),
+                str(candidate.get("feature", "")).casefold(),
+                str(candidate.get("unit_key", "")).casefold(),
+            ),
+        )
+
+    def _section_best_area_assignment(
+        self,
+        area_info: Dict[str, Any],
+        assigned_counts: Dict[str, int],
+    ) -> Dict[str, Any]:
+        candidates = list(area_info.get("candidates", []) or [])
+        if not candidates:
+            return {"status": "UNASSIGNED"}
+
+        best_candidate = candidates[0]
+        best_quality = (
+            0 if best_candidate.get("exact") else 1,
+            int(best_candidate.get("missing_count", 0)),
+        )
+        best_candidates = [
+            candidate
+            for candidate in candidates
+            if (
+                0 if candidate.get("exact") else 1,
+                int(candidate.get("missing_count", 0)),
+            )
+            == best_quality
+        ]
+        chosen = self._section_choose_candidate(best_candidates, assigned_counts)
+        assigned_before = assigned_counts.get(chosen["unit_key"], 0)
+        if len(best_candidates) > 1 and assigned_before == 0:
+            status = "AMBIGUOUS"
+        elif assigned_before > 0:
+            status = "POSSIBLE_REPEAT"
+        elif chosen.get("exact"):
+            status = "CERTAIN"
+        else:
+            status = "LIKELY"
+        return self._section_assignment_payload(
+            candidate=chosen,
+            status=status,
+            candidate_pool=best_candidates,
+            assigned_counts=assigned_counts,
+        )
+
+    def _section_choose_candidate(
+        self,
+        candidates: List[Dict[str, Any]],
+        assigned_counts: Dict[str, int],
+    ) -> Dict[str, Any]:
+        return min(
+            candidates,
+            key=lambda candidate: (
+                assigned_counts.get(candidate.get("unit_key", ""), 0),
+                float(candidate.get("polarity", float("inf"))),
+                str(candidate.get("feature", "")).casefold(),
+                str(candidate.get("unit_key", "")).casefold(),
+            ),
+        )
+
+    def _section_assignment_payload(
+        self,
+        candidate: Dict[str, Any],
+        status: str,
+        candidate_pool: List[Dict[str, Any]],
+        assigned_counts: Dict[str, int],
+    ) -> Dict[str, Any]:
+        candidate_pool = list(candidate_pool or [candidate])
+        return {
+            "status": status,
+            "unit_info": candidate.get("unit_info"),
+            "unit_key": candidate.get("unit_key", ""),
+            "missing_labels": list(candidate.get("missing_labels", []) or []),
+            "candidate_names": [
+                self._section_unit_display_name(item.get("unit_info", {}))
+                for item in candidate_pool
+            ],
+            "assigned_before": int(
+                assigned_counts.get(candidate.get("unit_key", ""), 0)
+            ),
+            "exact": bool(candidate.get("exact")),
+        }
+
+    def _section_unit_display_name(self, unit_info: Dict[str, Any]) -> str:
+        return (
+            self._psc_text(unit_info.get("name", ""))
+            or self._psc_text(unit_info.get("feature", ""))
+            or "PSC_unit"
+        )
+
+    def _format_section_labels(self, labels: List[str]) -> str:
+        return ", ".join(self._psc_text(label) for label in labels or []) or "-"
+
+    def _print_section_area_assignment(
+        self,
+        area_idx: int,
+        boundary_labels: List[str],
+        assignment: Dict[str, Any],
+    ) -> None:
+        status = str(assignment.get("status", "UNASSIGNED"))
+        details = [f"boundaries={self._format_section_labels(boundary_labels)}"]
+        missing_labels = assignment.get("missing_labels", []) or []
+        if missing_labels:
+            details.append(f"missing={self._format_section_labels(missing_labels)}")
+        candidate_names = assignment.get("candidate_names", []) or []
+        if len(candidate_names) > 1:
+            details.append(f"candidates={', '.join(candidate_names)}")
+        assigned_before = int(assignment.get("assigned_before", 0) or 0)
+        if assigned_before:
+            details.append(f"already assigned={assigned_before}")
+
+        unit_info = assignment.get("unit_info")
+        if unit_info is None:
+            self.print_terminal(
+                f"Area {area_idx}: {status} | " + " | ".join(details)
+            )
+            return
+
+        self.print_terminal(
+            f"Area {area_idx}: {status} -> "
+            f"{self._section_unit_display_name(unit_info)} | "
+            + " | ".join(details)
+        )
 
     def _legend_color_for_feature(self, feature: str) -> Optional[List[float]]:
         project = self._pzero_project()
