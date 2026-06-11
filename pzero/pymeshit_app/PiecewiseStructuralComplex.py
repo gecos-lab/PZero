@@ -38,6 +38,8 @@ from PySide6.QtWidgets import (
 class PiecewiseStructuralComplex:
     """Controller for PSC preview, seed placement, and material assignment."""
 
+    SECTION_SEED_ROLES = {"TMU", "TSU", "SU", "IU", "SZ"}
+
     def __init__(self, host):
         object.__setattr__(self, "host", host)
 
@@ -90,11 +92,16 @@ class PiecewiseStructuralComplex:
             "Select two ambiguous units in the preview table and swap their seed coordinates."
         )
         selector_layout.addWidget(swap_seed_button)
-        clear_seed_swaps_button = QPushButton("Clear swaps", dialog)
-        clear_seed_swaps_button.setToolTip(
-            "Remove saved PSC seed swaps for the selected STm table."
+        from_sections_button = QPushButton("From sections", dialog)
+        from_sections_button.setToolTip(
+            "Use XsVertexSet seeds from geol_coll with roles TMU, TSU, SU, IU, or SZ."
         )
-        selector_layout.addWidget(clear_seed_swaps_button)
+        selector_layout.addWidget(from_sections_button)
+        use_calculated_button = QPushButton("Use calculated", dialog)
+        use_calculated_button.setToolTip(
+            "Clear saved PSC seed overrides and return to PyMeshIt-calculated seed locations."
+        )
+        selector_layout.addWidget(use_calculated_button)
         layout.addLayout(selector_layout)
     
         preview_table = QTableWidget(0, 6, dialog)
@@ -126,7 +133,7 @@ class PiecewiseStructuralComplex:
         layout.addWidget(buttons)
     
         preview_state = {"psc_model": None, "mapping": None, "rows": []}
-        seed_overrides: Dict[str, List[float]] = {}
+        seed_overrides: Dict[str, List[List[float]]] = {}
     
         def unit_seed_key(unit_info: Dict[str, Any]) -> str:
             return str(
@@ -145,13 +152,10 @@ class PiecewiseStructuralComplex:
             raw_overrides = options.get("psc_seed_overrides", {})
             if not isinstance(raw_overrides, dict):
                 return
-            for unit_key, seed_point in raw_overrides.items():
-                try:
-                    coords = [float(value) for value in list(seed_point)[:3]]
-                except (TypeError, ValueError):
-                    continue
-                if len(coords) == 3 and all(np.isfinite(coords)):
-                    seed_overrides[str(unit_key)] = coords
+            for unit_key, seed_value in raw_overrides.items():
+                seed_points = self._psc_normalize_seed_points(seed_value)
+                if seed_points:
+                    seed_overrides[str(unit_key)] = seed_points
     
         def save_seed_overrides(table_name: str) -> None:
             project = self._pzero_project()
@@ -163,8 +167,8 @@ class PiecewiseStructuralComplex:
             options = dict(table_options.get(table_name, {}) or {})
             if seed_overrides:
                 options["psc_seed_overrides"] = {
-                    unit_key: [float(value) for value in seed_point[:3]]
-                    for unit_key, seed_point in seed_overrides.items()
+                    unit_key: self._psc_seed_override_storage(seed_points)
+                    for unit_key, seed_points in seed_overrides.items()
                 }
             else:
                 options.pop("psc_seed_overrides", None)
@@ -174,7 +178,9 @@ class PiecewiseStructuralComplex:
             for unit_info in mapping.get("units", []) or []:
                 unit_key = unit_seed_key(unit_info)
                 if unit_key in seed_overrides:
-                    unit_info["seed_point"] = list(seed_overrides[unit_key])
+                    seed_points = [list(seed) for seed in seed_overrides[unit_key]]
+                    unit_info["seed_points"] = seed_points
+                    unit_info["seed_point"] = seed_points[0] if seed_points else None
                     unit_info["seed_override"] = True
     
         def refresh_preview():
@@ -202,8 +208,8 @@ class PiecewiseStructuralComplex:
                     missing_count += len(missing_boundaries)
                     unit_key = unit_seed_key(unit_info)
                     if unit_key in seed_overrides:
-                        seed_points = [list(seed_overrides[unit_key])]
-                        unit_info["seed_point"] = seed_points[0]
+                        seed_points = [list(seed) for seed in seed_overrides[unit_key]]
+                        unit_info["seed_point"] = seed_points[0] if seed_points else None
                         unit_info["seed_points"] = seed_points
                         unit_info["seed_override"] = True
                     else:
@@ -229,7 +235,10 @@ class PiecewiseStructuralComplex:
                     for col_idx, value in enumerate(values):
                         item = QTableWidgetItem(str(value))
                         if col_idx == 4 and unit_info.get("seed_override"):
-                            item.setToolTip("Seed swapped manually in this PSC dialog.")
+                            item.setToolTip(
+                                "Seed overridden in this PSC dialog "
+                                "(manual swap or From sections)."
+                            )
                             item.setForeground(QColor(40, 95, 170))
                         if col_idx == 5 and missing_boundaries:
                             item.setForeground(QColor(190, 40, 40))
@@ -242,7 +251,7 @@ class PiecewiseStructuralComplex:
                 f"Seed locations: {seed_location_count} | "
                 f"Known boundaries: {len(psc_model.get('boundary_features', set()))} | "
                 f"Missing matches: {missing_count} | "
-                f"Saved seed swaps: {len(seed_overrides)}"
+                f"Saved seed overrides: {len(seed_overrides)}"
             )
             ambiguity_groups = self._psc_ambiguity_groups(rows)
             if ambiguity_groups:
@@ -285,11 +294,36 @@ class PiecewiseStructuralComplex:
                 return
             first_key = unit_seed_key(first_unit)
             second_key = unit_seed_key(second_unit)
-            seed_overrides[first_key] = [float(value) for value in second_seed[:3]]
-            seed_overrides[second_key] = [float(value) for value in first_seed[:3]]
+            seed_overrides[first_key] = [[float(value) for value in second_seed[:3]]]
+            seed_overrides[second_key] = [[float(value) for value in first_seed[:3]]]
             save_seed_overrides(table_combo.currentText())
             refresh_preview()
     
+        def import_section_seeds():
+            rows = list(preview_state.get("rows", []))
+            if not rows:
+                refresh_preview()
+                rows = list(preview_state.get("rows", []))
+            imported, skipped, unmatched = self._psc_section_seed_overrides_for_units(
+                rows,
+                unit_seed_key,
+            )
+            if not imported:
+                self.print_terminal(
+                    "No matching XsVertexSet section seeds found for the current PSC units "
+                    f"(skipped={skipped}, unmatched={unmatched})."
+                )
+                return
+            seed_overrides.clear()
+            seed_overrides.update(imported)
+            save_seed_overrides(table_combo.currentText())
+            refresh_preview()
+            seed_count = sum(len(points) for points in imported.values())
+            self.print_terminal(
+                f"Imported {seed_count} section seed(s) for {len(imported)} PSC material(s) "
+                f"(skipped={skipped}, unmatched={unmatched})."
+            )
+
         def clear_seed_overrides():
             if not seed_overrides:
                 return
@@ -302,7 +336,8 @@ class PiecewiseStructuralComplex:
             refresh_preview()
     
         swap_seed_button.clicked.connect(swap_selected_seeds)
-        clear_seed_swaps_button.clicked.connect(clear_seed_overrides)
+        from_sections_button.clicked.connect(import_section_seeds)
+        use_calculated_button.clicked.connect(clear_seed_overrides)
         table_combo.currentTextChanged.connect(lambda _text: on_table_changed())
         load_seed_overrides(table_combo.currentText())
         refresh_preview()
@@ -330,6 +365,168 @@ class PiecewiseStructuralComplex:
             f"{seed_count} seed location(s) from STm table '{table_name}'."
             + (f" Skipped {skipped_count} unit(s) without a valid seed." if skipped_count else "")
         )
+
+    def _psc_normalize_seed_points(self, value: Any) -> List[List[float]]:
+        """Return a clean list of XYZ seed points from legacy or multi-seed values."""
+        if value is None:
+            return []
+
+        def as_point(point_value: Any) -> Optional[List[float]]:
+            try:
+                coords = [float(coord) for coord in list(point_value)[:3]]
+            except (TypeError, ValueError):
+                return None
+            if len(coords) == 3 and all(np.isfinite(coords)):
+                return coords
+            return None
+
+        try:
+            values = list(value)
+        except TypeError:
+            return []
+        if not values:
+            return []
+
+        first = values[0]
+        if np.isscalar(first):
+            point = as_point(values)
+            return [point] if point is not None else []
+
+        seed_points = []
+        for item in values:
+            point = as_point(item)
+            if point is not None:
+                seed_points.append(point)
+        return seed_points
+
+    def _psc_seed_override_storage(self, seed_points: List[List[float]]) -> Any:
+        """Store one seed as legacy XYZ, multiple seeds as a list of XYZ points."""
+        clean_points = self._psc_normalize_seed_points(seed_points)
+        if len(clean_points) == 1:
+            return [float(value) for value in clean_points[0]]
+        return [[float(value) for value in point] for point in clean_points]
+
+    def _psc_unit_match_keys(self, unit_info: Dict[str, Any]) -> set:
+        """Return normalized material keys accepted for a PSC mapped unit."""
+        feature = self._psc_text(unit_info.get("feature", ""))
+        role = self._psc_text(unit_info.get("unit_role", ""))
+        name = self._psc_text(unit_info.get("name", ""))
+        keys = {
+            self._psc_key(feature),
+            self._psc_key(name),
+        }
+        if feature and role:
+            keys.add(self._psc_key(f"{feature}_{role}"))
+            keys.add(self._psc_key(f"{feature} {role}"))
+        return {key for key in keys if key}
+
+    def _psc_section_seed_entries(self) -> List[Dict[str, Any]]:
+        """Read PSC seed candidates from section XsVertexSet entities in geol_coll."""
+        project = self._pzero_project()
+        geol_coll = getattr(project, "geol_coll", None)
+        if geol_coll is None:
+            return []
+
+        role_keys = {self._psc_key(role) for role in self.SECTION_SEED_ROLES}
+        entries = []
+        for uid in getattr(geol_coll, "get_uids", []) or []:
+            try:
+                topology = self._psc_text(geol_coll.get_uid_topology(uid))
+                role = self._psc_text(geol_coll.get_uid_role(uid))
+                feature = self._psc_text(geol_coll.get_uid_feature(uid))
+            except Exception:
+                continue
+            if topology not in {"XsVertexSet", "XsVertex"}:
+                continue
+            if self._psc_key(role) not in role_keys:
+                continue
+            if not feature:
+                continue
+            try:
+                vtk_obj = geol_coll.get_uid_vtk_obj(uid)
+                points = np.asarray(getattr(vtk_obj, "points", []), dtype=float)
+            except Exception:
+                continue
+            if points.ndim == 1:
+                points = points.reshape(1, -1)
+            if points.ndim != 2 or points.shape[1] < 3 or points.shape[0] == 0:
+                continue
+            seed_points = []
+            for point in points[:, :3]:
+                coords = [float(value) for value in point[:3]]
+                if all(np.isfinite(coords)):
+                    seed_points.append(coords)
+            if not seed_points:
+                continue
+            try:
+                name = self._psc_text(geol_coll.get_uid_name(uid))
+            except Exception:
+                name = ""
+            entries.append(
+                {
+                    "uid": uid,
+                    "name": name,
+                    "role": role,
+                    "feature": feature,
+                    "feature_key": self._psc_key(feature),
+                    "role_key": self._psc_key(role),
+                    "seed_points": seed_points,
+                }
+            )
+        return entries
+
+    def _psc_section_seed_overrides_for_units(
+        self,
+        mapped_units: List[Dict[str, Any]],
+        unit_seed_key,
+    ) -> Tuple[Dict[str, List[List[float]]], int, int]:
+        """Match section XsVertexSet seeds to mapped PSC units."""
+        unit_matches = []
+        for unit_info in mapped_units or []:
+            unit_matches.append(
+                {
+                    "unit_info": unit_info,
+                    "unit_key": unit_seed_key(unit_info),
+                    "material_keys": self._psc_unit_match_keys(unit_info),
+                    "role_key": self._psc_key(unit_info.get("unit_role", "")),
+                }
+            )
+
+        overrides: Dict[str, List[List[float]]] = {}
+        skipped = 0
+        unmatched = 0
+        for entry in self._psc_section_seed_entries():
+            feature_key = entry.get("feature_key", "")
+            role_key = entry.get("role_key", "")
+            if not feature_key:
+                skipped += 1
+                continue
+            role_matches = [
+                unit
+                for unit in unit_matches
+                if feature_key in unit["material_keys"] and role_key == unit["role_key"]
+            ]
+            if len(role_matches) == 1:
+                target = role_matches[0]
+            else:
+                material_matches = [
+                    unit
+                    for unit in unit_matches
+                    if feature_key in unit["material_keys"]
+                ]
+                if len(material_matches) == 1:
+                    target = material_matches[0]
+                else:
+                    unmatched += 1
+                    continue
+            unit_key = target["unit_key"]
+            if not unit_key:
+                skipped += 1
+                continue
+            overrides.setdefault(unit_key, []).extend(
+                [list(point) for point in entry.get("seed_points", [])]
+            )
+        return overrides, skipped, unmatched
     
     def _available_stm_tables(self) -> List[str]:
         """Return STm table names from the embedded PZero project."""
@@ -2131,17 +2328,14 @@ class PiecewiseStructuralComplex:
         mapped_units: Optional[List[Dict[str, Any]]] = None,
     ) -> List[List[float]]:
         """Compute one or more PSC seed points for a mapped STm unit."""
-        if unit_info.get("seed_override") and unit_info.get("seed_point") is not None:
-            try:
-                seed_point = [
-                    float(value)
-                    for value in list(unit_info.get("seed_point", []))[:3]
-                ]
-            except (TypeError, ValueError):
-                return []
-            if len(seed_point) == 3 and all(np.isfinite(seed_point)):
-                unit_info["seed_points"] = [seed_point]
-                return [seed_point]
+        if unit_info.get("seed_override"):
+            seed_points = self._psc_normalize_seed_points(
+                unit_info.get("seed_points") or unit_info.get("seed_point")
+            )
+            if seed_points:
+                unit_info["seed_points"] = seed_points
+                unit_info["seed_point"] = seed_points[0]
+                return seed_points
             return []
     
         local_boundary_sets = self._psc_local_boundary_sets_for_unit(
