@@ -365,6 +365,9 @@ def facets_pc(self):
         uid = self.selected_uids[0]
 
     vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+    if "ClusterId" not in vtk_obj.point_data_keys:
+        print("Selected entity has no clusters, please choose an other or make them with the proper function")
+        return
     name = self.parent.dom_coll.get_uid_name(uid)
     appender = vtkAppendPolyData()
     regions = set(vtk_obj.get_point_data("ClusterId"))
@@ -378,7 +381,7 @@ def facets_pc(self):
     l_list = np_zeros(n_regions)
     w_list = np_zeros(n_regions)
     for i, region in enumerate(regions):
-        print(f"{i}/{n_regions}", end="\r")
+        print(f"{i}/{n_regions-1}", end="\r")
 
         thresh = vtkThresholdPoints()
 
@@ -434,7 +437,8 @@ def facets_pc(self):
     properties_name = facets.point_data_keys
     properties_components = [facets.get_point_data_shape(i)[1] for i in properties_name]
 
-    curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
+    curr_obj_dict = deepcopy(self.parent.dom_coll.entity_dict)
+    # curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
     curr_obj_dict["uid"] = str(uuid4())
     curr_obj_dict["name"] = f"{name}facets"
     curr_obj_dict["role"] = "undef"
