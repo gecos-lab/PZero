@@ -10,7 +10,7 @@ from numpy import column_stack as np_column_stack
 from numpy import ndarray as np_ndarray
 
 # VTK imports incl. VTK-Numpy interface____
-from vtkmodules.vtkRenderingCore import vtkCellPicker
+from vtkmodules.vtkRenderingCore import vtkCellPicker, vtkMapper
 from vtk import vtkAppendPolyData
 
 # PyVista imports____
@@ -52,11 +52,23 @@ class ViewVTK(BaseView):
     """Abstract class used as a base for all classes using the VTK/PyVista plotting canvas."""
 
     RGB_TOTAL_PROPERTY = "RGB total"
+    _coincident_topology_rendering_enabled = False
 
     def __init__(self, *args, **kwargs):
         super(ViewVTK, self).__init__(*args, **kwargs)
 
     # ================================  General methods shared by all views - built incrementally =====================
+
+    @classmethod
+    def _configure_coincident_topology_rendering(cls):
+        """Render coincident lines/points in front of filled polygons without moving data."""
+        if ViewVTK._coincident_topology_rendering_enabled:
+            return
+        vtkMapper.SetResolveCoincidentTopologyToPolygonOffset()
+        vtkMapper.SetResolveCoincidentTopologyPolygonOffsetParameters(0.0, 0.0)
+        vtkMapper.SetResolveCoincidentTopologyLineOffsetParameters(0.0, -4.0)
+        vtkMapper.SetResolveCoincidentTopologyPointOffsetParameter(-8.0)
+        ViewVTK._coincident_topology_rendering_enabled = True
 
     def _get_point_cloud_rgb_total(self, plot_entity):
         """Return a Nx3 RGB array for point-cloud rendering, if available.
@@ -292,6 +304,9 @@ class ViewVTK(BaseView):
         the layout of an empty frame generated with Qt Designer"""
         # print(self.ViewFrame)
         self.plotter = pvQtInteractor(self.ViewFrame)
+        # Shared VTK render setting used by all ViewVTK subclasses. Changing
+        # these offsets affects Map, Xsection, Interpretation and 3D views.
+        self._configure_coincident_topology_rendering()
         # background color - could be made interactive in the future
         self.plotter.set_background("black")
         self.ViewFrameLayout.addWidget(self.plotter.interactor)
