@@ -104,12 +104,13 @@ def _unit_vector(vec: np.ndarray) -> Optional[np.ndarray]:
 def _to_pyvista_triangles(vtk_trisurf) -> pv.PolyData:
     """Wrap a TriSurf as a pure-triangle PyVista PolyData.
 
-    Shallow copy is enough because all filters below return new objects.
+    The preview pipeline must never mutate the live project object. Make the
+    PyVista wrapper own an isolated copy before filters or point edits run.
     """
     poly = pv.wrap(vtk_trisurf)
     if not isinstance(poly, pv.PolyData):
         poly = pv.PolyData(poly)
-    return poly.triangulate()
+    return poly.copy(deep=True).triangulate()
 
 
 def _convex_hull_polydata(points: np.ndarray) -> Optional[pv.PolyData]:
@@ -178,8 +179,140 @@ def _blend_toward_convex_hull(
     return points + blend * (closest - points)
 
 
-def _project_to_plane(points: np.ndarray, blend: float) -> np.ndarray:
-    """Blend `points` toward their best-fit plane.
+def _triangle_faces(mesh: pv.PolyData) -> np.ndarray:
+    """Return triangle point ids from a triangulated PolyData."""
+    faces = np.asarray(mesh.faces, dtype=np.int64)
+    if faces.size == 0:
+        return np.empty((0, 3), dtype=np.int64)
+
+    try:
+        regular = faces.reshape((-1, 4))
+        if np.all(regular[:, 0] == 3):
+            return regular[:, 1:4]
+    except ValueError:
+        pass
+
+    triangles = []
+    idx = 0
+    while idx < faces.size:
+        n_points = int(faces[idx])
+        start = idx + 1
+        stop = start + n_points
+        if n_points == 3 and stop <= faces.size:
+            triangles.append(faces[start:stop])
+        idx = stop
+    if not triangles:
+        return np.empty((0, 3), dtype=np.int64)
+    return np.asarray(triangles, dtype=np.int64)
+
+
+def _surface_vertex_area_weights(mesh: pv.PolyData) -> Optional[np.ndarray]:
+    """Approximate each vertex's represented surface area."""
+    if mesh is None or mesh.n_points < 3 or mesh.n_cells == 0:
+        return None
+
+    faces = _triangle_faces(mesh)
+    if faces.size == 0:
+        return None
+
+    points = np.asarray(mesh.points, dtype=float)
+    tri_points = points[faces]
+    areas = 0.5 * np.linalg.norm(
+        np.cross(
+            tri_points[:, 1] - tri_points[:, 0],
+            tri_points[:, 2] - tri_points[:, 0],
+        ),
+        axis=1,
+    )
+    valid = np.isfinite(areas) & (areas > 1e-12)
+    if not np.any(valid):
+        return None
+
+    weights = np.zeros(mesh.n_points, dtype=float)
+    for corner in range(3):
+        np.add.at(weights, faces[valid, corner], areas[valid] / 3.0)
+
+    if float(np.sum(weights)) <= 1e-12:
+        return None
+    return weights
+
+
+def _fault_trace_frame(
+    points: np.ndarray, weights: Optional[np.ndarray] = None
+) -> Optional[
+    Tuple[np.ndarray, float, np.ndarray, np.ndarray, float, float]
+]:
+    """Fit a map-view strike frame for straightening steep fault surfaces.
+
+    The fitted plane is constrained to keep a straight XY trace: cross-strike
+    offset is allowed to vary with Z, but not with the along-strike coordinate.
+    """
+    pts = np.asarray(points, dtype=float)
+    if pts.ndim != 2 or pts.shape[1] != 3 or pts.shape[0] < 3:
+        return None
+
+    if weights is None:
+        wts = np.ones(pts.shape[0], dtype=float)
+    else:
+        wts = np.asarray(weights, dtype=float).reshape(-1)
+        if wts.shape[0] != pts.shape[0]:
+            wts = np.ones(pts.shape[0], dtype=float)
+
+    valid = np.isfinite(wts) & (wts > 0.0) & np.all(np.isfinite(pts), axis=1)
+    if int(np.count_nonzero(valid)) < 3:
+        return None
+
+    pts = pts[valid]
+    wts = wts[valid]
+    total_weight = float(np.sum(wts))
+    if total_weight <= 1e-12:
+        return None
+
+    xy = pts[:, :2]
+    z = pts[:, 2]
+    xy_center = np.average(xy, axis=0, weights=wts)
+    xy_centered = xy - xy_center
+    covariance = (xy_centered * wts[:, None]).T @ xy_centered / total_weight
+    try:
+        eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+    except Exception:
+        return None
+
+    strike = eigenvectors[:, int(np.argmax(eigenvalues))]
+    strike_norm = float(np.linalg.norm(strike))
+    if strike_norm <= 1e-12:
+        return None
+    strike = strike / strike_norm
+
+    # Stable sign only affects repeatability; the projection is otherwise
+    # invariant to flipping both strike and cross-strike axes.
+    if abs(strike[1]) >= abs(strike[0]):
+        reference = np.array([0.0, 1.0])
+    else:
+        reference = np.array([1.0, 0.0])
+    if float(np.dot(strike, reference)) < 0.0:
+        strike = -strike
+    cross = np.array([-strike[1], strike[0]], dtype=float)
+
+    h = np.dot(xy_centered, cross)
+    z_center = float(np.average(z, weights=wts))
+    h_center = float(np.average(h, weights=wts))
+    dz = z - z_center
+    centered_h = h - h_center
+    denom = float(np.sum(wts * dz * dz))
+    slope = 0.0
+    if denom > 1e-12:
+        slope = float(np.sum(wts * dz * centered_h) / denom)
+
+    return xy_center, z_center, strike, cross, h_center, slope
+
+
+def _project_to_plane(
+    points: np.ndarray,
+    blend: float,
+    weights: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    """Straighten a fault-like surface toward a best-fit planar trace.
 
     Parameters
     ----------
@@ -187,16 +320,77 @@ def _project_to_plane(points: np.ndarray, blend: float) -> np.ndarray:
         Array of shape (n, 3).
     blend:
         Blend factor in [0, 1]. 0 returns `points` unchanged,
-        1 returns the fully planar projection.
+        1 returns the fully straightened projection.
+    weights:
+        Optional per-point fit weights. For TriSurf meshes these are vertex
+        area weights, so the plane follows the surface area rather than raw
+        vertex density.
     """
     if blend <= 0.0 or points.shape[0] < 3:
         return points
     blend = float(min(max(blend, 0.0), 1.0))
-    center, normal = best_fitting_plane(points)
-    normal = normal / (np.linalg.norm(normal) + 1e-12)
-    offsets = np.dot(points - center, normal)
-    projected = points - np.outer(offsets, normal)
+    points = np.asarray(points, dtype=float)
+    frame = _fault_trace_frame(points, weights=weights)
+    if frame is None:
+        return points
+
+    xy_center, z_center, strike, cross, h_center, slope = frame
+    xy_centered = points[:, :2] - xy_center
+    strike_coord = np.dot(xy_centered, strike)
+    target_cross = h_center + slope * (points[:, 2] - z_center)
+
+    projected = points.copy()
+    projected[:, :2] = (
+        xy_center
+        + np.outer(strike_coord, strike)
+        + np.outer(target_cross, cross)
+    )
     return points + blend * (projected - points)
+
+
+def _has_active_fix_params(params: Dict[str, object]) -> bool:
+    """Return True when at least one operation changes the source mesh."""
+    if float(params.get("clean_tol_rel", 0.0)) > 0.0:
+        return True
+    if float(params.get("fill_holes_rel", 0.0)) > 0.0:
+        return True
+    if float(params.get("decimate_target", 0.0)) > 0.0:
+        return True
+    if int(params.get("subdivide_levels", 0)) > 0:
+        return True
+    if (
+        str(params.get("smooth_method", "none")) != "none"
+        and int(params.get("smooth_iterations", 0)) > 0
+    ):
+        return True
+    if float(params.get("convex_blend", 0.0)) > 0.0:
+        return True
+    if float(params.get("planarity_blend", 0.0)) > 0.0:
+        return True
+    if bool(params.get("clip_enabled", False)):
+        return (
+            float(params.get("clip_length", 0.0)) > 0.0
+            or float(params.get("clip_extent", 0.0)) > 0.0
+        )
+    return False
+
+
+def _needs_final_clean(params: Dict[str, object]) -> bool:
+    """Return True after operations that can leave orphaned topology."""
+    if float(params.get("clean_tol_rel", 0.0)) > 0.0:
+        return True
+    if float(params.get("fill_holes_rel", 0.0)) > 0.0:
+        return True
+    if float(params.get("decimate_target", 0.0)) > 0.0:
+        return True
+    if int(params.get("subdivide_levels", 0)) > 0:
+        return True
+    if bool(params.get("clip_enabled", False)):
+        return (
+            float(params.get("clip_length", 0.0)) > 0.0
+            or float(params.get("clip_extent", 0.0)) > 0.0
+        )
+    return False
 
 
 def _fallback_in_plane_axis(
@@ -364,9 +558,12 @@ def _apply_fix_pipeline(
     The pipeline order matters: clean first to remove duplicates and
     degenerate triangles, then topology-changing steps (fill holes,
     decimation, subdivision), then geometry-only steps (smoothing,
-    planar projection), and finally optional side clipping.
+    fault trace straightening), and finally optional side clipping.
     """
-    mesh = source.triangulate()
+    if not _has_active_fix_params(params):
+        return source.copy(deep=True)
+
+    mesh = source.copy(deep=True).triangulate()
 
     diag = _bbox_diagonal(mesh)
 
@@ -464,24 +661,28 @@ def _apply_fix_pipeline(
         if new_pts.shape == pts.shape:
             mesh.points = new_pts
 
-    # 7. Planar projection blend (reduce overall curvature).
+    # 7. Fault trace straightening blend (reduce map-view waviness).
     planarity = float(params.get("planarity_blend", 0.0))
     if planarity > 0.0 and mesh.n_points >= 3:
         pts = np.asarray(mesh.points)
-        new_pts = _project_to_plane(pts, planarity)
+        weights = _surface_vertex_area_weights(mesh)
+        new_pts = _project_to_plane(pts, planarity, weights=weights)
         mesh.points = new_pts
 
     # 8. Trim one side with a local planar clip.
     mesh = _apply_side_clip(mesh, params)
 
-    # Always end with a triangulated, compacted mesh.
-    mesh = mesh.clean(
-        tolerance=0.0,
-        absolute=True,
-        lines_to_points=False,
-        polys_to_lines=False,
-        strips_to_polys=False,
-    ).triangulate()
+    # Geometry-only tools should not delete points/cells. Compact only after
+    # operations that may actually create orphaned topology.
+    if _needs_final_clean(params):
+        mesh = mesh.clean(
+            tolerance=0.0,
+            absolute=True,
+            lines_to_points=False,
+            polys_to_lines=False,
+            strips_to_polys=False,
+        )
+    mesh = mesh.triangulate()
     return mesh
 
 
@@ -828,7 +1029,7 @@ class FixGeometryDialog(QDialog):
         return group
 
     def _build_planar_group(self) -> QGroupBox:
-        group = QGroupBox("6. Flatten toward best-fit plane")
+        group = QGroupBox("6. Straighten fault toward plane")
         form = QFormLayout(group)
 
         self.planarity_spin = QDoubleSpinBox()
@@ -838,11 +1039,12 @@ class FixGeometryDialog(QDialog):
         self.planarity_spin.setValue(0.0)
         self.planarity_spin.setToolTip(
             "0 = keep original curvature.\n"
-            "1 = project every vertex onto the best-fit plane.\n"
-            "Intermediate values blend between the two."
+            "1 = fit a straight map-view strike line and move vertices\n"
+            "only in the horizontal cross-strike direction.\n"
+            "Along-strike position, elevation, size, and topology are kept."
         )
         self.planarity_spin.valueChanged.connect(self._schedule_preview)
-        form.addRow("Planarity blend:", self.planarity_spin)
+        form.addRow("Straightening blend:", self.planarity_spin)
 
         return group
 
@@ -1057,12 +1259,20 @@ class FixGeometryDialog(QDialog):
             return
         try:
             source = _to_pyvista_triangles(original)
-            result = _apply_fix_pipeline(source, self._collect_params())
+            params = self._collect_params()
+            result = _apply_fix_pipeline(source, params)
         except Exception as exc:  # keep the dialog responsive on filter failure
             self.stats_label.setText(f"Preview error: {exc}")
             return
 
         self._last_result = result
+        if not _has_active_fix_params(params):
+            self._remove_preview_actor()
+            self._restore_original_actor()
+            self._update_stats(source, result)
+            return
+
+        self._ghost_original_actor()
         self._update_preview_actor(result)
         self._update_stats(source, result)
 
