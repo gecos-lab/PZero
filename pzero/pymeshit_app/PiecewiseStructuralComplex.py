@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -860,6 +861,9 @@ class PiecewiseStructuralComplex:
                 "polarity": self._psc_sort_key(unit_info.get("structural_polarity", "")),
                 "domains": domains,
                 "boundaries": set(),
+                "color_R": unit_info.get("color_R", 255),
+                "color_G": unit_info.get("color_G", 255),
+                "color_B": unit_info.get("color_B", 255),
                 "source": "extra",
             }
     
@@ -2543,7 +2547,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
 
         dialog = QDialog(self.host)
         dialog.setWindowTitle("Build PSC section areas")
-        dialog.resize(520, 190)
+        dialog.resize(520, 220)
         layout = QVBoxLayout(dialog)
 
         info_label = QLabel(
@@ -2561,6 +2565,14 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         for label, uid in self._available_boundary_options():
             boundary_combo.addItem(label, uid)
         form_layout.addRow("Boundary", boundary_combo)
+
+        max_missing_spin = QSpinBox(dialog)
+        max_missing_spin.setRange(0, 10)
+        max_missing_spin.setValue(self.MAX_RELAXED_MISSING_BOUNDARIES)
+        max_missing_spin.setToolTip(
+            "Maximum number of STm boundaries that may be absent from the local section signature."
+        )
+        form_layout.addRow("Max missing boundaries", max_missing_spin)
 
         use_selected_check = QCheckBox("Use selected XsPolyLine entities only")
         use_selected_check.setChecked(bool(selected_line_uids))
@@ -2597,6 +2609,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             boundary_uid=boundary_combo.currentData(),
             use_selected=use_selected_check.isChecked(),
             tolerance=self._default_section_tolerance(section_uid),
+            max_missing_boundaries=int(max_missing_spin.value()),
             # tolerance=float(tolerance_spin.value()),
         )
 
@@ -2606,6 +2619,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         boundary_uid: str = FRAME_BOUNDARY_KEY,
         use_selected: bool = False,
         tolerance: float = 0.0,
+        max_missing_boundaries: Optional[int] = None,
     ) -> None:
         """Build PSC section-area seeds and triangulated fills."""
         try:
@@ -2622,6 +2636,12 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             return
         section_uid = getattr(self.host, "this_x_section_uid", "")
         tolerance = max(float(tolerance or 0.0), 0.0)
+        if max_missing_boundaries is None:
+            max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
+        try:
+            max_missing_boundaries = max(int(max_missing_boundaries), 0)
+        except (TypeError, ValueError):
+            max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
 
         line_uids = self._section_polyline_uids(use_selected=use_selected)
         if not line_uids:
@@ -2692,6 +2712,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             return
 
         psc_model = self._build_psc_model_from_stm(table_name)
+        boundary_roles_by_key = self._section_boundary_roles_by_key(psc_model)
         created_seed_count = 0
         created_area_count = 0
         status_counts = {
@@ -2719,6 +2740,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                     "candidates": self._section_unit_candidates_for_boundary_labels(
                         psc_model=psc_model,
                         labels=boundary_labels,
+                        max_missing_boundaries=max_missing_boundaries,
                     ),
                 }
             )
@@ -2733,6 +2755,16 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             if len(exact_candidates) != 1:
                 continue
             candidate = exact_candidates[0]
+            if self._section_candidate_repeat_conflict_labels(
+                candidate=candidate,
+                area_info=area_info,
+                area_infos=area_infos,
+                assignments=assignments,
+                line_entries=line_entries,
+                boundary_roles_by_key=boundary_roles_by_key,
+                tolerance=tolerance,
+            ):
+                continue
             status = (
                 "POSSIBLE_REPEAT"
                 if assigned_counts.get(candidate["unit_key"], 0)
@@ -2754,6 +2786,11 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             assignment = self._section_best_area_assignment(
                 area_info=area_info,
                 assigned_counts=assigned_counts,
+                area_infos=area_infos,
+                assignments=assignments,
+                line_entries=line_entries,
+                boundary_roles_by_key=boundary_roles_by_key,
+                tolerance=tolerance,
             )
             assignments[info_idx] = assignment
             unit_key = assignment.get("unit_key", "")
@@ -2783,7 +2820,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 feature = self._psc_text(unit_info.get("feature", "")) or "PSC_unit"
                 unit_name = self._psc_text(unit_info.get("name", "")) or feature
 
-            color = self._legend_color_for_feature(feature)
+            color = self._color_for_psc_unit(unit_info, feature)
             seed_point = polygon.representative_point()
             seed_xyz = project.xsect_coll.plane2world(
                 section_uid=section_uid,
@@ -3125,7 +3162,15 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         self,
         psc_model: Dict[str, Any],
         labels: List[str],
+        max_missing_boundaries: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
+        if max_missing_boundaries is None:
+            max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
+        try:
+            max_missing_boundaries = max(int(max_missing_boundaries), 0)
+        except (TypeError, ValueError):
+            max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
+
         target_labels_by_key: Dict[str, str] = {}
         for label in labels or []:
             label_text = self._psc_text(label)
@@ -3152,7 +3197,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             if extra_keys:
                 continue
             missing_keys = unit_keys - target_keys
-            if len(missing_keys) > self.MAX_RELAXED_MISSING_BOUNDARIES:
+            if len(missing_keys) > max_missing_boundaries:
                 continue
 
             unit_key = str(
@@ -3196,10 +3241,38 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         self,
         area_info: Dict[str, Any],
         assigned_counts: Dict[str, int],
+        area_infos: List[Dict[str, Any]],
+        assignments: List[Optional[Dict[str, Any]]],
+        line_entries: List[Dict[str, Any]],
+        boundary_roles_by_key: Dict[str, str],
+        tolerance: float,
     ) -> Dict[str, Any]:
         candidates = list(area_info.get("candidates", []) or [])
         if not candidates:
             return {"status": "UNASSIGNED"}
+
+        filtered_candidates = []
+        blocked_labels = []
+        for candidate in candidates:
+            conflict_labels = self._section_candidate_repeat_conflict_labels(
+                candidate=candidate,
+                area_info=area_info,
+                area_infos=area_infos,
+                assignments=assignments,
+                line_entries=line_entries,
+                boundary_roles_by_key=boundary_roles_by_key,
+                tolerance=tolerance,
+            )
+            if conflict_labels:
+                blocked_labels.extend(conflict_labels)
+                continue
+            filtered_candidates.append(candidate)
+        candidates = filtered_candidates
+        if not candidates:
+            return {
+                "status": "UNASSIGNED",
+                "blocked_repeat_labels": sorted(set(blocked_labels), key=str.casefold),
+            }
 
         best_candidate = candidates[0]
         best_quality = (
@@ -3270,6 +3343,95 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             "exact": bool(candidate.get("exact")),
         }
 
+    def _section_boundary_roles_by_key(
+        self,
+        psc_model: Dict[str, Any],
+    ) -> Dict[str, str]:
+        roles_by_key: Dict[str, str] = {}
+        for boundary_info in psc_model.get("boundary_order", []) or []:
+            if not isinstance(boundary_info, dict):
+                continue
+            feature_key = self._psc_key(boundary_info.get("feature", ""))
+            if not feature_key or feature_key in roles_by_key:
+                continue
+            roles_by_key[feature_key] = (
+                self._psc_text(boundary_info.get("unit_role", "NonVolumetric"))
+                or "NonVolumetric"
+            )
+        return roles_by_key
+
+    def _section_candidate_repeat_conflict_labels(
+        self,
+        candidate: Dict[str, Any],
+        area_info: Dict[str, Any],
+        area_infos: List[Dict[str, Any]],
+        assignments: List[Optional[Dict[str, Any]]],
+        line_entries: List[Dict[str, Any]],
+        boundary_roles_by_key: Dict[str, str],
+        tolerance: float,
+    ) -> List[str]:
+        unit_key = str(candidate.get("unit_key", ""))
+        if not unit_key:
+            return []
+
+        conflict_labels = []
+        for other_area_info, assignment in zip(area_infos, assignments):
+            if not assignment or assignment.get("unit_key", "") != unit_key:
+                continue
+            shared_labels = self._section_shared_boundary_labels(
+                polygon=area_info.get("polygon"),
+                other_polygon=other_area_info.get("polygon"),
+                line_entries=line_entries,
+                tolerance=tolerance,
+            )
+            for label in shared_labels:
+                label_key = self._psc_key(label)
+                if not label_key:
+                    continue
+                role = boundary_roles_by_key.get(label_key, "")
+                # Repeated unit assignment across adjacent areas is allowed only
+                # across explicit NonVolumetric boundaries. Volumetric
+                # representatives, including SZ, must separate distinct areas.
+                if self._psc_key(role) != self._psc_key("NonVolumetric"):
+                    conflict_labels.append(self._psc_text(label))
+
+        return sorted(set(conflict_labels), key=str.casefold)
+
+    def _section_shared_boundary_labels(
+        self,
+        polygon,
+        other_polygon,
+        line_entries: List[Dict[str, Any]],
+        tolerance: float,
+    ) -> List[str]:
+        if polygon is None or other_polygon is None:
+            return []
+        min_length = max(float(tolerance or 0.0), 1.0e-9)
+        try:
+            shared_boundary = polygon.boundary.intersection(other_polygon.boundary)
+        except Exception:
+            return []
+        if self._geometry_length(shared_boundary) <= min_length:
+            return []
+
+        labels = []
+        seen = set()
+        for entry in line_entries:
+            feature = self._psc_text(entry.get("feature", ""))
+            feature_key = self._psc_key(feature)
+            if not feature_key or feature_key in seen:
+                continue
+            try:
+                shared_length = self._geometry_length(
+                    shared_boundary.intersection(entry["geometry"])
+                )
+            except Exception:
+                continue
+            if shared_length > min_length:
+                labels.append(feature)
+                seen.add(feature_key)
+        return labels
+
     def _section_unit_display_name(self, unit_info: Dict[str, Any]) -> str:
         return (
             self._psc_text(unit_info.get("name", ""))
@@ -3297,6 +3459,12 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         assigned_before = int(assignment.get("assigned_before", 0) or 0)
         if assigned_before:
             details.append(f"already assigned={assigned_before}")
+        blocked_repeat_labels = assignment.get("blocked_repeat_labels", []) or []
+        if blocked_repeat_labels:
+            details.append(
+                "blocked repeat across="
+                f"{self._format_section_labels(blocked_repeat_labels)}"
+            )
 
         unit_info = assignment.get("unit_info")
         if unit_info is None:
@@ -3310,6 +3478,22 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             f"{self._section_unit_display_name(unit_info)} | "
             + " | ".join(details)
         )
+
+    def _color_for_psc_unit(
+        self,
+        unit_info: Optional[Dict[str, Any]],
+        feature: str,
+    ) -> Optional[List[float]]:
+        if unit_info is not None and unit_info.get("source") == "extra":
+            try:
+                return [
+                    max(0.0, min(255.0, float(unit_info.get("color_R")))),
+                    max(0.0, min(255.0, float(unit_info.get("color_G")))),
+                    max(0.0, min(255.0, float(unit_info.get("color_B")))),
+                ]
+            except (TypeError, ValueError):
+                pass
+        return self._legend_color_for_feature(feature)
 
     def _legend_color_for_feature(self, feature: str) -> Optional[List[float]]:
         project = self._pzero_project()
