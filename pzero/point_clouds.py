@@ -438,7 +438,6 @@ def facets_pc(self):
     properties_components = [facets.get_point_data_shape(i)[1] for i in properties_name]
 
     curr_obj_dict = deepcopy(self.parent.dom_coll.entity_dict)
-    # curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
     curr_obj_dict["uid"] = str(uuid4())
     curr_obj_dict["name"] = f"{name}facets"
     curr_obj_dict["role"] = "undef"
@@ -459,11 +458,14 @@ def calibration_pc(self):
     n_points = np_zeros_like(self.selected_uids, dtype=float)
     normals_var = np_zeros_like(self.selected_uids, dtype=float)
     for i, uid in enumerate(self.selected_uids):
-        vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
-        points = vtk_obj.points
+        if "Normals" not in self.parent.dom_coll.get_uid_properties_names(uid):
+            print("Selected entity has no Normals, please choose an other or make them with the proper function")
+            return
+        
+        vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)    
+        points = vtk_obj.points  
         normals = numpy_support.vtk_to_numpy(
-            vtk_obj.GetPointData().GetScalars("Normals")
-        )
+            vtk_obj.GetPointData().GetScalars("Normals"))
         n_points[i] = vtk_obj.GetNumberOfPoints()
         normals_var[i] = srf(normals)
 
@@ -517,14 +519,19 @@ def auto_pick(self):
         return
     else:
         uid = self.selected_uids[0]
+    
+    vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+    if "ClusterId" not in vtk_obj.point_data_keys:
+            print("Selected entity has no Clusters, please choose an other or make them with the proper function")
+            return
 
     vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
     name = self.parent.dom_coll.get_uid_name(uid)
     appender = vtkAppendPolyData()
-    max_region = np_max(vtk_obj.get_point_data("ClusterId"))
+    regions = set(vtk_obj.get_point_data("ClusterId").astype(int))
     vtk_obj.GetPointData().SetActiveScalars("ClusterId")
-    for i in range(max_region):
-        print(f"{i}/{max_region}", end="\r")
+    for i in regions:
+        print(f"{i}/{regions}", end="\r")
         thresh = vtkThresholdPoints()
 
         thresh.SetInputData(vtk_obj)
@@ -550,12 +557,17 @@ def auto_pick(self):
 
     appender.Update()
 
+    if appender.GetOutput().GetNumberOfPoints() == 0:
+        print("No attitude points could be computed")
+        self.clear_selection()
+        return
+
     points = Attitude()
     points.ShallowCopy(appender.GetOutput())
     properties_name = points.point_data_keys
     properties_components = [points.get_point_data_shape(i)[1] for i in properties_name]
 
-    curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
+    curr_obj_dict = deepcopy(self.parent.dom_coll.entity_dict)
     curr_obj_dict["uid"] = str(uuid4())
     curr_obj_dict["name"] = f"{name}auto_pick"
     curr_obj_dict["role"] = "undef"
@@ -574,7 +586,8 @@ def auto_pick(self):
 
 def thresh_filt(self):
     """Function used to filter the point cloud using a given property"""
-    uid = self.actors_df.loc[self.actors_df["show"] == True, "uid"].values[0]
+    # uid = self.actors_df.loc[self.actors_df["show"] == True, "uid"].values[0]
+    uid = self.selected_uids[0]
     vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
     if isinstance(vtk_obj, PCDom):
         input_dict = {
@@ -598,7 +611,6 @@ def thresh_filt(self):
         # out.plot()
         # self.parent.dom_coll.replace_vtk(uid[0],out)
         entity_dict = deepcopy(self.parent.dom_coll.entity_dict)
-        # print(entity_dict)
         entity_dict["name"] = (
             self.parent.dom_coll.get_uid_name(uid)
             + "_thresh_"
@@ -606,15 +618,11 @@ def thresh_filt(self):
             + "_"
             + str(dialog["u_t"])
         )
-        entity_dict["vtk_obj"] = out
+        # entity_dict["vtk_obj"] = out
         entity_dict["topology"] = "PCDom"
-        entity_dict["properties_names"] = self.parent.dom_coll.get_uid_properties_names(
-            uid
-        )
-        entity_dict["topology"] = "PCDom"
-        entity_dict["properties_components"] = (
-            self.parent.dom_coll.get_uid_properties_components(uid)
-        )
+        entity_dict["properties_names"] = self.parent.dom_coll.get_uid_properties_names(uid)
+        # entity_dict["topology"] = "PCDom"
+        entity_dict["properties_components"] = (self.parent.dom_coll.get_uid_properties_components(uid))
         entity_dict["vtk_obj"] = out
         self.parent.dom_coll.add_entity_from_dict(entity_dict)
         del out

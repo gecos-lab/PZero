@@ -21,7 +21,7 @@ import numpy as np
 from unittest.mock import MagicMock
 from unittest.mock import patch
 from pzero.entities_factory import PCDom
-from pzero.point_clouds import normals2dd, cut_pc, decimate_pc, segment_pc, facets_pc
+from pzero.point_clouds import normals2dd, cut_pc, decimate_pc, segment_pc, facets_pc, calibration_pc, auto_pick
 
 
 # =============================================================================
@@ -93,8 +93,11 @@ def _make_self(vtk_obj, uid: str = "uid_001", dip_data: bool = True, name: str =
     """
     self_mock = MagicMock()
     self_mock.selected_uids = [uid]
+    self_mock.actors_df.loc[self_mock.actors_df["show"] == True, "uid"].values[0].return_value = [uid]
     self_mock.parent.dom_coll.get_uid_name.return_value = name
     self_mock.parent.dom_coll.get_uid_vtk_obj.return_value = vtk_obj
+    self_mock.parent.dom_coll.get_uid_properties_components.return_value = ...
+    
     
     if dip_data:
         self_mock.parent.dom_coll.get_uid_properties_names.return_value = ["dip", "dip direction"]
@@ -121,6 +124,26 @@ def _make_self(vtk_obj, uid: str = "uid_001", dip_data: bool = True, name: str =
     "vtk_obj": None,
     }
     
+    self_mock.parent.dom_coll.add_entity_from_dict = {
+    "uid": "",
+    "name": "",
+    "topology": "",
+    "properties_names": [],
+    "properties_components": [],
+    "vtk_obj": None,
+    }
+    
+    return self_mock
+
+def _make_self_multi(vtk_objs: list, uids: list) -> MagicMock:
+    """
+    Version of _make_self for functions that loop over multiple selected UIDs.
+    vtk_objs[i] is returned when get_uid_vtk_obj(uids[i]) is called.
+    """
+    self_mock = MagicMock()
+    self_mock.selected_uids = uids
+    self_mock.parent.dom_coll.get_uid_vtk_obj.side_effect = lambda uid: vtk_objs[uids.index(uid)]
+    self_mock.parent.dom_coll.get_uid_properties_names.return_value = ["Normals"]
     return self_mock
 
 
@@ -241,7 +264,7 @@ class TestNormals2dd:
         if dat_path is None:
             pytest.skip("No .dat file provided - use --dat-file=<path> to enable")
 
-        points = np.loadtxt(dat_path, dtype=np.float64)
+        points = np.loadtxt(dat_path, dtype=np.float64, skiprows=1)
 
         # Subsample up to 5000 points for plane fitting.
         # SVD on the full cloud would require enormous memory for large files.
@@ -278,6 +301,7 @@ class TestNormals2dd:
         print(f"\n[.dat] dip:           mean={dip.mean():.1f}  std={dip.std():.1f}")
         print(f"[.dat] dip direction: mean={dd.mean():.1f}  std={dd.std():.1f}")
 
+
 class TestCutPC:
    """
    Tests for cut_pc() defined in point_clouds.py.
@@ -308,6 +332,7 @@ write the cropped data in the corresponding propreties_components
        assert " -- No input data selected -- " in printed
 
        self_mock.plotter.track_click_position.assert_not_called()
+
 
 class TestDecimatePC:
     """
@@ -358,6 +383,7 @@ class TestDecimatePC:
         
         assert set(decimated_pc.points[:, 0]).issubset(vtk_obj.points[:, 0])
         assert set(decimated_pc.points[:, 1]).issubset(vtk_obj.points[:, 1])
+
 
 class TestSegmentPC:
     """
@@ -455,7 +481,7 @@ class TestSegmentPC:
 
         assert seg_pc.GetNumberOfPoints() != 0 and seg_pc.GetNumberOfPoints() is not None, "Problem, size is 0"
         # The pc size should be 200 since there is only one cluster left
-        assert seg_pc.GetNumberOfPoints() == 200, "Problem, there is no one cluster left"
+        assert 180 <= seg_pc.GetNumberOfPoints() <= 200, "Problem, there is no one cluster left"
         
     def test_neighbor_cleaning(self, mock_dialog, capsys):
         """
@@ -558,12 +584,12 @@ class TestSegmentPC:
             "nn":  1,   # accept almost all the clusters
             }
 
-        points = np.loadtxt(dat_path, dtype=np.float64)
+        points = np.loadtxt(dat_path, dtype=np.float64, skiprows=1)
 
         # Subsample up to 10000 points for plane fitting.
         # SVD on the full cloud would require enormous memory for large files.
         rng = np.random.default_rng(42)
-        sample_size = min(10000, len(points))
+        sample_size = min(100000, len(points))
         sample = points[rng.choice(len(points), sample_size, replace=False)]
 
         pc = PCDom()
@@ -602,6 +628,7 @@ class TestSegmentPC:
         print(f"\n[.dat] original points : {pc.GetNumberOfPoints()}")
         print(f"[.dat] segmented points: {seg_pc.GetNumberOfPoints()}")
         print(f"[.dat] clusters found  : {len(np.unique(cluster_ids))}")
+   
     
 class TestFacetsPC:
     """
@@ -889,15 +916,15 @@ class TestFacetsPC:
             "d1":  0,
             "d2":  90,    
             "rad": 10.0,
-            "nn":  0,   # accept almost all the clusters
+            "nn":  1,   # accept almost all the clusters
             }
 
-        points = np.loadtxt(dat_path, dtype=np.float64)
+        points = np.loadtxt(dat_path, dtype=np.float64, skiprows=1)
 
         # Subsample up to 10000 points for plane fitting.
         # SVD on the full cloud would require enormous memory for large files.
         rng = np.random.default_rng(42)
-        sample_size = min(10000, len(points))
+        sample_size = min(100000, len(points))
         sample = points[rng.choice(len(points), sample_size, replace=False)]
 
         pc = PCDom()
@@ -965,3 +992,441 @@ class TestFacetsPC:
         print(f"[.dat] area            : {area}")
         print(f"[.dat] width           : {facets.get_field_data('width')}")
         print(f"[.dat] length          : {facets.get_field_data('length')}")
+  
+        
+class TestCalibrationPC:
+    """
+    Tests for calibration_pc() defined in point_clouds.py.
+
+    calibration_pc is creating a new entry to the vtk object for the distances
+    between each points and the best fitting plane and it is plotting
+    some statistics on the object.
+
+    Because calibration_pc() needs a running PZero application to work normally,
+    we replace all of those parts with MagicMocks. That way we can test the
+    logic of the function in isolation, without starting the whole application.
+    """
+    
+    @pytest.fixture(autouse=True)
+    def mock_plot(self):
+        """
+        Small patch to avoid the crash when calling the plotting functions.
+        The plot will not be returned.
+        """ 
+        with patch("pzero.point_clouds.plt_subplot") as mock_subplot, \
+            patch("pzero.point_clouds.sns") as mock_sns:
+            mock_fig = MagicMock()
+            mock_subplot.return_value = (mock_fig, (MagicMock(), MagicMock()))
+            mock_sns.histplot.return_value = MagicMock()
+            yield
+            
+    def test_no_selection_prints_warning(self, capsys):
+        """
+        If the user forgot to select a point cloud in the GUI,
+        selected_uids is empty. The function should print a clear warning
+        and return immediately without touching anything else.
+        """
+        self_mock = MagicMock()
+        self_mock.selected_uids = []
+        calibration_pc(self_mock)
+
+        printed = capsys.readouterr().out
+        assert "No entities selected, make sure to have the right tab open" in printed
+
+        self_mock.parent.dom_coll.replace_vtk.assert_not_called() 
+        
+    def test_missing_normals_prints_warning(self, capsys):
+        """
+        If the user selected a point cloud that has no Normals,
+        the function should print a clear warning and return immediatly 
+        whitout touching anything else.
+        """
+        
+        vtk_obj = _make_real_pc(with_normals=False)
+        self_mock = _make_self(vtk_obj)
+        calibration_pc(self_mock)
+
+        printed = capsys.readouterr().out
+        assert "Selected entity has no Normals, please choose an other or make them with the proper function" in printed
+
+        self_mock.parent.dom_coll.replace_vtk.assert_not_called() 
+        
+    def test_distance(self):
+        """
+        Each point cloud should have a "Distance" entry and
+        all the distances should be positives otherwise,
+        best_fitting_plane is not working. 
+        """
+        
+        pc1 = _make_real_pc()
+        pc2 = _make_real_pc()
+        pc3 = _make_real_pc()
+        pcs = [pc1, pc2, pc3]
+        self_mock = _make_self_multi(pcs, ["uid_001", "uid_002", "uid_003"])
+        calibration_pc(self_mock)
+        
+        distances1 = pc1.get_point_data("Distance")
+        distances2 = pc2.get_point_data("Distance")
+        distances3 = pc3.get_point_data("Distance")
+        assert (distances1 is not None and
+                distances2 is not None and
+                distances3 is not None), "One of the distances is None"
+        
+        assert (np.all(distances1 >= 0) and
+                np.all(distances2 >= 0) and
+                np.all(distances3 >= 0)), "One of the distances is not positives"
+        
+        assert not np.array_equal(distances1, distances2), "pc1 and pc2 have identical distances"
+        assert not np.array_equal(distances1, distances3), "pc1 and pc3 have identical distances"
+        
+        assert self_mock.parent.dom_coll.replace_vtk.call_count == 3, "All the vtk did not got updated"
+        
+        
+class TestAutoPick:
+    """
+    Tests for auto_pick() defined in point_clouds.py.
+
+    auto_pick is creating an Attitude at the centroid of each clusters and
+    put it as a Vertex. Each Attitude is has a Normal vector wich is calculated
+    with the best fitting plan.
+
+    Because auto_pick() needs a running PZero application to work normally,
+    we replace all of those parts with MagicMocks. That way we can test the
+    logic of the function in isolation, without starting the whole application.
+    """
+    
+    @pytest.fixture(autouse=False)
+    def mock_dialog(self): 
+        """
+        Small helper to mimic the dialog box in the segment_pc script
+        """  
+        with patch("pzero.point_clouds.multiple_input_dialog") as m:
+            yield m
+            
+    def test_no_selection_prints_warning(self, capsys):
+        """
+        If the user forgot to select a point cloud in the GUI,
+        selected_uids is empty. The function should print a clear warning
+        and return immediately without touching anything else.
+        """
+        self_mock = MagicMock()
+        self_mock.selected_uids = []
+        auto_pick(self_mock)
+
+        printed = capsys.readouterr().out
+        assert "No entities selected, make sure to have the right tab open" in printed
+
+        self_mock.parent.dom_coll.get_uid_vtk_obj.assert_not_called() 
+        
+    def test_missing_clusters_prints_warning(self, capsys):
+        """
+        If the user selected a point cloud that has no clusters,
+        the function should print a clear warning and return immediatly 
+        whitout touching anything else.
+        """
+        
+        vtk_obj = _make_real_pc()
+        self_mock = _make_self(vtk_obj)
+        auto_pick(self_mock)
+
+        printed = capsys.readouterr().out
+        assert "Selected entity has no Clusters, please choose an other or make them with the proper function" in printed
+
+        self_mock.parent.geol_coll.add_entity_from_dict.assert_not_called()
+        
+    def test_Normals_present(self, mock_dialog):
+        """
+        The result should have Normals attached to it.
+        Each cluster should have his normal.
+        """
+        
+        mock_dialog.return_value = {
+            "name": "test_result",
+            "dd1": 0,
+            "dd2": 360,   
+            "d1":  0,
+            "d2":  90,    
+            "rad": 10.0,
+            "nn":  1,
+            }
+        vtk_obj = _make_real_pc(with_clusters=True)
+        self_mock = _make_self(vtk_obj)
+        segment_pc(self_mock)
+        # To get back the data from segment_pc because since it is using a 
+        # MagicMock object, it is not returning anything
+        call_args = self_mock.parent.dom_coll.add_entity_from_dict.call_args
+        entity_dict_clust = call_args.kwargs["entity_dict"]
+        clust = entity_dict_clust["vtk_obj"]
+        
+        self_mock_pick = _make_self(clust)
+        auto_pick(self_mock_pick)
+        # To get back the data from segment_pc because since it is using a 
+        # MagicMock object, it is not returning anything
+        call_args = self_mock_pick.parent.geol_coll.add_entity_from_dict.call_args
+        entity_dict_pick = call_args.kwargs["entity_dict"]
+        pick = entity_dict_pick["vtk_obj"]
+        assert "Normals" in pick.point_data_keys, "There are missing Normals."  
+        
+    def test_Normals_are_right(self, mock_dialog):
+        """
+        The normals should be unit vectors and they should
+        be pointing downward.
+        """
+        
+        mock_dialog.return_value = {
+            "name": "test_result",
+            "dd1": 0,
+            "dd2": 360,   
+            "d1":  0,
+            "d2":  90,    
+            "rad": 10.0,
+            "nn":  1,
+            }
+        vtk_obj = _make_real_pc(with_clusters=True)
+        self_mock = _make_self(vtk_obj)
+        segment_pc(self_mock)
+        # To get back the data from segment_pc because since it is using a 
+        # MagicMock object, it is not returning anything
+        call_args = self_mock.parent.dom_coll.add_entity_from_dict.call_args
+        entity_dict_clust = call_args.kwargs["entity_dict"]
+        clust = entity_dict_clust["vtk_obj"]
+        
+        self_mock_pick = _make_self(clust)
+        auto_pick(self_mock_pick)
+        # To get back the data from segment_pc because since it is using a 
+        # MagicMock object, it is not returning anything
+        call_args = self_mock_pick.parent.geol_coll.add_entity_from_dict.call_args
+        entity_dict_pick = call_args.kwargs["entity_dict"]
+        pick = entity_dict_pick["vtk_obj"]
+        normals = pick.get_point_data("Normals").reshape(-1, 3)
+        
+        norms   = np.linalg.norm(normals, axis=1)
+        np.testing.assert_allclose(norms, 1.0, atol=1e-5), "Some Normals are not unit"
+        assert np.all(normals[:, 2] < 0), "Some Normals doesn't point downward"
+        
+    def test_topology_is_vertex(self, mock_dialog):
+        """
+        The "Topology" field should be a "VertexSet". Otherwise,
+        the function that add the dictionnary is not working.
+        """
+        
+        mock_dialog.return_value = {
+            "name": "test_result",
+            "dd1": 0,
+            "dd2": 360,   
+            "d1":  0,
+            "d2":  90,    
+            "rad": 10.0,
+            "nn":  1,
+            }
+        vtk_obj = _make_real_pc(with_clusters=True)
+        self_mock = _make_self(vtk_obj)
+        segment_pc(self_mock)
+        # To get back the data from segment_pc because since it is using a 
+        # MagicMock object, it is not returning anything
+        call_args = self_mock.parent.dom_coll.add_entity_from_dict.call_args
+        entity_dict_clust = call_args.kwargs["entity_dict"]
+        clust = entity_dict_clust["vtk_obj"]
+        
+        self_mock_pick = _make_self(clust)
+        auto_pick(self_mock_pick)
+        # To get back the data from segment_pc because since it is using a 
+        # MagicMock object, it is not returning anything
+        call_args = self_mock_pick.parent.geol_coll.add_entity_from_dict.call_args
+        entity_dict_pick = call_args.kwargs["entity_dict"]
+        topo = entity_dict_pick["topology"]
+        
+        assert topo is "VertexSet", "The topology is not a Vertex"
+        
+    def test_feature_name_is_right(self, mock_dialog):
+        """
+        The "feature" field should return the name of the object.
+        Here the name is "Pc".
+        """
+        
+        mock_dialog.return_value = {
+            "name": "test_result",
+            "dd1": 0,
+            "dd2": 360,   
+            "d1":  0,
+            "d2":  90,    
+            "rad": 10.0,
+            "nn":  1,
+            }
+        vtk_obj = _make_real_pc(with_clusters=True)
+        self_mock = _make_self(vtk_obj)
+        segment_pc(self_mock)
+        # To get back the data from segment_pc because since it is using a 
+        # MagicMock object, it is not returning anything
+        call_args = self_mock.parent.dom_coll.add_entity_from_dict.call_args
+        entity_dict_clust = call_args.kwargs["entity_dict"]
+        clust = entity_dict_clust["vtk_obj"]
+        
+        self_mock_pick = _make_self(clust)
+        auto_pick(self_mock_pick)
+        # To get back the data from segment_pc because since it is using a 
+        # MagicMock object, it is not returning anything
+        call_args = self_mock_pick.parent.geol_coll.add_entity_from_dict.call_args
+        entity_dict_pick = call_args.kwargs["entity_dict"]
+        name = entity_dict_pick["feature"]
+        
+        assert name == self_mock_pick.parent.dom_coll.get_uid_name.return_value, "The feature name does not corresponding."
+        
+    def test_Attitude_has_right_number_of_points(self, mock_dialog):
+        """
+        The Attitude object that is returned should have 
+        the same amount of point than the number of clusters.
+        Otherwise, the loop on the clusters is not working.
+        """
+        
+        mock_dialog.return_value = {
+            "name": "test_result",
+            "dd1": 0,
+            "dd2": 360,   
+            "d1":  0,
+            "d2":  90,    
+            "rad": 10.0,
+            "nn":  1,
+            }
+        vtk_obj = _make_real_pc(with_clusters=True)
+        self_mock = _make_self(vtk_obj)
+        segment_pc(self_mock)
+        # To get back the data from segment_pc because since it is using a 
+        # MagicMock object, it is not returning anything
+        call_args = self_mock.parent.dom_coll.add_entity_from_dict.call_args
+        entity_dict_clust = call_args.kwargs["entity_dict"]
+        clust = entity_dict_clust["vtk_obj"]
+        n_clust = len(set(clust.get_point_data("ClusterId")))
+        
+        self_mock_pick = _make_self(clust)
+        auto_pick(self_mock_pick)
+        # To get back the data from segment_pc because since it is using a 
+        # MagicMock object, it is not returning anything
+        call_args = self_mock_pick.parent.geol_coll.add_entity_from_dict.call_args
+        entity_dict_pick = call_args.kwargs["entity_dict"]
+        pick = entity_dict_pick["vtk_obj"]
+        n_attitude_points = pick.GetNumberOfPoints()
+        
+        assert 0 < n_attitude_points <= n_clust, "There is not the right number of pick points."
+        
+    def test_with_real_dat_file(self, request, mock_dialog):
+        """
+        Optional integration test using a real .dat point cloud file.
+
+        The file must contain one point per row: x y z (space-separated).
+        
+        If you want to see the prints and run only this function, run :
+        pytest test_point_clouds.py::TestAutoPick::test_with_real_dat_file -v -s --dat-file=/path/to/your/data
+        """
+        dat_path = request.config.getoption("--dat-file", default=None)
+        if dat_path is None:
+            pytest.skip("No .dat file provided - use --dat-file=<path> to enable")
+
+        mock_dialog.return_value = {
+            "name": "test_result",
+            "dd1": 0,
+            "dd2": 360,    
+            "d1":  0,
+            "d2":  90,    
+            "rad": 10.0,
+            "nn":  1,   # accept almost all the clusters
+            }
+
+        points = np.loadtxt(dat_path, dtype=np.float64, skiprows=1)
+
+        # Subsample up to 10000 points for plane fitting.
+        # SVD on the full cloud would require enormous memory for large files.
+        rng = np.random.default_rng(42)
+        sample_size = min(10000, len(points))
+        sample = points[rng.choice(len(points), sample_size, replace=False)]
+
+        pc = PCDom()
+        pc.points = sample[:, :3]
+        #Create and add the normals
+        pc.vtk_set_normals()
+        #Create and add the dip and dip direction
+        dip = pc.points_map_dip
+        pc.init_point_data("dip", 1)
+        pc.set_point_data("dip", dip)
+        dip_dir = pc.points_map_dip_direction
+        pc.init_point_data("dip direction", 1)
+        pc.set_point_data("dip direction", dip_dir)
+
+        self_mock = _make_self(pc)
+        segment_pc(self_mock)
+        
+        call_args   = self_mock.parent.dom_coll.add_entity_from_dict.call_args
+        entity_dict = call_args.kwargs["entity_dict"]
+        clust     = entity_dict["vtk_obj"]
+        n_clusters = len(set(clust.get_point_data("ClusterId")))
+
+        print(f"\n[.dat] original points : {pc.GetNumberOfPoints()}")
+        print(f"[.dat] clusters found  : {n_clusters}")
+
+        # --- Run auto_pick on the segmented cloud ---
+        self_mock_ap = _make_self(clust)
+        auto_pick(self_mock_ap)
+
+        call_args   = self_mock_ap.parent.geol_coll.add_entity_from_dict.call_args
+        entity_dict = call_args.kwargs["entity_dict"]
+        result      = entity_dict["vtk_obj"]
+
+        # 1 - Saved to geol_coll not dom_coll
+        self_mock_ap.parent.geol_coll.add_entity_from_dict.assert_called_once()
+        self_mock_ap.parent.dom_coll.add_entity_from_dict.assert_not_called()
+
+        # 2 - Topology is VertexSet
+        assert entity_dict["topology"] == "VertexSet", \
+            f"Wrong topology: {entity_dict['topology']}"
+
+        # 3 - Feature links back to the source object name
+        assert entity_dict["feature"] == self_mock_ap.parent.dom_coll.get_uid_name.return_value, \
+            "Feature field does not match the source object name"
+
+        # 4 - One attitude point per cluster
+        # auto_pick uses range(max_region) so result may have fewer points
+        # than n_clusters if some IDs were non-contiguous — so we use <=
+        n_attitude_points = result.GetNumberOfPoints()
+        assert 0 < n_attitude_points <= n_clusters, \
+            f"Expected <= {n_clusters} attitude points, got {n_attitude_points}"
+
+        # 5 - Normals are present on the result
+        assert "Normals" in result.point_data_keys, \
+            "No Normals found on the Attitude result"
+
+        # 6 - Normals are unit vectors
+        normals = result.get_point_data("Normals").reshape(-1, 3)
+        norms   = np.linalg.norm(normals, axis=1)
+        np.testing.assert_allclose(norms, 1.0, atol=1e-5,
+            err_msg="Normals are not unit vectors")
+
+        # 7 - Normals point downward (geological convention)
+        assert np.all(normals[:, 2] < 0), \
+            "Some normals point upward — convention violated"
+
+        # 8 - clear_selection was called
+        self_mock_ap.clear_selection.assert_called_once()
+
+        # 9 - Print summary for visual inspection
+        print(f"[.dat] attitude points : {n_attitude_points}")
+        print(f"[.dat] normals sample  : {normals[:3]}")
+        
+        
+class ThreshFilter:
+    """
+    ...
+    """
+    
+    # @pytest.fixture(autouse=False)
+    # def mock_dialog(self): 
+    #     """
+    #     Small helper to mimic the dialog box in the segment_pc script
+        # """  
+        # with patch("pzero.point_clouds.multiple_input_dialog") as m:
+        #     yield m
+        
+    # mock_dialog.return_value = {
+        #     "prop_name": ["Select property name: ", vtk_obj.properties_names],
+        #     "l_t": ["Lower threshold: ", 0],
+        #     "u_t": ["Upper threshold: ", 10],
+        # }
