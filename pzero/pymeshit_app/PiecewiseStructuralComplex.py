@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
+    QWidget,
 )
 
 
@@ -2574,6 +2575,36 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         )
         form_layout.addRow("Max missing boundaries", max_missing_spin)
 
+        domxs_cut_options = self._available_domxs_cut_options()
+        domxs_cut_uid = self._default_domxs_cut_uid(
+            [uid for _label, uid in domxs_cut_options]
+        )
+        domxs_cut_widget = QWidget(dialog)
+        domxs_cut_layout = QHBoxLayout(domxs_cut_widget)
+        domxs_cut_layout.setContentsMargins(0, 0, 0, 0)
+        use_domxs_cut_check = QCheckBox("Use DomXs for dividing areas")
+        use_domxs_cut_check.setChecked(False)
+        use_domxs_cut_check.setEnabled(bool(domxs_cut_options))
+        domxs_cut_layout.addWidget(use_domxs_cut_check)
+        domxs_cut_combo = QComboBox(dialog)
+        for label, uid in domxs_cut_options:
+            domxs_cut_combo.addItem(label, uid)
+        if domxs_cut_uid:
+            selected_index = domxs_cut_combo.findData(domxs_cut_uid)
+            if selected_index >= 0:
+                domxs_cut_combo.setCurrentIndex(selected_index)
+        domxs_cut_combo.setEnabled(False)
+        domxs_cut_layout.addWidget(domxs_cut_combo, 1)
+        use_domxs_cut_check.toggled.connect(domxs_cut_combo.setEnabled)
+        use_domxs_cut_check.setToolTip(
+            "Use the selected DomXs to split PSC areas and seeds. "
+            "The DomXs is not used as an STm topology boundary."
+            if domxs_cut_options
+            else "No DomXs is available in the active Xsection."
+        )
+        domxs_cut_combo.setToolTip(use_domxs_cut_check.toolTip())
+        form_layout.addRow("DomXs", domxs_cut_widget)
+
         use_selected_check = QCheckBox("Use selected XsPolyLine entities only")
         use_selected_check.setChecked(bool(selected_line_uids))
         use_selected_check.setEnabled(bool(selected_line_uids))
@@ -2607,6 +2638,11 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         self.build_section_areas(
             table_name=table_combo.currentText(),
             boundary_uid=boundary_combo.currentData(),
+            dom_cut_uid=(
+                domxs_cut_combo.currentData()
+                if use_domxs_cut_check.isChecked()
+                else None
+            ),
             use_selected=use_selected_check.isChecked(),
             tolerance=self._default_section_tolerance(section_uid),
             max_missing_boundaries=int(max_missing_spin.value()),
@@ -2617,6 +2653,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         self,
         table_name: str,
         boundary_uid: str = FRAME_BOUNDARY_KEY,
+        dom_cut_uid: Optional[str] = None,
         use_selected: bool = False,
         tolerance: float = 0.0,
         max_missing_boundaries: Optional[int] = None,
@@ -2670,38 +2707,71 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             )
             return
 
-        network_geometries = [boundary_polygon.boundary] + [
+        dom_cut_entries = self._dom_cut_line_entries(
+            dom_cut_uid=dom_cut_uid,
+            boundary_polygon=boundary_polygon,
+            line_cls=LineString,
+            tolerance=tolerance,
+        )
+        if dom_cut_uid and not dom_cut_entries:
+            self.print_terminal(
+                "Selected DomXs produced no usable section line."
+            )
+            return
+
+        geologic_network_geometries = [boundary_polygon.boundary] + [
             entry["geometry"] for entry in line_entries
         ]
-        noded_network = unary_union(network_geometries)
-        polygons_geom, dangles_geom, cuts_geom, invalids_geom = polygonize_full(noded_network)
-
-        dangle_count = self._problem_edge_count(dangles_geom, tolerance)
-        cut_count = self._problem_edge_count(cuts_geom, tolerance)
-        invalid_count = len(self._iter_geometries(invalids_geom))
-        raw_polygons = [
-            polygon
-            for polygon in self._iter_geometries(polygons_geom)
-            if polygon.geom_type == "Polygon" and polygon.area > 0.0
-        ]
-        section_polygons = [
-            polygon
-            for polygon in raw_polygons
-            if boundary_polygon.covers(polygon.representative_point())
-        ]
-        section_polygons = self._unique_polygons(section_polygons)
-
-        coverage_ok = False
-        if section_polygons:
-            try:
-                covered = unary_union(section_polygons)
-                area_tolerance = max(boundary_polygon.area * 1.0e-6, tolerance * tolerance)
-                coverage_ok = (
-                    boundary_polygon.difference(covered).area <= area_tolerance
-                    and covered.difference(boundary_polygon).area <= area_tolerance
+        match_polygons = []
+        if dom_cut_entries:
+            (
+                match_polygons,
+                match_dangle_count,
+                match_cut_count,
+                match_invalid_count,
+                match_coverage_ok,
+            ) = self._polygonize_section_network(
+                boundary_polygon=boundary_polygon,
+                network_geometries=geologic_network_geometries,
+                polygonize_full=polygonize_full,
+                unary_union=unary_union,
+                tolerance=tolerance,
+            )
+            if (
+                match_dangle_count
+                or match_cut_count
+                or match_invalid_count
+                or not match_coverage_ok
+            ):
+                self.print_terminal(
+                    "Section lines are not watertight before DomXs cut "
+                    f"(dangles={match_dangle_count}, cuts={match_cut_count}, "
+                    f"invalid rings={match_invalid_count}). "
+                    "Clean the section with Snap to intersection and retry."
                 )
-            except Exception:
-                coverage_ok = False
+                return
+
+        network_geometries = geologic_network_geometries + [
+            entry["geometry"] for entry in dom_cut_entries
+        ]
+        (
+            section_polygons,
+            dangle_count,
+            cut_count,
+            invalid_count,
+            coverage_ok,
+        ) = self._polygonize_section_network(
+            boundary_polygon=boundary_polygon,
+            network_geometries=network_geometries,
+            polygonize_full=polygonize_full,
+            unary_union=unary_union,
+            tolerance=tolerance,
+        )
+        if dom_cut_entries:
+            self.print_terminal(
+                f"Using DomXs cut with {len(dom_cut_entries)} line part(s). "
+                "The cut splits PSC areas/seeds but is not used in STm matching."
+            )
 
         if dangle_count or cut_count or invalid_count or not coverage_ok:
             self.print_terminal(
@@ -2724,29 +2794,68 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         }
         assigned_counts: Dict[str, int] = {}
         area_infos = []
+        match_area_infos = []
+        if dom_cut_entries:
+            for match_idx, match_polygon in enumerate(match_polygons, start=1):
+                match_boundary_labels = self._polygon_boundary_labels(
+                    polygon=match_polygon,
+                    boundary_polygon=boundary_polygon,
+                    line_entries=line_entries,
+                    tolerance=tolerance,
+                )
+                match_area_infos.append(
+                    {
+                        "area_idx": match_idx,
+                        "polygon": match_polygon,
+                        "boundary_labels": match_boundary_labels,
+                        "candidates": self._section_unit_candidates_for_boundary_labels(
+                            psc_model=psc_model,
+                            labels=match_boundary_labels,
+                            max_missing_boundaries=max_missing_boundaries,
+                        ),
+                    }
+                )
 
         for area_idx, polygon in enumerate(section_polygons, start=1):
-            boundary_labels = self._polygon_boundary_labels(
+            match_area_info = self._dom_cut_parent_area_info(
                 polygon=polygon,
-                boundary_polygon=boundary_polygon,
-                line_entries=line_entries,
-                tolerance=tolerance,
+                parent_area_infos=match_area_infos,
             )
+            if match_area_info:
+                boundary_labels = list(match_area_info.get("boundary_labels", []))
+                candidates = list(match_area_info.get("candidates", []) or [])
+                dom_cut_parent_area_idx = int(match_area_info.get("area_idx", 0) or 0)
+            else:
+                boundary_labels = self._polygon_boundary_labels(
+                    polygon=polygon,
+                    boundary_polygon=boundary_polygon,
+                    line_entries=line_entries,
+                    tolerance=tolerance,
+                )
+                candidates = self._section_unit_candidates_for_boundary_labels(
+                    psc_model=psc_model,
+                    labels=boundary_labels,
+                    max_missing_boundaries=max_missing_boundaries,
+                )
+                dom_cut_parent_area_idx = 0
             area_infos.append(
                 {
                     "area_idx": area_idx,
                     "polygon": polygon,
                     "boundary_labels": boundary_labels,
-                    "candidates": self._section_unit_candidates_for_boundary_labels(
-                        psc_model=psc_model,
-                        labels=boundary_labels,
-                        max_missing_boundaries=max_missing_boundaries,
+                    "dom_cut_parent_area_idx": dom_cut_parent_area_idx,
+                    "dom_cut_side": self._dom_cut_area_side(
+                        polygon=polygon,
+                        dom_cut_entries=dom_cut_entries,
+                        tolerance=tolerance,
                     ),
+                    "candidates": candidates,
                 }
             )
 
-        assignments = [None for _area_info in area_infos]
-        for info_idx, area_info in enumerate(area_infos):
+        assignment_area_infos = match_area_infos if match_area_infos else area_infos
+        assignment_results = [None for _area_info in assignment_area_infos]
+        for info_idx, area_info in enumerate(assignment_area_infos):
             exact_candidates = [
                 candidate
                 for candidate in area_info.get("candidates", [])
@@ -2758,8 +2867,8 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             if self._section_candidate_repeat_conflict_labels(
                 candidate=candidate,
                 area_info=area_info,
-                area_infos=area_infos,
-                assignments=assignments,
+                area_infos=assignment_area_infos,
+                assignments=assignment_results,
                 line_entries=line_entries,
                 boundary_roles_by_key=boundary_roles_by_key,
                 tolerance=tolerance,
@@ -2770,7 +2879,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 if assigned_counts.get(candidate["unit_key"], 0)
                 else "CERTAIN"
             )
-            assignments[info_idx] = self._section_assignment_payload(
+            assignment_results[info_idx] = self._section_assignment_payload(
                 candidate=candidate,
                 status=status,
                 candidate_pool=exact_candidates,
@@ -2780,28 +2889,51 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 assigned_counts.get(candidate["unit_key"], 0) + 1
             )
 
-        for info_idx, area_info in enumerate(area_infos):
-            if assignments[info_idx] is not None:
+        for info_idx, area_info in enumerate(assignment_area_infos):
+            if assignment_results[info_idx] is not None:
                 continue
             assignment = self._section_best_area_assignment(
                 area_info=area_info,
                 assigned_counts=assigned_counts,
-                area_infos=area_infos,
-                assignments=assignments,
+                area_infos=assignment_area_infos,
+                assignments=assignment_results,
                 line_entries=line_entries,
                 boundary_roles_by_key=boundary_roles_by_key,
                 tolerance=tolerance,
             )
-            assignments[info_idx] = assignment
+            assignment_results[info_idx] = assignment
             unit_key = assignment.get("unit_key", "")
             if unit_key:
                 assigned_counts[unit_key] = assigned_counts.get(unit_key, 0) + 1
+
+        if match_area_infos:
+            assignment_by_parent_idx = {
+                int(area_info.get("area_idx", 0) or 0): assignment
+                for area_info, assignment in zip(match_area_infos, assignment_results)
+            }
+            assignments = [
+                deepcopy(
+                    assignment_by_parent_idx.get(
+                        int(area_info.get("dom_cut_parent_area_idx", 0) or 0)
+                    )
+                )
+                for area_info in area_infos
+            ]
+        else:
+            assignments = assignment_results
 
         for area_info, assignment in zip(area_infos, assignments):
             polygon = area_info["polygon"]
             area_idx = int(area_info["area_idx"])
             boundary_labels = area_info.get("boundary_labels", [])
             assignment = assignment or {"status": "UNASSIGNED"}
+            dom_cut_side = self._psc_text(area_info.get("dom_cut_side", ""))
+            if dom_cut_side:
+                assignment = dict(assignment)
+                assignment["dom_cut_side"] = dom_cut_side
+                assignment["dom_cut_parent_area_idx"] = area_info.get(
+                    "dom_cut_parent_area_idx", 0
+                )
             status = str(assignment.get("status", "UNASSIGNED"))
             status_counts[status] = status_counts.get(status, 0) + 1
             self._print_section_area_assignment(
@@ -2821,6 +2953,10 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 unit_name = self._psc_text(unit_info.get("name", "")) or feature
 
             color = self._color_for_psc_unit(unit_info, feature)
+            if dom_cut_side == "eroded":
+                feature = f"{feature}_eroded"
+                unit_name = f"{unit_name}_eroded"
+                color = self._lighten_rgb_color(color)
             seed_point = polygon.representative_point()
             seed_xyz = project.xsect_coll.plane2world(
                 section_uid=section_uid,
@@ -2870,6 +3006,15 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             f"POSSIBLE_REPEAT={status_counts.get('POSSIBLE_REPEAT', 0)}, "
             f"UNASSIGNED={status_counts.get('UNASSIGNED', 0)}."
         )
+        self.print_terminal(
+            "If ambiguous PSC areas are assigned to the wrong unit, select the "
+            "affected polygons and use Modify > Switch PSC areas."
+        )
+        if dom_cut_entries:
+            self.print_terminal(
+                "DomXs-divided ambiguous areas should be switched separately for "
+                "subsurface and eroded polygons."
+            )
 
     def _default_section_tolerance(self, section_uid: str) -> float:
         project = self._pzero_project()
@@ -2896,6 +3041,36 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             if topology in {"TriSurf", "PolyLine", "XsPolyLine"}:
                 options.append((f"{name} ({topology})", uid))
         return options
+
+    def _available_domxs_cut_options(self) -> List[Tuple[str, str]]:
+        project = self._pzero_project()
+        section_uid = getattr(self.host, "this_x_section_uid", "")
+        dom_coll = getattr(project, "dom_coll", None)
+        if dom_coll is None:
+            return []
+        options = []
+        for uid in getattr(dom_coll, "get_uids", []) or []:
+            try:
+                name = self._psc_text(dom_coll.get_uid_name(uid)) or uid
+                topology = self._psc_text(dom_coll.get_uid_topology(uid))
+                parent_uid = self._psc_text(dom_coll.get_uid_x_section(uid))
+            except Exception:
+                continue
+            if topology == "DomXs" and parent_uid == section_uid:
+                options.append((name, uid))
+        return options
+
+    def _default_domxs_cut_uid(self, domxs_uids: List[str]) -> Optional[str]:
+        if not domxs_uids:
+            return None
+        project = self._pzero_project()
+
+        selected_uids = list(getattr(self.host, "selected_uids", []) or [])
+        selected_uids.extend(getattr(project, "selected_uids", []) or [])
+        for uid in selected_uids:
+            if uid in domxs_uids:
+                return uid
+        return domxs_uids[0]
 
     def _section_polyline_uids(self, use_selected: bool = False) -> List[str]:
         project = self._pzero_project()
@@ -3122,6 +3297,156 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                             }
                         )
         return entries
+
+    def _dom_cut_line_entries(
+        self,
+        dom_cut_uid: Optional[str],
+        boundary_polygon,
+        line_cls,
+        tolerance: float,
+    ) -> List[Dict[str, Any]]:
+        if not dom_cut_uid:
+            return []
+        project = self._pzero_project()
+        dom_coll = getattr(project, "dom_coll", None)
+        if dom_coll is None or dom_cut_uid not in getattr(dom_coll, "get_uids", []):
+            return []
+        try:
+            vtk_obj = dom_coll.get_uid_vtk_obj(dom_cut_uid)
+            topology = self._psc_text(dom_coll.get_uid_topology(dom_cut_uid))
+            name = self._psc_text(dom_coll.get_uid_name(dom_cut_uid))
+        except Exception:
+            return []
+
+        if topology != "DomXs":
+            return []
+
+        entries = []
+        min_length = max(float(tolerance or 0.0), 1.0e-9)
+        for line in self._line_strings_from_polydata(vtk_obj, line_cls):
+            try:
+                clipped = line.intersection(boundary_polygon)
+            except Exception:
+                continue
+            for clipped_line in self._iter_line_geometries(clipped):
+                if clipped_line.length > min_length:
+                    entries.append(
+                        {
+                            "uid": dom_cut_uid,
+                            "feature": name or topology or "DomXs",
+                            "geometry": clipped_line,
+                        }
+                    )
+        return entries
+
+    def _dom_cut_area_side(
+        self,
+        polygon,
+        dom_cut_entries: List[Dict[str, Any]],
+        tolerance: float,
+    ) -> str:
+        if polygon is None or not dom_cut_entries:
+            return ""
+        try:
+            point = polygon.representative_point()
+        except Exception:
+            return ""
+
+        nearest_cut_v = None
+        nearest_distance = None
+        for entry in dom_cut_entries:
+            geometry = entry.get("geometry")
+            if geometry is None:
+                continue
+            try:
+                projected = geometry.interpolate(geometry.project(point))
+                distance = float(point.distance(projected))
+            except Exception:
+                continue
+            if nearest_distance is None or distance < nearest_distance:
+                nearest_distance = distance
+                nearest_cut_v = float(projected.y)
+        if nearest_cut_v is None:
+            return ""
+
+        delta_v = float(point.y) - nearest_cut_v
+        if abs(delta_v) <= max(float(tolerance or 0.0), 1.0e-9):
+            return ""
+        # Cross-section V increases down-dip, so larger V is below the DomXs trace.
+        return "subsurface" if delta_v > 0.0 else "eroded"
+
+    def _dom_cut_parent_area_info(
+        self,
+        polygon,
+        parent_area_infos: List[Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        if polygon is None or not parent_area_infos:
+            return None
+        try:
+            point = polygon.representative_point()
+        except Exception:
+            point = None
+
+        best_info = None
+        best_overlap = 0.0
+        for area_info in parent_area_infos:
+            parent_polygon = area_info.get("polygon")
+            if parent_polygon is None:
+                continue
+            try:
+                if point is not None and parent_polygon.covers(point):
+                    return area_info
+                overlap = float(parent_polygon.intersection(polygon).area)
+            except Exception:
+                continue
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_info = area_info
+        return best_info
+
+    def _polygonize_section_network(
+        self,
+        boundary_polygon,
+        network_geometries: List[Any],
+        polygonize_full,
+        unary_union,
+        tolerance: float,
+    ) -> Tuple[List[Any], int, int, int, bool]:
+        noded_network = unary_union(network_geometries)
+        polygons_geom, dangles_geom, cuts_geom, invalids_geom = polygonize_full(
+            noded_network
+        )
+
+        dangle_count = self._problem_edge_count(dangles_geom, tolerance)
+        cut_count = self._problem_edge_count(cuts_geom, tolerance)
+        invalid_count = len(self._iter_geometries(invalids_geom))
+        raw_polygons = [
+            polygon
+            for polygon in self._iter_geometries(polygons_geom)
+            if polygon.geom_type == "Polygon" and polygon.area > 0.0
+        ]
+        section_polygons = [
+            polygon
+            for polygon in raw_polygons
+            if boundary_polygon.covers(polygon.representative_point())
+        ]
+        section_polygons = self._unique_polygons(section_polygons)
+
+        coverage_ok = False
+        if section_polygons:
+            try:
+                covered = unary_union(section_polygons)
+                area_tolerance = max(
+                    boundary_polygon.area * 1.0e-6,
+                    float(tolerance or 0.0) * float(tolerance or 0.0),
+                )
+                coverage_ok = (
+                    boundary_polygon.difference(covered).area <= area_tolerance
+                    and covered.difference(boundary_polygon).area <= area_tolerance
+                )
+            except Exception:
+                coverage_ok = False
+        return section_polygons, dangle_count, cut_count, invalid_count, coverage_ok
 
     def _polygon_boundary_labels(
         self,
@@ -3458,6 +3783,14 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         missing_labels = assignment.get("missing_labels", []) or []
         if missing_labels:
             details.append(f"missing={self._format_section_labels(missing_labels)}")
+        dom_cut_side = self._psc_text(assignment.get("dom_cut_side", ""))
+        if dom_cut_side:
+            details.append(f"DomXs={dom_cut_side}")
+        dom_cut_parent_area_idx = int(
+            assignment.get("dom_cut_parent_area_idx", 0) or 0
+        )
+        if dom_cut_parent_area_idx:
+            details.append(f"STm match area={dom_cut_parent_area_idx}")
         candidate_names = assignment.get("candidate_names", []) or []
         if len(candidate_names) > 1:
             details.append(f"candidates={', '.join(candidate_names)}")
@@ -3499,6 +3832,20 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             except (TypeError, ValueError):
                 pass
         return self._legend_color_for_feature(feature)
+
+    @staticmethod
+    def _lighten_rgb_color(
+        color: Optional[List[float]],
+        factor: float = 0.45,
+    ) -> Optional[List[float]]:
+        if color is None:
+            return None
+        try:
+            rgb = [max(0.0, min(255.0, float(value))) for value in color[:3]]
+        except (TypeError, ValueError):
+            return None
+        factor = max(0.0, min(1.0, float(factor)))
+        return [value + (255.0 - value) * factor for value in rgb]
 
     def _legend_color_for_feature(self, feature: str) -> Optional[List[float]]:
         project = self._pzero_project()
