@@ -185,18 +185,28 @@ class STmGraphicsScene(QGraphicsScene):
 class ManualSTmUnitDialog(QDialog):
     """Dialog used to add an extra STm unit node."""
 
-    def __init__(self, parent=None, domain_columns=None):
+    def __init__(self, parent=None, domain_columns=None, unit_info=None):
         super().__init__(parent)
-        self.setWindowTitle("Add extra unit")
+        unit_info = dict(unit_info or {})
+        self.setWindowTitle("Edit extra unit" if unit_info else "Add extra unit")
         self.resize(420, 320)
         self.selected_color = structural_topology_color("extra_unit")
         self.domain_edits = {}
+        try:
+            self.selected_color = QColor(
+                int(float(unit_info.get("color_R", self.selected_color.red()))),
+                int(float(unit_info.get("color_G", self.selected_color.green()))),
+                int(float(unit_info.get("color_B", self.selected_color.blue()))),
+            )
+        except (TypeError, ValueError):
+            pass
 
         layout = QVBoxLayout(self)
         form_layout = QFormLayout()
 
         self.feature_edit = QLineEdit()
         self.feature_edit.setPlaceholderText("Unit feature/name")
+        self.feature_edit.setText(str(unit_info.get("feature", "")).strip())
         form_layout.addRow("Feature", self.feature_edit)
 
         self.unit_role_combo = QComboBox()
@@ -207,10 +217,18 @@ class ManualSTmUnitDialog(QDialog):
                 if value != "NonVolumetric"
             ]
         )
+        unit_role = normalise_structural_topology_unit_role(
+            unit_info.get("unit_role", "SU")
+        )
+        role_idx = self.unit_role_combo.findText(unit_role)
+        if role_idx >= 0:
+            self.unit_role_combo.setCurrentIndex(role_idx)
         form_layout.addRow("Unit Role", self.unit_role_combo)
 
         self.polarity_edit = QLineEdit()
         self.polarity_edit.setPlaceholderText("0")
+        if "structural_polarity" in unit_info:
+            self.polarity_edit.setText(str(unit_info.get("structural_polarity", "")))
         form_layout.addRow("Structural Polarity", self.polarity_edit)
 
         color_layout = QHBoxLayout()
@@ -222,9 +240,17 @@ class ManualSTmUnitDialog(QDialog):
         color_layout.addStretch(1)
         form_layout.addRow("Color", color_layout)
 
+        domains_by_column = {
+            str(domain_info.get("column", "")).strip(): str(
+                domain_info.get("value", "")
+            ).strip()
+            for domain_info in unit_info.get("domains", [])
+            if isinstance(domain_info, dict)
+        }
         for domain_column in domain_columns or ["Domain_1"]:
             domain_edit = QLineEdit()
             domain_edit.setPlaceholderText(str(domain_column))
+            domain_edit.setText(domains_by_column.get(str(domain_column), ""))
             self.domain_edits[str(domain_column)] = domain_edit
             form_layout.addRow(str(domain_column), domain_edit)
 
@@ -328,6 +354,7 @@ class STmBuildDialog(QDialog):
         self.setWindowTitle(f"Build STm - {self.table_name}")
         self.resize(1120, 860)
         self._fit_on_next_rebuild = True
+        self._fit_after_show_pending = True
 
         layout = QVBoxLayout(self)
         info_label = QLabel(
@@ -362,6 +389,9 @@ class STmBuildDialog(QDialog):
         self.add_manual_unit_button = QPushButton("Add extra unit")
         self.add_manual_unit_button.clicked.connect(self.add_manual_unit)
         buttons_layout.addWidget(self.add_manual_unit_button)
+        self.edit_manual_unit_button = QPushButton("Edit extra unit")
+        self.edit_manual_unit_button.clicked.connect(self.edit_selected_manual_unit)
+        buttons_layout.addWidget(self.edit_manual_unit_button)
         self.remove_manual_unit_button = QPushButton("Remove extra unit")
         self.remove_manual_unit_button.clicked.connect(self.remove_selected_manual_unit)
         buttons_layout.addWidget(self.remove_manual_unit_button)
@@ -388,6 +418,13 @@ class STmBuildDialog(QDialog):
         self.rebuild_scene()
         self.update_editing_ui()
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self._fit_after_show_pending:
+            self._fit_after_show_pending = False
+            QTimer.singleShot(0, self.reset_zoom_to_fit)
+            QTimer.singleShot(80, self.reset_zoom_to_fit)
+
     def on_editing_toggled(self, checked):
         """Enable/disable editing actions for manual STm links."""
         self.editing_enabled = bool(checked)
@@ -406,6 +443,9 @@ class STmBuildDialog(QDialog):
             self.editing_enabled and bool(self.manual_connections)
         )
         self.add_manual_unit_button.setEnabled(self.editing_enabled)
+        self.edit_manual_unit_button.setEnabled(
+            self.editing_enabled and self._selected_manual_unit_id() is not None
+        )
         self.remove_manual_unit_button.setEnabled(
             self.editing_enabled and self._selected_manual_unit_id() is not None
         )
@@ -797,19 +837,67 @@ class STmBuildDialog(QDialog):
             key=lambda column_name: structural_topology_domain_order(column_name) or 1,
         )
 
+    def _manual_unit_domain_columns(self, unit_info=None):
+        """Return domain columns needed to edit one extra unit."""
+        domain_columns = list(self._current_domain_columns())
+        for domain_info in (unit_info or {}).get("domains", []):
+            if not isinstance(domain_info, dict):
+                continue
+            domain_column = str(domain_info.get("column", "")).strip()
+            if domain_column and domain_column not in domain_columns:
+                domain_columns.append(domain_column)
+        return sorted(
+            domain_columns or ["Domain_1"],
+            key=lambda column_name: (
+                structural_topology_domain_order(column_name) or 1,
+                str(column_name),
+            ),
+        )
+
     def add_manual_unit(self):
         """Add a persisted unit node that is not generated by the STm table."""
         if not self.editing_enabled:
             return
         dialog = ManualSTmUnitDialog(
             parent=self,
-            domain_columns=self._current_domain_columns(),
+            domain_columns=self._manual_unit_domain_columns(),
         )
         if dialog.exec() != QDialog.Accepted:
             return
         unit_info = dialog.unit_info
         unit_info["id"] = self._make_manual_unit_id(unit_info["feature"])
         self.manual_units.append(unit_info)
+        self._save_manual_units()
+        self.rebuild_scene()
+        self.update_editing_ui()
+
+    def edit_selected_manual_unit(self):
+        """Edit the selected persisted extra unit without changing its id."""
+        if not self.editing_enabled:
+            return
+        unit_id = self._selected_manual_unit_id()
+        if not unit_id:
+            return
+        unit_idx = None
+        current_unit = None
+        for idx, unit_info in enumerate(self.manual_units):
+            if str(unit_info.get("id", "")) == unit_id:
+                unit_idx = idx
+                current_unit = dict(unit_info)
+                break
+        if current_unit is None:
+            return
+
+        dialog = ManualSTmUnitDialog(
+            parent=self,
+            domain_columns=self._manual_unit_domain_columns(current_unit),
+            unit_info=current_unit,
+        )
+        if dialog.exec() != QDialog.Accepted:
+            return
+        updated_unit = dialog.unit_info
+        updated_unit["id"] = unit_id
+        self.manual_units[unit_idx] = updated_unit
         self._save_manual_units()
         self.rebuild_scene()
         self.update_editing_ui()
