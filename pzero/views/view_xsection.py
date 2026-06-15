@@ -83,6 +83,10 @@ class ViewXsection(View2D):
         self.fitFrameButton.triggered.connect(self.fit_frame)
         self.menuModify.addAction(self.fitFrameButton)
 
+        self.switchPscAreasButton = QAction("Switch PSC areas", self)
+        self.switchPscAreasButton.triggered.connect(self.switch_psc_areas)
+        self.menuModify.addAction(self.switchPscAreasButton)
+
         self.buildPscSectionAreasButton = QAction("Build PSC section areas", self)
         self.buildPscSectionAreasButton.triggered.connect(
             self.build_psc_section_areas
@@ -96,6 +100,150 @@ class ViewXsection(View2D):
         )
 
         TwoDPiecewiseStructuralComplex(self).open_section_areas_dialog()
+
+    def switch_psc_areas(self):
+        """Switch role/feature assignments between two selected PSC area classes."""
+        geol_coll = getattr(self.parent, "geol_coll", None)
+        if geol_coll is None:
+            return
+
+        selected_uids = self._selected_geology_uids()
+        if not selected_uids:
+            return self._switch_psc_fail(
+                "Select PSC area polygons before using Switch PSC areas."
+            )
+
+        area_uids = []
+        rejected_uids = []
+        for uid in selected_uids:
+            if uid not in geol_coll.get_uids:
+                rejected_uids.append(uid)
+                continue
+            try:
+                topology = geol_coll.get_uid_topology(uid)
+                name = geol_coll.get_uid_name(uid)
+                parent_uid = geol_coll.get_uid_x_section(uid)
+            except Exception:
+                rejected_uids.append(uid)
+                continue
+            if (
+                topology == "TriSurf"
+                and "PSC_area_" in str(name or "")
+                and self.this_x_section_uid in str(parent_uid or "")
+            ):
+                area_uids.append(uid)
+            else:
+                rejected_uids.append(uid)
+
+        if rejected_uids:
+            return self._switch_psc_fail(
+                "Switch PSC areas accepts selected PSC area polygons only. "
+                f"Rejected {len(rejected_uids)} selected item(s)."
+            )
+        if len(area_uids) < 2:
+            return self._switch_psc_fail(
+                "Select at least two PSC area polygons to switch."
+            )
+
+        combos = []
+        for uid in area_uids:
+            combo = (
+                str(geol_coll.get_uid_role(uid) or ""),
+                str(geol_coll.get_uid_feature(uid) or ""),
+            )
+            if combo not in combos:
+                combos.append(combo)
+        if len(combos) != 2:
+            return self._switch_psc_fail(
+                "Switch PSC areas requires exactly two role/feature classes."
+            )
+
+        switch_map = {combos[0]: combos[1], combos[1]: combos[0]}
+        updated_uids = []
+        linked_seed_count = 0
+        for area_uid in area_uids:
+            old_combo = (
+                str(geol_coll.get_uid_role(area_uid) or ""),
+                str(geol_coll.get_uid_feature(area_uid) or ""),
+            )
+            new_role, new_feature = switch_map[old_combo]
+            if self._switch_psc_entity_metadata(area_uid, new_role, new_feature):
+                updated_uids.append(area_uid)
+
+            for seed_uid in self._linked_psc_seed_uids(area_uid):
+                if self._switch_psc_entity_metadata(seed_uid, new_role, new_feature):
+                    updated_uids.append(seed_uid)
+                    linked_seed_count += 1
+
+        if not updated_uids:
+            return
+        geol_coll.modelReset.emit()
+        geol_coll.attr_modified_update_legend_table()
+        self.parent.signals.metadata_modified.emit(updated_uids, geol_coll)
+        self.print_terminal(
+            f"Switched PSC assignments for {len(area_uids)} area(s) "
+            f"and {linked_seed_count} linked seed(s)."
+        )
+        self.clear_selection()
+
+    def _switch_psc_fail(self, message: str) -> None:
+        self.print_terminal(message)
+        self.clear_selection()
+
+    def _selected_geology_uids(self) -> list:
+        selected_uids = []
+        for uid in getattr(self, "selected_uids", []) or []:
+            if uid not in selected_uids:
+                selected_uids.append(uid)
+        for uid in getattr(self.parent, "selected_uids", []) or []:
+            if uid not in selected_uids:
+                selected_uids.append(uid)
+        return selected_uids
+
+    def _switch_psc_entity_metadata(
+        self,
+        uid: str,
+        new_role: str,
+        new_feature: str,
+    ) -> bool:
+        geol_coll = self.parent.geol_coll
+        if uid not in geol_coll.get_uids:
+            return False
+        old_role = str(geol_coll.get_uid_role(uid) or "")
+        old_feature = str(geol_coll.get_uid_feature(uid) or "")
+        old_name = str(geol_coll.get_uid_name(uid) or uid)
+        geol_coll.set_uid_role(uid=uid, role=new_role)
+        geol_coll.set_uid_feature(uid=uid, feature=new_feature)
+        geol_coll.set_uid_name(
+            uid=uid,
+            name=f"Switched from {old_role}/{old_feature} - {old_name}",
+        )
+        return True
+
+    def _linked_psc_seed_uids(self, area_uid: str) -> list:
+        geol_coll = self.parent.geol_coll
+        linked_uids = []
+        for uid in geol_coll.get_uids:
+            try:
+                if geol_coll.get_uid_topology(uid) != "XsVertexSet":
+                    continue
+                if "PSC_seed_" not in str(geol_coll.get_uid_name(uid) or ""):
+                    continue
+                parent_tokens = self._parent_uid_tokens(
+                    geol_coll.get_uid_x_section(uid)
+                )
+            except Exception:
+                continue
+            if area_uid in parent_tokens:
+                linked_uids.append(uid)
+        return linked_uids
+
+    @staticmethod
+    def _parent_uid_tokens(parent_uid) -> list:
+        text = str(parent_uid or "")
+        for separator in (";", ",", "|"):
+            text = text.replace(separator, " ")
+        return [token.strip() for token in text.split() if token.strip()]
 
     # # --- AGGIUNTA: funzione di slot per sincronizzazione selezione ---
     # def on_selection_changed(self, collection):

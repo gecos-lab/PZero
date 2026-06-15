@@ -2829,16 +2829,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 as_arr=True,
             )
 
-            seed_uid = self._create_seed_vertex(
-                name=f"PSC_seed_{unit_name}",
-                role=role,
-                feature=feature,
-                xyz=np.asarray(seed_xyz, dtype=float).reshape(3),
-                color=color,
-            )
-            if seed_uid:
-                created_seed_count += 1
-
+            area_uid = None
             trisurf = self._triangulated_polygon_surface(
                 polygon=polygon,
                 triangulate_func=triangulate,
@@ -2853,6 +2844,20 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 )
                 if area_uid:
                     created_area_count += 1
+
+            seed_parent_uid = section_uid
+            if area_uid:
+                seed_parent_uid = self._psc_linked_parent_uid(section_uid, area_uid)
+            seed_uid = self._create_seed_vertex(
+                name=f"PSC_seed_{unit_name}",
+                role=role,
+                feature=feature,
+                xyz=np.asarray(seed_xyz, dtype=float).reshape(3),
+                color=color,
+                parent_uid=seed_parent_uid,
+            )
+            if seed_uid:
+                created_seed_count += 1
 
         self.print_terminal(
             f"Build PSC section areas completed: created {created_seed_count} seed(s), "
@@ -3521,6 +3526,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         feature: str,
         xyz: np.ndarray,
         color: Optional[List[float]] = None,
+        parent_uid: Optional[str] = None,
     ) -> Optional[str]:
         from pzero.entities_factory import XsVertexSet
 
@@ -3528,7 +3534,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         section_uid = getattr(self.host, "this_x_section_uid", "")
         seed_dict = deepcopy(project.geol_coll.entity_dict)
         seed_dict["name"] = name
-        seed_dict["parent_uid"] = section_uid
+        seed_dict["parent_uid"] = parent_uid or section_uid
         seed_dict["topology"] = "XsVertexSet"
         seed_dict["role"] = role
         seed_dict["feature"] = feature
@@ -3559,6 +3565,14 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             vtk_obj.get_point_data_shape(key)[1] for key in area_dict["properties_names"]
         ]
         return project.geol_coll.add_entity_from_dict(entity_dict=area_dict, color=color)
+
+    @staticmethod
+    def _psc_linked_parent_uid(section_uid: str, linked_uid: str) -> str:
+        return ";".join(
+            str(uid).strip()
+            for uid in (section_uid, linked_uid)
+            if str(uid).strip()
+        )
 
     def _triangulated_polygon_surface(self, polygon, triangulate_func):
         from pzero.entities_factory import TriSurf
