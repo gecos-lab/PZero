@@ -21,7 +21,7 @@ import numpy as np
 from unittest.mock import MagicMock
 from unittest.mock import patch
 from pzero.entities_factory import PCDom
-from pzero.point_clouds import normals2dd, cut_pc, decimate_pc, segment_pc, facets_pc, calibration_pc, auto_pick
+from pzero.point_clouds import normals2dd, cut_pc, decimate_pc, segment_pc, facets_pc, calibration_pc, auto_pick, thresh_filt
 
 
 # =============================================================================
@@ -93,16 +93,15 @@ def _make_self(vtk_obj, uid: str = "uid_001", dip_data: bool = True, name: str =
     """
     self_mock = MagicMock()
     self_mock.selected_uids = [uid]
-    self_mock.actors_df.loc[self_mock.actors_df["show"] == True, "uid"].values[0].return_value = [uid]
     self_mock.parent.dom_coll.get_uid_name.return_value = name
-    self_mock.parent.dom_coll.get_uid_vtk_obj.return_value = vtk_obj
-    self_mock.parent.dom_coll.get_uid_properties_components.return_value = ...
-    
+    self_mock.parent.dom_coll.get_uid_vtk_obj.return_value = vtk_obj  
     
     if dip_data:
         self_mock.parent.dom_coll.get_uid_properties_names.return_value = ["dip", "dip direction"]
+        self_mock.parent.dom_coll.get_uid_properties_components.return_value = [1, 1]
     else:
         self_mock.parent.dom_coll.get_uid_properties_names.return_value = ["Normals"]
+        self_mock.parent.dom_coll.get_uid_properties_components.return_value = [3]
         
     self_mock.parent.dom_coll.entity_dict = {
     "uid": "",
@@ -119,15 +118,6 @@ def _make_self(vtk_obj, uid: str = "uid_001", dip_data: bool = True, name: str =
     "role" : "",
     "topology": "",
     "features" : "",
-    "properties_names": [],
-    "properties_components": [],
-    "vtk_obj": None,
-    }
-    
-    self_mock.parent.dom_coll.add_entity_from_dict = {
-    "uid": "",
-    "name": "",
-    "topology": "",
     "properties_names": [],
     "properties_components": [],
     "vtk_obj": None,
@@ -710,7 +700,7 @@ class TestFacetsPC:
         
         self_mock_facets = _make_self(clust)
         facets_pc(self_mock_facets)
-        # To get back the data from segment_pc because since it is using a 
+        # To get back the data from facets_pc because since it is using a 
         # MagicMock object, it is not returning anything
         call_args = self_mock_facets.parent.geol_coll.add_entity_from_dict.call_args
         entity_dict_facets = call_args.kwargs["entity_dict"]
@@ -750,7 +740,7 @@ class TestFacetsPC:
         
         self_mock_facets = _make_self(clust)
         facets_pc(self_mock_facets)
-        # To get back the data from segment_pc because since it is using a 
+        # To get back the data from facets_pc because since it is using a 
         # MagicMock object, it is not returning anything
         call_args = self_mock_facets.parent.geol_coll.add_entity_from_dict.call_args
         entity_dict_facets = call_args.kwargs["entity_dict"]
@@ -784,7 +774,7 @@ class TestFacetsPC:
         
         self_mock_facets = _make_self(clust)
         facets_pc(self_mock_facets)
-        # To get back the data from segment_pc because since it is using a 
+        # To get back the data from facets_pc because since it is using a 
         # MagicMock object, it is not returning anything
         call_args = self_mock_facets.parent.geol_coll.add_entity_from_dict.call_args
         entity_dict_facets = call_args.kwargs["entity_dict"]
@@ -819,7 +809,7 @@ class TestFacetsPC:
         
         self_mock_facets = _make_self(clust)
         facets_pc(self_mock_facets)
-        # To get back the data from segment_pc because since it is using a 
+        # To get back the data from facets_pc because since it is using a 
         # MagicMock object, it is not returning anything
         call_args = self_mock_facets.parent.geol_coll.add_entity_from_dict.call_args
         entity_dict_facets = call_args.kwargs["entity_dict"]
@@ -855,7 +845,7 @@ class TestFacetsPC:
         
         self_mock_facets = _make_self(clust)
         facets_pc(self_mock_facets)
-        # To get back the data from segment_pc because since it is using a 
+        # To get back the data from facets_pc because since it is using a 
         # MagicMock object, it is not returning anything
         call_args = self_mock_facets.parent.geol_coll.add_entity_from_dict.call_args
         entity_dict_facets = call_args.kwargs["entity_dict"]
@@ -889,7 +879,7 @@ class TestFacetsPC:
         
         self_mock_facets = _make_self(clust)
         facets_pc(self_mock_facets)
-        # To get back the data from segment_pc because since it is using a 
+        # To get back the data from facets_pc because since it is using a 
         # MagicMock object, it is not returning anything
         call_args = self_mock_facets.parent.geol_coll.add_entity_from_dict.call_args
         entity_dict_facets = call_args.kwargs["entity_dict"]
@@ -949,7 +939,7 @@ class TestFacetsPC:
 
         self_mock_facets = _make_self(clust)
         facets_pc(self_mock_facets)
-        # To get back the data from segment_pc because since it is using a 
+        # To get back the data from facets_pc because since it is using a 
         # MagicMock object, it is not returning anything
         call_args = self_mock_facets.parent.geol_coll.add_entity_from_dict.call_args
         entity_dict_facets = call_args.kwargs["entity_dict"]
@@ -1160,7 +1150,7 @@ class TestAutoPick:
         
         self_mock_pick = _make_self(clust)
         auto_pick(self_mock_pick)
-        # To get back the data from segment_pc because since it is using a 
+        # To get back the data from auto_pick because since it is using a 
         # MagicMock object, it is not returning anything
         call_args = self_mock_pick.parent.geol_coll.add_entity_from_dict.call_args
         entity_dict_pick = call_args.kwargs["entity_dict"]
@@ -1193,7 +1183,7 @@ class TestAutoPick:
         
         self_mock_pick = _make_self(clust)
         auto_pick(self_mock_pick)
-        # To get back the data from segment_pc because since it is using a 
+        # To get back the data from auto_pick because since it is using a 
         # MagicMock object, it is not returning anything
         call_args = self_mock_pick.parent.geol_coll.add_entity_from_dict.call_args
         entity_dict_pick = call_args.kwargs["entity_dict"]
@@ -1230,7 +1220,7 @@ class TestAutoPick:
         
         self_mock_pick = _make_self(clust)
         auto_pick(self_mock_pick)
-        # To get back the data from segment_pc because since it is using a 
+        # To get back the data from auto_pick because since it is using a 
         # MagicMock object, it is not returning anything
         call_args = self_mock_pick.parent.geol_coll.add_entity_from_dict.call_args
         entity_dict_pick = call_args.kwargs["entity_dict"]
@@ -1264,7 +1254,7 @@ class TestAutoPick:
         
         self_mock_pick = _make_self(clust)
         auto_pick(self_mock_pick)
-        # To get back the data from segment_pc because since it is using a 
+        # To get back the data from auto_pick because since it is using a 
         # MagicMock object, it is not returning anything
         call_args = self_mock_pick.parent.geol_coll.add_entity_from_dict.call_args
         entity_dict_pick = call_args.kwargs["entity_dict"]
@@ -1300,7 +1290,7 @@ class TestAutoPick:
         
         self_mock_pick = _make_self(clust)
         auto_pick(self_mock_pick)
-        # To get back the data from segment_pc because since it is using a 
+        # To get back the data from auto_pick because since it is using a 
         # MagicMock object, it is not returning anything
         call_args = self_mock_pick.parent.geol_coll.add_entity_from_dict.call_args
         entity_dict_pick = call_args.kwargs["entity_dict"]
@@ -1412,21 +1402,153 @@ class TestAutoPick:
         print(f"[.dat] normals sample  : {normals[:3]}")
         
         
-class ThreshFilter:
+class TestThreshFilter:
     """
-    ...
+    Tests for thresh_filt() defined in point_clouds.py.
+
+    thresh_filt is filtering the point cloud using threshold on a property.
+    Both property and thresholds are selected by the user within a dialog box.
+
+    Because thresh_filt() needs a running PZero application to work normally,
+    we replace all of those parts with MagicMocks. That way we can test the
+    logic of the function in isolation, without starting the whole application.
     """
     
-    # @pytest.fixture(autouse=False)
-    # def mock_dialog(self): 
-    #     """
-    #     Small helper to mimic the dialog box in the segment_pc script
-        # """  
-        # with patch("pzero.point_clouds.multiple_input_dialog") as m:
-        #     yield m
+    @pytest.fixture(autouse=False)
+    def mock_dialog(self): 
+        """
+        Small helper to mimic the dialog box in the segment_pc script
+        """  
+        with patch("pzero.point_clouds.multiple_input_dialog") as m:
+            yield m
+    
+    def test_no_selection_prints_warning(self, capsys):
+        """
+        If the user forgot to select a point cloud in the GUI,
+        selected_uids is empty. The function should print a clear warning
+        and return immediately without touching anything else.
+        """
+        self_mock = MagicMock()
+        self_mock.selected_uids = []
+        thresh_filt(self_mock)
+
+        printed = capsys.readouterr().out
+        assert "No entities selected, make sure to have the right tab open" in printed
+
+        self_mock.parent.dom_coll.get_uid_vtk_obj.assert_not_called()
         
-    # mock_dialog.return_value = {
-        #     "prop_name": ["Select property name: ", vtk_obj.properties_names],
-        #     "l_t": ["Lower threshold: ", 0],
-        #     "u_t": ["Upper threshold: ", 10],
-        # }
+    def test_no_pc_selected(self, capsys):
+        """
+        If the user selected an object that is not a point cloud,
+        the function should print a clear warning
+        and return immediately without touching anything else.
+        """
+        self_mock = MagicMock()
+        self_mock.selected_uids = ["uid_001"]
+        thresh_filt(self_mock)
+
+        printed = capsys.readouterr().out
+        assert "Entity not point cloud or multiple entities visible" in printed
+
+        self_mock.parent.dom_coll.add_entity_from_dict.assert_not_called()  
+        
+    def test_data_out_thresh(self, mock_dialog):
+        """
+        If there are data that are outside the thresholds,
+        means the function is not working.
+        """
+        mock_dialog.return_value = {
+            "prop_name": "dip direction",
+            "l_t": 0,
+            "u_t": 150,
+                }
+        
+        vtk_obj = _make_real_pc(with_clusters=True)
+        print(set(vtk_obj.get_point_data("dip direction")))
+        vtk_obj.generate_cells()
+        self_mock = _make_self(vtk_obj)
+        thresh_filt(self_mock)
+        # To get back the data from thresh_filt because since it is using a 
+        # MagicMock object, it is not returning anything
+        call_args = self_mock.parent.dom_coll.add_entity_from_dict.call_args
+        entity_dict_filt = call_args.kwargs["entity_dict"]
+        pc_filt = entity_dict_filt["vtk_obj"]
+        
+        assert pc_filt.GetNumberOfPoints() != 0 and pc_filt.GetNumberOfPoints() is not None, "Problem, size is 0"
+        # The pc size should be 400 since there is only two cluster left
+        assert 380 <= pc_filt.GetNumberOfPoints() <= 400, "Problem, there is no two clusters left"
+        
+    def test_topo_is_pc(self, mock_dialog):
+        """
+        The "Topology" field should be a "PCDom". Otherwise,
+        the function that add the dictionnary is not working.
+        """
+        mock_dialog.return_value = {
+            "prop_name": "dip direction",
+            "l_t": 0,
+            "u_t": 100,
+                }
+        
+        vtk_obj = _make_real_pc(with_clusters=True)
+        self_mock = _make_self(vtk_obj)
+        thresh_filt(self_mock)
+        # To get back the data from thresh_filt because since it is using a 
+        # MagicMock object, it is not returning anything
+        call_args = self_mock.parent.dom_coll.add_entity_from_dict.call_args
+        entity_dict_filt = call_args.kwargs["entity_dict"]
+        topo = entity_dict_filt["topology"]
+        
+        assert topo is "PCDom", "The topology is not a PointCloud"  
+        
+    def test_new_name_right(self, mock_dialog):
+        """
+        The "name" field should be a "Pc" + "_thresh_" + "l_t" + "_" + "u_t". 
+        Otherwise, the function that create the name is not working.
+        """
+        mock_dialog.return_value = {
+            "prop_name": "dip direction",
+            "l_t": 0,
+            "u_t": 100,
+                }
+        
+        vtk_obj = _make_real_pc(with_clusters=True)
+        self_mock = _make_self(vtk_obj)
+        thresh_filt(self_mock)
+        # To get back the data from thresh_filt because since it is using a 
+        # MagicMock object, it is not returning anything
+        call_args = self_mock.parent.dom_coll.add_entity_from_dict.call_args
+        entity_dict_filt = call_args.kwargs["entity_dict"]
+        name = entity_dict_filt["name"]
+        
+        assert name == "Pc_thresh_0_100", "The naming is not working."  
+        
+    def test_new_arrays_right(self, mock_dialog):
+        """
+        The other arrays than "name" and "vtk_obj" should not change.
+        Otherwise, the function that add in the dictionnary is not working.
+        """
+        mock_dialog.return_value = {
+            "prop_name": "dip direction",
+            "l_t": 0,
+            "u_t": 100,
+                }
+        
+        vtk_obj = _make_real_pc(with_clusters=True)
+        self_mock = _make_self(vtk_obj)
+        thresh_filt(self_mock)
+        # To get back the data from thresh_filt because since it is using a 
+        # MagicMock object, it is not returning anything
+        call_args = self_mock.parent.dom_coll.add_entity_from_dict.call_args
+        entity_dict_filt = call_args.kwargs["entity_dict"]
+        pc_filt = entity_dict_filt["vtk_obj"]
+        
+        # Check all properties are still present on the result
+        for key in vtk_obj.point_data_keys:
+            assert key in pc_filt.point_data_keys, f"Property '{key}' missing from result"
+            
+        original_dip = vtk_obj.get_point_data("dip")
+        result_dip   = pc_filt.get_point_data("dip")
+
+        # Every value in the result must have existed in the original
+        assert set(result_dip).issubset(set(original_dip))
+                

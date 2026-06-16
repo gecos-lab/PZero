@@ -586,7 +586,11 @@ def auto_pick(self):
 
 def thresh_filt(self):
     """Function used to filter the point cloud using a given property"""
-    # uid = self.actors_df.loc[self.actors_df["show"] == True, "uid"].values[0]
+    
+    if len(self.selected_uids) == 0:
+        print("No entities selected, make sure to have the right tab open")
+        return
+
     uid = self.selected_uids[0]
     vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
     if isinstance(vtk_obj, PCDom):
@@ -608,8 +612,7 @@ def thresh_filt(self):
         out = PCDom()
         out.ShallowCopy(thresh.GetOutput())
         out.generate_cells()
-        # out.plot()
-        # self.parent.dom_coll.replace_vtk(uid[0],out)
+        
         entity_dict = deepcopy(self.parent.dom_coll.entity_dict)
         entity_dict["name"] = (
             self.parent.dom_coll.get_uid_name(uid)
@@ -618,13 +621,11 @@ def thresh_filt(self):
             + "_"
             + str(dialog["u_t"])
         )
-        # entity_dict["vtk_obj"] = out
         entity_dict["topology"] = "PCDom"
         entity_dict["properties_names"] = self.parent.dom_coll.get_uid_properties_names(uid)
-        # entity_dict["topology"] = "PCDom"
         entity_dict["properties_components"] = (self.parent.dom_coll.get_uid_properties_components(uid))
         entity_dict["vtk_obj"] = out
-        self.parent.dom_coll.add_entity_from_dict(entity_dict)
+        self.parent.dom_coll.add_entity_from_dict(entity_dict=entity_dict)
         del out
         del thresh
     else:
