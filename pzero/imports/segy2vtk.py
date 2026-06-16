@@ -51,7 +51,7 @@ def segy2vtk(self, in_file_name):
 
                 if not success:
                     self.print_terminal("Failed to standardize SEG-Y file.")
-                    return
+                    return None
 
                 self.print_terminal("Standardization successful, importing file...")
 
@@ -83,9 +83,11 @@ def segy2vtk(self, in_file_name):
 
         self.image_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
         self.print_terminal("Import successful.")
+        return this_uid
 
     except Exception as e:
         self.print_terminal(f"Error during import: {str(e)}")
+        return None
 
 
 def read_segy_file(in_file_name=None):

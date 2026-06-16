@@ -7849,6 +7849,36 @@ class ViewInterpretation(ViewMap):
             del self.interpretation_lines[uid]
             self._visibility_dirty = True
 
+    def _refresh_single_slice_interpretation_metadata(
+        self, updated_uids=None, collection=None
+    ):
+        """Refresh cached single-slice interpretation metadata after parent_uid edits."""
+        try:
+            if collection is not self.parent.geol_coll:
+                return
+        except Exception:
+            return
+
+        try:
+            changed = set(updated_uids or [])
+        except Exception:
+            changed = set()
+
+        if not changed or not hasattr(self, "interpretation_lines"):
+            return
+
+        line_uids = changed & set(self.interpretation_lines.keys())
+        for uid in line_uids:
+            slice_info = self._extract_single_slice_interpretation_metadata(uid=uid)
+            if not slice_info:
+                slice_info = dict(self.interpretation_lines.get(uid) or {})
+                if not slice_info:
+                    continue
+                slice_info["seismic_uid"] = self._get_entity_parent_seismic_uid(uid)
+
+            self.unregister_interpretation_line(uid)
+            self.register_interpretation_line(uid, slice_info)
+
     def update_multipart_horizon_visibility(self, uid=None):
         """
         Update visibility of multipart horizon lines by extracting only the cells
@@ -13983,8 +14013,14 @@ class ViewInterpretation(ViewMap):
             return
 
         for uid in horizon_uids:
+            self.multipart_horizons[uid]["seismic_uid"] = (
+                self._get_entity_parent_seismic_uid(uid)
+            )
             self.update_multipart_horizon_visibility(uid)
         for uid in fault_uids:
+            self.multipart_faults[uid]["seismic_uid"] = (
+                self._get_entity_parent_seismic_uid(uid)
+            )
             self.update_multipart_fault_visibility(uid)
 
         self.plotter.render()
@@ -14141,6 +14177,9 @@ class ViewInterpretation(ViewMap):
         """Keep multipart interpretation actors slice-filtered after metadata edits."""
         super().entities_metadata_modified_update_views(
             collection=collection, updated_uids=updated_uids
+        )
+        self._refresh_single_slice_interpretation_metadata(
+            updated_uids=updated_uids, collection=collection
         )
         self._refresh_multipart_entities_for_uids(
             updated_uids=updated_uids, collection=collection

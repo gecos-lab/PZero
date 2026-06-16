@@ -574,6 +574,145 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             elif self.shown_table == "tabBackgrounds":
                 self.backgrnd_coll.remove_entity(uid=uid)
 
+    def _get_seismic_image_uids(self):
+        """Return the uid set of imported seismic images currently stored in the project."""
+        try:
+            seismic_rows = self.image_coll.df.loc[
+                self.image_coll.df["topology"] == "Seismics", "uid"
+            ].to_list()
+        except Exception:
+            return set()
+        return {str(uid).strip() for uid in seismic_rows if str(uid).strip()}
+
+    def _collect_orphaned_seismic_parent_links(self):
+        """Collect geological entities whose parent_uid points to a missing seismic volume."""
+        try:
+            geol_df = self.geol_coll.df
+        except Exception:
+            return []
+
+        if geol_df.empty or "parent_uid" not in geol_df.columns:
+            return []
+
+        seismic_uids = self._get_seismic_image_uids()
+        xsection_uids = {str(uid).strip() for uid in self.xsect_coll.get_uids if str(uid).strip()}
+        well_uids = {str(uid).strip() for uid in self.well_coll.get_uids if str(uid).strip()}
+
+        orphan_groups = {}
+        for _, row in geol_df.iterrows():
+            parent_uid = str(row.get("parent_uid", "") or "").strip()
+            if not parent_uid:
+                continue
+
+            topology = str(row.get("topology", "") or "").strip()
+            if topology.startswith("Xs"):
+                continue
+
+            if (
+                parent_uid in seismic_uids
+                or parent_uid in xsection_uids
+                or parent_uid in well_uids
+            ):
+                continue
+
+            uid = str(row.get("uid", "") or "").strip()
+            if not uid:
+                continue
+
+            group = orphan_groups.setdefault(
+                parent_uid,
+                {
+                    "parent_uid": parent_uid,
+                    "uids": [],
+                    "names": set(),
+                    "roles": set(),
+                    "features": set(),
+                },
+            )
+            group["uids"].append(uid)
+
+            name = str(row.get("name", "") or "").strip()
+            role = str(row.get("role", "") or "").strip()
+            feature = str(row.get("feature", "") or "").strip()
+            if name:
+                group["names"].add(name)
+            if role:
+                group["roles"].add(role)
+            if feature:
+                group["features"].add(feature)
+
+        orphan_list = []
+        for parent_uid, group in orphan_groups.items():
+            preview_names = ", ".join(sorted(group["names"])[:3])
+            role_preview = ", ".join(sorted(group["roles"])[:2])
+            label = f"{parent_uid} | {len(group['uids'])} entities"
+            if role_preview:
+                label += f" | roles: {role_preview}"
+            if preview_names:
+                label += f" | {preview_names}"
+            group["label"] = label
+            orphan_list.append(group)
+
+        orphan_list.sort(
+            key=lambda item: (-len(item["uids"]), str(item["parent_uid"]).lower())
+        )
+        return orphan_list
+
+    def _prompt_orphaned_seismic_relink(self, imported_file_name=None):
+        """Optionally map orphaned interpretation entities to the newly imported seismic."""
+        orphan_groups = self._collect_orphaned_seismic_parent_links()
+        if not orphan_groups:
+            return None
+
+        choice_list = ["Do not link interpreted entities"]
+        label_to_parent_uid = {choice_list[0]: None}
+        for group in orphan_groups:
+            choice_list.append(group["label"])
+            label_to_parent_uid[group["label"]] = group["parent_uid"]
+
+        imported_name = (
+            os_path.basename(imported_file_name)
+            if imported_file_name
+            else "the imported SEG-Y"
+        )
+        selected_label = input_combo_dialog(
+            parent=self,
+            title="Link interpreted entities",
+            label=(
+                f"Assign orphaned interpreted horizons/faults to {imported_name}?"
+            ),
+            choice_list=choice_list,
+        )
+        return label_to_parent_uid.get(selected_label)
+
+    def relink_geological_parent_uid(self, old_parent_uid=None, new_parent_uid=None):
+        """Reassign geological entities from one parent_uid to another."""
+        old_parent_uid = str(old_parent_uid or "").strip()
+        new_parent_uid = str(new_parent_uid or "").strip()
+        if not old_parent_uid or not new_parent_uid or old_parent_uid == new_parent_uid:
+            return []
+
+        try:
+            mask = (
+                self.geol_coll.df["parent_uid"].fillna("").astype(str).str.strip()
+                == old_parent_uid
+            )
+            if "topology" in self.geol_coll.df.columns:
+                mask = mask & (
+                    ~self.geol_coll.df["topology"].fillna("").astype(str).str.startswith("Xs")
+                )
+        except Exception:
+            return []
+
+        updated_uids = self.geol_coll.df.loc[mask, "uid"].astype(str).to_list()
+        if not updated_uids:
+            return []
+
+        self.geol_coll.df.loc[mask, "parent_uid"] = new_parent_uid
+        self.geol_coll.modelReset.emit()
+        self.signals.metadata_modified.emit(updated_uids, self.geol_coll)
+        return updated_uids
+
     def entities_merge(self):
         """Merge entities of the same topology - VertexSet, PolyLine, TriSurf, ..."""
         if not self.selected_uids:
@@ -3233,15 +3372,45 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def import_SEGY(self):
         # ___________________________________________________________ TO BE REVIEWED AND UPDATED IN MODULE segy2vtk
-        """Import SEGY file and update Mesh3D collection."""
+        """Import SEG-Y data and optionally relink orphaned interpretation entities."""
         self.print_terminal("Importing SEGY seismics file.")
         # Select and open input file
         in_file_name = open_file_dialog(
             parent=self, caption="Import SEGY from file", filter="SEGY (*.sgy *.segy)"
         )
         if in_file_name:
+            before_uids = self._get_seismic_image_uids()
             self.print_terminal("in_file_name: " + in_file_name)
             segy2vtk(self=self, in_file_name=in_file_name)
+            new_uids = list(self._get_seismic_image_uids() - before_uids)
+            if not new_uids:
+                return
+            new_seismic_uid = new_uids[0]
+
+            old_parent_uid = self._prompt_orphaned_seismic_relink(
+                imported_file_name=in_file_name
+            )
+            if not old_parent_uid:
+                return
+
+            updated_uids = self.relink_geological_parent_uid(
+                old_parent_uid=old_parent_uid,
+                new_parent_uid=new_seismic_uid,
+            )
+            if updated_uids:
+                self.print_terminal(
+                    "Linked "
+                    + str(len(updated_uids))
+                    + " geological entities from missing seismic "
+                    + old_parent_uid
+                    + " to imported seismic "
+                    + new_seismic_uid
+                    + "."
+                )
+            else:
+                self.print_terminal(
+                    "No geological entities matched the selected missing seismic uid."
+                )
 
     # Methods used to export entities to other file formats.
 
