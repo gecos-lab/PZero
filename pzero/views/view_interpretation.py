@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QSlider,
     QSpinBox,
+    QDoubleSpinBox,
     QVBoxLayout,
     QCheckBox,
 )
@@ -29,7 +30,7 @@ from scipy.optimize import linear_sum_assignment
 
 # PZero imports
 from .view_map import ViewMap
-from ..entities_factory import Seismics, PolyLine
+from ..entities_factory import PolyLine
 from ..properties_manager import get_property_render_settings
 from ..helpers.helper_dialogs import (
     message_dialog,
@@ -178,7 +179,12 @@ class ViewInterpretation(ViewMap):
         self.multipart_horizons = {}
         self.multipart_faults = {}
         self.slice_well_actors = {}
+        self.slice_well_halo_actors = {}
         self.slice_well_label_actors = {}
+        self.slice_well_marker_actors = {}
+        self.slice_well_marker_label_actors = {}
+        self.slice_well_marker_leader_actors = {}
+        self._well_marker_filter_dirty = True
 
         # Flag to batch updates during propagation
         self._is_propagating = False
@@ -200,10 +206,6 @@ class ViewInterpretation(ViewMap):
 
         # Override default view to something neutral initially
         self.plotter.view_xy()
-
-        # Use trackball style instead of image style to allow proper 3D views
-        # Image style forces XY view which breaks Inline/Crossline views
-        # self.plotter.enable_trackball_style()
 
     @staticmethod
     def _build_control_tooltip(summary, low_text=None, high_text=None):
@@ -430,6 +432,14 @@ class ViewInterpretation(ViewMap):
 
         # Check if this is a multipart horizon - NEVER show the full version
         if coll_name == "geol_coll" and uid:
+            if self._is_well_child_marker_uid(uid):
+                self._well_marker_filter_dirty = True
+                self._remove_raw_actor_for_uid(uid)
+                parent_uid = self._get_well_child_marker_parent_uid(uid)
+                if parent_uid and hasattr(self, "current_seismic_uid"):
+                    self.update_well_visibility(uid=parent_uid)
+                return None
+
             try:
                 vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
                 cell_data = vtk_obj.GetCellData() if vtk_obj is not None else None
@@ -462,8 +472,8 @@ class ViewInterpretation(ViewMap):
                 return
 
         if coll_name == "well_coll" and uid:
-            self.update_well_visibility(uid=uid)
-            return
+            self.update_well_visibility(uid=uid, visible=visible)
+            return getattr(self, "slice_well_actors", {}).get(uid)
 
         # For all other entities, use normal display
         this_actor = super().show_actor_with_property(
@@ -564,8 +574,68 @@ class ViewInterpretation(ViewMap):
         self.chk_axes.stateChanged.connect(self.toggle_orientation_widget)
         bot_layout.addWidget(self.chk_axes)
 
+        # --- Well Row: slice-aware well display controls ---
+        well_layout = QHBoxLayout()
+        main_layout.addLayout(well_layout)
+
+        well_layout.addWidget(QLabel("Wells:"))
+
+        self.chk_wells = QCheckBox("Wells")
+        self.chk_wells.setChecked(True)
+        self.chk_wells.stateChanged.connect(self._on_well_display_changed)
+        well_layout.addWidget(self.chk_wells)
+
+        self.chk_well_names = QCheckBox("Names")
+        self.chk_well_names.setChecked(True)
+        self.chk_well_names.stateChanged.connect(self._on_well_display_changed)
+        well_layout.addWidget(self.chk_well_names)
+
+        self.chk_well_markers = QCheckBox("Markers")
+        self.chk_well_markers.setChecked(True)
+        self.chk_well_markers.stateChanged.connect(self._on_well_display_changed)
+        well_layout.addWidget(self.chk_well_markers)
+
+        self.chk_well_marker_labels = QCheckBox("Marker labels")
+        self.chk_well_marker_labels.setChecked(False)
+        self.chk_well_marker_labels.stateChanged.connect(self._on_well_display_changed)
+        well_layout.addWidget(self.chk_well_marker_labels)
+
+        well_layout.addWidget(QLabel("Well:"))
+        self.combo_well_filter = QComboBox()
+        self.combo_well_filter.addItem("No well on slice", "__none__")
+        self.combo_well_filter.currentIndexChanged.connect(
+            self._on_well_selection_changed
+        )
+        well_layout.addWidget(self.combo_well_filter)
+
+        well_layout.addWidget(QLabel("Marker:"))
+        self.combo_well_marker_filter = QComboBox()
+        self.combo_well_marker_filter.addItem("All markers for well")
+        self.combo_well_marker_filter.currentTextChanged.connect(
+            self._on_well_display_changed
+        )
+        well_layout.addWidget(self.combo_well_marker_filter)
+
+        well_layout.addWidget(QLabel("Corridor:"))
+        self.spin_well_corridor = QDoubleSpinBox()
+        self.spin_well_corridor.setRange(0.1, 50.0)
+        self.spin_well_corridor.setDecimals(1)
+        self.spin_well_corridor.setSingleStep(0.5)
+        self.spin_well_corridor.setValue(10.0)
+        self.spin_well_corridor.setSuffix(" sp")
+        self.spin_well_corridor.valueChanged.connect(self._on_well_display_changed)
+        well_layout.addWidget(self.spin_well_corridor)
+
+        well_layout.addWidget(QLabel("Label size:"))
+        self.spin_well_label_size = QSpinBox()
+        self.spin_well_label_size.setRange(6, 32)
+        self.spin_well_label_size.setValue(10)
+        self.spin_well_label_size.valueChanged.connect(self._on_well_display_changed)
+        well_layout.addWidget(self.spin_well_label_size)
+
         # Spacer to push checks to left? Or just let them flow.
         bot_layout.addStretch()
+        well_layout.addStretch()
 
         # Add to main layout
         # Using a QDockWidget for controls to ensure it doesn't interfere with the render window
@@ -577,6 +647,24 @@ class ViewInterpretation(ViewMap):
             Qt.TopDockWidgetArea | Qt.BottomDockWidgetArea
         )
         self.addDockWidget(Qt.TopDockWidgetArea, self.controls_dock)
+
+    def _on_well_display_changed(self):
+        """Refresh slice-projected wells after interpretation well controls change."""
+        self._well_marker_filter_dirty = True
+        self.update_all_well_visibility()
+        try:
+            self.plotter.render()
+        except Exception:
+            pass
+
+    def _on_well_selection_changed(self):
+        """Refresh marker choices and overlay after the active well changes."""
+        self._well_marker_filter_dirty = True
+        self.update_all_well_visibility()
+        try:
+            self.plotter.render()
+        except Exception:
+            pass
 
     def _on_annotation_toggle_changed(self):
         """Handle annotation toggle changes and render."""
@@ -626,6 +714,15 @@ class ViewInterpretation(ViewMap):
             # Display the new entities in this view
             for uid in incoming_uids:
                 try:
+                    if self._is_well_child_marker_uid(uid):
+                        self._well_marker_filter_dirty = True
+                        self._refresh_well_marker_filter_options(force=True)
+                        self._remove_raw_actor_for_uid(uid)
+                        parent_uid = self._get_well_child_marker_parent_uid(uid)
+                        if parent_uid:
+                            self.update_well_visibility(uid=parent_uid)
+                        continue
+
                     # Check if this is an interpretation line we're tracking
                     if uid in self.interpretation_lines:
                         # Only show if it matches current slice
@@ -700,6 +797,8 @@ class ViewInterpretation(ViewMap):
                     self.print_terminal(f"Error displaying new entity {uid}: {e}")
         elif collection == getattr(self.parent, "well_coll", None):
             self.print_terminal(f"New well entities added: {incoming_uids}")
+            self._well_marker_filter_dirty = True
+            self._refresh_well_marker_filter_options(force=True)
             for uid in incoming_uids:
                 try:
                     self.update_well_visibility(uid=uid)
@@ -1637,18 +1736,6 @@ class ViewInterpretation(ViewMap):
         if settings.get("cmap"):
             return settings["cmap"]
         return "gray"  # Default
-
-    def _get_geol_legend_color(self, uid, default=(1.0, 1.0, 1.0)):
-        """Return normalized RGB color for a geological entity from the legend table."""
-        try:
-            legend = self.parent.geol_coll.get_uid_legend(uid=uid)
-            return (
-                legend["color_R"] / 255.0,
-                legend["color_G"] / 255.0,
-                legend["color_B"] / 255.0,
-            )
-        except Exception:
-            return default
 
     def _sanitize_legend_value(self, value, fallback="undef"):
         """Normalize legend metadata values so they are always usable strings."""
@@ -3569,15 +3656,6 @@ class ViewInterpretation(ViewMap):
         rebuilt_line.Modified()
         return rebuilt_line, slice_indices, slice_to_cell_index
 
-    def _build_multipart_vtk_with_replaced_slice(
-        self, vtk_obj=None, slice_idx=None, edited_points=None
-    ):
-        """Return a multipart PolyLine where one slice is replaced with edited geometry."""
-        return self._build_multipart_vtk_with_replaced_slices(
-            vtk_obj=vtk_obj,
-            edited_points_by_slice={slice_idx: edited_points},
-        )
-
     def _prompt_multipart_edit_propagation_slices(self, selection=None, current_slice_idx=None):
         """Ask whether the current edit should be copied to additional slices and return matching targets."""
         if selection is None:
@@ -5029,15 +5107,6 @@ class ViewInterpretation(ViewMap):
         primary_axis = self._get_multipart_sampling_primary_axis(
             axis=axis, entity_kind=entity_kind
         )
-        _, in_plane_axes = self._get_slice_plane_axes(axis=axis)
-        secondary_axes = [
-            coord_idx for coord_idx in in_plane_axes if coord_idx != primary_axis
-        ]
-        if not secondary_axes:
-            secondary_axes = [
-                coord_idx for coord_idx in range(3) if coord_idx != primary_axis
-            ]
-        secondary_axis = secondary_axes[0]
 
         merged_points = []
         for segment in slice_segments:
@@ -5054,7 +5123,6 @@ class ViewInterpretation(ViewMap):
         order = np.argsort(merged_points[:, primary_axis], kind="mergesort")
         sorted_points = merged_points[order]
         primary_values = sorted_points[:, primary_axis]
-        secondary_values = sorted_points[:, secondary_axis]
 
         diffs = np.diff(primary_values)
         positive_diffs = np.abs(diffs[np.abs(diffs) > 1.0e-9])
@@ -8056,22 +8124,41 @@ class ViewInterpretation(ViewMap):
             self.update_multipart_fault_visibility(uid)
 
     def _remove_slice_well_actor(self, uid=None):
-        """Remove slice-specific well trace and label actors."""
+        """Remove slice-specific well trace, marker, and label actors."""
         if not uid:
             return
         actor_names = [
+            f"well_slice_halo_{uid}",
             f"well_slice_{uid}",
             f"well_slice_label_{uid}",
+            f"well_slice_marker_leaders_{uid}",
             f"{uid}_prop",
             f"well_coll_{uid}",
             f"well_{uid}",
             uid,
         ]
+        prefixes = (
+            f"well_slice_marker_points_{uid}",
+            f"well_slice_marker_labels_{uid}",
+            f"well_slice_marker_leaders_{uid}",
+        )
+        try:
+            actors = getattr(self.plotter.renderer, "actors", {})
+            for actor_name in list(actors.keys()):
+                if any(str(actor_name).startswith(prefix) for prefix in prefixes):
+                    actor_names.append(actor_name)
+        except Exception:
+            pass
+
         for actor_name in actor_names:
             try:
                 self.plotter.remove_actor(actor_name)
             except Exception:
                 pass
+        try:
+            self.slice_well_halo_actors.pop(uid, None)
+        except Exception:
+            pass
         try:
             self.slice_well_actors.pop(uid, None)
         except Exception:
@@ -8080,10 +8167,82 @@ class ViewInterpretation(ViewMap):
             self.slice_well_label_actors.pop(uid, None)
         except Exception:
             pass
+        try:
+            self.slice_well_marker_actors.pop(uid, None)
+        except Exception:
+            pass
+        try:
+            self.slice_well_marker_label_actors.pop(uid, None)
+        except Exception:
+            pass
+        try:
+            self.slice_well_marker_leader_actors.pop(uid, None)
+        except Exception:
+            pass
         self._invalidate_actor_cache(uid)
+
+    def _well_control_checked(self, attr_name, default=True):
+        """Return a well-control checkbox state with a safe default."""
+        widget = getattr(self, attr_name, None)
+        if widget is None:
+            return bool(default)
+        try:
+            return bool(widget.isChecked())
+        except Exception:
+            return bool(default)
+
+    def _well_label_font_size(self):
+        try:
+            return int(self.spin_well_label_size.value())
+        except Exception:
+            return 10
+
+    def _well_marker_filter_text(self):
+        try:
+            value = str(self.combo_well_marker_filter.currentText()).strip()
+        except Exception:
+            value = ""
+        if not value or value in {"All markers", "All markers for well"}:
+            return None
+        return value
+
+    def _selected_well_uid_for_display(self):
+        """Return the active well uid selected in the interpretation well dropdown."""
+        combo = getattr(self, "combo_well_filter", None)
+        if combo is None:
+            return None
+        try:
+            data = combo.currentData()
+        except Exception:
+            data = None
+        if data in (None, ""):
+            return None
+        return str(data)
+
+    def _well_name_for_uid(self, uid=None):
+        """Return a readable well name for a uid."""
+        try:
+            return str(self.parent.well_coll.get_uid_well_name(uid))
+        except Exception:
+            return str(uid)[:8] if uid else ""
+
+    def _well_uid_is_selected_for_display(self, uid=None):
+        """Return True when a well should be drawn by the selected-well filter."""
+        selected_uid = self._selected_well_uid_for_display()
+        if selected_uid == "__none__":
+            return False
+        if selected_uid is None:
+            return True
+        return str(uid) == selected_uid
 
     def _get_well_slice_tolerance(self):
         """Return a practical slice-plane tolerance for deciding well visibility."""
+        try:
+            corridor_factor = float(self.spin_well_corridor.value())
+        except Exception:
+            corridor_factor = 3.0
+        corridor_factor = max(corridor_factor, 0.1)
+
         try:
             affine = self._get_seismic_axis_vectors()
             if affine is not None:
@@ -8096,17 +8255,668 @@ class ViewInterpretation(ViewMap):
                 if axis_vec is not None:
                     spacing = float(np.linalg.norm(axis_vec))
                     if spacing > 0:
-                        return max(spacing * 3.0, 1e-9)
+                        return max(spacing * corridor_factor, 1e-9)
         except Exception:
             pass
 
         try:
             spacing = abs(float(self._get_axis_spacing(axis=self.current_axis)))
             if spacing > 0:
-                return max(spacing * 3.0, 1e-9)
+                return max(spacing * corridor_factor, 1e-9)
         except Exception:
             pass
         return 1.0
+
+    @staticmethod
+    def _normalise_marker_label(value):
+        """Convert marker labels from VTK/numpy values to compact display text."""
+        try:
+            if isinstance(value, bytes):
+                value = value.decode(errors="ignore")
+        except Exception:
+            pass
+        text = str(value).strip()
+        if text.startswith("marker_"):
+            text = text[len("marker_") :]
+        if text in {"", "nan", "None", "undef"}:
+            return ""
+        return text
+
+    @staticmethod
+    def _vtk_points_to_numpy(vtk_obj=None):
+        """Return points from a VTK/PyVista object as an Nx3 array."""
+        if vtk_obj is None:
+            return None
+        try:
+            points = np.asarray(vtk_obj.points, dtype=np.float64)
+        except Exception:
+            try:
+                n_points = int(vtk_obj.GetNumberOfPoints())
+                points = np.array(
+                    [vtk_obj.GetPoint(i) for i in range(n_points)],
+                    dtype=np.float64,
+                )
+            except Exception:
+                return None
+        if points.ndim == 1:
+            if points.size != 3:
+                return None
+            points = points.reshape(1, 3)
+        if points.ndim != 2 or points.shape[1] != 3 or points.shape[0] <= 0:
+            return None
+        return points
+
+    def _is_well_child_marker_uid(self, uid=None):
+        """Return True for imported well marker entities stored in geology collection."""
+        if not uid or not hasattr(self.parent, "geol_coll") or not hasattr(self.parent, "well_coll"):
+            return False
+        try:
+            df = self.parent.geol_coll.df
+            row = df.loc[df["uid"] == uid]
+            if row.empty:
+                return False
+            row = row.iloc[0]
+            parent_uid = str(row.get("parent_uid", "") or "")
+            if parent_uid not in set(map(str, self.parent.well_coll.get_uids)):
+                return False
+            if str(row.get("topology", "")) != "VertexSet":
+                return False
+            name = str(row.get("name", "") or "")
+            role = str(row.get("role", "") or "")
+            return name.startswith("marker_") or role == "top"
+        except Exception:
+            return False
+
+    def _get_well_child_marker_parent_uid(self, uid=None):
+        """Return the parent well uid for a geology marker entity."""
+        try:
+            row = self.parent.geol_coll.df.loc[
+                self.parent.geol_coll.df["uid"] == uid
+            ].iloc[0]
+            parent_uid = str(row.get("parent_uid", "") or "")
+            if parent_uid:
+                return parent_uid
+        except Exception:
+            pass
+        return None
+
+    def _get_geology_marker_color(self, uid=None):
+        """Return geology legend color for a marker uid as RGB floats."""
+        try:
+            style = self.parent.geol_coll.get_uid_legend(uid=uid)
+            return (
+                float(style["color_R"]) / 255.0,
+                float(style["color_G"]) / 255.0,
+                float(style["color_B"]) / 255.0,
+            )
+        except Exception:
+            return (0.95, 0.75, 0.10)
+
+    def _get_well_marker_records(self, well_uid=None, vtk_obj=None):
+        """Collect imported marker records for a well."""
+        if not well_uid:
+            return []
+
+        records = []
+        try:
+            df = self.parent.geol_coll.df
+            marker_rows = df.loc[df["parent_uid"].astype(str) == str(well_uid)]
+        except Exception:
+            marker_rows = []
+
+        for _, row in getattr(marker_rows, "iterrows", lambda: [])():
+            try:
+                if str(row.get("topology", "")) != "VertexSet":
+                    continue
+                marker_uid = row.get("uid")
+                marker_obj = row.get("vtk_obj")
+                points = self._vtk_points_to_numpy(marker_obj)
+                if points is None:
+                    continue
+                marker_name = self._normalise_marker_label(row.get("feature", ""))
+                if not marker_name:
+                    marker_name = self._normalise_marker_label(row.get("name", ""))
+                if not marker_name:
+                    continue
+                color = self._get_geology_marker_color(uid=marker_uid)
+                try:
+                    point_size = float(
+                        self.parent.geol_coll.get_uid_legend(uid=marker_uid).get(
+                            "point_size", 10.0
+                        )
+                    )
+                except Exception:
+                    point_size = 10.0
+                for point in points:
+                    records.append(
+                        {
+                            "name": marker_name,
+                            "label": marker_name,
+                            "point": np.asarray(point, dtype=np.float64),
+                            "color": color,
+                            "point_size": max(point_size, 8.0),
+                            "source_uid": marker_uid,
+                        }
+                    )
+            except Exception:
+                continue
+
+        # Support true marker field-data stored directly on WellTrace for other imports.
+        # Do not call WellTrace.get_marker_names()/plot_markers() here: that also
+        # treats pORIGINAL_MD, pTWT_s, etc. as marker-like fields in some imports.
+        if vtk_obj is not None:
+            try:
+                field_keys = list(vtk_obj.get_field_data_keys())
+            except Exception:
+                field_keys = []
+
+            marker_groups = []
+            for key in field_keys:
+                if not str(key).startswith("pmarker_"):
+                    continue
+                marker_group = str(key).split("_", 1)[1]
+                if f"marker_{marker_group}" in field_keys:
+                    marker_groups.append(marker_group)
+
+            for marker_group in marker_groups:
+                try:
+                    points = vtk_obj.get_field_data(f"pmarker_{marker_group}")
+                    labels = vtk_obj.get_field_data(f"marker_{marker_group}")
+                except Exception:
+                    continue
+                if points is None or labels is None:
+                    continue
+                points = np.asarray(points, dtype=np.float64).reshape(-1, 3)
+                labels = np.asarray(labels).reshape(-1)
+                for point, label in zip(points, labels):
+                    marker_name = self._normalise_marker_label(label)
+                    if not marker_name:
+                        marker_name = self._normalise_marker_label(marker_group)
+                    if not marker_name:
+                        continue
+                    records.append(
+                        {
+                            "name": marker_name,
+                            "label": marker_name,
+                            "point": np.asarray(point, dtype=np.float64),
+                            "color": (0.95, 0.75, 0.10),
+                            "point_size": 10.0,
+                            "source_uid": None,
+                        }
+                    )
+        return records
+
+    def _refresh_well_marker_filter_options(self, force=False):
+        """Populate the marker filter combo from the selected visible well."""
+        if not force and not getattr(self, "_well_marker_filter_dirty", True):
+            return
+        combo = getattr(self, "combo_well_marker_filter", None)
+        if combo is None:
+            return
+
+        names = set()
+        selected_well_uid = self._selected_well_uid_for_display()
+        if selected_well_uid and selected_well_uid != "__none__":
+            try:
+                vtk_obj = self.parent.well_coll.get_uid_vtk_obj(selected_well_uid)
+            except Exception:
+                vtk_obj = None
+            for record in self._get_well_marker_records(
+                well_uid=selected_well_uid, vtk_obj=vtk_obj
+            ):
+                marker_name = self._normalise_marker_label(record.get("name", ""))
+                if marker_name:
+                    names.add(marker_name)
+
+        try:
+            current = combo.currentText()
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItem("All markers for well")
+            for name in sorted(names):
+                combo.addItem(name)
+            idx = combo.findText(current)
+            combo.setCurrentIndex(idx if idx >= 0 else 0)
+        finally:
+            try:
+                combo.blockSignals(False)
+            except Exception:
+                pass
+        self._well_marker_filter_dirty = False
+
+    def _refresh_visible_well_filter_options(self, uid_list=None):
+        """Populate the active-well combo with wells visible on the current slice."""
+        combo = getattr(self, "combo_well_filter", None)
+        if combo is None:
+            return
+
+        try:
+            uid_list = list(uid_list or self.parent.well_coll.get_uids)
+        except Exception:
+            uid_list = []
+
+        current_uid = self._selected_well_uid_for_display()
+        visible_uids = []
+        if getattr(self, "current_seismic_uid", None):
+            for uid in uid_list:
+                try:
+                    if not self._is_uid_enabled_in_tree(uid):
+                        continue
+                    vtk_obj = self.parent.well_coll.get_uid_vtk_obj(uid)
+                    slice_polydata, _label_point = self._extract_well_slice_polydata(
+                        vtk_obj
+                    )
+                    if (
+                        slice_polydata is not None
+                        and slice_polydata.GetNumberOfPoints() > 0
+                    ):
+                        visible_uids.append(str(uid))
+                except Exception:
+                    continue
+
+        self._visible_slice_well_uids = visible_uids
+
+        try:
+            combo.blockSignals(True)
+            combo.clear()
+            if not visible_uids:
+                combo.addItem("No well on slice", "__none__")
+                combo.setCurrentIndex(0)
+                return
+
+            for uid in visible_uids:
+                combo.addItem(self._well_name_for_uid(uid), uid)
+
+            idx = -1
+            if current_uid not in (None, "__none__"):
+                for item_idx in range(combo.count()):
+                    if str(combo.itemData(item_idx)) == str(current_uid):
+                        idx = item_idx
+                        break
+            combo.setCurrentIndex(idx if idx >= 0 else 0)
+        finally:
+            try:
+                combo.blockSignals(False)
+            except Exception:
+                pass
+
+    def _suppress_well_child_marker_actors(self, well_uid=None):
+        """Remove raw geology actors for markers that are rendered by well overlays."""
+        try:
+            df = self.parent.geol_coll.df
+            if well_uid is not None:
+                df = df.loc[df["parent_uid"].astype(str) == str(well_uid)]
+            marker_uids = list(df["uid"].to_list())
+        except Exception:
+            marker_uids = []
+        for marker_uid in marker_uids:
+            try:
+                if self._is_well_child_marker_uid(marker_uid):
+                    self._remove_raw_actor_for_uid(marker_uid)
+            except Exception:
+                continue
+
+    def _current_vertical_exaggeration(self):
+        """Return the active z scale used for vertical exaggeration."""
+        try:
+            _sx, _sy, sz = self._get_plotter_scale_factors()
+            return float(sz) if float(sz) != 0.0 else 1.0
+        except Exception:
+            return 1.0
+
+    def _points_for_unscaled_label_actor(self, points):
+        """Return display-space anchors for 2D label actors under plotter scaling."""
+        label_points = np.asarray(points, dtype=np.float64).copy()
+        if label_points.ndim == 1:
+            label_points = label_points.reshape(1, 3)
+        if label_points.ndim != 2 or label_points.shape[1] != 3:
+            return label_points
+
+        sx, sy, sz = self._get_plotter_scale_factors()
+        label_points[:, 0] *= sx
+        label_points[:, 1] *= sy
+        label_points[:, 2] *= sz
+        return label_points
+
+    def _current_slice_display_bounds(self):
+        """Return current seismic slice bounds used to clip well overlays."""
+        bounds = getattr(self, "current_slice_bounds", None)
+        if bounds is None and getattr(self, "slice_actor", None) is not None:
+            try:
+                bounds = self.slice_actor.bounds
+            except Exception:
+                bounds = None
+        if bounds is None:
+            return None
+        try:
+            return tuple(float(value) for value in bounds)
+        except Exception:
+            return None
+
+    def _point_in_current_slice_bounds(self, point):
+        """Return True when a projected point is inside the visible seismic slice."""
+        bounds = self._current_slice_display_bounds()
+        if bounds is None:
+            return True
+        point = np.asarray(point, dtype=np.float64)
+        eps = 1.0e-6
+        for axis, bounds_idx in enumerate(((0, 1), (2, 3), (4, 5))):
+            low = float(bounds[bounds_idx[0]])
+            high = float(bounds[bounds_idx[1]])
+            if high < low:
+                low, high = high, low
+            if abs(high - low) <= eps:
+                # The normal axis of a slice can be degenerate; the well point
+                # has already been projected onto that plane.
+                continue
+            if point[axis] < low - eps or point[axis] > high + eps:
+                return False
+        return True
+
+    def _clip_segment_fractions_to_current_slice_bounds(
+        self, point_a, point_b, start_fraction=0.0, end_fraction=1.0
+    ):
+        """Clip a projected segment fraction interval to visible slice bounds."""
+        bounds = self._current_slice_display_bounds()
+        if bounds is None:
+            return float(start_fraction), float(end_fraction)
+
+        p0 = np.asarray(point_a, dtype=np.float64)
+        p1 = np.asarray(point_b, dtype=np.float64)
+        delta = p1 - p0
+        t0 = float(start_fraction)
+        t1 = float(end_fraction)
+        eps = 1.0e-12
+
+        for axis, bounds_idx in enumerate(((0, 1), (2, 3), (4, 5))):
+            low = float(bounds[bounds_idx[0]])
+            high = float(bounds[bounds_idx[1]])
+            if high < low:
+                low, high = high, low
+            if abs(high - low) <= 1.0e-6:
+                continue
+
+            d_axis = float(delta[axis])
+            p_axis = float(p0[axis])
+            if abs(d_axis) <= eps:
+                if p_axis < low or p_axis > high:
+                    return None
+                continue
+
+            ta = (low - p_axis) / d_axis
+            tb = (high - p_axis) / d_axis
+            enter = min(ta, tb)
+            exit_ = max(ta, tb)
+            t0 = max(t0, enter)
+            t1 = min(t1, exit_)
+            if t0 > t1:
+                return None
+
+        return t0, t1
+
+    def _project_points_to_current_well_slice(self, points):
+        """Project candidate points onto the current slice and return mask within tolerance."""
+        points = np.asarray(points, dtype=np.float64)
+        if points.ndim != 2 or points.shape[1] != 3:
+            return None, None
+
+        plane_center = getattr(self, "current_slice_plane_center", None)
+        plane_normal = getattr(self, "current_slice_plane_normal", None)
+        tolerance = self._get_well_slice_tolerance()
+
+        if plane_center is not None and plane_normal is not None:
+            center = np.asarray(plane_center, dtype=np.float64)
+            normal = np.asarray(plane_normal, dtype=np.float64)
+            normal_norm = float(np.linalg.norm(normal))
+            if normal_norm <= 0:
+                return None, None
+            normal = normal / normal_norm
+            signed_dist = np.dot(points - center[None, :], normal)
+            projected = points - signed_dist[:, None] * normal[None, :]
+            plane_mask = np.abs(signed_dist) <= tolerance
+            bounds_mask = np.array(
+                [self._point_in_current_slice_bounds(point) for point in projected],
+                dtype=bool,
+            )
+            return projected, plane_mask & bounds_mask
+
+        coord_idx = {"Inline": 0, "Crossline": 1, "Z-slice": 2}.get(
+            self.current_axis
+        )
+        if coord_idx is None:
+            return None, None
+        signed_dist = points[:, coord_idx] - float(self.current_slice_position)
+        projected = points.copy()
+        projected[:, coord_idx] = float(self.current_slice_position)
+        plane_mask = np.abs(signed_dist) <= tolerance
+        bounds_mask = np.array(
+            [self._point_in_current_slice_bounds(point) for point in projected],
+            dtype=bool,
+        )
+        return projected, plane_mask & bounds_mask
+
+    def _slice_project_marker_records(self, records):
+        """Filter and project marker records for the active slice."""
+        if not records:
+            return []
+        marker_filter = self._well_marker_filter_text()
+        filtered = [
+            record
+            for record in records
+            if marker_filter is None or record.get("name") == marker_filter
+        ]
+        if not filtered:
+            return []
+
+        points = np.vstack([record["point"] for record in filtered])
+        projected, mask = self._project_points_to_current_well_slice(points)
+        if projected is None or mask is None:
+            return []
+
+        out = []
+        for record, point, is_visible in zip(filtered, projected, mask):
+            if not bool(is_visible):
+                continue
+            projected_record = dict(record)
+            projected_record["projected_point"] = np.asarray(point, dtype=np.float64)
+            out.append(projected_record)
+        return out
+
+    def _current_camera_label_basis(self):
+        """Return approximate screen-right and screen-up vectors in world coordinates."""
+        try:
+            camera = self.plotter.camera
+            view_up = np.asarray(camera.GetViewUp(), dtype=np.float64)
+            direction = np.asarray(camera.GetDirectionOfProjection(), dtype=np.float64)
+        except Exception:
+            view_up = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+            direction = np.array([0.0, 0.0, -1.0], dtype=np.float64)
+
+        up_norm = float(np.linalg.norm(view_up))
+        if up_norm <= 0:
+            view_up = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+        else:
+            view_up = view_up / up_norm
+
+        right = np.cross(direction, view_up)
+        right_norm = float(np.linalg.norm(right))
+        if right_norm <= 0:
+            right = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+        else:
+            right = right / right_norm
+        return right, view_up
+
+    def _well_label_world_offset(self):
+        """Return a stable world-space label offset based on the current slice size."""
+        bounds = self._current_slice_display_bounds()
+        if bounds is None:
+            return 1.0
+        try:
+            v_exag = abs(self._current_vertical_exaggeration()) or 1.0
+            extents = [
+                abs(float(bounds[1]) - float(bounds[0])),
+                abs(float(bounds[3]) - float(bounds[2])),
+                abs(float(bounds[5]) - float(bounds[4])) * v_exag,
+            ]
+            extent = max([value for value in extents if value > 0] or [1.0])
+        except Exception:
+            extent = 1.0
+        return max(extent * 0.012, 1.0)
+
+    def _prepare_marker_label_records(self, records):
+        """Place marker label anchors beside the true marker depth."""
+        if not records:
+            return []
+        right, _up = self._current_camera_label_basis()
+        offset = self._well_label_world_offset()
+        bounds = self._current_slice_display_bounds()
+        z_low = z_high = z_margin = None
+        if bounds is not None:
+            z_extent = max(abs(float(bounds[5]) - float(bounds[4])), 1.0)
+            z_low = min(float(bounds[4]), float(bounds[5]))
+            z_high = max(float(bounds[4]), float(bounds[5]))
+            z_margin = z_extent * 0.01
+
+        prepared = []
+        for record in records:
+            out = dict(record)
+            marker_point = np.asarray(record["projected_point"], dtype=np.float64)
+            label_point = marker_point + right * offset
+            # Keep label and leader anchors at the exact marker depth. Any vertical
+            # separation here reads as a bad well tie when viewing seismic sections.
+            label_point[2] = marker_point[2]
+            if z_low is not None and z_high is not None:
+                label_point[2] = float(
+                    np.clip(label_point[2], z_low + z_margin, z_high - z_margin)
+                )
+            out["label_point"] = label_point
+            prepared.append(out)
+
+        return prepared
+
+    @staticmethod
+    def _build_segment_polydata(point_pairs):
+        """Build a PolyData containing independent line segments."""
+        if not point_pairs:
+            return None
+        points = []
+        lines = []
+        for point_a, point_b in point_pairs:
+            start_idx = len(points)
+            points.append(np.asarray(point_a, dtype=np.float64))
+            points.append(np.asarray(point_b, dtype=np.float64))
+            lines.extend([2, start_idx, start_idx + 1])
+        polydata = pv.PolyData(np.asarray(points, dtype=np.float64))
+        polydata.lines = np.asarray(lines)
+        return polydata
+
+    @staticmethod
+    def _marker_color_key(color):
+        return tuple(round(float(component), 4) for component in color)
+
+    @staticmethod
+    def _text_color_for_background(color):
+        r, g, b = [float(component) for component in color[:3]]
+        luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        return "black" if luminance > 0.55 else "white"
+
+    def _add_well_marker_overlays(self, uid=None, vtk_obj=None):
+        """Draw marker points, leaders, and optional boxed labels for a slice well."""
+        if not uid or not self._well_control_checked("chk_well_markers", True):
+            return
+
+        records = self._slice_project_marker_records(
+            self._get_well_marker_records(well_uid=uid, vtk_obj=vtk_obj)
+        )
+        if not records:
+            return
+
+        grouped = {}
+        for record in records:
+            grouped.setdefault(self._marker_color_key(record["color"]), []).append(record)
+
+        point_actors = []
+        for idx, (color_key, group) in enumerate(grouped.items()):
+            points = np.vstack([record["projected_point"] for record in group])
+            point_size = max(float(record.get("point_size", 10.0)) for record in group)
+            try:
+                actor = self.plotter.add_mesh(
+                    pv.PolyData(points),
+                    name=f"well_slice_marker_points_{uid}_{idx}",
+                    color=color_key,
+                    style="points",
+                    point_size=max(point_size, 9.0),
+                    render_points_as_spheres=True,
+                    pickable=False,
+                    reset_camera=False,
+                    lighting=False,
+                )
+                self._apply_coplanar_interpretation_offset(actor=actor)
+                point_actors.append(actor)
+            except Exception:
+                continue
+        self.slice_well_marker_actors[uid] = point_actors
+
+        if not self._well_control_checked("chk_well_marker_labels", False):
+            return
+
+        label_records = self._prepare_marker_label_records(records)
+        point_pairs = [
+            (record["projected_point"], record["label_point"])
+            for record in label_records
+        ]
+        leader_polydata = self._build_segment_polydata(point_pairs)
+        if leader_polydata is not None:
+            try:
+                leader_actor = self.plotter.add_mesh(
+                    leader_polydata,
+                    name=f"well_slice_marker_leaders_{uid}",
+                    color=(0.92, 0.92, 0.92),
+                    line_width=1.5,
+                    opacity=0.85,
+                    pickable=False,
+                    reset_camera=False,
+                    lighting=False,
+                )
+                self._apply_coplanar_interpretation_offset(actor=leader_actor)
+                self.slice_well_marker_leader_actors[uid] = leader_actor
+            except Exception:
+                pass
+
+        label_groups = {}
+        for record in label_records:
+            label_groups.setdefault(self._marker_color_key(record["color"]), []).append(
+                record
+            )
+
+        label_actors = []
+        for idx, (color_key, group) in enumerate(label_groups.items()):
+            try:
+                label_actor = self.plotter.add_point_labels(
+                    self._points_for_unscaled_label_actor(
+                        np.vstack([record["label_point"] for record in group])
+                    ),
+                    [record["label"] for record in group],
+                    name=f"well_slice_marker_labels_{uid}_{idx}",
+                    font_size=self._well_label_font_size(),
+                    text_color=self._text_color_for_background(color_key),
+                    point_color=color_key,
+                    point_size=0,
+                    show_points=False,
+                    shape="rect",
+                    shape_color=color_key,
+                    shape_opacity=0.78,
+                    margin=4,
+                    always_visible=False,
+                    justification_horizontal="left",
+                    justification_vertical="center",
+                    pickable=False,
+                    reset_camera=False,
+                )
+                label_actors.append(label_actor)
+            except Exception:
+                continue
+        self.slice_well_marker_label_actors[uid] = label_actors
 
     def _extract_well_slice_polydata(self, vtk_obj=None):
         """Build a projected well trace for the current seismic slice."""
@@ -8222,12 +9032,18 @@ class ViewInterpretation(ViewMap):
             if clipped is None:
                 continue
             f0, f1 = clipped
+            bounds_clipped = self._clip_segment_fractions_to_current_slice_bounds(
+                projected[idx], projected[idx + 1], f0, f1
+            )
+            if bounds_clipped is None:
+                continue
+            f0, f1 = bounds_clipped
             add_line(projected_at(idx, idx + 1, f0), projected_at(idx, idx + 1, f1))
 
         # Keep standalone stations only when no line segment could be drawn.
         if vtk_lines.GetNumberOfCells() == 0:
             for idx, is_on in enumerate(on_slice):
-                if is_on:
+                if is_on and self._point_in_current_slice_bounds(projected[idx]):
                     add_vertex(projected[idx])
 
         # If a deviated well crosses the exact plane between samples, keep the
@@ -8248,7 +9064,8 @@ class ViewInterpretation(ViewMap):
                 else:
                     p = p.copy()
                     p[coord_idx] = float(self.current_slice_position)
-                add_vertex(p)
+                if self._point_in_current_slice_bounds(p):
+                    add_vertex(p)
 
         if vtk_points.GetNumberOfPoints() <= 0:
             return None, None
@@ -8263,16 +9080,23 @@ class ViewInterpretation(ViewMap):
         label_point = np.array(out.GetPoint(0), dtype=float)
         return out, label_point
 
-    def update_well_visibility(self, uid=None):
+    def update_well_visibility(self, uid=None, visible=None):
         """Show a well only when it intersects or lies near the current seismic slice."""
         if not uid or not hasattr(self.parent, "well_coll"):
             return
 
         self._remove_slice_well_actor(uid)
+        self._suppress_well_child_marker_actors(well_uid=uid)
 
-        if not self.current_seismic_uid:
+        if visible is False:
+            return
+        if not self._well_control_checked("chk_wells", True):
+            return
+        if not getattr(self, "current_seismic_uid", None):
             return
         if not self._is_uid_enabled_in_tree(uid):
+            return
+        if not self._well_uid_is_selected_for_display(uid):
             return
 
         try:
@@ -8305,6 +9129,22 @@ class ViewInterpretation(ViewMap):
 
         actor_name = f"well_slice_{uid}"
         try:
+            halo_actor = self.plotter.add_mesh(
+                pv.wrap(slice_polydata),
+                name=f"well_slice_halo_{uid}",
+                color=(0.0, 0.0, 0.0),
+                line_width=line_width + 3.0,
+                point_size=13,
+                render_lines_as_tubes=True,
+                render_points_as_spheres=True,
+                opacity=min(max(opacity, 0.35), 0.70),
+                pickable=False,
+                reset_camera=False,
+                lighting=False,
+            )
+            self._apply_coplanar_interpretation_offset(actor=halo_actor)
+            self.slice_well_halo_actors[uid] = halo_actor
+
             actor = self.plotter.add_mesh(
                 pv.wrap(slice_polydata),
                 name=actor_name,
@@ -8323,14 +9163,18 @@ class ViewInterpretation(ViewMap):
         except Exception:
             return
 
-        if label_point is not None:
+        if label_point is not None and self._well_control_checked(
+            "chk_well_names", True
+        ):
             try:
                 well_name = self.parent.well_coll.get_uid_well_name(uid)
             except Exception:
                 well_name = str(uid)[:8]
             try:
                 label_actor = self.plotter.add_point_labels(
-                    np.asarray([label_point], dtype=float),
+                    self._points_for_unscaled_label_actor(
+                        np.asarray([label_point], dtype=float)
+                    ),
                     [well_name],
                     name=f"well_slice_label_{uid}",
                     font_size=10,
@@ -8338,13 +9182,15 @@ class ViewInterpretation(ViewMap):
                     point_color=color,
                     point_size=0,
                     shape_opacity=0.35,
-                    always_visible=True,
+                    always_visible=False,
                     pickable=False,
                     reset_camera=False,
                 )
                 self.slice_well_label_actors[uid] = label_actor
             except Exception:
                 pass
+
+        self._add_well_marker_overlays(uid=uid, vtk_obj=vtk_obj)
 
     def update_all_well_visibility(self):
         """Refresh all wells for the current slice."""
@@ -8354,6 +9200,12 @@ class ViewInterpretation(ViewMap):
             uid_list = list(self.parent.well_coll.get_uids)
         except Exception:
             uid_list = []
+
+        self._refresh_visible_well_filter_options(uid_list=uid_list)
+        self._well_marker_filter_dirty = True
+        self._refresh_well_marker_filter_options()
+        self._suppress_well_child_marker_actors()
+
         active = set(uid_list)
         for uid in list(getattr(self, "slice_well_actors", {}).keys()):
             if uid not in active:
@@ -8910,12 +9762,16 @@ class ViewInterpretation(ViewMap):
             if actor_row.empty:
                 continue
             self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = True
+            collection = actor_row["collection"].to_list()[0]
+            if collection == "well_coll":
+                self.update_well_visibility(uid=uid, visible=True)
+                continue
             if self._is_slice_filtered_uid(uid):
                 slice_filtered_uids.add(uid)
                 self.scan_and_index_single_horizon(uid)
                 self.set_actor_visibility(uid, False)
                 continue
-            if actor_row["collection"].to_list()[0] == "geol_coll":
+            if collection == "geol_coll":
                 self._ensure_geology_actor_realized(uid=uid, visible=True)
             self.set_actor_visible(uid=uid, visible=True)
 
@@ -8924,6 +9780,10 @@ class ViewInterpretation(ViewMap):
             if actor_row.empty:
                 continue
             self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
+            collection = actor_row["collection"].to_list()[0]
+            if collection == "well_coll":
+                self.update_well_visibility(uid=uid, visible=False)
+                continue
             if self._is_slice_filtered_uid(uid):
                 slice_filtered_uids.add(uid)
                 self.set_actor_visibility(uid, False)
@@ -13029,7 +13889,11 @@ class ViewInterpretation(ViewMap):
 
             if hasattr(self, "slice_well_actors") and (
                 uid in self.slice_well_actors
+                or uid in getattr(self, "slice_well_halo_actors", {})
                 or uid in getattr(self, "slice_well_label_actors", {})
+                or uid in getattr(self, "slice_well_marker_actors", {})
+                or uid in getattr(self, "slice_well_marker_label_actors", {})
+                or uid in getattr(self, "slice_well_marker_leader_actors", {})
             ):
                 try:
                     self._remove_slice_well_actor(uid)
@@ -13047,6 +13911,11 @@ class ViewInterpretation(ViewMap):
             self.update_interpretation_line_visibility()
             self.update_all_multipart_horizons_visibility()
             self.update_all_multipart_faults_visibility()
+        except Exception:
+            pass
+        try:
+            self._well_marker_filter_dirty = True
+            self.update_all_well_visibility()
         except Exception:
             pass
 
@@ -13200,10 +14069,31 @@ class ViewInterpretation(ViewMap):
             except Exception:
                 pass
 
+    def _refresh_well_overlay_for_style_uid(self, uid=None, collection=None):
+        """Refresh a slice well overlay if a well or its child marker style changed."""
+        if not uid or collection is None:
+            return False
+
+        if collection == getattr(self.parent, "well_coll", None):
+            self.update_well_visibility(uid=uid)
+            return True
+
+        if collection == getattr(self.parent, "geol_coll", None):
+            if self._is_well_child_marker_uid(uid):
+                parent_uid = self._get_well_child_marker_parent_uid(uid)
+                self._remove_raw_actor_for_uid(uid)
+                if parent_uid:
+                    self.update_well_visibility(uid=parent_uid)
+                return True
+
+        return False
+
     def change_actor_color(self, updated_uids=None, collection=None):
         """Update actor color without assuming every uid has a raw actor."""
         actors = getattr(self.plotter.renderer, "actors", {})
         for uid in updated_uids or []:
+            if self._refresh_well_overlay_for_style_uid(uid=uid, collection=collection):
+                continue
             if uid not in self.uids_in_view or uid not in actors:
                 continue
             color_R = collection.get_uid_legend(uid=uid)["color_R"]
@@ -13216,6 +14106,8 @@ class ViewInterpretation(ViewMap):
         """Update actor opacity without assuming every uid has a raw actor."""
         actors = getattr(self.plotter.renderer, "actors", {})
         for uid in updated_uids or []:
+            if self._refresh_well_overlay_for_style_uid(uid=uid, collection=collection):
+                continue
             if uid not in self.uids_in_view or uid not in actors:
                 continue
             opacity = collection.get_uid_legend(uid=uid)["opacity"] / 100
@@ -13225,6 +14117,8 @@ class ViewInterpretation(ViewMap):
         """Update actor line width without assuming every uid has a raw actor."""
         actors = getattr(self.plotter.renderer, "actors", {})
         for uid in updated_uids or []:
+            if self._refresh_well_overlay_for_style_uid(uid=uid, collection=collection):
+                continue
             if uid not in self.uids_in_view or uid not in actors:
                 continue
             line_thick = collection.get_uid_legend(uid=uid)["line_thick"]
@@ -13234,6 +14128,8 @@ class ViewInterpretation(ViewMap):
         """Update actor point size without assuming every uid has a raw actor."""
         actors = getattr(self.plotter.renderer, "actors", {})
         for uid in updated_uids or []:
+            if self._refresh_well_overlay_for_style_uid(uid=uid, collection=collection):
+                continue
             if uid not in self.uids_in_view or uid not in actors:
                 continue
             point_size = collection.get_uid_legend(uid=uid)["point_size"]
@@ -13321,15 +14217,6 @@ class ViewInterpretation(ViewMap):
         # Ensure plotter updates immediately
         if self.plotter:
             self.plotter.render()
-
-    def _force_initial_display(self):
-        """Force initial slice display after window is fully shown."""
-        if self.current_seismic_uid:
-            self.print_terminal("Forcing initial slice display...")
-            self._camera_initialized = False  # Force camera reset
-            self.update_slice_limits()
-            self.update_camera_orientation()  # Sets correct view (YZ for Inline, etc.)
-            self.update_slice()
 
     def clear_seismic_volumes(self):
         """Remove any full structured-source actors from the plotter."""
