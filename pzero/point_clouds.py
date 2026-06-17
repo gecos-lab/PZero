@@ -26,8 +26,6 @@ from numpy import zeros as np_zeros
 from numpy import zeros_like as np_zeros_like
 from numpy import arange as np_arange
 
-from pyvista.core.filters import _update_alg as pv_update_alg
-
 from vtkmodules.util import numpy_support
 from vtkmodules.vtkCommonCore import vtkIdTypeArray
 from vtkmodules.vtkCommonDataModel import (
@@ -280,7 +278,7 @@ def segment_pc(self):
         connectivity_filter_dd.SetExtractionModeToAllClusters()
         connectivity_filter_dd.ScalarConnectivityOn()
         connectivity_filter_dd.SetScalarRange(dialog["dd1"], dialog["dd2"])
-        pv_update_alg(connectivity_filter_dd, False, "Segmenting on dip directions")
+        #pv_update_alg(connectivity_filter_dd, False, "Segmenting on dip directions")
 
         f1 = connectivity_filter_dd.GetOutput()
         f1.GetPointData().SetActiveScalars("dip")
@@ -304,7 +302,7 @@ def segment_pc(self):
         r.SetNumberOfNeighbors(dialog["nn"])
         r.GenerateOutliersOff()
 
-        pv_update_alg(r, True, "Cleaning pc")
+        #(r, True, "Cleaning pc")
         pc = PCDom()
         pc.ShallowCopy(r.GetOutput())
         pc.GetPointData().SetActiveScalars("ClusterId")
