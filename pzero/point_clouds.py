@@ -278,7 +278,7 @@ def segment_pc(self):
         connectivity_filter_dd.SetExtractionModeToAllClusters()
         connectivity_filter_dd.ScalarConnectivityOn()
         connectivity_filter_dd.SetScalarRange(dialog["dd1"], dialog["dd2"])
-        pv_update_alg(connectivity_filter_dd, True, "Segmenting on dip directions")
+        pv_update_alg(connectivity_filter_dd, False, "Segmenting on dip directions")
         
         f1 = connectivity_filter_dd.GetOutput()
         f1.GetPointData().SetActiveScalars("dip") 
