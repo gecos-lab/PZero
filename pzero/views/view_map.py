@@ -34,7 +34,11 @@ from ..entities_factory import (
 )
 from ..orientation_analysis import get_dip_dir_vectors
 from ..collections.xsection_collection import section_from_strike
-from ..collections.boundary_collection import boundary_from_points, boundary_from_three_points, boundary_from_obb
+from ..collections.boundary_collection import (
+    boundary_from_points,
+    boundary_from_three_points,
+    boundary_from_obb,
+)
 
 
 class ViewMap(View2D):
@@ -75,9 +79,7 @@ class ViewMap(View2D):
         self.menuCreate.addAction(self.boundaryFromThreePointsButton)
 
         self.boundaryFromOBBButton = QAction("Boundary from OBB", self)
-        self.boundaryFromOBBButton.triggered.connect(
-            lambda: boundary_from_obb(self)
-        )
+        self.boundaryFromOBBButton.triggered.connect(lambda: boundary_from_obb(self))
         self.menuCreate.addAction(self.boundaryFromOBBButton)
 
     # ================================  Methods required by BaseView(), (re-)implemented here =========================
@@ -387,9 +389,9 @@ class ViewMap(View2D):
                     try:
                         prop_names = self.parent.dom_coll.get_uid_properties_names(uid)
                         prop_index = prop_names.index(show_property)
-                        n_comp = self.parent.dom_coll.get_uid_properties_components(uid)[
-                            prop_index
-                        ]
+                        n_comp = self.parent.dom_coll.get_uid_properties_components(
+                            uid
+                        )[prop_index]
                         show_property_value = plot_entity.get_point_data(show_property)
                     except Exception:
                         show_property_value = None

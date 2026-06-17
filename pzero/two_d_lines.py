@@ -37,7 +37,9 @@ from .helpers.helper_widgets import Editor, Tracer, Tracer3D
 from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 from .entities_factory import PolyLine, XsPolyLine
 
-from .views.view_map import ViewMap; from .views.view_xsection import ViewXsection
+from .views.view_map import ViewMap
+from .views.view_xsection import ViewXsection
+
 
 @freeze_gui_on
 def draw_line(self):
@@ -108,7 +110,7 @@ def draw_line(self):
 @freeze_gui_on
 def draw_line_3d(self):
     """Draw a line in 3D using point clicking. Only works on surfaces.
-    
+
     Usage:
     - Left-click on surfaces to add points
     - Right-click to finish drawing
@@ -116,66 +118,78 @@ def draw_line_3d(self):
     """
     import numpy as np
     from vtkmodules.vtkRenderingCore import vtkCellPicker
-    
+
     def on_left_click(obj, event):
         """Handle left-click to add point only if clicking on a surface.
-        
+
         Args:
             obj: The VTK interactor object
             event: The VTK event object containing click information
         """
         if not tracer_3d.is_active:
             return
-        
+
         # Get the event position from the interactor
         pos = obj.GetEventPosition()
-        
+
         # Create a cell picker to check if we hit a surface
         picker = vtkCellPicker()
         picker.SetTolerance(0.01)
-        
+
         # Try to pick an actor at the click position
         style = obj.GetInteractorStyle()
         style.SetDefaultRenderer(self.plotter.renderer)
         picker_output = picker.Pick(pos[0], pos[1], 0, style.GetDefaultRenderer())
-        
+
         # Check if we hit a surface (actor)
         if picker_output and picker.GetActor():
             # Get the intersection point on the surface
             picked_position = picker.GetPickPosition()
-            
+
             try:
                 # Convert to list if needed
                 if isinstance(picked_position, (tuple, list, np.ndarray)):
-                    point = list(picked_position) if not isinstance(picked_position, list) else picked_position
+                    point = (
+                        list(picked_position)
+                        if not isinstance(picked_position, list)
+                        else picked_position
+                    )
                     if len(point) == 3:
                         tracer_3d.add_point(point)
-                        self.print_terminal(f"✓ Point {len(tracer_3d.points)} added at ({point[0]:.2f}, {point[1]:.2f}, {point[2]:.2f})")
+                        self.print_terminal(
+                            f"✓ Point {len(tracer_3d.points)} added at ({point[0]:.2f}, {point[1]:.2f}, {point[2]:.2f})"
+                        )
                     else:
-                        self.print_terminal(f"ERROR: Point has {len(point)} coordinates, expected 3")
+                        self.print_terminal(
+                            f"ERROR: Point has {len(point)} coordinates, expected 3"
+                        )
                 else:
-                    self.print_terminal(f"ERROR: picked_position is not a valid type: {type(picked_position)}")
+                    self.print_terminal(
+                        f"ERROR: picked_position is not a valid type: {type(picked_position)}"
+                    )
             except Exception as e:
                 self.print_terminal(f"ERROR adding point: {e}")
         else:
             # No surface was hit - inform user
-            self.print_terminal("No surface detected at click position. Click on a surface to add points.")
-    
+            self.print_terminal(
+                "No surface detected at click position. Click on a surface to add points."
+            )
+
     # Store observer tags for cleanup
     observer_tags = {}
-    
+
     def on_right_click(obj, event):
         """Handle right-click to finish drawing."""
         if not tracer_3d.is_active:
             freeze_gui_off(self)
             return
-        
+
         # Remove event observers using stored tags
         if "left" in observer_tags:
             self.plotter.iren.interactor.RemoveObserver(observer_tags["left"])
         if "right" in observer_tags:
             self.plotter.iren.interactor.RemoveObserver(observer_tags["right"])
-        
+
         # Check if we have enough points
         if len(tracer_3d.points) < 2:
             self.print_terminal("Need at least 2 points to create a line")
@@ -183,25 +197,25 @@ def draw_line_3d(self):
             # self.enable_actions()
             freeze_gui_off(self)
             return
-        
+
         # Get the polydata from the tracer
         traced_pld = tracer_3d.get_polydata()
-        
+
         if traced_pld and traced_pld.GetNumberOfPoints() > 0:
             line_dict["vtk_obj"].ShallowCopy(traced_pld)
             self.parent.geol_coll.add_entity_from_dict(line_dict)
             self.print_terminal(f"✓ Created line with {len(tracer_3d.points)} points")
-        
+
         # Clean up
         tracer_3d.disable()
         # self.enable_actions()
         freeze_gui_off(self)
-    
+
     # self.disable_actions()
-    
+
     # Create deepcopy of the geological entity dictionary
     line_dict = deepcopy(self.parent.geol_coll.entity_dict)
-    
+
     # One dictionary is set as input for a general widget of multiple-value-input
     line_dict_in = {
         "name": ["PolyLine name: ", "new_pline"],
@@ -218,33 +232,39 @@ def draw_line_3d(self):
             list(set(self.parent.geol_coll.legend_df["scenario"].tolist())),
         ],
     }
-    
+
     line_dict_updt = multiple_input_dialog(
         title="Digitize new 3D PolyLine", input_dict=line_dict_in
     )
-    
+
     # Check if the output of the widget is empty or not
     if line_dict_updt is None:
         # self.enable_actions()
         freeze_gui_off(self)
         return
-    
+
     # Getting the values that have been typed by the user through the widget
     for key in line_dict_updt:
         line_dict[key] = line_dict_updt[key]
-    
+
     line_dict["topology"] = "PolyLine"
     line_dict["vtk_obj"] = PolyLine()
-    
+
     # Create and enable the 3D tracer
     tracer_3d = Tracer3D(self)
     tracer_3d.enable()
-    
+
     # Set up click handlers using VTK event observers for surface picking
-    observer_tags["left"] = self.plotter.iren.interactor.AddObserver("LeftButtonPressEvent", on_left_click)
-    observer_tags["right"] = self.plotter.iren.interactor.AddObserver("RightButtonPressEvent", on_right_click)
-    
-    self.print_terminal("3D Line Drawing: Left-click on surfaces to add points, Right-click to finish")
+    observer_tags["left"] = self.plotter.iren.interactor.AddObserver(
+        "LeftButtonPressEvent", on_left_click
+    )
+    observer_tags["right"] = self.plotter.iren.interactor.AddObserver(
+        "RightButtonPressEvent", on_right_click
+    )
+
+    self.print_terminal(
+        "3D Line Drawing: Left-click on surfaces to add points, Right-click to finish"
+    )
 
 
 @freeze_gui_on
@@ -635,7 +655,6 @@ def split_line_line(self):
     self.clear_selection()
 
 
-
 @freeze_gui_onoff
 def split_line_existing_point(self):
     # Split line at picked point in 2D work coordinates (map XY or xsection UV).
@@ -778,6 +797,7 @@ def split_line_existing_point(self):
         side="right", callback=lambda event: end_select(event, sel_uid)
     )
 
+
 def split_line_vector(self, vector):
     freeze_gui_off(self)
     pass
@@ -881,10 +901,12 @@ def merge_lines(self):
     new_line["vtk_obj"].points = points_0
     # Automatically create all line cells.
     new_line["vtk_obj"].auto_cells()
-        # Add merged line first. Remove source lines only if add succeeds.
+    # Add merged line first. Remove source lines only if add succeeds.
     out_uid = self.parent.geol_coll.add_entity_from_dict(new_line)
     if not out_uid:
-        self.print_terminal(" -- Failed to add merged line. Input lines not removed -- ")
+        self.print_terminal(
+            " -- Failed to add merged line. Input lines not removed -- "
+        )
         self.enable_actions()
         return
     # Deselect input lines, then remove old entities.
@@ -893,6 +915,8 @@ def merge_lines(self):
         if uid == out_uid:
             continue
         self.parent.geol_coll.remove_entity(uid)
+
+
 def _ordered_unique_uids(uids):
     ordered = []
     for uid in uids:
@@ -987,7 +1011,7 @@ def _trim_terminal_branch(line_coords, point, tolerance, eps=1e-8):
         if point_idx >= len(out_coords) - 1:
             return out_coords, _coords_changed(line_coords, out_coords, eps=eps)
         trimmed = out_coords[: point_idx + 1, :]
-    
+
     trimmed = _dedupe_consecutive_coords(trimmed, eps=eps)
     if len(trimmed) < 2:
         return out_coords, _coords_changed(line_coords, out_coords, eps=eps)
@@ -1012,6 +1036,7 @@ def _endpoint_extension_candidates(line_coords, eps=1e-12):
             candidates.append(("prepend", start_anchor, vec / vec_len))
             break
     return candidates
+
 
 @freeze_gui_onoff
 def snap_line(self):
@@ -1074,7 +1099,9 @@ def snap_line(self):
                 return
             line_uv[uid] = in_uv
     else:
-        self.print_terminal(" -- Snap to intersection is available only in 2D views -- ")
+        self.print_terminal(
+            " -- Snap to intersection is available only in 2D views -- "
+        )
         return
 
     changed_uids = set()
@@ -1107,7 +1134,9 @@ def snap_line(self):
                 nearest_dist_b = min(
                     np_norm(point - before_b[0]), np_norm(point - before_b[-1])
                 )
-                if (nearest_dist_a > max_dist + eps) and (nearest_dist_b > max_dist + eps):
+                if (nearest_dist_a > max_dist + eps) and (
+                    nearest_dist_b > max_dist + eps
+                ):
                     continue
 
                 out_a = _insert_point_on_line_coords(before_a, point, eps=eps)
@@ -1207,7 +1236,9 @@ def snap_line(self):
                     endpoint_snap_count += 1
 
             target_before = line_uv[target_uid]
-            target_after = _insert_point_on_line_coords(target_before, hit_point, eps=eps)
+            target_after = _insert_point_on_line_coords(
+                target_before, hit_point, eps=eps
+            )
             target_after = _dedupe_consecutive_coords(target_after, eps=eps)
             if _coords_changed(target_before, target_after, eps=eps):
                 line_uv[target_uid] = target_after
@@ -1822,7 +1853,7 @@ def copy_kink(self):
         else:
             self.print_terminal("Unsupported offset geometry")
             return
-        
+
         outUV = np_array(out_line.coords)
         outU = outUV[:, 0]
         outV = outUV[:, 1]

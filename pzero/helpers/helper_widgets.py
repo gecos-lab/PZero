@@ -115,7 +115,7 @@ class Vector(vtkContourWidget):
 class Tracer3D:
     """A 3D line drawing tool that uses point picking for better 3D interaction.
     Click on surfaces to add points, right-click to finish."""
-    
+
     def __init__(self, parent=None):
         self._parent = parent
         self.points = []
@@ -123,7 +123,7 @@ class Tracer3D:
         self.temp_line_actor = None
         self.point_actors = []
         self.is_active = False
-        
+
     def enable(self):
         """Enable the 3D line drawing mode."""
         self.is_active = True
@@ -131,20 +131,20 @@ class Tracer3D:
         self.line_actor = None
         self.temp_line_actor = None
         self.point_actors = []
-        
+
     def disable(self):
         """Disable the 3D line drawing mode and clean up."""
         self.is_active = False
         self._cleanup_visuals()
-        
+
     def _cleanup_visuals(self):
         """Remove all visual elements."""
-        if self.line_actor and hasattr(self._parent, 'plotter'):
+        if self.line_actor and hasattr(self._parent, "plotter"):
             try:
                 self._parent.plotter.remove_actor(self.line_actor)
             except:
                 pass
-        if self.temp_line_actor and hasattr(self._parent, 'plotter'):
+        if self.temp_line_actor and hasattr(self._parent, "plotter"):
             try:
                 self._parent.plotter.remove_actor(self.temp_line_actor)
             except:
@@ -204,16 +204,16 @@ class Tracer3D:
             return radius
         except Exception:
             return None
-        
+
     def add_point(self, point):
         """Add a point to the line being drawn."""
-        
+
         # Convert to tuple if needed
         if isinstance(point, np_ndarray):
             point = tuple(point)
-        
+
         self.points.append(point)
-        
+
         # Calculate appropriate sphere radius based on scene bounds
         sphere_radius = self._compute_point_radius(point)
         if not sphere_radius:
@@ -227,61 +227,63 @@ class Tracer3D:
                 sphere_radius = scene_size * 0.01  # 1% of scene size
             except Exception:
                 sphere_radius = 10  # Fallback radius
-        
+
         # Add a sphere at the point location for visual feedback
-        sphere = pv_Sphere(radius=sphere_radius, center=point, theta_resolution=16, phi_resolution=16)
+        sphere = pv_Sphere(
+            radius=sphere_radius, center=point, theta_resolution=16, phi_resolution=16
+        )
         actor = self._parent.plotter.add_mesh(
-            sphere, color='red', opacity=0.9, pickable=False, lighting=True
+            sphere, color="red", opacity=0.9, pickable=False, lighting=True
         )
         self.point_actors.append(actor)
-        
+
         # Update the line visualization
         if len(self.points) >= 2:
             self._update_line()
-        
+
         self._parent.plotter.render()
-        
+
     def _update_line(self):
         """Update the line visualization."""
-        
+
         # Remove old line actor
         if self.line_actor:
             try:
                 self._parent.plotter.remove_actor(self.line_actor)
             except:
                 pass
-        
+
         # Create new line from all points
         line = pv_lines_from_points(np_array(self.points))
         self.line_actor = self._parent.plotter.add_mesh(
-            line, color='yellow', line_width=5, pickable=False, lighting=False
+            line, color="yellow", line_width=5, pickable=False, lighting=False
         )
-        
+
     def update_temp_line(self, current_pos):
         """Show a temporary line from the last point to current mouse position."""
-        
+
         if len(self.points) == 0:
             return
-            
+
         # Remove old temp line
         if self.temp_line_actor:
             try:
                 self._parent.plotter.remove_actor(self.temp_line_actor)
             except:
                 pass
-        
+
         # Create temp line from last point to current position
         temp_line = pv_lines_from_points(np_array([self.points[-1], current_pos]))
         self.temp_line_actor = self._parent.plotter.add_mesh(
-            temp_line, color='gray', line_width=1, opacity=0.5, pickable=False
+            temp_line, color="gray", line_width=1, opacity=0.5, pickable=False
         )
         self._parent.plotter.render()
-        
+
     def get_polydata(self):
         """Get the final polydata object."""
         if len(self.points) < 2:
             return None
-        
+
         # Create polydata from points
         line = pv_lines_from_points(np_array(self.points))
         return line

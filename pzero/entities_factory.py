@@ -2882,11 +2882,16 @@ class WellTrace(PolyLine):
                     name = data.split("_", 1)[1]
                     name_list.append(name)
             # Check for generic trace properties that have position data (p{name})
-            elif data.startswith("p") and not data.startswith("pmarker") and not data == "pname" and not data == "pMD":
-                name = data[1:] # remove 'p'
+            elif (
+                data.startswith("p")
+                and not data.startswith("pmarker")
+                and not data == "pname"
+                and not data == "pMD"
+            ):
+                name = data[1:]  # remove 'p'
                 # check if corresponding data exists
                 if name in field_data:
-                     name_list.append(name)
+                    name_list.append(name)
         return name_list
 
     def plot_markers(self, prop):
@@ -2894,11 +2899,11 @@ class WellTrace(PolyLine):
             prop_pos = self.get_field_data(f"pmarker_{prop}").reshape(-1, 3)
             prop_data = self.get_field_data(f"marker_{prop}")
         elif f"p{prop}" in self.get_field_data_keys():
-             prop_pos = self.get_field_data(f"p{prop}").reshape(-1, 3)
-             prop_data = self.get_field_data(prop)
+            prop_pos = self.get_field_data(f"p{prop}").reshape(-1, 3)
+            prop_data = self.get_field_data(prop)
         else:
-             return [None, None]
-             
+            return [None, None]
+
         return [prop_pos, prop_data]
 
     def create_trace(self, xyz_trace, name=None):

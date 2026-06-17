@@ -1139,15 +1139,15 @@ class Legend(QObject):
         new_color_G = color_out.green()
         new_color_B = color_out.blue()
         # Here the query is reversed and modified, dropping the values() method, to allow SETTING the color in the legend.
-        parent.well_legend_df.loc[
-            parent.well_legend_df["name"] == locid, "color_R"
-        ] = new_color_R
-        parent.well_legend_df.loc[
-            parent.well_legend_df["name"] == locid, "color_G"
-        ] = new_color_G
-        parent.well_legend_df.loc[
-            parent.well_legend_df["name"] == locid, "color_B"
-        ] = new_color_B
+        parent.well_legend_df.loc[parent.well_legend_df["name"] == locid, "color_R"] = (
+            new_color_R
+        )
+        parent.well_legend_df.loc[parent.well_legend_df["name"] == locid, "color_G"] = (
+            new_color_G
+        )
+        parent.well_legend_df.loc[parent.well_legend_df["name"] == locid, "color_B"] = (
+            new_color_B
+        )
         # Update sender color.
         # self.sender().setStyleSheet(
         #     "background-color:rgb({},{},{})".format(
@@ -1187,9 +1187,9 @@ class Legend(QObject):
         locid = sender.locid
         opacity = sender.value()
         # Here the query is reversed and modified, dropping the values() method, to allow SETTING the line thickness in the legend
-        parent.well_legend_df.loc[
-            parent.well_legend_df["name"] == locid, "opacity"
-        ] = opacity
+        parent.well_legend_df.loc[parent.well_legend_df["name"] == locid, "opacity"] = (
+            opacity
+        )
         # Signal to update actors in windows. This is emitted only for the modified uid under the 'line_thick' key.
         updated_list = parent.well_coll.df.loc[
             parent.well_coll.df["name"] == locid, "uid"
