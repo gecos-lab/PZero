@@ -290,7 +290,7 @@ def segment_pc(self):
         connectivity_filter_dip.ScalarConnectivityOn()
         connectivity_filter_dip.SetScalarRange(dialog["d1"], dialog["d2"])
 
-        pv_update_alg(connectivity_filter_dip, True, "Segmenting dips")
+        pv_update_alg(connectivity_filter_dip, False, "Segmenting dips")
 
         # n_clusters = connectivity_filter_dip.GetNumberOfExtractedClusters()
 
