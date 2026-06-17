@@ -13,12 +13,32 @@ from PySide6.QtWidgets import QMenu
 # Numpy imports____
 import numpy as np
 from numpy import append as np_append
+from numpy import array as np_array
+from numpy import linspace as np_linspace
+from numpy import argmin as np_argmin
+from numpy import argmax as np_argmax
+from numpy import mean as np_mean
+from numpy import asarray as np_asarray
+from numpy import linalg as np_linalg
+from numpy import max as np_max
+from numpy import min as np_min
+from numpy import sum as np_sum
+from numpy import diff as np_diff
+from numpy import zeros as np_zeros
+from numpy import vstack as np_vstack
+from numpy import empty as np_empty
+from numpy import ones as np_ones
+from numpy import abs as np_abs
+from numpy import count_nonzero as np_count_nonzero
+from numpy import cross as np_cross
+from numpy import dot as np_dot
+from numpy import any as np_any
 
 # VTK imports____
 from vtkmodules.util import numpy_support
 from vtkmodules.vtkCommonDataModel import vtkSphere
 from vtkmodules.vtkFiltersPoints import vtkExtractPoints
-from vtk import vtkJSONSceneExporter
+from vtk import vtkJSONSceneExporter, vtkAppendPolyData, vtkFeatureEdges
 
 from PySide6.QtWidgets import (
     QMainWindow,
@@ -44,6 +64,7 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QStackedWidget,
     QWidget,
+    QDoubleSpinBox,
 )
 import time
 from PySide6.QtGui import QAction
@@ -64,7 +85,7 @@ from ..helpers.helper_dialogs import (
 )
 from ..helpers.helper_functions import best_fitting_plane, gen_frame, freeze_gui_off
 from ..collections.geological_collection import GeologicalCollection
-from ..entities_factory import PolyData, Attitude
+from ..entities_factory import PolyData, Attitude, PolyLine, TriSurf
 from ..two_d_lines import draw_line_3d
 
 
@@ -2013,7 +2034,7 @@ class View3D(ViewVTK):
             # Generate evenly spaced positions between start and end position
             import numpy as np
 
-            positions = np.linspace(
+            positions = np_linspace(
                 start_norm, end_norm, n_slices
             )  # Normalized positions
 
@@ -2152,7 +2173,7 @@ class View3D(ViewVTK):
             end_norm = end_slider.value() / 100.0
             import numpy as np
 
-            positions = np.linspace(start_norm, end_norm, slices_spin.value())
+            positions = np_linspace(start_norm, end_norm, slices_spin.value())
             # Resolve property once
             main_uid = self.get_entity_uid_by_name(entity_name)
             prop_text = None
@@ -3859,7 +3880,7 @@ class View3D(ViewVTK):
             return None
 
     def initialize_menu_tools(self):
-        """Add mesh slicer to the menu tools."""
+        """Add 3D-specific menu tools."""
         # Call parent's initialize_menu_tools first to ensure menus and toolbars are created
         super().initialize_menu_tools()
 
@@ -3879,6 +3900,10 @@ class View3D(ViewVTK):
         self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
         self.menuCreate.addAction(self.drawLine3DButton)
 
+        self.actionExtendSurface = QAction("Extend surface", self)
+        self.actionExtendSurface.triggered.connect(self.open_extend_surface_dialog)
+        self.menuModify.addAction(self.actionExtendSurface)
+
         # Create Mesh Tools menu if it doesn't exist
         if not hasattr(self, "menuMeshTools"):
             self.menuMeshTools = QMenu("Mesh Tools", self)
@@ -3890,6 +3915,970 @@ class View3D(ViewVTK):
 
         # Add to menu
         self.menuMeshTools.addAction(self.actionMeshSlicer)
+
+    def open_extend_surface_dialog(self):
+        """Open a live-preview tool to extend the selected geological surface/line."""
+        uid = self._resolve_extend_surface_selection()
+        if not uid:
+            return
+        vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        topology = self.parent.geol_coll.get_uid_topology(uid)
+        role = self.parent.geol_coll.get_uid_role(uid)
+        name = self.parent.geol_coll.get_uid_name(uid)
+
+        if topology not in ["TriSurf", "PolyLine"]:
+            self.print_terminal(
+                "Extend surface currently supports geological TriSurf and PolyLine objects only."
+            )
+            return
+
+        if hasattr(self, "extend_surface_dialog") and self.extend_surface_dialog:
+            try:
+                self.extend_surface_dialog.close()
+            except Exception:
+                pass
+
+        default_distance = self._default_extension_distance(vtk_obj=vtk_obj)
+        default_vector = (
+            self._default_extension_vector(
+                vtk_obj=vtk_obj, topology=topology, role=role
+            )
+            * default_distance
+        )
+        vector_limit = max(default_distance * 20.0, 10.0)
+
+        dialog = QDialog(self)
+        dialog.setModal(False)
+        dialog.setWindowTitle("Extend surface")
+        dialog.resize(460, 280)
+        layout = QVBoxLayout(dialog)
+
+        info_group = QGroupBox("Selection", dialog)
+        info_layout = QVBoxLayout(info_group)
+        role_txt = role if role else "undef"
+        info_layout.addWidget(QLabel(f"{name} [{topology}]"))
+        info_layout.addWidget(
+            QLabel(
+                "Enter real X/Y/Z extension values. Faults default to Z growth; horizons/polylines default to XY growth."
+            )
+        )
+        info_layout.addWidget(QLabel(f"Role: {role_txt}"))
+        layout.addWidget(info_group)
+
+        direction_group = QGroupBox("Extension Vector", dialog)
+        direction_layout = QVBoxLayout(direction_group)
+
+        spin_layout = QHBoxLayout()
+        x_spin = QDoubleSpinBox(direction_group)
+        y_spin = QDoubleSpinBox(direction_group)
+        z_spin = QDoubleSpinBox(direction_group)
+        for label_txt, spin, value in [
+            ("X", x_spin, default_vector[0]),
+            ("Y", y_spin, default_vector[1]),
+            ("Z", z_spin, default_vector[2]),
+        ]:
+            spin.setRange(-vector_limit, vector_limit)
+            spin.setDecimals(3)
+            spin.setSingleStep(max(default_distance / 10.0, 0.1))
+            spin.setValue(float(value))
+            col = QVBoxLayout()
+            col.addWidget(QLabel(label_txt))
+            col.addWidget(spin)
+            spin_layout.addLayout(col)
+        direction_layout.addLayout(spin_layout)
+
+        preset_layout = QHBoxLayout()
+        role_button = QPushButton("Role default", direction_group)
+        x_button = QPushButton("+X", direction_group)
+        y_button = QPushButton("+Y", direction_group)
+        z_button = QPushButton("+Z", direction_group)
+        preset_layout.addWidget(role_button)
+        preset_layout.addWidget(x_button)
+        preset_layout.addWidget(y_button)
+        preset_layout.addWidget(z_button)
+        direction_layout.addLayout(preset_layout)
+        layout.addWidget(direction_group)
+
+        options_group = QGroupBox("Extension", dialog)
+        options_layout = QVBoxLayout(options_group)
+
+        distance_layout = QHBoxLayout()
+        distance_layout.addWidget(QLabel("Scale"))
+        distance_spin = QDoubleSpinBox(options_group)
+        distance_spin.setDecimals(3)
+        distance_spin.setRange(0.0, 1_000.0)
+        distance_spin.setSingleStep(0.25)
+        distance_spin.setValue(1.0)
+        distance_layout.addWidget(distance_spin)
+        options_layout.addLayout(distance_layout)
+
+        side_layout = QHBoxLayout()
+        side_layout.addWidget(QLabel("Side"))
+        side_combo = QComboBox(options_group)
+        if topology == "TriSurf":
+            side_combo.addItem("Positive boundary", "positive")
+            side_combo.addItem("Negative boundary", "negative")
+            side_combo.addItem("Both boundaries", "both")
+            side_combo.setCurrentIndex(2)
+        else:
+            side_combo.addItem("End", "positive")
+            side_combo.addItem("Start", "negative")
+            side_combo.addItem("Both ends", "both")
+            side_combo.setCurrentIndex(2)
+        side_layout.addWidget(side_combo)
+        options_layout.addLayout(side_layout)
+
+        live_preview_check = QCheckBox("Live preview", options_group)
+        live_preview_check.setChecked(True)
+        options_layout.addWidget(live_preview_check)
+        layout.addWidget(options_group)
+
+        buttons_layout = QHBoxLayout()
+        apply_button = QPushButton("Apply", dialog)
+        close_button = QPushButton("Close", dialog)
+        buttons_layout.addWidget(apply_button)
+        buttons_layout.addWidget(close_button)
+        layout.addLayout(buttons_layout)
+
+        def set_vector(vector):
+            x_spin.blockSignals(True)
+            y_spin.blockSignals(True)
+            z_spin.blockSignals(True)
+            x_spin.setValue(float(vector[0]))
+            y_spin.setValue(float(vector[1]))
+            z_spin.setValue(float(vector[2]))
+            x_spin.blockSignals(False)
+            y_spin.blockSignals(False)
+            z_spin.blockSignals(False)
+            update_preview()
+
+        def get_vector():
+            return np_array(
+                [x_spin.value(), y_spin.value(), z_spin.value()],
+                dtype=float,
+            )
+
+        def update_preview():
+            if not live_preview_check.isChecked():
+                self._cleanup_extend_surface_preview()
+                return
+            preview_obj = self._build_extension_preview_geometry(
+                vtk_obj=vtk_obj,
+                topology=topology,
+                direction=get_vector(),
+                distance=float(distance_spin.value()),
+                side=side_combo.currentData(),
+            )
+            self._show_extend_surface_preview(uid=uid, vtk_obj=preview_obj)
+
+        role_button.clicked.connect(
+            lambda: set_vector(
+                self._default_extension_vector(
+                    vtk_obj=vtk_obj, topology=topology, role=role
+                )
+                * default_distance
+            )
+        )
+        x_button.clicked.connect(
+            lambda: set_vector(np_array([default_distance, 0.0, 0.0]))
+        )
+        y_button.clicked.connect(
+            lambda: set_vector(np_array([0.0, default_distance, 0.0]))
+        )
+        z_button.clicked.connect(
+            lambda: set_vector(np_array([0.0, 0.0, default_distance]))
+        )
+
+        for spin in [x_spin, y_spin, z_spin, distance_spin]:
+            spin.valueChanged.connect(update_preview)
+        side_combo.currentIndexChanged.connect(update_preview)
+        live_preview_check.toggled.connect(update_preview)
+
+        def apply_extension():
+            out_obj = self._build_extended_geology_entity(
+                vtk_obj=vtk_obj,
+                topology=topology,
+                direction=get_vector(),
+                distance=float(distance_spin.value()),
+                side=side_combo.currentData(),
+            )
+            if out_obj is None:
+                return
+            self._cleanup_extend_surface_preview()
+            self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=out_obj)
+            dialog.close()
+
+        def close_dialog():
+            self._cleanup_extend_surface_preview()
+            dialog.close()
+
+        def dialog_finished(*_args):
+            self._cleanup_extend_surface_preview()
+            if getattr(self, "extend_surface_dialog", None) is dialog:
+                self.extend_surface_dialog = None
+
+        apply_button.clicked.connect(apply_extension)
+        close_button.clicked.connect(close_dialog)
+        dialog.finished.connect(dialog_finished)
+
+        self.extend_surface_dialog = dialog
+        update_preview()
+        dialog.show()
+
+    def _resolve_extend_surface_selection(self):
+        """Resolve a single selected geology uid from the view, tree, or geology table."""
+        candidate_uids = []
+
+        try:
+            for uid in self.selected_uids:
+                rows = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].values
+                if len(rows) > 0 and rows[0] == "geol_coll":
+                    candidate_uids.append(uid)
+        except Exception:
+            pass
+
+        try:
+            candidate_uids.extend(list(self.parent.geol_coll.selected_uids))
+        except Exception:
+            pass
+
+        try:
+            selection_model = self.parent.GeologyTableView.selectionModel()
+            if selection_model is not None:
+                selected_rows = selection_model.selectedRows(column=0)
+                candidate_uids.extend(
+                    [idx.data() for idx in selected_rows if idx and idx.data()]
+                )
+        except Exception:
+            pass
+
+        candidate_uids = [uid for uid in candidate_uids if uid in self.parent.geol_coll.get_uids]
+        unique_uids = list(dict.fromkeys(candidate_uids))
+
+        if len(unique_uids) == 1:
+            return unique_uids[0]
+
+        if len(unique_uids) == 0:
+            self.print_terminal(
+                "Select one geological TriSurf or PolyLine in the 3D view, geology tree, or Geology table."
+            )
+            return None
+
+        self.print_terminal(
+            "Extend surface needs exactly one geological entity selected."
+        )
+        return None
+
+    def _make_unit_vector(self, vector):
+        """Return a normalized direction vector or None for zero-length input."""
+        vector = np_asarray(vector, dtype=float).reshape(3)
+        magnitude = np_linalg.norm(vector)
+        if magnitude <= 1e-9:
+            return None
+        return vector / magnitude
+
+    def _resolve_extension_displacement(self, direction=None, distance=1.0):
+        """Convert UI values into a displacement vector and its normalized direction."""
+        base_vector = np_asarray(direction, dtype=float).reshape(3)
+        scale = float(distance)
+        displacement_vector = base_vector * scale
+        magnitude = float(np_linalg.norm(displacement_vector))
+        if magnitude <= 1e-9:
+            return None, None, 0.0
+        return displacement_vector / magnitude, displacement_vector, magnitude
+
+    def _default_extension_distance(self, vtk_obj):
+        """Choose a moderate default extension distance from object size."""
+        try:
+            bounds = vtk_obj.bounds
+            extents = np_array(
+                [
+                    bounds[1] - bounds[0],
+                    bounds[3] - bounds[2],
+                    bounds[5] - bounds[4],
+                ],
+                dtype=float,
+            )
+            scale = float(np_max(extents))
+            if scale <= 0.0:
+                return 1.0
+            return max(scale * 0.15, 1.0)
+        except Exception:
+            return 1.0
+
+    def _default_extension_vector(self, vtk_obj=None, topology=None, role=None):
+        """Return a role-aware initial direction for the extension tool."""
+        role = (role or "undef").lower()
+        fault_roles = {"fault", "tectonic", "intrusive", "unconformity"}
+        horizon_roles = {
+            "top",
+            "base",
+            "bedding",
+            "tm_unit",
+            "ts_unit",
+            "int_unit",
+            "formation",
+        }
+
+        if topology == "TriSurf" and role in fault_roles:
+            return np_array([0.0, 0.0, 1.0], dtype=float)
+
+        if topology == "PolyLine":
+            try:
+                parts = vtk_obj.split_parts()
+            except Exception:
+                parts = None
+            if not parts:
+                parts = [vtk_obj]
+            longest_part = None
+            longest_length = -1.0
+            for part in parts:
+                try:
+                    ordered = part.deep_copy()
+                    ordered.poly2lines()
+                    ordered.sort_nodes()
+                    points = np_asarray(ordered.points, dtype=float)
+                except Exception:
+                    points = np_asarray(part.points, dtype=float)
+                if points.shape[0] < 2:
+                    continue
+                segment_lengths = np_linalg.norm(
+                    np_diff(points[:, :2], axis=0), axis=1
+                )
+                part_length = float(np_sum(segment_lengths))
+                if part_length > longest_length:
+                    longest_length = part_length
+                    longest_part = points
+            if longest_part is not None:
+                vector = longest_part[-1] - longest_part[0]
+                if role in horizon_roles:
+                    vector[2] = 0.0
+                unit_vector = self._make_unit_vector(vector)
+                if unit_vector is not None:
+                    return unit_vector
+
+        try:
+            bounds = vtk_obj.bounds
+            extents = np_array(
+                [
+                    bounds[1] - bounds[0],
+                    bounds[3] - bounds[2],
+                    bounds[5] - bounds[4],
+                ],
+                dtype=float,
+            )
+            if topology == "TriSurf" and role not in fault_roles:
+                axis = 0 if extents[0] >= extents[1] else 1
+            else:
+                axis = int(np_argmax(extents))
+            vector = np_zeros(3, dtype=float)
+            vector[axis] = 1.0
+            return vector
+        except Exception:
+            return np_array([1.0, 0.0, 0.0], dtype=float)
+
+    def _show_extend_surface_preview(self, uid=None, vtk_obj=None):
+        """Render the preview geometry for the extend tool."""
+        self._cleanup_extend_surface_preview()
+        if vtk_obj is None or vtk_obj.GetNumberOfPoints() <= 0:
+            return
+
+        preview_name = "__extend_surface_preview__"
+        color = self._legend_color_for_uid(uid) or [1.0, 0.85, 0.15]
+        kwargs = {
+            "name": preview_name,
+            "color": color,
+            "pickable": False,
+        }
+        if isinstance(vtk_obj, TriSurf):
+            kwargs["opacity"] = 0.45
+            kwargs["show_edges"] = True
+        else:
+            kwargs["line_width"] = 8
+            kwargs["render_lines_as_tubes"] = True
+        self.plotter.add_mesh(vtk_obj, **kwargs)
+        self.plotter.render()
+
+    def _cleanup_extend_surface_preview(self):
+        """Remove any temporary extension preview actor."""
+        preview_name = "__extend_surface_preview__"
+        try:
+            if preview_name in self.plotter.renderer.actors:
+                self.plotter.remove_actor(preview_name)
+                self.plotter.render()
+        except Exception:
+            pass
+
+    def _build_extension_preview_geometry(
+        self, vtk_obj=None, topology=None, direction=None, distance=0.0, side=None
+    ):
+        """Build preview-only geometry for the extension tool."""
+        if topology == "TriSurf":
+            return self._build_extended_trisurf(
+                vtk_obj=vtk_obj,
+                direction=direction,
+                distance=distance,
+                side=side,
+                preview_only=True,
+            )
+        if topology == "PolyLine":
+            return self._build_extended_polyline(
+                vtk_obj=vtk_obj,
+                direction=direction,
+                distance=distance,
+                side=side,
+                preview_only=True,
+            )
+        return None
+
+    def _build_extended_geology_entity(
+        self, vtk_obj=None, topology=None, direction=None, distance=0.0, side=None
+    ):
+        """Build the final geometry to replace the selected entity."""
+        _, displacement_vector, magnitude = self._resolve_extension_displacement(
+            direction=direction, distance=distance
+        )
+        if displacement_vector is None or magnitude <= 0.0:
+            self.print_terminal("Set a non-zero extension vector or scale.")
+            return None
+        if topology == "TriSurf":
+            return self._build_extended_trisurf(
+                vtk_obj=vtk_obj,
+                direction=direction,
+                distance=distance,
+                side=side,
+                preview_only=False,
+            )
+        if topology == "PolyLine":
+            return self._build_extended_polyline(
+                vtk_obj=vtk_obj,
+                direction=direction,
+                distance=distance,
+                side=side,
+                preview_only=False,
+            )
+        return None
+
+    def _append_polydata_parts(self, parts=None, topology=None):
+        """Append multiple polydata parts while preserving the target topology class."""
+        parts = [part for part in (parts or []) if part is not None]
+        if not parts:
+            return None
+        if len(parts) == 1:
+            return parts[0]
+
+        append_filter = vtkAppendPolyData()
+        for part in parts:
+            append_filter.AddInputData(part)
+        append_filter.Update()
+
+        if topology == "TriSurf":
+            out_obj = TriSurf()
+        else:
+            out_obj = PolyLine()
+        out_obj.DeepCopy(append_filter.GetOutput())
+        return out_obj
+
+    def _build_extended_polyline(
+        self, vtk_obj=None, direction=None, distance=0.0, side=None, preview_only=False
+    ):
+        """Extend the selected polyline at its ends."""
+        _, displacement_vector, _ = self._resolve_extension_displacement(
+            direction=direction, distance=distance
+        )
+        if displacement_vector is None:
+            self.print_terminal("Set a non-zero extension vector.")
+            return None
+
+        try:
+            parts = vtk_obj.split_parts()
+        except Exception:
+            parts = None
+        if not parts:
+            parts = [vtk_obj.deep_copy()]
+
+        output_parts = []
+        preview_parts = []
+
+        for raw_part in parts:
+            try:
+                part = raw_part.deep_copy()
+            except Exception:
+                part = raw_part
+
+            try:
+                part.poly2lines()
+                part.sort_nodes()
+            except Exception:
+                pass
+
+            points = np_asarray(part.points, dtype=float)
+            if points.shape[0] < 2:
+                continue
+
+            new_points = points.copy()
+            point_data = {}
+            for key in part.point_data_keys:
+                components = part.get_point_data_shape(key)[1]
+                array = np_asarray(part.get_point_data(key))
+                point_data[key] = array.reshape(points.shape[0], components).copy()
+
+            if side in ["negative", "both"]:
+                start_point = points[0] - displacement_vector
+                new_points = np_vstack((start_point, new_points))
+                for key in point_data:
+                    point_data[key] = np_vstack((point_data[key][0:1], point_data[key]))
+                preview = PolyLine()
+                preview.points = np_vstack((points[0], start_point))
+                preview.auto_cells()
+                preview_parts.append(preview)
+
+            if side in ["positive", "both"]:
+                end_point = points[-1] + displacement_vector
+                new_points = np_vstack((new_points, end_point))
+                for key in point_data:
+                    point_data[key] = np_vstack((point_data[key], point_data[key][-1:]))
+                preview = PolyLine()
+                preview.points = np_vstack((points[-1], end_point))
+                preview.auto_cells()
+                preview_parts.append(preview)
+
+            new_part = PolyLine()
+            new_part.points = new_points
+            new_part.auto_cells()
+            for key, array in point_data.items():
+                if array.shape[1] == 1:
+                    new_part.set_point_data(key, array.reshape(-1))
+                else:
+                    new_part.set_point_data(key, array)
+            output_parts.append(new_part)
+
+        if preview_only:
+            return self._append_polydata_parts(preview_parts, topology="PolyLine")
+        return self._append_polydata_parts(output_parts, topology="PolyLine")
+
+    def _collect_trisurf_boundary_edges(self, vtk_obj=None):
+        """Return boundary edges as pairs of point ids on the cleaned TriSurf."""
+        id_obj = TriSurf()
+        id_obj.DeepCopy(vtk_obj)
+        id_obj.ids_to_scalar()
+
+        boundary_filter = vtkFeatureEdges()
+        boundary_filter.BoundaryEdgesOn()
+        boundary_filter.NonManifoldEdgesOff()
+        boundary_filter.FeatureEdgesOff()
+        boundary_filter.ManifoldEdgesOff()
+        boundary_filter.SetInputData(id_obj)
+        boundary_filter.Update()
+
+        boundary = pv.wrap(boundary_filter.GetOutput())
+        if boundary.n_points <= 0 or boundary.n_lines <= 0:
+            return np_empty((0, 2), dtype=int)
+
+        line_cells = np_asarray(boundary.lines).reshape((-1, 3))[:, 1:3]
+        original_ids = np_asarray(boundary.point_data["vtkIdFilter_Ids"], dtype=int)
+        return original_ids[line_cells]
+
+    def _order_trisurf_boundary_components(self, boundary_edges=None):
+        """Return ordered boundary point-id sequences for each connected edge component."""
+        if boundary_edges is None or boundary_edges.shape[0] == 0:
+            return []
+
+        adjacency = {}
+        edge_keys = []
+        for edge in boundary_edges:
+            p0 = int(edge[0])
+            p1 = int(edge[1])
+            edge_key = (p0, p1) if p0 <= p1 else (p1, p0)
+            edge_keys.append(edge_key)
+            adjacency.setdefault(p0, []).append(p1)
+            adjacency.setdefault(p1, []).append(p0)
+
+        edge_to_component = {}
+        components = []
+        visited_edges = set()
+        for edge_key in edge_keys:
+            if edge_key in visited_edges:
+                continue
+
+            stack = [edge_key]
+            component_edges = set()
+            component_points = set()
+            while stack:
+                current_edge = stack.pop()
+                if current_edge in visited_edges:
+                    continue
+                visited_edges.add(current_edge)
+                component_edges.add(current_edge)
+                p0, p1 = current_edge
+                component_points.update([p0, p1])
+                for point_id in current_edge:
+                    for neighbor in adjacency.get(point_id, []):
+                        next_edge = (
+                            (point_id, neighbor)
+                            if point_id <= neighbor
+                            else (neighbor, point_id)
+                        )
+                        if next_edge not in visited_edges:
+                            stack.append(next_edge)
+
+            endpoints = [
+                point_id
+                for point_id in component_points
+                if len(adjacency.get(point_id, [])) == 1
+            ]
+            start_point = endpoints[0] if endpoints else min(component_points)
+
+            ordered_points = [start_point]
+            previous_point = None
+            current_point = start_point
+            remaining_edges = set(component_edges)
+            while remaining_edges:
+                next_point = None
+                for neighbor in adjacency.get(current_point, []):
+                    edge_key = (
+                        (current_point, neighbor)
+                        if current_point <= neighbor
+                        else (neighbor, current_point)
+                    )
+                    if edge_key in remaining_edges and neighbor != previous_point:
+                        next_point = neighbor
+                        break
+                if next_point is None:
+                    for neighbor in adjacency.get(current_point, []):
+                        edge_key = (
+                            (current_point, neighbor)
+                            if current_point <= neighbor
+                            else (neighbor, current_point)
+                        )
+                        if edge_key in remaining_edges:
+                            next_point = neighbor
+                            break
+                if next_point is None:
+                    break
+
+                edge_key = (
+                    (current_point, next_point)
+                    if current_point <= next_point
+                    else (next_point, current_point)
+                )
+                remaining_edges.remove(edge_key)
+                ordered_points.append(next_point)
+                previous_point, current_point = current_point, next_point
+                if current_point == start_point:
+                    break
+
+            if len(ordered_points) >= 2:
+                components.append(ordered_points)
+
+        return components
+
+    def _build_trisurf_selection_frame(
+        self, points=None, selection_unit=None, surface_normal=None
+    ):
+        """Build a 2D frame on the surface with U aligned to extension direction in-plane."""
+        if points is None or selection_unit is None:
+            return None, None, None, None
+
+        selection_unit = self._make_unit_vector(selection_unit)
+        if selection_unit is None:
+            return None, None, None, None
+
+        if surface_normal is None:
+            _, surface_normal = best_fitting_plane(points)
+        surface_normal = self._make_unit_vector(surface_normal)
+        if surface_normal is None:
+            return None, None, None, None
+
+        axis_u = selection_unit - np_dot(selection_unit, surface_normal) * surface_normal
+        axis_u = self._make_unit_vector(axis_u)
+        if axis_u is None:
+            for candidate in [
+                np_array([1.0, 0.0, 0.0], dtype=float),
+                np_array([0.0, 1.0, 0.0], dtype=float),
+                np_array([0.0, 0.0, 1.0], dtype=float),
+            ]:
+                projected = candidate - np_dot(candidate, surface_normal) * surface_normal
+                axis_u = self._make_unit_vector(projected)
+                if axis_u is not None:
+                    break
+        if axis_u is None:
+            return None, None, None, None
+
+        axis_v = self._make_unit_vector(np_cross(surface_normal, axis_u))
+        if axis_v is None:
+            return None, None, None, None
+
+        origin = np_mean(points, axis=0)
+        return origin, axis_u, axis_v, surface_normal
+
+    def _select_trisurf_boundary_edge_sets(
+        self,
+        points=None,
+        boundary_edges=None,
+        selection_unit=None,
+        side=None,
+        surface_normal=None,
+    ):
+        """Select top/bottom boundary edge chains from a 2D projected boundary."""
+        if (
+            points is None
+            or boundary_edges is None
+            or boundary_edges.shape[0] == 0
+            or selection_unit is None
+        ):
+            return []
+
+        origin, axis_u, axis_v, _ = self._build_trisurf_selection_frame(
+            points=points,
+            selection_unit=selection_unit,
+            surface_normal=surface_normal,
+        )
+        if origin is None or axis_u is None or axis_v is None:
+            return []
+
+        point_vectors = np_asarray(points, dtype=float) - origin
+        point_u = np_asarray(point_vectors @ axis_u, dtype=float)
+        point_v = np_asarray(point_vectors @ axis_v, dtype=float)
+        ordered_components = self._order_trisurf_boundary_components(boundary_edges)
+        if not ordered_components:
+            return []
+
+        edge_key_set = {
+            (int(edge[0]), int(edge[1])) if int(edge[0]) <= int(edge[1]) else (int(edge[1]), int(edge[0]))
+            for edge in boundary_edges
+        }
+
+        def ensure_closed_loop(component_point_ids=None):
+            if component_point_ids is None or len(component_point_ids) < 3:
+                return component_point_ids
+            if component_point_ids[0] == component_point_ids[-1]:
+                return component_point_ids
+            edge_key = (
+                (int(component_point_ids[0]), int(component_point_ids[-1]))
+                if int(component_point_ids[0]) <= int(component_point_ids[-1])
+                else (int(component_point_ids[-1]), int(component_point_ids[0]))
+            )
+            if edge_key in edge_key_set:
+                return component_point_ids + [component_point_ids[0]]
+            return component_point_ids
+
+        def chain_edges(loop_point_ids=None, start_idx=None, end_idx=None, forward=True):
+            if loop_point_ids is None or len(loop_point_ids) < 2:
+                return None
+            n_points = len(loop_point_ids) - 1
+            if n_points < 2:
+                return None
+            edges = []
+            idx = int(start_idx)
+            step = 1 if forward else -1
+            while idx != int(end_idx):
+                next_idx = (idx + step) % n_points
+                p0 = int(loop_point_ids[idx])
+                p1 = int(loop_point_ids[next_idx])
+                edges.append((p0, p1))
+                idx = next_idx
+            if not edges:
+                return None
+            return np_array(edges, dtype=int)
+
+        def score_chain(chain=None):
+            if chain is None or chain.shape[0] == 0:
+                return None
+            mid_u = (point_u[chain[:, 0]] + point_u[chain[:, 1]]) / 2.0
+            return float(np_mean(mid_u))
+
+        selected_edge_sets = []
+        positive_candidates = []
+        negative_candidates = []
+        for component_point_ids in ordered_components:
+            loop_point_ids = ensure_closed_loop(component_point_ids)
+            if loop_point_ids is None or len(loop_point_ids) < 4:
+                continue
+
+            loop_v = np_asarray([point_v[int(point_id)] for point_id in loop_point_ids[:-1]])
+            top_idx = int(np_argmax(loop_v))
+            bottom_idx = int(np_argmin(loop_v))
+            if top_idx == bottom_idx:
+                continue
+
+            forward_chain = chain_edges(
+                loop_point_ids=loop_point_ids,
+                start_idx=top_idx,
+                end_idx=bottom_idx,
+                forward=True,
+            )
+            backward_chain = chain_edges(
+                loop_point_ids=loop_point_ids,
+                start_idx=top_idx,
+                end_idx=bottom_idx,
+                forward=False,
+            )
+            if forward_chain is None or backward_chain is None:
+                continue
+
+            forward_score = score_chain(forward_chain)
+            backward_score = score_chain(backward_chain)
+            if forward_score is None or backward_score is None:
+                continue
+
+            if forward_score >= backward_score:
+                positive_candidates.append((forward_chain, forward_score))
+                negative_candidates.append((backward_chain, backward_score))
+            else:
+                positive_candidates.append((backward_chain, backward_score))
+                negative_candidates.append((forward_chain, forward_score))
+
+        if side in ["positive", "both"]:
+            if positive_candidates:
+                selected_edge_sets.append(
+                    (max(positive_candidates, key=lambda item: item[1])[0], 1.0)
+                )
+        if side in ["negative", "both"]:
+            if negative_candidates:
+                selected_edge_sets.append(
+                    (min(negative_candidates, key=lambda item: item[1])[0], -1.0)
+                )
+        return selected_edge_sets
+
+    def _build_extended_trisurf(
+        self, vtk_obj=None, direction=None, distance=0.0, side=None, preview_only=False
+    ):
+        """Extend a TriSurf by adding ribbons along the selected boundary side(s)."""
+        clean_output = vtk_obj.clean_topology()
+        clean_trisurf = TriSurf()
+        clean_trisurf.DeepCopy(clean_output)
+
+        points = np_asarray(clean_trisurf.points, dtype=float)
+        cells = np_asarray(clean_trisurf.cells, dtype=int)
+        if points.shape[0] < 3 or cells.shape[0] < 1:
+            return None
+
+        unit_vector, displacement_vector, magnitude = self._resolve_extension_displacement(
+            direction=direction, distance=distance
+        )
+        if unit_vector is None or displacement_vector is None or magnitude <= 0.0:
+            self.print_terminal("Set a non-zero extension vector.")
+            return None
+
+        tri_vectors_1 = points[cells[:, 1]] - points[cells[:, 0]]
+        tri_vectors_2 = points[cells[:, 2]] - points[cells[:, 0]]
+        tri_normals = np_cross(tri_vectors_1, tri_vectors_2)
+        tri_norm_lengths = np_linalg.norm(tri_normals, axis=1)
+        valid_normals = tri_normals[tri_norm_lengths > 1e-9]
+        if valid_normals.size == 0:
+            return None
+        average_normal = self._make_unit_vector(np_mean(valid_normals, axis=0))
+        if average_normal is None:
+            average_normal = np_array([0.0, 0.0, 1.0], dtype=float)
+
+        boundary_edges = self._collect_trisurf_boundary_edges(clean_trisurf)
+        if boundary_edges.shape[0] == 0:
+            self.print_terminal("The selected TriSurf has no open boundary to extend.")
+            return None
+
+        selected_edge_sets = self._select_trisurf_boundary_edge_sets(
+            points=points,
+            boundary_edges=boundary_edges,
+            selection_unit=unit_vector,
+            side=side,
+            surface_normal=average_normal,
+        )
+
+        base_cells = cells.tolist()
+        new_cells = list(base_cells)
+        point_list = points.tolist()
+        preview_points = []
+        preview_cells = []
+        point_data_lists = {}
+        point_data_components = {}
+        for key in clean_trisurf.point_data_keys:
+            components = clean_trisurf.get_point_data_shape(key)[1]
+            point_data_components[key] = components
+            array = np_asarray(clean_trisurf.get_point_data(key)).reshape(
+                points.shape[0], components
+            )
+            point_data_lists[key] = array.tolist()
+
+        shifted_point_cache = {}
+
+        def add_shifted_point(point_id, offset_key, offset_vector):
+            cache_key = (int(point_id), float(offset_key))
+            if cache_key in shifted_point_cache:
+                return shifted_point_cache[cache_key]
+            new_point = (points[point_id] + offset_vector).tolist()
+            point_list.append(new_point)
+            new_id = len(point_list) - 1
+            for key in point_data_lists:
+                point_data_lists[key].append(list(point_data_lists[key][point_id]))
+            shifted_point_cache[cache_key] = new_id
+            return new_id
+
+        def quad_triangles(idx0, idx1, idx2, idx3, point_source):
+            normal_test = np_cross(
+                np_asarray(point_source[idx1]) - np_asarray(point_source[idx0]),
+                np_asarray(point_source[idx2]) - np_asarray(point_source[idx0]),
+            )
+            if np_dot(normal_test, average_normal) >= 0.0:
+                return [[idx0, idx1, idx2], [idx0, idx2, idx3]]
+            return [[idx0, idx2, idx1], [idx0, idx3, idx2]]
+
+        for selected_edges, sign in selected_edge_sets:
+            if selected_edges.shape[0] == 0:
+                continue
+            displacement = displacement_vector * sign
+            for edge in selected_edges:
+                p0 = int(edge[0])
+                p1 = int(edge[1])
+                p2 = add_shifted_point(p1, sign, displacement)
+                p3 = add_shifted_point(p0, sign, displacement)
+                triangles = quad_triangles(p0, p1, p2, p3, point_list)
+                new_cells.extend(triangles)
+
+                preview_base = len(preview_points)
+                preview_quad = [
+                    points[p0],
+                    points[p1],
+                    points[p1] + displacement,
+                    points[p0] + displacement,
+                ]
+                preview_points.extend([point.tolist() for point in preview_quad])
+                preview_cells.extend(
+                    quad_triangles(
+                        preview_base,
+                        preview_base + 1,
+                        preview_base + 2,
+                        preview_base + 3,
+                        preview_points,
+                    )
+                )
+
+        if preview_only:
+            if not preview_points or not preview_cells:
+                return None
+            preview_obj = TriSurf()
+            preview_obj.points = np_asarray(preview_points, dtype=float)
+            for cell in preview_cells:
+                preview_obj.append_cell(np_asarray(cell, dtype=int))
+            preview_obj.Modified()
+            return preview_obj
+
+        out_obj = TriSurf()
+        out_obj.points = np_asarray(point_list, dtype=float)
+        for cell in new_cells:
+            out_obj.append_cell(np_asarray(cell, dtype=int))
+        for key, values in point_data_lists.items():
+            array = np_asarray(values)
+            if point_data_components[key] == 1:
+                out_obj.set_point_data(key, array.reshape(-1))
+            else:
+                out_obj.set_point_data(key, array)
+        try:
+            out_obj.vtk_set_normals()
+        except Exception:
+            pass
+        out_obj.Modified()
+        return out_obj
 
         # Fix Geometry: repair / simplify / flatten a TriSurf before remeshing
         # (e.g. in PyMeshIT). The action lives under the standard Modify menu.
