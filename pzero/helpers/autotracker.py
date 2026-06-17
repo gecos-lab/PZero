@@ -127,6 +127,7 @@ class Autotracker:
             'fault_attach_depth_tolerance': 2,  # Max top/bottom shift allowed when following the same fault
             'fault_attach_apply_row_tolerance': 8,  # Current horizon must already be near the predicted contact
             'fault_attach_apply_col_tolerance': 4,  # Avoid forcing attachment far above/below the reflector
+            'fault_attach_candidate_weight': 6.0,  # Pull DP candidates toward known moving fault contacts
         }
 
         # Store previous dip for consistency tracking
@@ -460,6 +461,11 @@ class Autotracker:
         prev_fault_models = self._prepare_fault_models(prev_fault_traces, w=w) if prev_fault_traces else []
         if not prev_fault_models:
             prev_fault_models = fault_models
+        fault_attachment_targets = self._build_fault_attachment_targets(
+            prev_positions=seed_positions,
+            fault_models=fault_models,
+            prev_fault_models=prev_fault_models,
+        )
 
         rows: List[int] = []
         expected_cols: List[int] = []
@@ -560,6 +566,12 @@ class Autotracker:
                     # Keep the point hugging the moving fault plane when snap is active.
                     if snap_active:
                         cost += self._fault_proximity_cost(row=row, col=candidate_col, fault_models=fault_models)
+
+                    cost += self._fault_attachment_candidate_cost(
+                        row=row,
+                        candidate_col=candidate_col,
+                        targets=fault_attachment_targets,
+                    )
 
                 candidate_costs[j] = cost
 
@@ -878,8 +890,10 @@ class Autotracker:
             return self._smooth_positions_segment(positions)
 
         # Build fault models for proximity tests
-        cols_all = [c for _, c in positions]
-        w = int(max(cols_all)) + 1 if cols_all else 0
+        w = self._fault_model_width_from_traces(
+            positions=positions,
+            fault_traces=fault_traces,
+        )
         fault_models = self._prepare_fault_models(fault_traces, w=w)
         if not fault_models:
             return self._smooth_positions_segment(positions)
@@ -1130,6 +1144,82 @@ class Autotracker:
         return w * (x ** 2)
 
     @staticmethod
+    def _fault_model_width_from_traces(
+        positions: Optional[List[Tuple[int, int]]] = None,
+        fault_traces: Optional[List[List[Tuple[int, int]]]] = None,
+        prev_fault_traces: Optional[List[List[Tuple[int, int]]]] = None,
+    ) -> int:
+        """Return a width large enough to preserve fault trace depths."""
+        cols: List[int] = []
+        if positions:
+            cols.extend(int(c) for _r, c in positions)
+        for traces in (fault_traces, prev_fault_traces):
+            if not traces:
+                continue
+            for trace in traces:
+                cols.extend(int(c) for _r, c in trace)
+        return int(max(cols)) + 1 if cols else 0
+
+    def _build_fault_attachment_targets(
+        self,
+        prev_positions: List[Tuple[int, int]],
+        fault_models: List[Tuple[int, int, np.ndarray]],
+        prev_fault_models: List[Tuple[int, int, np.ndarray]],
+    ) -> List[Tuple[int, int]]:
+        """Resolve previous horizon/fault crossing anchors onto current fault traces."""
+        if not prev_positions or not fault_models or not prev_fault_models:
+            return []
+
+        anchors = self._detect_fault_crossing_anchors(prev_positions, prev_fault_models)
+        targets: List[Tuple[int, int]] = []
+        for model_idx, anchor_row, anchor_col in anchors:
+            target = self._resolve_fault_attachment_target(
+                anchor_row=anchor_row,
+                anchor_col=anchor_col,
+                fault_models=fault_models,
+                preferred_model_index=model_idx,
+            )
+            if target is not None:
+                targets.append((int(target[0]), int(target[1])))
+        return targets
+
+    def _fault_attachment_candidate_cost(
+        self,
+        row: int,
+        candidate_col: int,
+        targets: List[Tuple[int, int]],
+    ) -> float:
+        """
+        Pre-bias DP candidates toward known moving fault contacts.
+
+        The final snap still decides exact attachment. This cost prevents the DP
+        and waveform terms from choosing a smooth reflector path so far from the
+        contact that the final attachment guard refuses to apply.
+        """
+        if not targets:
+            return 0.0
+
+        row_tol = max(int(self.tracking_params.get('fault_attach_apply_row_tolerance', 8)), 1)
+        col_range = max(
+            int(self.tracking_params.get('fault_snap_col_range', 40)),
+            int(self.tracking_params.get('search_window', 15)),
+            1,
+        )
+        weight = float(self.tracking_params.get('fault_attach_candidate_weight', 6.0))
+
+        best = np.inf
+        for target_row, target_col in targets:
+            row_delta = abs(int(row) - int(target_row))
+            if row_delta > row_tol:
+                continue
+            row_factor = 1.0 - (row_delta / float(row_tol + 1))
+            col_delta = abs(float(candidate_col) - float(target_col)) / float(col_range)
+            cost = weight * row_factor * (col_delta ** 2)
+            if cost < best:
+                best = cost
+        return 0.0 if not np.isfinite(best) else float(best)
+
+    @staticmethod
     def _fault_row_on_model_at_col(
         fault_model: Tuple[int, int, np.ndarray],
         col: int,
@@ -1295,6 +1385,15 @@ class Autotracker:
                 continue
             # If the current fault does not exist at nearly the same depth, do not
             # snap to the fault top/bottom just because it is nearby.
+            row_at_nearest_col = self._fault_row_on_model_at_col(fault_model, nearest_col)
+            if row_at_nearest_col is not None:
+                score = (
+                    abs(float(row_at_nearest_col) - float(anchor_row)) +
+                    0.5 * abs(float(nearest_col) - float(anchor_col))
+                )
+                if score < best_score:
+                    best_score = score
+                    best_target = (int(round(row_at_nearest_col)), int(nearest_col))
 
         return best_target
 
@@ -1314,6 +1413,12 @@ class Autotracker:
 
         row_tol = int(self.tracking_params.get('fault_attach_apply_row_tolerance', 8))
         col_tol = int(self.tracking_params.get('fault_attach_apply_col_tolerance', 4))
+        snap_col_range = int(self.tracking_params.get('fault_snap_col_range', 40))
+        search_window = int(self.tracking_params.get('search_window', 15))
+        # DP/waveform terms can choose a nearby same-event sample before the final
+        # fault-contact snap. Keep the row guard strict, but allow enough vertical
+        # slack for known moving fault anchors to be applied.
+        effective_col_tol = max(col_tol, min(snap_col_range, max(search_window, 1)))
 
         best_score = np.inf
         best_row_delta = np.inf
@@ -1328,7 +1433,7 @@ class Autotracker:
                 best_row_delta = row_delta
                 best_col_delta = col_delta
 
-        return bool(best_row_delta <= row_tol and best_col_delta <= col_tol)
+        return bool(best_row_delta <= row_tol and best_col_delta <= effective_col_tol)
 
     def _apply_fault_attachment_target(
         self,
@@ -1378,11 +1483,14 @@ class Autotracker:
         if not positions or not prev_positions or not fault_traces or not prev_fault_traces:
             return positions
 
-        cols_all = [int(c) for _, c in positions]
-        if not cols_all:
+        w = self._fault_model_width_from_traces(
+            positions=positions,
+            fault_traces=fault_traces,
+            prev_fault_traces=prev_fault_traces,
+        )
+        if w <= 0:
             return positions
 
-        w = int(max(cols_all)) + 1
         fault_models = self._prepare_fault_models(fault_traces, w=w)
         prev_fault_models = self._prepare_fault_models(prev_fault_traces, w=w)
         if not fault_models or not prev_fault_models:
