@@ -297,9 +297,9 @@ class TestCutPC:
    Tests for cut_pc() defined in point_clouds.py.
 
    cut_pc add a new entry to the pc's dictionnary with 3 different methods.
- "Inner" and "Outer" add entries for the inside and outside of the selection
- of the scissors helper. "Both" do both at the same time. And these methods then
-write the cropped data in the corresponding propreties_components
+   "Inner" and "Outer" add entries for the inside and outside of the selection
+   of the scissors helper. "Both" do both at the same time. And these methods then
+   write the cropped data in the corresponding propreties_components
 
    Because cut_pc() needs a running PZero application to work normally and is using
    an internal function as a callback of the scissors helper, we can only test 
