@@ -153,8 +153,14 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
         in_dict = {
             "origin_U": ["Image origin (left) in X-section coords U", "0.0"],
             "origin_V": ["Image origin (top) in V coords", f"{origin_z}"],
-            "length": ["Image length along X-section coords U (left > right)", f"{length}"],
-            "height": ["Image height along X-section coords V (top > bottom)", f"{height}"],
+            "length": [
+                "Image length along X-section coords U (left > right)",
+                f"{length}",
+            ],
+            "height": [
+                "Image height along X-section coords V (top > bottom)",
+                f"{height}",
+            ],
         }
         out_dict = multiple_input_dialog(
             title="XSection image georeferencing\n(in XSection reference frame)",
@@ -182,9 +188,16 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
         # Direction matrix. The -1 in the last row accounts for the origin being in the upper corner.
         # Alternatively, the spacing could have been set to -(height / img_height_px).
         strike = np_float64(strike)
-        direction_matrix = [np_sin(strike * np_pi / 180), 0, -(np_cos(strike * np_pi / 180)),
-                            np_cos(strike * np_pi / 180), 0, np_sin(strike * np_pi / 180),
-                            0, -1, 0,
+        direction_matrix = [
+            np_sin(strike * np_pi / 180),
+            0,
+            -(np_cos(strike * np_pi / 180)),
+            np_cos(strike * np_pi / 180),
+            0,
+            np_sin(strike * np_pi / 180),
+            0,
+            -1,
+            0,
         ]
 
         # Read the image and convert to vtk array.

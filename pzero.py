@@ -16,7 +16,7 @@ from PySide6.QtGui import QPixmap
 
 # Start Qt application
 app = QApplication(argv)
- # set application icon for ico if available
+# set application icon for ico if available
 icon_path = QPixmap("_internal/pzero.ico")
 app.setWindowIcon(QPixmap(icon_path))
 

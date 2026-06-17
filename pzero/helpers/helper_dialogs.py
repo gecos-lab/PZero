@@ -41,6 +41,7 @@ from pzero.ui.navigator_window_ui import Ui_NavWindow
 from pzero.ui.preview_window_ui import Ui_PreviewWindow
 from .helper_functions import auto_sep
 
+
 def options_dialog(
     title=None, message=None, yes_role="Yes", no_role="No", reject_role=None
 ):
@@ -626,6 +627,7 @@ class progress_dialog(QProgressDialog):
 
 class PCDataModel(QAbstractTableModel):
     """Abstract table model showing a pandas DataFrame with highlighted columns."""
+
     def __init__(self, data, index_list, parent=None, *args, **kwargs):
         super(PCDataModel, self).__init__(*args, **kwargs)
         self.df = data
@@ -981,7 +983,9 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         sep = auto_sep(path)
         # Update UI combo to reflect detected separator if present
         try:
-            self.SeparatorcomboBox.setCurrentIndex(list(self.sep_dict.values()).index(sep))
+            self.SeparatorcomboBox.setCurrentIndex(
+                list(self.sep_dict.values()).index(sep)
+            )
         except ValueError:
             pass
         df = pd_read_csv(path, sep=sep, nrows=50, engine="c", index_col=False)
@@ -1037,7 +1041,9 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             AttrcomboBox.addItems(self.default_attr_list)
 
             # capture row index and combobox in lambda defaults to avoid late binding
-            AttrcomboBox.activated.connect(lambda _, idx=i, cb=AttrcomboBox: ass_value(idx, cb))
+            AttrcomboBox.activated.connect(
+                lambda _, idx=i, cb=AttrcomboBox: ass_value(idx, cb)
+            )
 
             ScalarnameLine = QLineEdit()
             ScalarnameLine.setObjectName(f"ScalarnameLine_{i}")
@@ -1054,7 +1060,9 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             # initial selection
             if self.rename_dict[i] in self.default_attr_list:
                 self.AssignTable.cellWidget(i, 1).setCurrentText(self.rename_dict[i])
-            elif isinstance(self.rename_dict[i], str) and self.rename_dict[i].startswith("user_"):
+            elif isinstance(self.rename_dict[i], str) and self.rename_dict[
+                i
+            ].startswith("user_"):
                 self.AssignTable.cellWidget(i, 1).setCurrentText("User defined")
                 self.AssignTable.cellWidget(i, 2).setEnabled(True)
                 self.AssignTable.cellWidget(i, 2).setText(self.rename_dict[i])
@@ -1062,7 +1070,9 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
                 # keep as-is (will fallback to original column name at export time)
                 self.AssignTable.cellWidget(i, 1).setCurrentText("As is")
 
-            self.AssignTable.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+            self.AssignTable.horizontalHeader().setSectionResizeMode(
+                0, QHeaderView.ResizeToContents
+            )
 
         def ass_value(row, sel_combo):
             if sel_combo.currentText() == "User defined":
@@ -1089,7 +1099,6 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
             self.rename_dict[row] = scal_name
             sel_line.setText(scal_name)
             self.preview_file(self.input_data_df)
-
 
     def close_ui(self):
         self.close()
@@ -1173,12 +1182,12 @@ class ShapefileAssignmentDialog(QMainWindow):
         # Header row
         row = 1
         header_pzero = QLabel("<b>PZero Property</b>")
-        #header_arrow = QLabel("<b>←</b>")
-        #header_arrow.setAlignment(Qt.AlignCenter)
+        # header_arrow = QLabel("<b>←</b>")
+        # header_arrow.setAlignment(Qt.AlignCenter)
         header_shapefile = QLabel("<b>Shapefile Column</b>")
         header_manual = QLabel("<b>User Value</b>")
         main_layout.addWidget(header_pzero, row, 0)
-        #main_layout.addWidget(header_arrow, row, 1)
+        # main_layout.addWidget(header_arrow, row, 1)
         main_layout.addWidget(header_shapefile, row, 1)
         main_layout.addWidget(header_manual, row, 2)
         row += 1
@@ -1193,8 +1202,8 @@ class ShapefileAssignmentDialog(QMainWindow):
         # Required fields
         for field in self.required_fields:
             label = QLabel(f"<b>{field} *</b>")
-            #arrow_label = QLabel("←")
-            #arrow_label.setAlignment(Qt.AlignCenter)
+            # arrow_label = QLabel("←")
+            # arrow_label.setAlignment(Qt.AlignCenter)
             combo = QComboBox()
             if field == "feature":
                 combo.addItems(shapefile_columns + [self.USER_DEFINED_OPTION])
@@ -1206,7 +1215,7 @@ class ShapefileAssignmentDialog(QMainWindow):
             )
 
             main_layout.addWidget(label, row, 0)
-#            main_layout.addWidget(arrow_label, row, 1)
+            #            main_layout.addWidget(arrow_label, row, 1)
             main_layout.addWidget(combo, row, 1)
             if field == "feature":
                 self.feature_user_line = QLineEdit()
@@ -1228,8 +1237,8 @@ class ShapefileAssignmentDialog(QMainWindow):
 
         for field in self.optional_fields:
             label = QLabel(f"{field}")
-            #arrow_label = QLabel("←")
-            #arrow_label.setAlignment(Qt.AlignCenter)
+            # arrow_label = QLabel("←")
+            # arrow_label.setAlignment(Qt.AlignCenter)
             combo = QComboBox()
             if field == "role" and self.valid_roles:
                 combo.addItems(shapefile_columns + [self.FIXED_ROLE_OPTION])
@@ -1243,7 +1252,7 @@ class ShapefileAssignmentDialog(QMainWindow):
             )
 
             main_layout.addWidget(label, row, 0)
-            #.addWidget(arrow_label, row, 1)
+            # .addWidget(arrow_label, row, 1)
             main_layout.addWidget(combo, row, 1)
 
             # Create appropriate widget for third column
@@ -1408,7 +1417,9 @@ class ShapefileAssignmentDialog(QMainWindow):
                     self.scenario_user_line.setEnabled(True)
                 self.attribute_mapping["scenario"] = self.USER_DEFINED_SCENARIO_TOKEN
                 self.attribute_mapping["scenario_user_value"] = (
-                    self.scenario_user_line.text().strip() if self.scenario_user_line else ""
+                    self.scenario_user_line.text().strip()
+                    if self.scenario_user_line
+                    else ""
                 )
             elif text == "<none>":
                 if self.scenario_user_line is not None:
@@ -1438,10 +1449,7 @@ class ShapefileAssignmentDialog(QMainWindow):
     def _on_user_feature_text_changed(self, _text):
         """Update mapping when user edits custom feature value."""
         feature_combo = self.combo_boxes.get("feature")
-        if (
-            feature_combo
-            and feature_combo.currentText() == self.USER_DEFINED_OPTION
-        ):
+        if feature_combo and feature_combo.currentText() == self.USER_DEFINED_OPTION:
             self.attribute_mapping["feature"] = self.USER_DEFINED_FEATURE_TOKEN
             self.attribute_mapping["feature_user_value"] = (
                 self._get_user_defined_feature_value()
@@ -1471,10 +1479,15 @@ class ShapefileAssignmentDialog(QMainWindow):
                 )
         elif field == "scenario":
             scenario_combo = self.combo_boxes.get("scenario")
-            if scenario_combo and scenario_combo.currentText() == self.USER_DEFINED_OPTION:
+            if (
+                scenario_combo
+                and scenario_combo.currentText() == self.USER_DEFINED_OPTION
+            ):
                 self.attribute_mapping["scenario"] = self.USER_DEFINED_SCENARIO_TOKEN
                 self.attribute_mapping["scenario_user_value"] = (
-                    self.scenario_user_line.text().strip() if self.scenario_user_line else ""
+                    self.scenario_user_line.text().strip()
+                    if self.scenario_user_line
+                    else ""
                 )
 
     def _validate_and_accept(self):
@@ -1537,7 +1550,9 @@ class ShapefileAssignmentDialog(QMainWindow):
         if scenario_combo and scenario_combo.currentText() == self.USER_DEFINED_OPTION:
             self.attribute_mapping["scenario"] = self.USER_DEFINED_SCENARIO_TOKEN
             self.attribute_mapping["scenario_user_value"] = (
-                self.scenario_user_line.text().strip() if self.scenario_user_line else ""
+                self.scenario_user_line.text().strip()
+                if self.scenario_user_line
+                else ""
             )
 
         self.result = self.attribute_mapping.copy()

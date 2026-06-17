@@ -30,12 +30,13 @@ class View2D(ViewVTK):
             if interactor.GetKeyCode() not in ["w", "s"]:
                 interactor.SetKeyCode("")
                 # interactor.SetKeySym("")
-                #print("blank called")
+                # print("blank called")
 
         self.plotter.iren.interactor.AddObserver("KeyPressEvent", blank_keypress, 10)
         self.plotter.clear_events_for_key("v")
+
     # ================================  General methods shared by all views - built incrementally =====================
-    
+
     def initialize_menu_tools(self):
         """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
         # append code from superclass
@@ -145,6 +146,7 @@ class View2D(ViewVTK):
             lambda: self.vector_by_mouse(measure_distance)
         )
         self.menuView.addAction(self.measureDistanceButton)
+
     # ================================  Methods required by ViewVTK(), (re-)implemented here ==========================
 
     def show_qt_canvas(self):
@@ -165,13 +167,13 @@ class View2D(ViewVTK):
             "LeftButtonPressEvent", self._clear_ctrl_modifier, 10.0
         )
 
-    
     def blank_keypress(interactor, event):
-            """Blanks/cancels/overrides a keypress event.
-            Directly accessing VTK events is necessary since the PyVista
-            key event handling is not easily overridden."""
-            # Do nothing, effectively blanking the event
-            pass
+        """Blanks/cancels/overrides a keypress event.
+        Directly accessing VTK events is necessary since the PyVista
+        key event handling is not easily overridden."""
+        # Do nothing, effectively blanking the event
+        pass
+
     def end_pick(self, pos):
         """Function used to disable actor picking. Due to some slight difference,
         must be reimplemented in subclasses.
@@ -196,7 +198,8 @@ class View2D(ViewVTK):
         """Vector by mouse points to the pzero Vector() class, derived from VTK vtkContourWidget(),
         which includes several sub-methods that are specified in the pass_func argument.
         All these are placed here under the hood of @freeze_gui_onoff. Linked functions, i.e. functions
-        passed as "func", should not be placed under @freeze_gui, but must end with @freeze_gui_off."""
+        passed as "func", should not be placed under @freeze_gui, but must end with @freeze_gui_off.
+        """
         # self.disable_actions()
         vector = Vector(parent=self, pass_func=func)
         vector.EnabledOn()

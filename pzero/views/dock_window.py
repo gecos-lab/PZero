@@ -69,8 +69,8 @@ class DockWindow(QDockWidget):
                 )
         if window_type == "View3D":
             QTimer.singleShot(0, self._resize_then_init_3d_camera_widget)
-    
-    # Temporary fix for issue 242 and 243: the 3D camera orientation widget 
+
+    # Temporary fix for issue 242 and 243: the 3D camera orientation widget
     # is not correctly displayed when the 3D view is first opened.
     def _resize_then_init_3d_camera_widget(self):
         """Nudge dock size, then rebuild the 3D camera orientation widget."""
@@ -84,7 +84,6 @@ class DockWindow(QDockWidget):
             self.canvas.plotter.add_camera_orientation_widget()
         except Exception:
             pass
-
 
     def closeEvent(self, event):
         """Override the standard closeEvent method in two cases:
