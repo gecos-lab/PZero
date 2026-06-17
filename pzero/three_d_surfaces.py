@@ -598,7 +598,7 @@ def _orient_polyline_rows_consistently(row_points):
 
 def _extract_regularized_slice_stack(vtk_obj):
     """Extract a structured row/column stack from a regularized multipart interpretation."""
-    from numpy import array as np_array
+    import numpy as np
 
     if vtk_obj is None or vtk_obj.GetNumberOfCells() < 2:
         return None, None
@@ -613,9 +613,7 @@ def _extract_regularized_slice_stack(vtk_obj):
         key=lambda cell_idx: (int(slice_array.GetValue(cell_idx)), cell_idx),
     )
 
-    slice_indices = []
-    row_points = []
-    point_counts = []
+    rows_by_slice = {}
     for cell_id in ordered_cell_ids:
         cell = vtk_obj.GetCell(cell_id)
         if cell is None:
@@ -623,23 +621,75 @@ def _extract_regularized_slice_stack(vtk_obj):
         n_points = cell.GetNumberOfPoints()
         if n_points < 2:
             continue
-        points = np_array(
+        points = np.asarray(
             [vtk_obj.GetPoint(cell.GetPointId(point_idx)) for point_idx in range(n_points)],
             dtype=float,
         )
-        slice_indices.append(int(slice_array.GetValue(cell_id)))
-        row_points.append(points)
-        point_counts.append(n_points)
+        slice_idx = int(slice_array.GetValue(cell_id))
+        rows_by_slice.setdefault(slice_idx, []).append(points)
+
+    def merge_parts(parts):
+        valid_parts = [
+            np.asarray(part, dtype=float)
+            for part in parts
+            if np.asarray(part).ndim == 2 and np.asarray(part).shape[0] >= 2
+        ]
+        if not valid_parts:
+            return None
+        merged = valid_parts.pop(0)
+        while valid_parts:
+            end_point = merged[-1]
+            best_idx = 0
+            best_reverse = False
+            best_distance = None
+            for idx, candidate in enumerate(valid_parts):
+                forward_distance = np.linalg.norm(candidate[0] - end_point)
+                reverse_distance = np.linalg.norm(candidate[-1] - end_point)
+                if best_distance is None or forward_distance < best_distance:
+                    best_idx = idx
+                    best_reverse = False
+                    best_distance = forward_distance
+                if reverse_distance < best_distance:
+                    best_idx = idx
+                    best_reverse = True
+                    best_distance = reverse_distance
+            next_part = valid_parts.pop(best_idx)
+            if best_reverse:
+                next_part = next_part[::-1].copy()
+            if np.linalg.norm(next_part[0] - merged[-1]) <= 1.0e-9:
+                merged = np.vstack((merged, next_part[1:]))
+            else:
+                merged = np.vstack((merged, next_part))
+        return merged
+
+    slice_indices = []
+    row_points = []
+    point_counts = []
+    for slice_idx in sorted(rows_by_slice):
+        merged_points = merge_parts(rows_by_slice[slice_idx])
+        if merged_points is None or merged_points.shape[0] < 2:
+            continue
+        slice_indices.append(int(slice_idx))
+        row_points.append(merged_points)
+        point_counts.append(int(merged_points.shape[0]))
 
     if len(row_points) < 2:
         return None, None
-    if len(set(slice_indices)) != len(slice_indices):
-        return None, None
-    if len(set(point_counts)) != 1:
-        return None, None
 
     row_points = _orient_polyline_rows_consistently(row_points)
-    return np_array(row_points, dtype=float), {
+    if len(set(point_counts)) != 1:
+        target_col_count = int(round(float(np.median(point_counts))))
+        target_col_count = max(2, target_col_count)
+        resampled_rows = []
+        for row in row_points:
+            resampled_row = _resample_structured_curve(row, target_col_count)
+            if resampled_row is None:
+                return None, None
+            resampled_rows.append(resampled_row)
+        row_points = resampled_rows
+        point_counts = [target_col_count] * len(row_points)
+
+    return np.asarray(row_points, dtype=float), {
         "kind": "regularized_slices",
         "slice_indices": slice_indices,
         "row_count": len(row_points),
@@ -659,24 +709,31 @@ def _extract_gridded_polyline_stack(vtk_obj):
         cell = vtk_obj.GetCell(cell_id)
         cell_lengths.append(cell.GetNumberOfPoints() if cell is not None else 0)
 
-    first_length = int(cell_lengths[0]) if cell_lengths else 0
-    if first_length < 2:
-        return None, None
+    n_cells = int(vtk_obj.GetNumberOfCells())
+    n_points = int(vtk_obj.GetNumberOfPoints())
+    row_count = None
+    col_count = None
+    for candidate_row_count in range(2, n_cells - 1):
+        candidate_col_count = n_cells - candidate_row_count
+        if candidate_col_count < 2:
+            continue
+        if n_points != candidate_row_count * candidate_col_count:
+            continue
+        if any(
+            int(cell_length) != candidate_col_count
+            for cell_length in cell_lengths[:candidate_row_count]
+        ):
+            continue
+        if any(
+            int(cell_length) != candidate_row_count
+            for cell_length in cell_lengths[candidate_row_count:]
+        ):
+            continue
+        row_count = candidate_row_count
+        col_count = candidate_col_count
+        break
 
-    row_count = 0
-    for cell_length in cell_lengths:
-        if int(cell_length) != first_length:
-            break
-        row_count += 1
-
-    col_count = first_length
-    if row_count < 2 or col_count < 2:
-        return None, None
-    if len(cell_lengths) != row_count + col_count:
-        return None, None
-    if any(int(cell_length) != row_count for cell_length in cell_lengths[row_count:]):
-        return None, None
-    if vtk_obj.GetNumberOfPoints() != row_count * col_count:
+    if row_count is None or col_count is None:
         return None, None
 
     row_points = []
@@ -1035,8 +1092,11 @@ def regularized_grid_surface_interpolation(self):
         return
 
     input_vtk_obj = self.geol_coll.get_uid_vtk_obj(input_uids[0])
-    if not isinstance(input_vtk_obj, (PolyLine, XsPolyLine)):
-        self.print_terminal(" -- Error input type: only PolyLine and XsPolyLine -- ")
+    if not all(
+        hasattr(input_vtk_obj, attr)
+        for attr in ("GetNumberOfCells", "GetCell", "GetPoint")
+    ):
+        self.print_terminal(" -- Error input type: only VTK polyline grids are supported -- ")
         return
 
     structured_stack, structured_info = _extract_structured_point_stack(input_vtk_obj)

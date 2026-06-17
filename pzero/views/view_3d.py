@@ -3904,6 +3904,10 @@ class View3D(ViewVTK):
         self.actionExtendSurface.triggered.connect(self.open_extend_surface_dialog)
         self.menuModify.addAction(self.actionExtendSurface)
 
+        self.actionFixGeometry = QAction("Fix Geometry", self)
+        self.actionFixGeometry.triggered.connect(self.show_fix_geometry_dialog)
+        self.menuModify.addAction(self.actionFixGeometry)
+
         # Create Mesh Tools menu if it doesn't exist
         if not hasattr(self, "menuMeshTools"):
             self.menuMeshTools = QMenu("Mesh Tools", self)
@@ -4879,15 +4883,6 @@ class View3D(ViewVTK):
             pass
         out_obj.Modified()
         return out_obj
-
-        # Fix Geometry: repair / simplify / flatten a TriSurf before remeshing
-        # (e.g. in PyMeshIT). The action lives under the standard Modify menu.
-        self.actionFixGeometry = QAction("Fix Geometry", self)
-        self.actionFixGeometry.triggered.connect(self.show_fix_geometry_dialog)
-        if hasattr(self, "menuModify"):
-            self.menuModify.addAction(self.actionFixGeometry)
-        else:
-            self.menuMeshTools.addAction(self.actionFixGeometry)
 
     def show_fix_geometry_dialog(self):
         """Open the interactive Fix Geometry dialog for the current 3D view."""
