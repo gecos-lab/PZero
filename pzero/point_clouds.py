@@ -254,13 +254,13 @@ def segment_pc(self):
                 "dip direction/dip data not present in the dataset. Calculate from Normals using the specific function."
             )
             return
-        
+
         if "ClusterId" not in vtk_obj.point_data_keys:
             print(
                 "Selected entity has no clusters, please choose an other or make them with the proper function"
             )
             return
-        
+
         input_dict = {
             "name": ["Name result: ", "segmented_"],
             "dd1": ["Dip direction lower threshold: ", 0],
@@ -297,7 +297,7 @@ def segment_pc(self):
         r.SetRadius(dialog["rad"])
         r.SetNumberOfNeighbors(dialog["nn"])
         r.GenerateOutliersOff()
-        
+
         pc = PCDom()
         pc.ShallowCopy(r.GetOutput())
         pc.GetPointData().SetActiveScalars("ClusterId")
