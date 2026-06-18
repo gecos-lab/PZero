@@ -71,7 +71,6 @@ def normals2dd(self):
             dip = vtk_obj.points_map_dip
             dip_dir = vtk_obj.points_map_dip_direction
 
-            # print(np.rad2deg(dir))
             vtk_obj.init_point_data("dip", 1)
             vtk_obj.init_point_data("dip direction", 1)
 
@@ -124,7 +123,6 @@ def cut_pc(self, method="both"):
 
         clip_out, clip_in = extract_pc(vtk_obj, loop)
         entity_dict = deepcopy(self.parent.dom_coll.entity_dict)
-        # print(entity_dict)
         if method == "both":
             entity_dict["name"] = self.parent.dom_coll.get_uid_name(uid) + "_cut_in"
             entity_dict["vtk_obj"] = clip_in
@@ -140,7 +138,6 @@ def cut_pc(self, method="both"):
             self.parent.dom_coll.add_entity_from_dict(entity_dict)
 
             entity_dict = deepcopy(self.parent.dom_coll.entity_dict)
-            # print(entity_dict)
             entity_dict["name"] = self.parent.dom_coll.get_uid_name(uid) + "_cut_out"
             entity_dict["vtk_obj"] = clip_out
             entity_dict["topology"] = "PCDom"
@@ -186,7 +183,6 @@ def cut_pc(self, method="both"):
             return
 
         scissors.EnabledOff()
-        # self.enable_actions()
         self.clear_selection()
 
     if not self.selected_uids:
@@ -278,7 +274,6 @@ def segment_pc(self):
         connectivity_filter_dd.SetExtractionModeToAllClusters()
         connectivity_filter_dd.ScalarConnectivityOn()
         connectivity_filter_dd.SetScalarRange(dialog["dd1"], dialog["dd2"])
-        #pv_update_alg(connectivity_filter_dd, False, "Segmenting on dip directions")
 
         f1 = connectivity_filter_dd.GetOutput()
         f1.GetPointData().SetActiveScalars("dip")
@@ -290,19 +285,12 @@ def segment_pc(self):
         connectivity_filter_dip.ScalarConnectivityOn()
         connectivity_filter_dip.SetScalarRange(dialog["d1"], dialog["d2"])
 
-        # pv_update_alg(connectivity_filter_dip, False, "Segmenting dips")
-
-        # n_clusters = connectivity_filter_dip.GetNumberOfExtractedClusters()
-
-        # print(n_clusters)
-
         r = vtkRadiusOutlierRemoval()
         r.SetInputData(connectivity_filter_dip.GetOutput())
         r.SetRadius(dialog["rad"])
         r.SetNumberOfNeighbors(dialog["nn"])
         r.GenerateOutliersOff()
-
-        #(r, True, "Cleaning pc")
+        
         pc = PCDom()
         pc.ShallowCopy(r.GetOutput())
         pc.GetPointData().SetActiveScalars("ClusterId")
@@ -503,10 +491,6 @@ def calibration_pc(self):
     ax.set(xlabel="Number of points per region")
     ax = sns.histplot(normals_var, ax=ax2)
     ax.set(xlabel="SRF")
-    # ax1.autoscale(enable=True, axis="y", tight=True)
-    # ax2.hist(normals_var)
-    # ax2.set_xticklabels([])
-    # ax2.autoscale(enable=True, axis="y", tight=True)
     fig.show()
 
     # Calculate distance from fitted plane -> estimate of curvature
@@ -547,15 +531,10 @@ def auto_pick(self):
         thresh.Update()
 
         points = numpy_support.vtk_to_numpy(thresh.GetOutput().GetPoints().GetData())
-        # print(points)
         if thresh.GetOutput().GetNumberOfPoints() > 0:
-            # print(thresh.GetOutput())
             c, n = best_fitting_plane(points)
-            # n = np.mean(numpy_support.vtk_to_numpy(thresh.GetOutput().GetPointData().GetArray('Normals')),axis=0)
-            # c = np.mean(points,axis=0)
             if n[2] >= 0:
                 n *= -1
-            # plane = pv.Plane(center = c, direction= n)
             att_point = Attitude()
             att_point.append_point(point_vector=c)
             att_point.auto_cells()
