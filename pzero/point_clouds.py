@@ -253,7 +253,7 @@ def segment_pc(self):
                 "dip direction/dip data not present in the dataset. Calculate from Normals using the specific function."
             )
             return
-        
+
         input_dict = {
             "name": ["Name result: ", "segmented_"],
             "dd1": ["Dip direction lower threshold: ", 0],
@@ -274,7 +274,7 @@ def segment_pc(self):
         connectivity_filter_dd.SetExtractionModeToAllClusters()
         connectivity_filter_dd.ScalarConnectivityOn()
         connectivity_filter_dd.SetScalarRange(dialog["dd1"], dialog["dd2"])
-        connectivity_filter_dd.Update() 
+        connectivity_filter_dd.Update()
 
         f1 = connectivity_filter_dd.GetOutput()
         f1.GetPointData().SetActiveScalars("dip")
@@ -285,7 +285,7 @@ def segment_pc(self):
         connectivity_filter_dip.ColorClustersOn()
         connectivity_filter_dip.ScalarConnectivityOn()
         connectivity_filter_dip.SetScalarRange(dialog["d1"], dialog["d2"])
-        connectivity_filter_dip.Update() 
+        connectivity_filter_dip.Update()
 
         r = vtkRadiusOutlierRemoval()
         r.SetInputData(connectivity_filter_dip.GetOutput())
@@ -293,7 +293,7 @@ def segment_pc(self):
         r.SetNumberOfNeighbors(dialog["nn"])
         r.GenerateOutliersOff()
         r.Update()
-        
+
         pc = PCDom()
         pc.ShallowCopy(r.GetOutput())
         pc.GetPointData().SetActiveScalars("ClusterId")
