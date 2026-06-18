@@ -14,14 +14,7 @@ from numpy import sin as np_sin
 
 from PySide6.QtCore import Signal as pyqtSignal
 from PySide6.QtCore import QObject, QUrl
-from PySide6.QtWidgets import (
-    QMainWindow,
-    QMessageBox,
-    QDialog,
-    QLabel,
-    QVBoxLayout,
-    QComboBox,
-)
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QDialog, QLabel, QVBoxLayout, QComboBox
 from PySide6.QtGui import QAction, QDesktopServices, QPixmap
 from PySide6.QtCore import Qt, QTimer
 
@@ -390,7 +383,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def open_release_url(self):
         QDesktopServices.openUrl(QUrl("https://github.com/gecos-lab/PZero/releases"))
-
     """Methods used to manage the entities shown in tables."""
 
     @property
@@ -773,7 +765,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     dom_uid=dom_uid, map_image_uid=map_image_uid
                 )
 
-    @freeze_gui_onoff
+    @ freeze_gui_onoff
     def property_add(self):
         # ____________________________________________________ ADD IMAGES
         """Add empty property on geological entity"""
@@ -1237,9 +1229,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         table_view._role_click_handler = handler
         table_view.clicked.connect(handler)
 
-    def on_role_cell_clicked(
-        self, table_view=None, collection=None, role_col=None, index=None
-    ):
+    def on_role_cell_clicked(self, table_view=None, collection=None, role_col=None, index=None):
         """Open an in-table combo editor for role values when clicking the role column."""
         if table_view is None or collection is None or index is None:
             return
@@ -1299,6 +1289,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             editor_combo.deleteLater()
         table_view._active_role_editor = None
 
+
     def save_project(self):
         # ________________________________________WRITERS TO BE MOVED TO COLLECTIONS
         """Save project to file and folder"""
@@ -1327,7 +1318,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         fout.write("Last saved revision:\n")
         fout.write(f"rev_{now}\n")
         fout.write("CRS EPSG:\n")
-        test_epsg = "test_epsg"
+        test_epsg = 'test_epsg'
         fout.write(f"{test_epsg}\n")
         fout.close()
 
@@ -1649,13 +1640,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             try:
                 test_epsg = lines[4].strip()
             except:
-                test_epsg = "no_epsg"
+                test_epsg = 'no_epsg'
             fin.close()
             in_dir_name = in_file_name[:-3] + "_p0/" + rev_name
             self.print_terminal(
                 f"Opening project/revision : {in_file_name}/{rev_name}\n"
             )
-            self.print_terminal(f"Project CRS : {test_epsg}\n")
+            self.print_terminal(
+                f"Project CRS : {test_epsg}\n"
+            )
             if not os_path.isdir(in_dir_name):
                 self.print_terminal(in_dir_name)
                 self.print_terminal("-- ERROR: missing folder --")
@@ -1911,20 +1904,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                                 new_xsect_coll_df.insert(
                                     15,
                                     "height",
-                                    abs(
-                                        new_xsect_coll_df.top - new_xsect_coll_df.bottom
-                                    ),
+                                    abs(new_xsect_coll_df.top - new_xsect_coll_df.bottom),
                                 )
-                                self.print_terminal(
-                                    "column height added to xsect table"
-                                )
+                                self.print_terminal("column height added to xsect table")
                             if "top" in new_xsect_coll_df.columns:
                                 if "bottom" in new_xsect_coll_df.columns:
-                                    new_xsect_coll_df.loc[
-                                        new_xsect_coll_df["bottom"]
-                                        > new_xsect_coll_df["top"],
-                                        "top",
-                                    ] = new_xsect_coll_df["bottom"]
+                                    new_xsect_coll_df.loc[new_xsect_coll_df["bottom"] > new_xsect_coll_df["top"], "top"] = new_xsect_coll_df["bottom"]
                                 new_xsect_coll_df.rename(
                                     columns={"top": "origin_z"}, inplace=True
                                 )
@@ -1963,24 +1948,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             new_xsect_coll_df["origin_x"] += (
                                 new_xsect_coll_df["height"]
                                 * np_cos(new_xsect_coll_df["dip"] * np_pi / 180)
-                                * np_cos(
-                                    (new_xsect_coll_df["strike"] + 180 % 360)
-                                    * np_pi
-                                    / 180
-                                )
+                                * np_cos((new_xsect_coll_df["strike"] + 180 % 360) * np_pi / 180)
                             )
                             new_xsect_coll_df["origin_y"] += (
                                 new_xsect_coll_df["height"]
                                 * np_cos(new_xsect_coll_df["dip"] * np_pi / 180)
-                                * np_sin(
-                                    (new_xsect_coll_df["strike"] + 180 % 360)
-                                    * np_pi
-                                    / 180
-                                )
+                                * np_sin((new_xsect_coll_df["strike"] + 180 % 360) * np_pi / 180)
                             )
-                            new_xsect_coll_df["origin_z"] += new_xsect_coll_df[
-                                "height"
-                            ] * np_sin(new_xsect_coll_df["dip"] * np_pi / 180)
+                            new_xsect_coll_df["origin_z"] += (
+                                new_xsect_coll_df["height"]
+                                * np_sin(new_xsect_coll_df["dip"] * np_pi / 180)
+                            )
 
                     for new_column in new_xsect_coll_df.columns.values.tolist():
                         # drop columns not included in the standard dictionary
@@ -2839,6 +2817,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             # Update legend.
             self.prop_legend.update_widget(parent=self)
 
+
         except BaseException as e:
             # Get current system exception
             import sys
@@ -2854,9 +2833,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
             for trace in trace_back:
                 stack_trace.append(
-                    "File : %s , Line : %d, Func.Name : %s, Message : %s"
-                    % (trace[0], trace[1], trace[2], trace[3])
-                )
+                    "File : %s , Line : %d, Func.Name : %s, Message : %s" % (trace[0], trace[1], trace[2], trace[3]))
 
             print("Exception type : %s " % ex_type.__name__)
             print("Exception message : %s" % ex_value)

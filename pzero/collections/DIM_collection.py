@@ -73,9 +73,12 @@ class DIMCollection(BaseCollection):
                     refresh_prop_legend = True
             elif entity_dict["properties_components"][i] == 3:
                 for j in range(3):
-                    property_name = entity_dict["properties_names"][i] + f"[{j}]"
+                    property_name = (
+                        entity_dict["properties_names"][i] + f"[{j}]"
+                    )
                     if self.parent.prop_legend_df.loc[
-                        self.parent.prop_legend_df["property_name"] == property_name
+                        self.parent.prop_legend_df["property_name"]
+                        == property_name
                     ].empty:
                         # New Pandas >= 2.0.0
                         self.parent.prop_legend_df = pd_concat(

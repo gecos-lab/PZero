@@ -22,6 +22,7 @@ from vtkmodules.util.numpy_support import numpy_to_vtk
 from pzero.collections.dom_collection import DomCollection
 from pzero.entities_factory import PCDom
 
+
 COORDINATE_ALIASES = {
     "X": (
         "easting",
@@ -189,7 +190,9 @@ def pc2vtk(
             rename_summary = ", ".join(
                 f"{source}->{target}" for source, target in renamed_axes.items()
             )
-            self.parent.print_terminal(f"Detected coordinate columns: {rename_summary}")
+            self.parent.print_terminal(
+                f"Detected coordinate columns: {rename_summary}"
+            )
         if missing_axes:
             missing_summary = ", ".join(missing_axes)
             self.parent.print_terminal(
@@ -239,9 +242,7 @@ def pc2vtk(
                     r = (r * 255.0).round()
                     g = (g * 255.0).round()
                     b = (b * 255.0).round()
-                    converted_msg = (
-                        "RGB floating-point: scaled to 0–255 and converted to 8-bit."
-                    )
+                    converted_msg = "RGB floating-point: scaled to 0–255 and converted to 8-bit."
                 elif rgb_max <= 255.0 and rgb_min >= 0.0:
                     # Already in 0–255 range, nothing to do except cast
                     converted_msg = None
@@ -258,9 +259,7 @@ def pc2vtk(
                     r = ((r - rgb_min) * 255.0 / span).round()
                     g = ((g - rgb_min) * 255.0 / span).round()
                     b = ((b - rgb_min) * 255.0 / span).round()
-                    converted_msg = (
-                        "RGB out of range: normalized to 8-bit (contrast-preserving)."
-                    )
+                    converted_msg = "RGB out of range: normalized to 8-bit (contrast-preserving)."
 
                 # Clip and cast to uint8
                 from numpy import clip as np_clip

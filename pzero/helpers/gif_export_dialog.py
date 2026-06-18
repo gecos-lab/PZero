@@ -37,11 +37,11 @@ from ..properties_manager import PropertiesCMaps
 
 class GifExportDialog(QDialog):
     """Dialog for exporting animated GIF files from PZero 3D views.
-
+    
     This dialog provides comprehensive options for creating publication-quality
     animated GIFs including camera orbit controls, animation presets,
     visual settings, and quality options.
-
+    
     Args:
         parent: The parent view window (ViewVTK subclass)
         plotter: The PyVista plotter to capture
@@ -101,7 +101,7 @@ class GifExportDialog(QDialog):
         self.parent_view = parent
         self.plotter = plotter
         self.view_name = view_name
-
+        
         # Capture current camera position before dialog opens
         self._captured_camera = None
         self._captured_focal_point = None
@@ -120,7 +120,7 @@ class GifExportDialog(QDialog):
         """Set up the dialog user interface."""
         self.setWindowTitle(f"Create Animated GIF - {self.view_name}")
         self.setMinimumSize(950, 650)
-
+        
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(10)
 
@@ -139,7 +139,7 @@ class GifExportDialog(QDialog):
 
         # === Content Layout (2 Columns) ===
         content_layout = QHBoxLayout()
-
+        
         # Left Column: Animation & Camera Settings
         left_layout = QVBoxLayout()
         self._create_animation_group(left_layout)
@@ -276,9 +276,7 @@ class GifExportDialog(QDialog):
         # Reset to current view
         reset_btn = QPushButton("Use Current View as Start")
         reset_btn.clicked.connect(self._reset_to_current_view)
-        reset_btn.setToolTip(
-            "Set the current camera view as the animation starting point"
-        )
+        reset_btn.setToolTip("Set the current camera view as the animation starting point")
         form.addRow("", reset_btn)
 
         parent_layout.addWidget(group)
@@ -449,19 +447,19 @@ class GifExportDialog(QDialog):
     def _on_animation_changed(self, index):
         """Handle animation preset selection."""
         _, anim_type, _ = self.ANIMATION_PRESETS[index]
-
+        
         # Enable/disable custom angle based on animation type
         is_custom = anim_type == "custom"
         self.custom_angle_spin.setEnabled(is_custom)
-
+        
         # Enable/disable zoom factor based on animation type
         is_zoom = anim_type == "zoom"
         self.zoom_factor_spin.setEnabled(is_zoom)
-
+        
         # Enable/disable direction for oscillate animations
         is_oscillate = "oscillate" in anim_type
         # Direction still makes sense for oscillate
-
+        
     def _on_resolution_changed(self, index):
         """Handle resolution preset selection."""
         if index < len(self.RESOLUTION_PRESETS) - 1:  # Not "Custom"
@@ -481,16 +479,16 @@ class GifExportDialog(QDialog):
         fps = self.fps_spin.value()
         width = self.width_spin.value()
         height = self.height_spin.value()
-
+        
         total_frames = int(duration * fps)
-        if hasattr(self, "loop_check") and self.loop_check.isChecked():
+        if hasattr(self, 'loop_check') and self.loop_check.isChecked():
             total_frames = total_frames * 2 - 1
-
+        
         # Rough estimate of file size (very approximate)
         estimated_size_mb = (total_frames * width * height * 0.5) / (1024 * 1024)
-        if hasattr(self, "optimize_check") and self.optimize_check.isChecked():
+        if hasattr(self, 'optimize_check') and self.optimize_check.isChecked():
             estimated_size_mb *= 0.4
-
+        
         self.info_label.setText(
             f"~{total_frames} frames | Est. size: {estimated_size_mb:.1f} MB"
         )
@@ -504,27 +502,25 @@ class GifExportDialog(QDialog):
                 QMessageBox.information(
                     self,
                     "Camera Updated",
-                    "Animation will now start from the current camera view.",
+                    "Animation will now start from the current camera view."
                 )
             except Exception as e:
                 QMessageBox.warning(
-                    self, "Error", f"Could not capture camera position: {str(e)}"
+                    self,
+                    "Error",
+                    f"Could not capture camera position: {str(e)}"
                 )
 
     def _setup_export_plotter(self, plotter):
         """Configure the off-screen plotter for export.
-
+        
         Args:
             plotter: PyVista Plotter to configure
         """
         # Background color
         bg_choice = self.background_combo.currentText()
-        is_dark_bg = bg_choice in [
-            "Black (Default)",
-            "Dark Gray",
-            "Gradient (Black-Gray)",
-        ]
-
+        is_dark_bg = bg_choice in ["Black (Default)", "Dark Gray", "Gradient (Black-Gray)"]
+        
         if bg_choice == "Black (Default)":
             plotter.set_background("black")
         elif bg_choice == "White":
@@ -555,7 +551,7 @@ class GifExportDialog(QDialog):
 
         # Reset camera to fit all actors, then apply captured position if available
         plotter.reset_camera()
-
+        
         # Set initial camera position
         if self._captured_camera is not None:
             plotter.camera_position = self._captured_camera
@@ -567,13 +563,13 @@ class GifExportDialog(QDialog):
         # Add bounding box if requested
         if self.show_bounds_check.isChecked():
             plotter.add_bounding_box(color=text_color)
-
+        
         # Do initial render to ensure everything is set up
         plotter.render()
 
     def _copy_actors_to_plotter(self, target_plotter, is_dark_bg):
         """Copy actors from source plotter to target plotter.
-
+        
         Args:
             target_plotter: The plotter to copy actors to
             is_dark_bg: Whether using a dark background
@@ -595,7 +591,7 @@ class GifExportDialog(QDialog):
                 try:
                     if not hasattr(actor, "GetMapper") or actor.GetMapper() is None:
                         continue
-
+                    
                     mapper = actor.GetMapper()
                     if mapper.GetInput() is None:
                         continue
@@ -618,9 +614,7 @@ class GifExportDialog(QDialog):
                         bool(prop.GetRenderLinesAsTubes()) if prop else False
                     )
                     visibility = actor.GetVisibility()
-                    texture = (
-                        actor.GetTexture() if hasattr(actor, "GetTexture") else None
-                    )
+                    texture = actor.GetTexture() if hasattr(actor, "GetTexture") else None
 
                     if not visibility:
                         continue
@@ -664,13 +658,9 @@ class GifExportDialog(QDialog):
                         render_points_as_spheres=render_points_as_spheres,
                         render_lines_as_tubes=render_lines_as_tubes,
                         show_scalar_bar=show_scalar_bar and scalars is not None,
-                        scalar_bar_args=(
-                            {
-                                "color": text_color,
-                            }
-                            if show_scalar_bar
-                            else None
-                        ),
+                        scalar_bar_args={
+                            "color": text_color,
+                        } if show_scalar_bar else None,
                     )
                 except Exception:
                     # Skip actors that can't be copied
@@ -814,11 +804,11 @@ class GifExportDialog(QDialog):
 
     def _apply_easing(self, t, easing_type):
         """Apply easing function to normalized time value.
-
+        
         Args:
             t: Normalized time value (0 to 1)
             easing_type: Type of easing to apply
-
+            
         Returns:
             Eased time value
         """
@@ -864,18 +854,14 @@ class GifExportDialog(QDialog):
         forward = np.array(focal_point, dtype=float) - np.array(position, dtype=float)
         f_norm = np.linalg.norm(forward)
         if f_norm < 1e-12:
-            return tuple(
-                GifExportDialog._normalize_vector(fallback_up, [0.0, 0.0, 1.0])
-            )
+            return tuple(GifExportDialog._normalize_vector(fallback_up, [0.0, 0.0, 1.0]))
         forward /= f_norm
 
         axis = GifExportDialog._normalize_vector(orbit_axis, [0.0, 0.0, 1.0])
         right = np.cross(forward, axis)
         r_norm = np.linalg.norm(right)
         if r_norm < 1e-12:
-            return tuple(
-                GifExportDialog._normalize_vector(fallback_up, [0.0, 0.0, 1.0])
-            )
+            return tuple(GifExportDialog._normalize_vector(fallback_up, [0.0, 0.0, 1.0]))
         right /= r_norm
 
         up = np.cross(right, forward)
@@ -883,61 +869,61 @@ class GifExportDialog(QDialog):
 
     def _generate_camera_path(self, plotter, num_frames):
         """Generate camera positions for the animation.
-
+        
         Args:
             plotter: The PyVista plotter
             num_frames: Number of frames to generate
-
+            
         Returns:
             List of camera positions (position, focal_point, view_up)
         """
         # Get animation settings
         anim_idx = self.animation_combo.currentIndex()
         _, anim_type, default_angle = self.ANIMATION_PRESETS[anim_idx]
-
+        
         # Determine total angle
         if anim_type == "custom":
             total_angle = self.custom_angle_spin.value()
         else:
             total_angle = default_angle
-
+        
         # Get direction
         clockwise = self.direction_combo.currentText() == "Clockwise"
         direction = 1 if clockwise else -1
-
+        
         # Get orbit axis
         axis_choice = self.axis_combo.currentText()
-
+        
         # Get easing type
         easing_type = self.easing_combo.currentText()
-
+        
         # Get elevation offset
         elevation_offset = np.radians(self.elevation_spin.value())
-
+        
         # Get zoom factor for zoom animation
         zoom_factor = self.zoom_factor_spin.value()
-
+        
         # Get starting camera from the plotter (after setup)
         plotter.reset_camera()
         cam = plotter.camera
-
+        
         # Use captured camera if available
         if self._captured_camera is not None:
             plotter.camera_position = self._captured_camera
             cam = plotter.camera
-
+        
         # Get camera parameters
         focal_point = np.array(cam.focal_point)
         start_pos = np.array(cam.position)
         view_up = np.array(cam.up)
         stable_fallback_up = self._normalize_vector(view_up, [0.0, 0.0, 1.0])
-
+        
         camera_positions = []
-
+        
         # Calculate camera radius from focal point
         camera_vector = start_pos - focal_point
         radius = np.linalg.norm(camera_vector)
-
+        
         if radius < 1e-6:
             # Fallback if camera is at focal point
             radius = 1.0
@@ -953,37 +939,35 @@ class GifExportDialog(QDialog):
         else:  # Camera Up Vector
             orbit_axis = stable_fallback_up
         orbit_axis = self._normalize_vector(orbit_axis, [0.0, 0.0, 1.0])
-
+        
         # Normalize the camera vector for direction
         camera_dir = camera_vector / radius
-
+        
         # Get initial spherical coordinates
         # Azimuth: angle in XY plane from X axis
         # Elevation: angle from XY plane
         initial_azimuth = np.arctan2(camera_dir[1], camera_dir[0])
         initial_elevation = np.arcsin(np.clip(camera_dir[2], -1, 1))
-
+        
         for i in range(num_frames):
             # Normalized time (0 to 1)
             t = i / max(num_frames - 1, 1)
-
+            
             # Apply easing
             eased_t = self._apply_easing(t, easing_type)
-
+            
             if anim_type == "zoom":
                 # Zoom animation: move camera closer then back
                 zoom_t = np.sin(eased_t * np.pi)  # 0 -> 1 -> 0
                 current_zoom = 1.0 / (1 + (zoom_factor - 1) * zoom_t)
                 new_pos = focal_point + camera_vector * current_zoom
-                camera_positions.append(
-                    (tuple(new_pos), tuple(focal_point), tuple(view_up))
-                )
-
+                camera_positions.append((tuple(new_pos), tuple(focal_point), tuple(view_up)))
+                
             elif "oscillate" in anim_type:
                 # Oscillating animation: swing back and forth
                 swing_angle = np.radians(total_angle / 2) * direction
                 angle = swing_angle * np.sin(eased_t * 2 * np.pi)
-
+                
                 if "Vertical" in axis_choice or "Up" in axis_choice:
                     base_vector = camera_vector
                     if abs(elevation_offset) > 1e-12:
@@ -1007,48 +991,34 @@ class GifExportDialog(QDialog):
                     new_azimuth = initial_azimuth
                     new_elevation = initial_elevation + angle
                     # Calculate new position using spherical coordinates
-                    new_x = focal_point[0] + radius * np.cos(new_elevation) * np.cos(
-                        new_azimuth
-                    )
-                    new_y = focal_point[1] + radius * np.cos(new_elevation) * np.sin(
-                        new_azimuth
-                    )
+                    new_x = focal_point[0] + radius * np.cos(new_elevation) * np.cos(new_azimuth)
+                    new_y = focal_point[1] + radius * np.cos(new_elevation) * np.sin(new_azimuth)
                     new_z = focal_point[2] + radius * np.sin(new_elevation)
                     camera_positions.append(
                         ((new_x, new_y, new_z), tuple(focal_point), tuple(view_up))
                     )
-
+                
             elif "tilt" in anim_type:
                 # Tilt animation: camera tilts up and down
                 tilt_angle = np.radians(total_angle) * direction
                 angle = tilt_angle * np.sin(eased_t * 2 * np.pi)
-
+                
                 new_azimuth = initial_azimuth
                 new_elevation = initial_elevation + angle
                 # Clamp elevation to avoid flipping
-                new_elevation = np.clip(
-                    new_elevation, -np.pi / 2 + 0.1, np.pi / 2 - 0.1
-                )
-
-                new_x = focal_point[0] + radius * np.cos(new_elevation) * np.cos(
-                    new_azimuth
-                )
-                new_y = focal_point[1] + radius * np.cos(new_elevation) * np.sin(
-                    new_azimuth
-                )
+                new_elevation = np.clip(new_elevation, -np.pi/2 + 0.1, np.pi/2 - 0.1)
+                
+                new_x = focal_point[0] + radius * np.cos(new_elevation) * np.cos(new_azimuth)
+                new_y = focal_point[1] + radius * np.cos(new_elevation) * np.sin(new_azimuth)
                 new_z = focal_point[2] + radius * np.sin(new_elevation)
-
-                camera_positions.append(
-                    ((new_x, new_y, new_z), tuple(focal_point), tuple(view_up))
-                )
-
+                
+                camera_positions.append(((new_x, new_y, new_z), tuple(focal_point), tuple(view_up)))
+                
             else:
                 # Orbit/Turntable animation - rotate around the model
                 angle_rad = np.radians(total_angle * eased_t) * direction
                 base_vector = camera_vector
-                if abs(elevation_offset) > 1e-12 and (
-                    "Vertical" in axis_choice or "Up" in axis_choice
-                ):
+                if abs(elevation_offset) > 1e-12 and ("Vertical" in axis_choice or "Up" in axis_choice):
                     right_axis = self._normalize_vector(
                         np.cross(orbit_axis, base_vector), [1.0, 0.0, 0.0]
                     )
@@ -1063,12 +1033,12 @@ class GifExportDialog(QDialog):
                     new_pos, focal_point, orbit_axis, stable_fallback_up
                 )
                 camera_positions.append((tuple(new_pos), tuple(focal_point), frame_up))
-
+        
         # Handle ping-pong looping
-        if hasattr(self, "loop_check") and self.loop_check.isChecked():
+        if hasattr(self, 'loop_check') and self.loop_check.isChecked():
             # Add reversed frames (excluding first and last to avoid duplication)
             camera_positions = camera_positions + camera_positions[-2:0:-1]
-
+        
         return camera_positions
 
     def _show_preview(self):
@@ -1076,9 +1046,7 @@ class GifExportDialog(QDialog):
         try:
             # Create preview at reduced resolution
             preview_width = min(640, self.width_spin.value())
-            preview_height = int(
-                preview_width * self.height_spin.value() / self.width_spin.value()
-            )
+            preview_height = int(preview_width * self.height_spin.value() / self.width_spin.value())
 
             preview_plotter = pv.Plotter(
                 off_screen=True,
@@ -1108,9 +1076,7 @@ class GifExportDialog(QDialog):
             img = np.ascontiguousarray(img)
             height, width, channels = img.shape
             bytes_per_line = channels * width
-            q_img = QImage(
-                img.data, width, height, bytes_per_line, QImage.Format_RGB888
-            )
+            q_img = QImage(img.data, width, height, bytes_per_line, QImage.Format_RGB888)
             pixmap = QPixmap.fromImage(q_img)
 
             label = QLabel()
@@ -1126,7 +1092,9 @@ class GifExportDialog(QDialog):
 
         except Exception as e:
             QMessageBox.warning(
-                self, "Preview Failed", f"Could not generate preview:\n{str(e)}"
+                self,
+                "Preview Failed",
+                f"Could not generate preview:\n{str(e)}"
             )
 
     def _export_gif(self):
@@ -1139,15 +1107,15 @@ class GifExportDialog(QDialog):
             self,
             "Export Animated GIF",
             default_name,
-            "GIF files (*.gif);;All files (*.*)",
+            "GIF files (*.gif);;All files (*.*)"
         )
 
         if not file_path:
             return
-
+        
         # Ensure .gif extension
-        if not file_path.lower().endswith(".gif"):
-            file_path += ".gif"
+        if not file_path.lower().endswith('.gif'):
+            file_path += '.gif'
 
         try:
             # Get settings
@@ -1156,69 +1124,71 @@ class GifExportDialog(QDialog):
             duration = self.duration_spin.value()
             fps = self.fps_spin.value()
             num_frames = int(duration * fps)
-
+            
             # Create progress dialog
             progress = QProgressDialog(
-                "Creating animated GIF...", "Cancel", 0, num_frames + 2, self
+                "Creating animated GIF...",
+                "Cancel",
+                0, num_frames + 2,
+                self
             )
             progress.setWindowTitle("Exporting Animation")
             progress.setWindowModality(Qt.WindowModal)
             progress.setMinimumDuration(0)
             progress.setValue(0)
-
+            
             # Create off-screen plotter
             export_plotter = pv.Plotter(
                 off_screen=True,
                 window_size=[width, height],
             )
-
+            
             # Apply anti-aliasing
             if self.aa_check.isChecked():
                 export_plotter.enable_anti_aliasing(
-                    "ssaa", multi_samples=self.aa_samples_spin.value()
+                    "ssaa",
+                    multi_samples=self.aa_samples_spin.value()
                 )
-
+            
             # Setup the plotter
             self._setup_export_plotter(export_plotter)
-
+            
             # Generate camera path
             camera_positions = self._generate_camera_path(export_plotter, num_frames)
-
+            
             # Collect frames
             frames = []
-
+            
             for i, cam_pos in enumerate(camera_positions):
                 if progress.wasCanceled():
                     export_plotter.close()
                     return
-
+                
                 progress.setValue(i)
-                progress.setLabelText(
-                    f"Rendering frame {i + 1} of {len(camera_positions)}..."
-                )
-
+                progress.setLabelText(f"Rendering frame {i + 1} of {len(camera_positions)}...")
+                
                 # Set camera position
                 export_plotter.camera_position = cam_pos
-
+                
                 # Force render update - this is critical!
                 export_plotter.render()
-
+                
                 # Capture frame
                 frame = export_plotter.screenshot(return_img=True)
                 frames.append(frame)
-
+            
             export_plotter.close()
-
+            
             progress.setLabelText("Assembling GIF...")
             progress.setValue(num_frames)
-
+            
             # Try to use imageio for GIF creation
             try:
                 import imageio.v3 as iio
-
+                
                 # Calculate frame duration in milliseconds
                 frame_duration = int(1000 / fps)
-
+                
                 # Write GIF
                 iio.imwrite(
                     file_path,
@@ -1226,18 +1196,18 @@ class GifExportDialog(QDialog):
                     duration=frame_duration,
                     loop=0,  # Infinite loop
                 )
-
+                
             except ImportError:
                 # Fallback to PIL/Pillow
                 try:
                     from PIL import Image
-
+                    
                     # Convert frames to PIL Images
                     pil_frames = [Image.fromarray(f) for f in frames]
-
+                    
                     # Calculate frame duration in milliseconds
                     frame_duration = int(1000 / fps)
-
+                    
                     # Save as GIF
                     pil_frames[0].save(
                         file_path,
@@ -1247,19 +1217,19 @@ class GifExportDialog(QDialog):
                         loop=0,
                         optimize=self.optimize_check.isChecked(),
                     )
-
+                    
                 except ImportError:
                     raise ImportError(
                         "Neither 'imageio' nor 'Pillow' is installed.\n"
                         "Please install one of them: pip install imageio pillow"
                     )
-
+            
             progress.setValue(num_frames + 2)
             progress.close()
-
+            
             # Calculate file size
             file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-
+            
             QMessageBox.information(
                 self,
                 "Export Successful",
@@ -1267,12 +1237,14 @@ class GifExportDialog(QDialog):
                 f"Resolution: {width} × {height} pixels\n"
                 f"Frames: {len(frames)}\n"
                 f"Duration: {len(frames) / fps:.1f} seconds\n"
-                f"File size: {file_size_mb:.2f} MB",
+                f"File size: {file_size_mb:.2f} MB"
             )
 
             self.accept()
 
         except Exception as e:
             QMessageBox.critical(
-                self, "Export Failed", f"Failed to export animation:\n{str(e)}"
+                self,
+                "Export Failed",
+                f"Failed to export animation:\n{str(e)}"
             )

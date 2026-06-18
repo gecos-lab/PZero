@@ -137,6 +137,7 @@ class View3D(ViewVTK):
         self.drawLine3DButton = QAction("Draw line (3D mode)", self)
         self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
         self.menuCreate.addAction(self.drawLine3DButton)
+        
 
         self.menuBoreTraceVis = QMenu("Borehole visualization methods", self)
 
@@ -3620,3 +3621,5 @@ class View3D(ViewVTK):
                 child.setChecked(True)
                 break
         return dialog
+
+

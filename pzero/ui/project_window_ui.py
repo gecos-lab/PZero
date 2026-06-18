@@ -549,7 +549,9 @@ class Ui_ProjectWindow(object):
             QCoreApplication.translate("ProjectWindow", "Merge to Multipart", None)
         )
         self.actionSplitMultipart.setText(
-            QCoreApplication.translate("ProjectWindow", "Split to Single Part", None)
+            QCoreApplication.translate(
+                "ProjectWindow", "Split to Single Part", None
+            )
         )
         self.actionDecimatePointCloud.setText(
             QCoreApplication.translate("ProjectWindow", "Decimate PC", None)

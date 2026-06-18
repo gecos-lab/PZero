@@ -36,16 +36,11 @@ from vtkmodules.vtkFiltersCore import vtkAppendPolyData
 
 from pzero.entities_factory import Plane, XsPolyLine
 from pzero.helpers.helper_dialogs import general_input_dialog, open_file_dialog
-from pzero.helpers.helper_functions import (
-    auto_sep,
-    best_fitting_plane,
-    freeze_gui_onoff,
-    freeze_gui_on,
-    freeze_gui_off,
-)
+from pzero.helpers.helper_functions import auto_sep, best_fitting_plane, freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 from pzero.orientation_analysis import dip_directions2normals, get_dip_dir_vectors
 
 from .AbstractCollection import BaseCollection
+
 
 # =================================== Methods used to create cross sections ===========================================
 
@@ -67,13 +62,9 @@ def section_from_strike(self, vector):
         "strike": ["Insert strike", np_round(vector.azimuth), "QLineEdit"],
         "dip": ["Insert dip", 90.0, "QLineEdit"],
         "length": ["Insert length", np_round(vector.length), "QLineEdit"],
-        "height": ["Insert height", np_round(vector.length / 200) * 100, "QLineEdit"],
+        "height": ["Insert height", np_round(vector.length/200)*100, "QLineEdit"],
         "num_xs": ["Number of XSections", 1, "QLineEdit"],
-        "spacing": [
-            "Spacing of XSections (+o-)",
-            np_round(vector.length / 200) * 100,
-            "QLineEdit",
-        ],
+        "spacing": ["Spacing of XSections (+o-)", np_round(vector.length/200)*100, "QLineEdit"],
     }
     section_dict_updt = general_input_dialog(
         title="New XSection from points", input_dict=section_dict_in
@@ -661,9 +652,9 @@ class XSectionCollection(BaseCollection):
         normal_vct = np_array(
             self.get_uid_normal_vect(section_uid=section_uid), dtype=np_float64
         ).reshape(3)
-        origin = np_array(
-            self.get_uid_origin(uid=section_uid), dtype=np_float64
-        ).reshape(3)
+        origin = np_array(self.get_uid_origin(uid=section_uid), dtype=np_float64).reshape(
+            3
+        )
         X_arr = np_array(X, dtype=np_float64)
         Y_arr = np_array(Y, dtype=np_float64)
         Z_arr = np_array(Z, dtype=np_float64)
@@ -692,9 +683,9 @@ class XSectionCollection(BaseCollection):
         dip_vct = np_array(
             self.get_uid_dip_vect(section_uid=section_uid), dtype=np_float64
         ).reshape(3)
-        origin = np_array(
-            self.get_uid_origin(uid=section_uid), dtype=np_float64
-        ).reshape(3)
+        origin = np_array(self.get_uid_origin(uid=section_uid), dtype=np_float64).reshape(
+            3
+        )
         # U and V can be scalars or arrays; keep their shape and broadcast on the XYZ axis
         U_arr = np_array(U, dtype=np_float64)
         V_arr = np_array(V, dtype=np_float64)

@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QMimeData
 from PySide6.QtGui import QDrag, QActionGroup
 
+
 MESH_SLICER_COLLECTION_PREFIXES = {
     "mesh3d_coll": "Mesh",
     "image_coll": "Image",
@@ -720,6 +721,7 @@ class CustomTreeWidget(QTreeWidget):
 
         self.emit_checkbox_toggled()
 
+
     def toggle_with_menu(self, position):
         """
         Provides functionality to toggle the states of checkboxes for selected
@@ -746,16 +748,16 @@ class CustomTreeWidget(QTreeWidget):
             self.view, "show_mesh_slicer_dialog"
         ):
             open_mesh_slicer_action = menu.addAction("Open Mesh Slicer")
-
+        
         well_view_actions = self._create_well_view_mode_menu(menu)
-
+        
         # Add Labels submenu (Background collection only)
         background_labels_actions = None
         if self._can_show_labels():
             background_labels_actions = self._create_show_labels_submenu(menu, item)
 
         action = menu.exec_(self.viewport().mapToGlobal(position))
-
+        
         if action == toggle_action:
             for item in self.selectedItems():
                 new_state = (
@@ -765,10 +767,10 @@ class CustomTreeWidget(QTreeWidget):
                 self.update_child_check_states(item, new_state)
                 self.update_parent_check_states(item)
             self.emit_checkbox_toggled()
-
+        
         if action == open_mesh_slicer_action:
             self._open_mesh_slicer_for_item(item)
-
+            
         if well_view_actions:
             if action == well_view_actions.get("trace"):
                 self._set_borehole_view_mode("trace")
@@ -804,9 +806,7 @@ class CustomTreeWidget(QTreeWidget):
         none_action.setCheckable(True)
         # We don't easily know current state so we default to unchecked or leave it logic-less for now
         # Ideally we'd check if any labels are currently shown.
-        none_action.setChecked(
-            True
-        )  # Default to None being checked? OR try to find out.
+        none_action.setChecked(True)  # Default to None being checked? OR try to find out.
         action_group.addAction(none_action)
         actions["None"] = none_action
 
@@ -814,13 +814,14 @@ class CustomTreeWidget(QTreeWidget):
         action.setCheckable(True)
         action_group.addAction(action)
         actions[object_name] = action
-
+            
         return actions
 
     def _can_show_labels(self):
-        return getattr(
-            self.collection, "collection_name", None
-        ) == "backgrnd_coll" and hasattr(self.view, "show_labels")
+        return (
+            getattr(self.collection, "collection_name", None) == "backgrnd_coll"
+            and hasattr(self.view, "show_labels")
+        )
 
     def _show_background_labels(self, item, property_name):
         uid = self.get_item_uid(item)
