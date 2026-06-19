@@ -96,7 +96,7 @@ class PiecewiseStructuralComplex:
         selector_layout.addWidget(swap_seed_button)
         from_sections_button = QPushButton("From sections", dialog)
         from_sections_button.setToolTip(
-            "Use XsVertexSet seeds from geol_coll with roles TMU, TSU, SU, IU, or SZ."
+            "Use XsVertex/XsVertexSet seeds from geol_coll with roles TMU, TSU, SU, IU, or SZ."
         )
         selector_layout.addWidget(from_sections_button)
         use_calculated_button = QPushButton("Use calculated", dialog)
@@ -175,7 +175,7 @@ class PiecewiseStructuralComplex:
             else:
                 options.pop("psc_seed_overrides", None)
             table_options[table_name] = options
-    
+
         def apply_seed_overrides(mapping: Dict[str, Any]) -> None:
             for unit_info in mapping.get("units", []) or []:
                 unit_key = unit_seed_key(unit_info)
@@ -755,7 +755,7 @@ class PiecewiseStructuralComplex:
             pass
         text = str(value).strip()
         return "" if text.casefold() in {"nan", "nat", "<na>", "none"} else text
-    
+
     @staticmethod
     def _psc_sort_key(value: Any) -> float:
         """Return a numeric STm polarity key."""
@@ -3441,8 +3441,10 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                     float(tolerance or 0.0) * float(tolerance or 0.0),
                 )
                 coverage_ok = (
-                    boundary_polygon.difference(covered).area <= area_tolerance
-                    and covered.difference(boundary_polygon).area <= area_tolerance
+                    float(boundary_polygon.difference(covered).area)
+                    <= area_tolerance
+                    and float(covered.difference(boundary_polygon).area)
+                    <= area_tolerance
                 )
             except Exception:
                 coverage_ok = False
