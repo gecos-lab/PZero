@@ -265,6 +265,7 @@ class CustomTreeWidget(QTreeWidget):
                 else None
             )
         )
+        self.itemSelectionChanged.connect(self.emit_selection_changed)
 
         # Import initial selection state if parent and collection exist
         if hasattr(self.collection, "selected_uids"):

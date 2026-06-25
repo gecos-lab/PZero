@@ -1,17 +1,31 @@
 """orientation_analysis.py
 PZero© Andrea Bistacchi"""
 
-from numpy import array as np_array
-from numpy import asarray as np_asarray
 from numpy import cos as np_cos
-from numpy import cross as np_cross
+from numpy import sin as np_sin
+# from numpy import pi as np_pi
+# from numpy import arcsin as np_arcsin
+# from numpy import arccos as np_arccos
+# from numpy import arctan2 as np_arctan2
 from numpy import deg2rad as np_deg2rad
 from numpy import greater as np_greater
 from numpy import less_equal as np_less_equal
+from numpy import array as np_array
+from numpy import asarray as np_asarray
+from numpy import cross as np_cross
+from numpy import squeeze as np_squeeze
+from numpy import sum as np_sum
+from numpy import dot as np_dot
+from numpy import argsort as np_argsort
+from numpy import column_stack as np_column_stack
+from numpy import vstack as np_vstack
+from numpy.linalg import norm as np_linalg_norm
+from numpy.linalg import eigh as np_linalg_eigh
+from numpy.linalg import det as np_linalg_det
 from numpy import ndarray as np_ndarray
 from numpy import number as np_number
-from numpy import sin as np_sin
-from numpy import squeeze as np_squeeze
+
+from scipy.cluster.vq import kmeans2
 
 from pzero.helpers.helper_dialogs import multiple_input_dialog
 
@@ -239,3 +253,209 @@ def get_dip_dir_vectors(normals=None, az=False):
         return az_vectors, dir_vectors
     else:
         return dip_vectors, dir_vectors
+    
+    
+def fisherparams(samplecart):
+    """
+    Calculate fisher parameters.
+
+    Parameters
+    ----------
+    samplecart : ndarray, shape (N, 3)
+        Sample of unit vectors on the sphere
+
+    Returns
+    -------
+    dict
+        "mean_direction" : ndarray, shape (1, 3)
+            Mean direction (unit vector).
+        "kappa" : float
+            Fisher concentration parameter.
+    """
+    samplecart = np_asarray(samplecart, dtype=float)
+
+    if samplecart.ndim != 2 or samplecart.shape[1] != 3:
+        raise ValueError("samplecart must have shape (N, 3)")
+
+    n = samplecart.shape[0]
+
+    # Resultant vector
+    Rvec = np_sum(samplecart, axis=0)
+    R = np_linalg_norm(Rvec)
+
+    if R == 0:
+        raise ValueError("Resultant length is zero; mean direction undefined")
+
+    # Mean direction
+    muhat = Rvec / R
+
+    # Mean resultant length
+    Rbar = R / n
+
+    # Fisher concentration estimate (sphstat formula)
+    if Rbar < 0.9:
+        kappahat = (3 * Rbar - Rbar**3) / (1 - Rbar**2)
+    else:
+        kappahat = 1.0 / (Rbar**3 - 4 * Rbar**2 + 3 * Rbar)
+
+    axeshat = muhat.reshape(1, 3)
+
+    return {"mean_direction": axeshat, "kappa": kappahat}
+
+
+def kentparams(samplecart):
+    """
+    Calculate kents parameters.
+    Kent mean direction sign is arbitrary for polar data, do not trust its absolute sign
+
+    Parameters
+    ----------
+    samplecart : ndarray, shape (N, 3)
+        Sample of unit vectors
+
+    Returns
+    -------
+    dict
+        "axes": ndarray, shape (3, 3)
+            Orthonormal axes:
+            axes[0] = mean direction (mu)
+            axes[1] = major axis (gamma1)
+            axes[2] = minor axis (gamma2)
+
+        "kappa" : float
+            Kent concentration parameter
+
+        "beta" : float
+            Kent ovalness parameter
+    """
+    samplecart = np_asarray(samplecart, dtype=float)
+
+    if samplecart.ndim != 2 or samplecart.shape[1] != 3:
+        raise ValueError("samplecart must have shape (N, 3)")
+
+    n = samplecart.shape[0]
+
+    # Scatter matrix
+    S = np_dot(samplecart.T, samplecart) / n
+
+    # Eigen-decomposition (symmetric matrix)
+    evals, evecs = np_linalg_eigh(S)
+
+    # Sort eigenvalues descending
+    idx = np_argsort(evals)[::-1]
+    evals = evals[idx]
+    evecs = evecs[:, idx]
+
+    # Axes: mean direction, major, minor
+    mu = evecs[:, 0]
+    gamma1 = evecs[:, 1]
+    gamma2 = evecs[:, 2]
+
+    # Enforce right-handed coordinate system
+    if np_linalg_det(np_column_stack((mu, gamma1, gamma2))) < 0:
+        gamma2 = -gamma2
+
+    axes = np_vstack((mu, gamma1, gamma2))
+
+    # Kent parameters (moment estimates)
+    kappahat = n * (evals[0] - evals[2])
+    betahat = n * (evals[1] - evals[2]) / 2.0
+
+    return {"axes" : axes, "kappa" : kappahat, "beta" : betahat}
+
+
+def bingham(samplecart):
+    """
+    Calculate Bingham parameters.
+
+    Parameters
+    ----------
+    samplecart : ndarray, shape (N, 3)
+        Sample of unit vectors
+
+    Returns
+    -------
+    dict
+        "eigenvalues": ndarray, shape (3,)
+            Eigenvalues
+
+        "axes": ndarray, shape (3, 3)
+            Orthonormal axes:
+            axes[0] = mean direction (mu)
+            axes[1] = major axis (gamma1)
+            axes[2] = minor axis (gamma2)
+    """
+    samplecart = np_asarray(samplecart, dtype=float)
+
+    if samplecart.ndim != 2 or samplecart.shape[1] != 3:
+        raise ValueError("samplecart must have shape (N, 3)")
+
+    n = samplecart.shape[0]
+
+    # Scatter matrix
+    T = np_dot(samplecart.T, samplecart) / n
+    
+    # Bingham distribution parameters
+    eigenvalues, eigenvectors = np_linalg_eigh(T)
+    idx = np_argsort(eigenvalues)[::-1]
+    eigenvalues = eigenvalues[idx]
+    eigenvectors = eigenvectors[:, idx]
+
+    # Axes: mean direction, major, minor
+    mu = eigenvectors[:, 0]
+    gamma1 = eigenvectors[:, 1]
+    gamma2 = eigenvectors[:, 2]
+
+    # Enforce right-handed coordinate system
+    if np_linalg_det(np_column_stack((mu, gamma1, gamma2))) < 0:
+        gamma2 = -gamma2
+
+    axes = np_vstack((mu, gamma1, gamma2))
+    
+    return {"eigenvalues" : eigenvalues, "axes" : axes} 
+    
+    
+def kmeans_clusters(samplecart, k):
+    """
+    Calculate k-means clusters.
+
+    Parameters
+    ----------
+    samplecart : ndarray, shape (N, 3)
+        Sample of unit vectors
+    k : int
+        Number of clusters to form
+
+    Returns
+    -------
+    dict
+        "centroids" : ndarray, shape (k, 3)
+            Cluster centroids. Note: these are the arithmetic mean of the
+            unit vectors assigned to each cluster, and are therefore NOT
+            themselves unit vectors - they must be re-normalized before
+            being plotted as poles.
+
+        "labels" : ndarray, shape (N,)
+            Cluster index (0 to k-1) assigned to each input vector, in the
+            same order as samplecart.
+    """
+    samplecart = np_asarray(samplecart, dtype=float)
+
+    if samplecart.ndim != 2 or samplecart.shape[1] != 3:
+        raise ValueError("samplecart must have shape (N, 3)")
+
+    n = samplecart.shape[0]
+
+    if k < 1:
+        raise ValueError("k must be at least 1")
+
+    if k > n:
+        raise ValueError(
+            f"k ({k}) cannot be greater than the number of data points ({n})"
+        )
+
+    centroids, labels = kmeans2(samplecart, k, minit="++")
+
+    return {"centroids": centroids, "labels": labels}
+
+...

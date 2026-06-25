@@ -3,10 +3,12 @@ PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
 from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QSpinBox, QWidgetAction
 
 # numpy import____
 from numpy import all as np_all
 from numpy import ndarray as np_ndarray
+from numpy.linalg import norm as np_linalg_norm
 
 # Pandas imports____
 from pandas import DataFrame as pd_DataFrame
@@ -15,12 +17,14 @@ from pandas import concat as pd_concat
 # PZero imports____
 from .abstract_view_mpl import ViewMPL
 from ..entities_factory import VertexSet, XsVertexSet, Attitude
+from pzero.orientation_analysis import fisherparams, kentparams, bingham, kmeans_clusters
 
 # mplstereonet import____
 import mplstereonet
 
 # Matplotlib imports____
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.pyplot import close as plt_close
 
 
 class ViewStereoplot(ViewMPL):
@@ -37,6 +41,14 @@ class ViewStereoplot(ViewMPL):
         # properties_names.astype("str") converts the list of strings in properties_names into a single
         # concatenated string, then .str.contains("Normals") searches for the (sub-)string "Normals".
         self.view_filter = 'properties_names.astype("str").str.contains("Normals", na=False) or properties_names.astype("str").str.contains("Lineations", na=False)'
+
+        self.analysis_results = {}
+        self.analysis_actors = {}
+        self.analysis_action_for_key = {}
+        self.kmeans_k = 1 # default value
+        self.is_normals = None
+        self.is_lineation = None
+        self.auto_recompute = False
 
         super(ViewStereoplot, self).__init__(*args, **kwargs)
         self.setWindowTitle("Stereoplot View")
@@ -61,7 +73,109 @@ class ViewStereoplot(ViewMPL):
         self.actionSetPolar = QAction("Toggle grid", self)
         self.actionSetPolar.triggered.connect(self.toggle_grid)
         self.menuView.addAction(self.actionSetPolar)
+        
+        self.actionRecompute = QAction("Recompute statistics", self)
+        self.actionRecompute.setEnabled(not self.auto_recompute)
+        self.actionRecompute.triggered.connect(self.recompute_values)
+        self.menuAnalysis.addAction(self.actionRecompute)
+        
+        self.actionAutoRecompute = QAction("Enable auto recomputation", self)
+        self.actionAutoRecompute.setCheckable(True)
+        self.actionAutoRecompute.setChecked(self.auto_recompute)
+        self.actionAutoRecompute.triggered.connect(self.toggle_auto_recompute)
+        self.menuAnalysis.addAction(self.actionAutoRecompute)
+        
+        self.menuAnalysis.addSection("K-means clusters")
 
+        self.kmeans_k_spinbox = QSpinBox()
+        self.kmeans_k_spinbox.setMinimum(1)
+        self.kmeans_k_spinbox.setValue(self.kmeans_k)
+        self.kmeans_k_spinbox.valueChanged.connect(self.set_kmeans_k)
+
+        self.kmeans_k_widget_action = QWidgetAction(self)
+        self.kmeans_k_widget_action.setDefaultWidget(self.kmeans_k_spinbox)
+        self.menuAnalysis.addAction(self.kmeans_k_widget_action)
+        
+        # ---- Normals analysis actors ----
+        self.menuAnalysis.addSection("Normals - Bingham")
+
+        self.actionNormalsBinghamMajorPole = QAction("Major axis as pole", self)
+        self.actionNormalsBinghamMajorPole.setCheckable(True)
+        self.actionNormalsBinghamMajorPole.triggered.connect(lambda: self.toggle_analysis_actor("normals_bingham_major_pole"))
+        self.menuAnalysis.addAction(self.actionNormalsBinghamMajorPole)
+        self.analysis_action_for_key["normals_bingham_major_pole"] = self.actionNormalsBinghamMajorPole
+
+        self.actionNormalsBinghamIntermediatePole = QAction("Intermediate axis as pole", self)
+        self.actionNormalsBinghamIntermediatePole.setCheckable(True)
+        self.actionNormalsBinghamIntermediatePole.triggered.connect(lambda: self.toggle_analysis_actor("normals_bingham_intermediate_pole"))
+        self.menuAnalysis.addAction(self.actionNormalsBinghamIntermediatePole)
+        self.analysis_action_for_key["normals_bingham_intermediate_pole"] = self.actionNormalsBinghamIntermediatePole
+
+        self.actionNormalsBinghamMinorPole = QAction("Minor axis as pole", self)
+        self.actionNormalsBinghamMinorPole.setCheckable(True)
+        self.actionNormalsBinghamMinorPole.triggered.connect(lambda: self.toggle_analysis_actor("normals_bingham_minor_pole"))
+        self.menuAnalysis.addAction(self.actionNormalsBinghamMinorPole)
+        self.analysis_action_for_key["normals_bingham_minor_pole"] = self.actionNormalsBinghamMinorPole
+
+        self.actionNormalsBinghamMinorGC = QAction("Great circle ⊥ minor axis", self)
+        self.actionNormalsBinghamMinorGC.setCheckable(True)
+        self.actionNormalsBinghamMinorGC.triggered.connect(lambda: self.toggle_analysis_actor("normals_bingham_minor_gc"))
+        self.menuAnalysis.addAction(self.actionNormalsBinghamMinorGC)
+        self.analysis_action_for_key["normals_bingham_minor_gc"] = self.actionNormalsBinghamMinorGC
+
+
+        self.menuAnalysis.addSection("Normals - K-means")
+
+        self.actionNormalsKmeansCenters = QAction("Cluster centers as poles", self)
+        self.actionNormalsKmeansCenters.setCheckable(True)
+        self.actionNormalsKmeansCenters.triggered.connect(lambda: self.toggle_analysis_actor("normals_kmeans_centers"))
+        self.menuAnalysis.addAction(self.actionNormalsKmeansCenters)
+        self.analysis_action_for_key["normals_kmeans_centers"] = self.actionNormalsKmeansCenters
+
+        # ---- Lineations analysis actors ----
+        self.menuAnalysis.addSection("Lineations - Bingham")
+
+        self.actionLineationsBinghamMajorPole = QAction("Major axis as pole", self)
+        self.actionLineationsBinghamMajorPole.setCheckable(True)
+        self.actionLineationsBinghamMajorPole.triggered.connect(lambda: self.toggle_analysis_actor("lineations_bingham_major_pole"))
+        self.menuAnalysis.addAction(self.actionLineationsBinghamMajorPole)
+        self.analysis_action_for_key["lineations_bingham_major_pole"] = self.actionLineationsBinghamMajorPole
+
+        self.actionLineationsBinghamIntermediatePole = QAction("Intermediate axis as pole", self)
+        self.actionLineationsBinghamIntermediatePole.setCheckable(True)
+        self.actionLineationsBinghamIntermediatePole.triggered.connect(lambda: self.toggle_analysis_actor("lineations_bingham_intermediate_pole"))
+        self.menuAnalysis.addAction(self.actionLineationsBinghamIntermediatePole)
+        self.analysis_action_for_key["lineations_bingham_intermediate_pole"] = self.actionLineationsBinghamIntermediatePole
+
+        self.actionLineationsBinghamMinorPole = QAction("Minor axis as pole", self)
+        self.actionLineationsBinghamMinorPole.setCheckable(True)
+        self.actionLineationsBinghamMinorPole.triggered.connect(lambda: self.toggle_analysis_actor("lineations_bingham_minor_pole"))
+        self.menuAnalysis.addAction(self.actionLineationsBinghamMinorPole)
+        self.analysis_action_for_key["lineations_bingham_minor_pole"] = self.actionLineationsBinghamMinorPole
+
+        self.actionLineationsBinghamMinorGC = QAction("Great circle ⊥ minor axis", self)
+        self.actionLineationsBinghamMinorGC.setCheckable(True)
+        self.actionLineationsBinghamMinorGC.triggered.connect(lambda: self.toggle_analysis_actor("lineations_bingham_minor_gc"))
+        self.menuAnalysis.addAction(self.actionLineationsBinghamMinorGC)
+        self.analysis_action_for_key["lineations_bingham_minor_gc"] = self.actionLineationsBinghamMinorGC
+
+        self.menuAnalysis.addSection("Lineations - K-means")
+
+        self.actionLineationsKmeansCenters = QAction("Cluster centers as poles", self)
+        self.actionLineationsKmeansCenters.setCheckable(True)
+        self.actionLineationsKmeansCenters.triggered.connect(lambda: self.toggle_analysis_actor("lineations_kmeans_centers"))
+        self.menuAnalysis.addAction(self.actionLineationsKmeansCenters)
+        self.analysis_action_for_key["lineations_kmeans_centers"] = self.actionLineationsKmeansCenters
+        
+    def connect_all_signals(self):
+        super().connect_all_signals()
+        self.sig_selection_lmb = lambda collection: self.on_selection_changed(collection)
+        self.parent.signals.selection_changed.connect(self.sig_selection_lmb)
+    
+    def disconnect_all_signals(self):
+        super().disconnect_all_signals()
+        self.parent.signals.selection_changed.disconnect(self.sig_selection_lmb)
+        
     # ================================  Methods required by BaseView(), (re-)implemented here =========================
 
     def initialize_interactor(self):
@@ -84,6 +198,9 @@ class ViewStereoplot(ViewMPL):
         # refactor allowing to change background color with:
         # mplstyle.use("default")
         # mplstyle.use("dark_background")
+        if hasattr(self, "figure") and self.figure is not None:
+            plt_close(self.figure)
+            
         self.figure, self.ax = mplstereonet.subplots(projection=self.proj_type)
 
         # get a reference to the canvas that contains the figure
@@ -136,38 +253,48 @@ class ViewStereoplot(ViewMPL):
                     dip = plot_entity.points_map_dip
 
                     if np_all(strike != None):
-                        if uid in self.selected_uids:
-                            if show_property == "Planes":
-                                this_actor = self.ax.plane(
-                                    strike, dip, color=color_RGB
-                                )[0]
-                            else:
-                                this_actor = self.ax.pole(strike, dip, color=color_RGB)[
-                                    0
-                                ]
-
-                            this_actor.set_visible(visible)
-                            self.print_terminal(f"uid: {uid} - agent: {this_actor}")
+                        if show_property == "Planes":
+                            this_actor = self.ax.plane(strike, dip, color=color_RGB)[0]
                         else:
-                            if show_property == "Planes":
-                                this_actor = self.ax.plane(
-                                    strike, dip, color=color_RGB
-                                )[0]
-                            else:
-                                if self.contours is not None and visible is True:
-                                    if self.contours:
-                                        self.ax.density_contourf(
-                                            strike, dip, measurement="poles"
-                                        )
-                                    else:
-                                        self.ax.density_contour(
-                                            strike, dip, measurement="poles"
-                                        )
-                                this_actor = self.ax.pole(strike, dip, color=color_RGB)[
-                                    0
-                                ]
-                            if this_actor:
-                                this_actor.set_visible(visible)
+                            if self.contours is not None and visible is True:
+                                if self.contours:
+                                    self.ax.density_contourf(strike, dip, measurement="poles")
+                                else:
+                                    self.ax.density_contour(strike, dip, measurement="poles")
+                            this_actor = self.ax.pole(strike, dip, color=color_RGB)[0]
+                        if this_actor:
+                            this_actor.set_visible(visible)
+                        # if uid in self.parent.geol_coll.selected_uids:
+                        #     if show_property == "Planes":
+                        #         this_actor = self.ax.plane(
+                        #             strike, dip, color=color_RGB
+                        #         )[0]
+                        #     else:
+                        #         this_actor = self.ax.pole(strike, dip, color=color_RGB)[
+                        #             0
+                        #         ]
+
+                        #     this_actor.set_visible(visible)
+                        # else:
+                        #     if show_property == "Planes":
+                        #         this_actor = self.ax.plane(
+                        #             strike, dip, color=color_RGB
+                        #         )[0]
+                        #     else:
+                        #         if self.contours is not None and visible is True:
+                        #             if self.contours:
+                        #                 self.ax.density_contourf(
+                        #                     strike, dip, measurement="poles"
+                        #                 )
+                        #             else:
+                        #                 self.ax.density_contour(
+                        #                     strike, dip, measurement="poles"
+                        #                 )
+                        #         this_actor = self.ax.pole(strike, dip, color=color_RGB)[
+                        #             0
+                        #         ]
+                        #     if this_actor:
+                        #         this_actor.set_visible(visible)
                     else:
                         this_actor = None
                 else:
@@ -202,7 +329,6 @@ class ViewStereoplot(ViewMPL):
             self.parent.geol_coll.df["topology"] == "VertexSet", "uid"
         ]
         for uid in uids:
-            # show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
             show = self.actor_shown(uid=uid)
             self.remove_actor_in_view(uid, redraw=False)
             this_actor = self.show_actor_with_property(
@@ -225,6 +351,10 @@ class ViewStereoplot(ViewMPL):
                 ],
                 ignore_index=True,
             )
+        previously_active_keys = [key for key, actor in self.analysis_actors.items() if actor is not None]
+        self.analysis_actors = {}
+        for key in previously_active_keys:
+            self._show_analysis_actor(key)
 
     def toggle_contours(self):
         """Display Kamb contours for visible poles in the stereoplot."""
@@ -273,6 +403,10 @@ class ViewStereoplot(ViewMPL):
                 ],
                 ignore_index=True,
             )
+        previously_active_keys = [key for key, actor in self.analysis_actors.items() if actor is not None]
+        self.analysis_actors = {}
+        for key in previously_active_keys:
+            self._show_analysis_actor(key)
 
     def toggle_grid(self):
         """
@@ -300,3 +434,429 @@ class ViewStereoplot(ViewMPL):
     def stop_event_loops(self):
         """Terminate running event loops. It looks like we do not use this method."""
         self.figure.canvas.stop_event_loop()
+        
+    def get_normals_and_lineations_for_analysis(self):
+        """
+        Walk through self.selected_uids and pull orientation data for statistical
+        analysis. For each selected uid, look for a "Normals" point-data property
+        and/or a "Lineations" point-data property, and stack whatever is found into
+        two separate DataFrames, each with columns ["uid", "x", "y", "z"].
+
+        A uid with neither property is skipped, and a message is printed to the
+        terminal so the user knows it was excluded.
+
+        Returns:
+            normals_df (DataFrame): columns uid, x, y, z - one row per Normals vector
+                found across all selected uids. Empty (0 rows) if none found.
+            lineations_df (DataFrame): same shape, for Lineations vectors.
+        """
+        normals_rows = []
+        lineations_rows = []
+        
+        if not self.parent.geol_coll.selected_uids:
+            self.print_terminal("No entities selected for analysis.")
+            return (
+                pd_DataFrame(columns=["uid", "x", "y", "z"]),
+                pd_DataFrame(columns=["uid", "x", "y", "z"]),
+            )
+
+        for uid in self.parent.geol_coll.selected_uids:
+            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            found_property = False
+
+            if vtk_obj is None:
+                self.print_terminal(f"uid {uid}: not found in geol_coll, skipped.")
+                continue
+
+            available_keys = vtk_obj.point_data_keys
+
+            # ---- Normals ----
+            if "Normals" in available_keys:
+                normals_array = vtk_obj.get_point_data("Normals")
+                # guard against a single-point entity, where reshape+squeeze
+                # collapses (1, 3) down to (3,)
+                if normals_array.ndim == 1:
+                    normals_array = normals_array.reshape(1, -1)
+                if normals_array.shape[0] > 0:
+                    found_property = True
+                    for row in normals_array:
+                        normals_rows.append(
+                            {"uid": uid, "x": row[0], "y": row[1], "z": row[2]}
+                        )
+
+            # ---- Lineations ----
+            if "Lineations" in available_keys:
+                lineations_array = vtk_obj.get_point_data("Lineations")
+                if lineations_array.ndim == 1:
+                    lineations_array = lineations_array.reshape(1, -1)
+                if lineations_array.shape[0] > 0:
+                    found_property = True
+                    for row in lineations_array:
+                        lineations_rows.append(
+                            {"uid": uid, "x": row[0], "y": row[1], "z": row[2]}
+                        )
+
+            if not found_property:
+                self.print_terminal(
+                    f"uid {uid}: no Normals or Lineations property found, skipped."
+                )
+
+        normals_df = pd_DataFrame(normals_rows, columns=["uid", "x", "y", "z"])
+        lineations_df = pd_DataFrame(lineations_rows, columns=["uid", "x", "y", "z"])
+
+        return normals_df, lineations_df          
+               
+    def recompute_values(self):
+        """
+        Recompute all orientation statistics (Fisher, Kent, Bingham, k-means)
+        for the entities currently in self.selected_uids.
+
+        This is a destructive recompute: any previously drawn analysis actors
+        are removed from the canvas and self.analysis_actors is cleared, then
+        self.analysis_results is rebuilt from scratch.
+
+        Side effects
+        ------------
+        self.analysis_results : dict
+            Rebuilt with keys "normals" and/or "lineations",
+            each mapping to a dict with keys "fisher",
+            "kent", "bingham", "kmeans" - each value either the corresponding
+            function's result dict, or None if that computation failed.
+        self.analysis_actors : dict
+            Cleared to {} after removing any live matplotlib artists it held.
+        """       
+        previously_active_keys = [key for key, actor in self.analysis_actors.items() if actor is not None]
+        
+        # Clear the old state
+        # Remove any previously-drawn analysis artists from the canvas, then reset
+        for key, actor in self.analysis_actors.items():
+            if actor is not None:
+                self._remove_analysis_actor(actor)
+
+        self.analysis_actors = {}
+
+        if hasattr(self, "figure"):
+            self.figure.canvas.draw()
+            
+        self.analysis_results = {}
+        
+        
+        # Get the objects
+        normals_df, lineations_df = self.get_normals_and_lineations_for_analysis()
+        normals_array = normals_df[["x", "y", "z"]].to_numpy()
+        lineations_array = lineations_df[["x", "y", "z"]].to_numpy()
+        self.last_normals_array = normals_array
+        self.last_lineations_array = lineations_array
+        k = self.kmeans_k # The number of searched clusters
+        
+        # Statistics calculation block for the "Normals" objects  
+        if normals_array.shape[0] > 0:
+            self.is_normals = True
+            # Fisher parameters calculation
+            try:
+                fisher_result = fisherparams(normals_array)
+            except ValueError as e:
+                self.print_terminal(f"Fisher stats failed: {e}")
+                fisher_result = None
+                
+            # Kent parameters calculation
+            try:
+                kent_result = kentparams(normals_array)
+            except ValueError as e:
+                self.print_terminal(f"Kent stats failed: {e}")
+                kent_result = None
+                
+            # Bingham parameters calculation
+            try:
+                bingham_result = bingham(normals_array)
+            except ValueError as e:
+                self.print_terminal(f"Bingham stats failed: {e}")
+                bingham_result = None
+                
+            # K-means clusters calculation
+            try:
+                kmean_result = kmeans_clusters(normals_array, k)
+            except ValueError as e:
+                self.print_terminal(f"K-means clusters failed: {e}")
+                kmean_result = None
+        else:
+            self.is_normals = False
+            fisher_result = None
+            kent_result = None
+            bingham_result = None
+            kmean_result = None
+                
+        self.analysis_results['normals'] = {
+            "fisher": fisher_result,
+            "kent": kent_result,
+            "bingham": bingham_result,
+            "kmeans": kmean_result,
+        }
+                
+        # Statistics calculation block for the "Lineation" objects
+        if lineations_array.shape[0] > 0:
+            self.is_lineation = True
+            # Fisher parameters calculation
+            try:
+                fisher_result = fisherparams(lineations_array)
+            except ValueError as e:
+                self.print_terminal(f"Fisher stats failed: {e}")
+                fisher_result = None
+                
+            # Kent parameters calculation
+            try:
+                kent_result = kentparams(lineations_array)
+            except ValueError as e:
+                self.print_terminal(f"Kent stats failed: {e}")
+                kent_result = None
+                
+            # Bingham parameters calculation
+            try:
+                bingham_result = bingham(lineations_array)
+            except ValueError as e:
+                self.print_terminal(f"Bingham stats failed: {e}")
+                bingham_result = None
+                
+            # K-means clusters calculation
+            try:
+                kmean_result = kmeans_clusters(lineations_array, k)
+            except ValueError as e:
+                self.print_terminal(f"K-means clusters failed: {e}")
+                kmean_result = None
+        else:
+            self.is_lineation = False
+            fisher_result = None
+            kent_result = None
+            bingham_result = None
+            kmean_result = None
+            
+        self.analysis_results['lineations'] = {
+            "fisher": fisher_result,
+            "kent": kent_result,
+            "bingham": bingham_result,
+            "kmeans": kmean_result,
+        }
+        
+        for key in previously_active_keys:
+            self.toggle_analysis_actor(key)
+      
+    def on_selection_changed(self, collection):
+        if collection is not self.parent.geol_coll:
+            return
+        has_selection = bool(self.parent.geol_coll.selected_uids)
+        self.actionRecompute.setEnabled(has_selection and not self.auto_recompute)
+        if not self.auto_recompute:
+            return
+        self.recompute_values()      
+      
+    def toggle_auto_recompute(self):
+        self.auto_recompute = self.actionAutoRecompute.isChecked()
+        self.actionRecompute.setEnabled(not self.auto_recompute)
+        if self.auto_recompute:
+            self.recompute_values() 
+
+    def recompute_kmeans_only(self):
+        """
+        Re-run k-means clustering only, using the same pooled vectors from the
+        most recent full recompute_values() call , with the current self.kmeans_k. 
+        Leaves fisher/kent/bingham results untouched.
+        Does nothing if recompute_values has not yet run at least once.
+        """
+        if not hasattr(self, "last_normals_array"):
+            self.print_terminal("No data to recompute k-means on yet - run Recompute first.")
+            return
+
+        k = self.kmeans_k
+
+        if self.is_normals:
+            try:
+                kmean_result = kmeans_clusters(self.last_normals_array, k)
+            except ValueError as e:
+                self.print_terminal(f"K-means clusters failed: {e}")
+                kmean_result = None
+            self.analysis_results["normals"]["kmeans"] = kmean_result
+            self._hide_analysis_actor("normals_kmeans_centers")
+            self._show_analysis_actor("normals_kmeans_centers")
+
+        if self.is_lineation:
+            try:
+                kmean_result = kmeans_clusters(self.last_lineations_array, k)
+            except ValueError as e:
+                self.print_terminal(f"K-means clusters failed: {e}")
+                kmean_result = None
+            self.analysis_results["lineations"]["kmeans"] = kmean_result
+            self._hide_analysis_actor("lineations_kmeans_centers")
+            self._show_analysis_actor("lineations_kmeans_centers")
+            
+    def set_kmeans_k(self, value):
+        self.kmeans_k = value
+        self.recompute_kmeans_only()
+
+    def _draw_pole(self, vector, **kwargs):
+        """
+        Convert a single cartesian unit vector into strike/dip and plot it
+        as a pole on self.ax. Returns the matplotlib artist created.
+        """
+        x, y, z = vector
+        plunge, bearing = mplstereonet.vector2plunge_bearing(x, y, z)
+        strike, dip = mplstereonet.plunge_bearing2pole(plunge, bearing)
+        actor = self.ax.pole(strike, dip, **kwargs)[0]
+        return actor
+
+    def _draw_great_circle(self, vector, **kwargs):
+        """
+        Convert a single cartesian unit vector into strike/dip, treating it
+        as the POLE of the plane to be drawn, and plot that plane as a great
+        circle on self.ax. Returns the matplotlib artist created.
+        """
+        x, y, z = vector
+        plunge, bearing = mplstereonet.vector2plunge_bearing(x, y, z)
+        strike, dip = mplstereonet.plunge_bearing2pole(plunge, bearing)
+        actor = self.ax.plane(strike, dip, **kwargs)[0]
+        return actor
+    
+    def _remove_analysis_actor(self, actor):
+        """Remove one analysis actor, which may be a single matplotlib artist
+        or a list of artists (e.g. k-means centers, one per cluster)."""
+        
+        actors_to_remove = actor if isinstance(actor, list) else [actor]
+        for single_actor in actors_to_remove:
+            self.remove_artist(single_actor)
+
+    def _hide_analysis_actor(self, key):
+        """
+        Remove the live artist(s) for one analysis visual, if any, and clear
+        its entry in self.analysis_actors. Does nothing if nothing is shown
+        for this key.
+        """
+        existing_actor = self.analysis_actors.get(key)
+        if existing_actor is not None:
+            self._remove_analysis_actor(existing_actor)
+            self.analysis_actors[key] = None
+            self.figure.canvas.draw()
+
+    def _show_analysis_actor(self, key):
+        """
+        Draw one analysis visual identified by key, reading whatever data it
+        needs from self.analysis_results, and store the resulting artist(s)
+        into self.analysis_actors. If the required data isn't available, the
+        visual isn't drawn and the corresponding menu checkbox (if any) is
+        unchecked via self.analysis_action_for_key, so the checkbox state
+        never claims something is shown when it isn't.
+        """
+        new_actor = None
+                
+        if key == "normals_bingham_major_pole":
+            bingham_result = self.analysis_results.get("normals", {}).get("bingham")
+            if bingham_result is None:
+                self.print_terminal("No Bingham result available for Normals.")
+            else:
+                major_axis = bingham_result["axes"][0]
+                new_actor = self._draw_pole(major_axis, color="red", marker="s")
+
+        elif key == "normals_bingham_intermediate_pole":
+            bingham_result = self.analysis_results.get("normals", {}).get("bingham")
+            if bingham_result is None:
+                self.print_terminal("No Bingham result available for Normals.")
+            else:
+                intermediate_axis = bingham_result["axes"][1]
+                new_actor = self._draw_pole(intermediate_axis, color="green", marker="s")
+
+        elif key == "normals_bingham_minor_pole":
+            bingham_result = self.analysis_results.get("normals", {}).get("bingham")
+            if bingham_result is None:
+                self.print_terminal("No Bingham result available for Normals.")
+            else:
+                minor_axis = bingham_result["axes"][2]
+                new_actor = self._draw_pole(minor_axis, color="blue", marker="s")
+
+        elif key == "normals_bingham_minor_gc":
+            bingham_result = self.analysis_results.get("normals", {}).get("bingham")
+            if bingham_result is None:
+                self.print_terminal("No Bingham result available for Normals.")
+            else:
+                minor_axis = bingham_result["axes"][2]
+                new_actor = self._draw_great_circle(minor_axis, color="blue")
+
+        elif key == "normals_kmeans_centers":
+            kmeans_result = self.analysis_results.get("normals", {}).get("kmeans")
+            if kmeans_result is None:
+                self.print_terminal("No k-means result available for Normals.")
+            else:
+                new_actor = []
+                for centroid in kmeans_result["centroids"]:
+                    norm = np_linalg_norm(centroid)
+                    if norm == 0:
+                        continue
+                    unit_centroid = centroid / norm
+                    new_actor.append(self._draw_pole(unit_centroid, color="black", marker="^"))
+
+        elif key == "lineations_bingham_major_pole":
+            bingham_result = self.analysis_results.get("lineations", {}).get("bingham")
+            if bingham_result is None:
+                self.print_terminal("No Bingham result available for Lineations.")
+            else:
+                major_axis = bingham_result["axes"][0]
+                new_actor = self._draw_pole(major_axis, color="red", marker="o")
+
+        elif key == "lineations_bingham_intermediate_pole":
+            bingham_result = self.analysis_results.get("lineations", {}).get("bingham")
+            if bingham_result is None:
+                self.print_terminal("No Bingham result available for Lineations.")
+            else:
+                intermediate_axis = bingham_result["axes"][1]
+                new_actor = self._draw_pole(intermediate_axis, color="green", marker="o")
+
+        elif key == "lineations_bingham_minor_pole":
+            bingham_result = self.analysis_results.get("lineations", {}).get("bingham")
+            if bingham_result is None:
+                self.print_terminal("No Bingham result available for Lineations.")
+            else:
+                minor_axis = bingham_result["axes"][2]
+                new_actor = self._draw_pole(minor_axis, color="blue", marker="o")
+
+        elif key == "lineations_bingham_minor_gc":
+            bingham_result = self.analysis_results.get("lineations", {}).get("bingham")
+            if bingham_result is None:
+                self.print_terminal("No Bingham result available for Lineations.")
+            else:
+                minor_axis = bingham_result["axes"][2]
+                new_actor = self._draw_great_circle(minor_axis, color="blue")
+
+        elif key == "lineations_kmeans_centers":
+            kmeans_result = self.analysis_results.get("lineations", {}).get("kmeans")
+            if kmeans_result is None:
+                self.print_terminal("No k-means result available for Lineations.")
+            else:
+                new_actor = []
+                for centroid in kmeans_result["centroids"]:
+                    norm = np_linalg_norm(centroid)
+                    if norm == 0:
+                        continue
+                    unit_centroid = centroid / norm
+                    new_actor.append(self._draw_pole(unit_centroid, color="black", marker="^"))
+
+        else:
+            self.print_terminal(f"Unknown analysis actor key: '{key}'")
+            return
+
+        if new_actor is None:
+            action = self.analysis_action_for_key.get(key)
+            if action is not None:
+                action.setChecked(False)
+        else:
+            self.analysis_actors[key] = new_actor
+            self.figure.canvas.draw()
+
+    def toggle_analysis_actor(self, key):
+        """
+        Toggle visibility of one analysis visual, identified by key
+        (e.g. "normals_bingham_major_pole"). If a live artist already exists
+        for this key, it is hidden. Otherwise, it is shown.
+        """
+        if self.analysis_actors.get(key) is not None:
+            self._hide_analysis_actor(key)
+        else:
+            self._show_analysis_actor(key)
+
+    ...

@@ -55,7 +55,7 @@ class ViewMPL(BaseView):
 
     def actor_shown(self, uid: str = None):
         """Method to check if an actor is shown in a Matplotlib plotter. Returns a boolean."""
-        return self.mpl_actors[uid].visible()
+        return self.mpl_actors[uid].get_visible()
 
     def show_actors(self, uids: list = None):
         """Method to show actors in uids list in a Matplotlib plotter."""
@@ -136,9 +136,19 @@ class ViewMPL(BaseView):
         """ "Remove actor from plotter. Can remove a single entity or a list of
         entities as actors - here we remove a single entity"""
 
-        if not self.mpl_actors[uid].empty:
-            if self.mpl_actors[uid]:
-                self.mpl_actors[uid].remove()
+        actor = self.mpl_actors.get(uid)
+        if actor is not None:
+            try:
+                actor.remove()
+            except Exception as e:
+                self.print_terminal(f"Could not remove actor '{uid}': {e}")
             if redraw:
-                # IN THE FUTURE check if there is a way to redraw just the actor that has just been removed.
                 self.figure.canvas.draw()
+                
+    def remove_artist(self, actor):
+        """Remove a single matplotlib artist from the canvas, defensively."""
+        if actor is not None:
+            try:
+                actor.remove()
+            except Exception as e:
+                self.print_terminal(f"Could not remove actor: {e}")
