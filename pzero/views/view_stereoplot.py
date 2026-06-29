@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QSpinBox, QWidgetAction
 from numpy import all as np_all
 from numpy import ndarray as np_ndarray
 from numpy.linalg import norm as np_linalg_norm
+from numpy import asarray as np_asarray
 
 # Pandas imports____
 from pandas import DataFrame as pd_DataFrame
@@ -18,6 +19,7 @@ from pandas import concat as pd_concat
 from .abstract_view_mpl import ViewMPL
 from ..entities_factory import VertexSet, XsVertexSet, Attitude
 from pzero.orientation_analysis import fisherparams, kentparams, bingham, kmeans_clusters
+from pzero.helpers.helper_dialogs import multiple_input_dialog
 
 # mplstereonet import____
 import mplstereonet
@@ -25,9 +27,11 @@ import mplstereonet
 # Matplotlib imports____
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.pyplot import close as plt_close
+import matplotlib.cm as cm
 
 
 class ViewStereoplot(ViewMPL):
+
     def __init__(self, *args, **kwargs):
         # Some properties need to be set before calling super.__init__ to import the parent class.
         # self.proj_type can be 'equal_area_stereonet' or  ‘equal_angle_stereonet’
@@ -85,6 +89,10 @@ class ViewStereoplot(ViewMPL):
         self.actionAutoRecompute.triggered.connect(self.toggle_auto_recompute)
         self.menuAnalysis.addAction(self.actionAutoRecompute)
         
+        self.actionSaveClusters = QAction("Save clusters as a property", self)
+        self.actionSaveClusters.triggered.connect(self.prompt_and_save_clusters)
+        self.menuAnalysis.addAction(self.actionSaveClusters)
+        
         self.menuAnalysis.addSection("K-means clusters")
 
         self.kmeans_k_spinbox = QSpinBox()
@@ -131,6 +139,12 @@ class ViewStereoplot(ViewMPL):
         self.actionNormalsKmeansCenters.triggered.connect(lambda: self.toggle_analysis_actor("normals_kmeans_centers"))
         self.menuAnalysis.addAction(self.actionNormalsKmeansCenters)
         self.analysis_action_for_key["normals_kmeans_centers"] = self.actionNormalsKmeansCenters
+        
+        self.actionNormalsKmeansColor = QAction("Color Clusters", self)
+        self.actionNormalsKmeansColor.setCheckable(True)
+        self.actionNormalsKmeansColor.triggered.connect(lambda: self.toggle_analysis_actor("normals_kmeans_color"))
+        self.menuAnalysis.addAction(self.actionNormalsKmeansColor)
+        self.analysis_action_for_key["normals_kmeans_color"] = self.actionNormalsKmeansColor
 
         # ---- Lineations analysis actors ----
         self.menuAnalysis.addSection("Lineations - Bingham")
@@ -167,6 +181,12 @@ class ViewStereoplot(ViewMPL):
         self.menuAnalysis.addAction(self.actionLineationsKmeansCenters)
         self.analysis_action_for_key["lineations_kmeans_centers"] = self.actionLineationsKmeansCenters
         
+        self.actionLineationsKmeansColor = QAction("Color Cluster", self)
+        self.actionLineationsKmeansColor.setCheckable(True)
+        self.actionLineationsKmeansColor.triggered.connect(lambda: self.toggle_analysis_actor("lineations_kmeans_color"))
+        self.menuAnalysis.addAction(self.actionLineationsKmeansColor)
+        self.analysis_action_for_key["lineations_kmeans_color"] = self.actionLineationsKmeansColor
+        
     def connect_all_signals(self):
         super().connect_all_signals()
         self.sig_selection_lmb = lambda collection: self.on_selection_changed(collection)
@@ -200,6 +220,8 @@ class ViewStereoplot(ViewMPL):
         # mplstyle.use("dark_background")
         if hasattr(self, "figure") and self.figure is not None:
             plt_close(self.figure)
+            self.canvas.setParent(None)
+            self.canvas.deleteLater()
             
         self.figure, self.ax = mplstereonet.subplots(projection=self.proj_type)
 
@@ -310,6 +332,7 @@ class ViewStereoplot(ViewMPL):
 
     # ================================  Methods specific to Stereoplot views ==========================================
 
+    # --- View display toggles ---
     def toggle_projection(self):
         """
         Switches the projection type between 'equal_area_stereonet' and 'equal_angle_stereonet'.
@@ -435,6 +458,8 @@ class ViewStereoplot(ViewMPL):
         """Terminate running event loops. It looks like we do not use this method."""
         self.figure.canvas.stop_event_loop()
         
+        
+    # --- Orientation analysis: data pipeline ---   
     def get_normals_and_lineations_for_analysis(self):
         """
         Walk through self.selected_uids and pull orientation data for statistical
@@ -585,6 +610,13 @@ class ViewStereoplot(ViewMPL):
             kent_result = None
             bingham_result = None
             kmean_result = None
+            
+        df_temp = normals_df.copy()
+        if kmean_result is not None:
+            df_temp["clusters"] = kmean_result["labels"]
+        else:
+            df_temp["clusters"] = None
+        self.last_normals_df = df_temp
                 
         self.analysis_results['normals'] = {
             "fisher": fisher_result,
@@ -630,6 +662,13 @@ class ViewStereoplot(ViewMPL):
             bingham_result = None
             kmean_result = None
             
+        df_temp = lineations_df.copy()
+        if kmean_result is not None:
+            df_temp["clusters"] = kmean_result["labels"]
+        else:
+            df_temp["clusters"] = None
+        self.last_lineations_df = df_temp
+            
         self.analysis_results['lineations'] = {
             "fisher": fisher_result,
             "kent": kent_result,
@@ -639,22 +678,7 @@ class ViewStereoplot(ViewMPL):
         
         for key in previously_active_keys:
             self.toggle_analysis_actor(key)
-      
-    def on_selection_changed(self, collection):
-        if collection is not self.parent.geol_coll:
-            return
-        has_selection = bool(self.parent.geol_coll.selected_uids)
-        self.actionRecompute.setEnabled(has_selection and not self.auto_recompute)
-        if not self.auto_recompute:
-            return
-        self.recompute_values()      
-      
-    def toggle_auto_recompute(self):
-        self.auto_recompute = self.actionAutoRecompute.isChecked()
-        self.actionRecompute.setEnabled(not self.auto_recompute)
-        if self.auto_recompute:
-            self.recompute_values() 
-
+    
     def recompute_kmeans_only(self):
         """
         Re-run k-means clustering only, using the same pooled vectors from the
@@ -675,8 +699,16 @@ class ViewStereoplot(ViewMPL):
                 self.print_terminal(f"K-means clusters failed: {e}")
                 kmean_result = None
             self.analysis_results["normals"]["kmeans"] = kmean_result
-            self._hide_analysis_actor("normals_kmeans_centers")
-            self._show_analysis_actor("normals_kmeans_centers")
+            df_temp = self.last_normals_df.copy()
+            if kmean_result is not None:
+                df_temp["clusters"] = kmean_result["labels"]
+            else:
+                df_temp["clusters"] = None
+            self.last_normals_df = df_temp
+            for key in ["normals_kmeans_centers", "normals_kmeans_color"]:
+                if self.analysis_actors.get(key) is not None:
+                    self._hide_analysis_actor(key)
+                    self._show_analysis_actor(key)
 
         if self.is_lineation:
             try:
@@ -685,55 +717,50 @@ class ViewStereoplot(ViewMPL):
                 self.print_terminal(f"K-means clusters failed: {e}")
                 kmean_result = None
             self.analysis_results["lineations"]["kmeans"] = kmean_result
-            self._hide_analysis_actor("lineations_kmeans_centers")
-            self._show_analysis_actor("lineations_kmeans_centers")
+            df_temp = self.last_lineations_df.copy()
+            if kmean_result is not None:
+                df_temp["clusters"] = kmean_result["labels"]
+            else:
+                df_temp["clusters"] = None
+            self.last_lineations_df = df_temp
+            for key in ["lineations_kmeans_centers", "lineations_kmeans_color"]:
+                if self.analysis_actors.get(key) is not None:
+                    self._hide_analysis_actor(key)
+                    self._show_analysis_actor(key)
             
     def set_kmeans_k(self, value):
         self.kmeans_k = value
         self.recompute_kmeans_only()
+       
+       
+    # --- Orientation analysis: selection-driven auto-recompute ---       
+    def on_selection_changed(self, collection):
+        if collection is not self.parent.geol_coll:
+            return
+        has_selection = bool(self.parent.geol_coll.selected_uids)
+        self.actionRecompute.setEnabled(has_selection and not self.auto_recompute)
+        if not self.auto_recompute:
+            return
+        self.recompute_values()      
+      
+    def toggle_auto_recompute(self):
+        self.auto_recompute = self.actionAutoRecompute.isChecked()
+        self.actionRecompute.setEnabled(not self.auto_recompute)
+        if self.auto_recompute:
+            self.recompute_values() 
 
-    def _draw_pole(self, vector, **kwargs):
+          
+    # --- Orientation analysis: drawing and visibility ---
+    def toggle_analysis_actor(self, key):
         """
-        Convert a single cartesian unit vector into strike/dip and plot it
-        as a pole on self.ax. Returns the matplotlib artist created.
+        Toggle visibility of one analysis visual, identified by key
+        (e.g. "normals_bingham_major_pole"). If a live artist already exists
+        for this key, it is hidden. Otherwise, it is shown.
         """
-        x, y, z = vector
-        plunge, bearing = mplstereonet.vector2plunge_bearing(x, y, z)
-        strike, dip = mplstereonet.plunge_bearing2pole(plunge, bearing)
-        actor = self.ax.pole(strike, dip, **kwargs)[0]
-        return actor
-
-    def _draw_great_circle(self, vector, **kwargs):
-        """
-        Convert a single cartesian unit vector into strike/dip, treating it
-        as the POLE of the plane to be drawn, and plot that plane as a great
-        circle on self.ax. Returns the matplotlib artist created.
-        """
-        x, y, z = vector
-        plunge, bearing = mplstereonet.vector2plunge_bearing(x, y, z)
-        strike, dip = mplstereonet.plunge_bearing2pole(plunge, bearing)
-        actor = self.ax.plane(strike, dip, **kwargs)[0]
-        return actor
-    
-    def _remove_analysis_actor(self, actor):
-        """Remove one analysis actor, which may be a single matplotlib artist
-        or a list of artists (e.g. k-means centers, one per cluster)."""
-        
-        actors_to_remove = actor if isinstance(actor, list) else [actor]
-        for single_actor in actors_to_remove:
-            self.remove_artist(single_actor)
-
-    def _hide_analysis_actor(self, key):
-        """
-        Remove the live artist(s) for one analysis visual, if any, and clear
-        its entry in self.analysis_actors. Does nothing if nothing is shown
-        for this key.
-        """
-        existing_actor = self.analysis_actors.get(key)
-        if existing_actor is not None:
-            self._remove_analysis_actor(existing_actor)
-            self.analysis_actors[key] = None
-            self.figure.canvas.draw()
+        if self.analysis_actors.get(key) is not None:
+            self._hide_analysis_actor(key)
+        else:
+            self._show_analysis_actor(key)
 
     def _show_analysis_actor(self, key):
         """
@@ -790,6 +817,19 @@ class ViewStereoplot(ViewMPL):
                         continue
                     unit_centroid = centroid / norm
                     new_actor.append(self._draw_pole(unit_centroid, color="black", marker="^"))
+                    
+        elif key == "normals_kmeans_color":
+            kmeans_result = self.analysis_results.get("normals", {}).get("kmeans")
+            if kmeans_result is None:
+                self.print_terminal("No k-means result available for Normals.")
+            else:
+                new_actor = []
+                for (uid, cluster_id), group in self.last_normals_df.groupby(["uid", "clusters"]):
+                    vectors = group[["x", "y", "z"]].to_numpy()
+                    palette = cm.get_cmap("tab10")
+                    color = palette(cluster_id % 10)
+                    actor = self._draw_pole(vectors, color=color)
+                    new_actor.append(actor)
 
         elif key == "lineations_bingham_major_pole":
             bingham_result = self.analysis_results.get("lineations", {}).get("bingham")
@@ -835,6 +875,19 @@ class ViewStereoplot(ViewMPL):
                         continue
                     unit_centroid = centroid / norm
                     new_actor.append(self._draw_pole(unit_centroid, color="black", marker="^"))
+                    
+        elif key == "lineations_kmeans_color":
+            kmeans_result = self.analysis_results.get("lineations", {}).get("kmeans")
+            if kmeans_result is None:
+                self.print_terminal("No k-means result available for Lineations.")
+            else:
+                new_actor = []
+                for (uid, cluster_id), group in self.last_lineations_df.groupby(["uid", "clusters"]):
+                    vectors = group[["x", "y", "z"]].to_numpy()
+                    palette = cm.get_cmap("tab10")
+                    color = palette(cluster_id % 10)
+                    actor = self._draw_pole(vectors, color=color)
+                    new_actor.append(actor)
 
         else:
             self.print_terminal(f"Unknown analysis actor key: '{key}'")
@@ -848,15 +901,102 @@ class ViewStereoplot(ViewMPL):
             self.analysis_actors[key] = new_actor
             self.figure.canvas.draw()
 
-    def toggle_analysis_actor(self, key):
+    def _hide_analysis_actor(self, key):
         """
-        Toggle visibility of one analysis visual, identified by key
-        (e.g. "normals_bingham_major_pole"). If a live artist already exists
-        for this key, it is hidden. Otherwise, it is shown.
+        Remove the live artist(s) for one analysis visual, if any, and clear
+        its entry in self.analysis_actors. Does nothing if nothing is shown
+        for this key.
         """
-        if self.analysis_actors.get(key) is not None:
-            self._hide_analysis_actor(key)
-        else:
-            self._show_analysis_actor(key)
+        existing_actor = self.analysis_actors.get(key)
+        if existing_actor is not None:
+            self._remove_analysis_actor(existing_actor)
+            self.analysis_actors[key] = None
+            self.figure.canvas.draw()
+    
+    def _remove_analysis_actor(self, actor):
+        """Remove one analysis actor, which may be a single matplotlib artist
+        or a list of artists (e.g. k-means centers, one per cluster)."""
+        
+        actors_to_remove = actor if isinstance(actor, list) else [actor]
+        for single_actor in actors_to_remove:
+            self.remove_artist(single_actor)
+    
+    def _draw_pole(self, vector, **kwargs):
+        """
+        Convert one or more cartesian unit vectors into strike/dip and plot
+        them as poles on self.ax. Accepts a single vector of shape (3,) or
+        multiple vectors as an array of shape (N, 3) - in the array case,
+        every point is drawn in a single matplotlib call, producing one
+        artist rather than one artist per point.
+        Returns the matplotlib artist created.
+        """
+        vector = np_asarray(vector, dtype=float)
 
-    ...
+        if vector.ndim == 1:
+            x, y, z = vector
+        else:
+            x, y, z = vector[:, 0], vector[:, 1], vector[:, 2]
+
+        plunge, bearing = mplstereonet.vector2plunge_bearing(x, y, z)
+        strike, dip = mplstereonet.plunge_bearing2pole(plunge, bearing)
+        actor = self.ax.pole(strike, dip, **kwargs)[0]
+        return actor
+
+    def _draw_great_circle(self, vector, **kwargs):
+        """
+        Convert one or more cartesian unit vectors into strike/dip, treating
+        each as the POLE of a plane, and plot those planes as great circles
+        on self.ax. Accepts a single vector of shape (3,) or multiple vectors
+        as an array of shape (N, 3), drawn in a single matplotlib call.
+        Returns the matplotlib artist created.
+        """
+        vector = np_asarray(vector, dtype=float)
+
+        if vector.ndim == 1:
+            x, y, z = vector
+        else:
+            x, y, z = vector[:, 0], vector[:, 1], vector[:, 2]
+
+        plunge, bearing = mplstereonet.vector2plunge_bearing(x, y, z)
+        strike, dip = mplstereonet.plunge_bearing2pole(plunge, bearing)
+        actor = self.ax.plane(strike, dip, **kwargs)[0]
+        return actor
+
+
+    # --- Clusters saving: saving the clusters as property ---
+    def save_clusters_as_property(self, property_name):
+        """
+        Write the most recently computed k-means cluster assignment (currently
+        cached in self.last_normals_df / self.last_lineations_df) onto each
+        contributing entity in geol_coll, as a new 1-component point-data
+        property named property_name.
+        """
+        for df, kind in [(getattr(self, "last_normals_df", None), "Normals"),
+                        (getattr(self, "last_lineations_df", None), "Lineations")]:
+            if df is None or "clusters" not in df.columns:
+                continue
+            if df["clusters"].isnull().all():
+                continue
+
+            for uid, group in df.groupby("uid"):
+                cluster_values = group["clusters"].to_numpy().reshape(-1, 1)
+                vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+                if vtk_obj is None:
+                    self.print_terminal(f"uid {uid}: not found, skipped while saving clusters.")
+                    continue
+                vtk_obj.init_point_data(data_key=property_name, dimension=1)
+                vtk_obj.set_point_data(data_key=property_name, attribute_matrix=cluster_values)
+                self.print_terminal(f"Saved '{property_name}' on uid {uid} ({kind}).")
+    
+    def prompt_and_save_clusters(self):
+        """Ask the user for a property name, then save the current cluster
+        assignment onto each contributing entity under that name."""
+        input_dict = {"property_name": ["Property name: ", "clusters"]}
+        updt_dict = multiple_input_dialog(title="Save clusters as property", input_dict=input_dict)
+        if updt_dict is None:
+            return
+        property_name = updt_dict["property_name"]
+        if not property_name:
+            self.print_terminal("No property name entered - clusters not saved.")
+            return
+        self.save_clusters_as_property(property_name=property_name)
