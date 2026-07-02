@@ -538,23 +538,18 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def show_uids(self, uids: list = None):
         """Show actors with the given uids."""
         # Maybe in the future this might be reimplemented in parallel or vectorized?
-        # print("show_uids: ", uids)
         for uid in uids:
-            # self.print_terminal(f"showing uid: {uid}")
-            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
-                self.set_actor_visible(uid=uid, visible=True)
-                self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = True
-                # self.print_terminal(f"shown uid: {uid}")
+            # if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
+            self.set_actor_visible(uid=uid, visible=True)
+            self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = True
 
     def hide_uids(self, uids: list = None):
         """Hide actors with the given uids."""
         # Maybe in th future this might be reimplemented in parallel or vectorized?
-        # print("hide_uids: ", uids)
         for uid in uids:
-            # self.print_terminal(f"hiding uid: {uid}")
-            if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
-                self.set_actor_visible(uid=uid, visible=False)
-                self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
+            # if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
+            self.set_actor_visible(uid=uid, visible=False)
+            self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
 
     @property
     def uids_in_view(self):

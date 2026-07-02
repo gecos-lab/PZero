@@ -117,20 +117,29 @@ class ViewMPL(BaseView):
                 # Get color from legend
                 point_size = collection.get_uid_legend(uid=uid)["point_size"]
                 # Now update color for actor uid
-                self.mpl_actors[uid].set_markersize(point_size)
+                actor = self.mpl_actors[uid]
+                if hasattr(actor, "set_markersize"):
+                    actor.set_markersize(point_size)
+                elif hasattr(actor, "set_sizes"):
+                    actor.set_sizes([point_size**2])
                 self.mpl_actors[uid].figure.canvas.draw()
             else:
                 continue
 
     def set_actor_visible(self, uid=None, visible=None):
-        """Set actor uid visible or invisible (visible = True or False)"""
-        # The options below seem too much, and for instance contours are not toggled.
-        # We keep them for future reference, but we use a simplera approach and see if it works.
+        """Set actor uid visible or invisible (visible = True or False). If the
+        actor hasn't been created yet (e.g. it was never shown since the view
+        opened), it is drawn fresh instead of silently failing."""
+        if uid not in self.mpl_actors:
+            collection_name = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].values[0]
+            show_property = self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"].values[0]
+            self.show_actor_with_property(uid=uid, coll_name=collection_name, show_property=show_property, visible=visible)
+            return
         try:
             self.mpl_actors[uid].set_visible(visible)
             self.mpl_actors[uid].figure.canvas.draw()
-        except:
-            self.print_terminal(f"ERROR with set_actor_visible: {uid}")
+        except Exception as e:
+            self.print_terminal(f"ERROR with set_actor_visible: {uid}: {e}")
 
     def remove_actor_in_view(self, uid=None, redraw=False):
         """ "Remove actor from plotter. Can remove a single entity or a list of

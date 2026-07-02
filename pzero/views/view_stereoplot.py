@@ -2,6 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
+import traceback
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QSpinBox, QWidgetAction
 
@@ -244,6 +245,8 @@ class ViewStereoplot(ViewMPL):
         show_property=None,
         visible=None,
     ):
+        # self.print_terminal(f"DEBUG show_actor_with_property called for uid={uid}, visible={visible}")
+        # self.print_terminal("".join(traceback.format_stack(limit=8)))
         # Show actor with scalar property (default None)
         if show_property is None:
             show_property = "Poles"
@@ -256,7 +259,9 @@ class ViewStereoplot(ViewMPL):
             color_G = this_coll.get_uid_legend(uid=uid)["color_G"]
             color_B = this_coll.get_uid_legend(uid=uid)["color_B"]
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
+            point_size = this_coll.get_uid_legend(uid=uid)["point_size"]
             line_thick = this_coll.get_uid_legend(uid=uid)["line_thick"]
+            opacity = this_coll.get_uid_legend(uid=uid)["opacity"]/100
             plot_entity = this_coll.get_uid_vtk_obj(uid)
         else:
             # catch errors
@@ -275,48 +280,66 @@ class ViewStereoplot(ViewMPL):
                     dip = plot_entity.points_map_dip
 
                     if np_all(strike != None):
+                        self.remove_actor_in_view(uid=uid, redraw=False)
                         if show_property == "Planes":
-                            this_actor = self.ax.plane(strike, dip, color=color_RGB)[0]
-                        else:
+                            this_actor = self.ax.plane(
+                                strike,
+                                dip,
+                                color=color_RGB,
+                                linewidth=line_thick,
+                                alpha=opacity,
+                            )[0]
+
+                        elif show_property in ["none", "Poles", None]:
                             if self.contours is not None and visible is True:
                                 if self.contours:
                                     self.ax.density_contourf(strike, dip, measurement="poles")
                                 else:
                                     self.ax.density_contour(strike, dip, measurement="poles")
-                            this_actor = self.ax.pole(strike, dip, color=color_RGB)[0]
-                        if this_actor:
-                            this_actor.set_visible(visible)
-                        # if uid in self.parent.geol_coll.selected_uids:
-                        #     if show_property == "Planes":
-                        #         this_actor = self.ax.plane(
-                        #             strike, dip, color=color_RGB
-                        #         )[0]
-                        #     else:
-                        #         this_actor = self.ax.pole(strike, dip, color=color_RGB)[
-                        #             0
-                        #         ]
 
-                        #     this_actor.set_visible(visible)
-                        # else:
-                        #     if show_property == "Planes":
-                        #         this_actor = self.ax.plane(
-                        #             strike, dip, color=color_RGB
-                        #         )[0]
-                        #     else:
-                        #         if self.contours is not None and visible is True:
-                        #             if self.contours:
-                        #                 self.ax.density_contourf(
-                        #                     strike, dip, measurement="poles"
-                        #                 )
-                        #             else:
-                        #                 self.ax.density_contour(
-                        #                     strike, dip, measurement="poles"
-                        #                 )
-                        #         this_actor = self.ax.pole(strike, dip, color=color_RGB)[
-                        #             0
-                        #         ]
-                        #     if this_actor:
-                        #         this_actor.set_visible(visible)
+                            this_actor = self.ax.pole(
+                                strike,
+                                dip,
+                                color=color_RGB,
+                                markersize=point_size,
+                                alpha=opacity,
+                            )[0]
+
+                        else:
+                            show_property_title = show_property
+
+                            if show_property == "X":
+                                prop_values = plot_entity.points_X
+                            elif show_property == "Y":
+                                prop_values = plot_entity.points_Y
+                            elif show_property == "Z":
+                                prop_values = plot_entity.points_Z
+                            elif isinstance(show_property, str) and show_property.endswith("]"):
+                                pos1 = show_property.index("[")
+                                pos2 = show_property.index("]")
+                                original_prop = show_property[:pos1]
+                                comp_index = int(show_property[pos1 + 1 : pos2])
+                                prop_values = plot_entity.get_point_data(original_prop)[:, comp_index]
+                                show_property_title = original_prop
+                            else:
+                                prop_values = plot_entity.get_point_data(show_property)
+
+                            cmap_row = self.parent.prop_legend_df.loc[
+                                self.parent.prop_legend_df["property_name"] == show_property_title,
+                                "colormap",
+                            ]
+                            show_property_cmap = cmap_row.values[0] if len(cmap_row) else "rainbow"
+
+                            prop_values = np_asarray(prop_values).reshape(-1)
+                            lon, lat = mplstereonet.pole(strike, dip)
+                            this_actor = self.ax.scatter(
+                                lon,
+                                lat,
+                                c=prop_values,
+                                cmap=show_property_cmap,
+                                s=point_size**2,
+                                alpha=opacity,
+                            )
                     else:
                         this_actor = None
                 else:
@@ -331,6 +354,48 @@ class ViewStereoplot(ViewMPL):
         return this_actor
 
     # ================================  Methods specific to Stereoplot views ==========================================
+
+    # --- Helpers ---
+    def _rebuild_all_entity_actors(self):
+        """
+        Redraw every entity actor currently known to this view (i.e. every uid
+        in self.actors_df), on the current self.ax. Used after initialize_interactor()
+        replaces the figure/axes, since every previously-drawn artist now belongs
+        to a destroyed figure and must be recreated, not just have its visibility
+        flipped.
+        """
+        existing_rows = self.actors_df.drop_duplicates(subset="uid", keep="last")
+        new_rows = []
+
+        for _, row in existing_rows.iterrows():
+            uid = row["uid"]
+            show = row["show"]
+            collection_name = row["collection"]
+            show_property = row["show_property"]
+
+            this_actor = self.show_actor_with_property(
+                uid=uid, coll_name=collection_name, show_property=show_property, visible=show
+            )
+            new_rows.append(
+                {
+                    "uid": uid,
+                    "actor": this_actor,
+                    "show": show,
+                    "collection": collection_name,
+                    "show_property": show_property,
+                }
+            )
+
+        self.actors_df = pd_DataFrame(new_rows)
+
+    def _rebuild_analysis_actors(self):
+        """Redraw every currently-active analysis visual on the current self.ax,
+        for the same reason as _rebuild_all_entity_actors: the old artists belong
+        to a now-destroyed figure."""
+        previously_active_keys = [key for key, actor in self.analysis_actors.items() if actor is not None]
+        self.analysis_actors = {}
+        for key in previously_active_keys:
+            self._show_analysis_actor(key)
 
     # --- View display toggles ---
     def toggle_projection(self):
@@ -348,48 +413,15 @@ class ViewStereoplot(ViewMPL):
 
         self.ViewFrameLayout.removeWidget(self.canvas)
         self.initialize_interactor()
-        uids = self.parent.geol_coll.df.loc[
-            self.parent.geol_coll.df["topology"] == "VertexSet", "uid"
-        ]
-        for uid in uids:
-            show = self.actor_shown(uid=uid)
-            self.remove_actor_in_view(uid, redraw=False)
-            this_actor = self.show_actor_with_property(
-                uid=uid, coll_name="geol_coll", show_property=None, visible=show
-            )
-            self.actors_df = pd_concat(
-                [
-                    self.actors_df,
-                    pd_DataFrame(
-                        [
-                            {
-                                "uid": uid,
-                                "actor": this_actor,
-                                "show": show,
-                                "collection": "geol_coll",
-                                "show_property": "poles",
-                            }
-                        ]
-                    ),
-                ],
-                ignore_index=True,
-            )
-        previously_active_keys = [key for key, actor in self.analysis_actors.items() if actor is not None]
-        self.analysis_actors = {}
-        for key in previously_active_keys:
-            self._show_analysis_actor(key)
+
+        self._rebuild_all_entity_actors()
+        self._rebuild_analysis_actors()
 
     def toggle_contours(self):
         """Display Kamb contours for visible poles in the stereoplot."""
 
         self.ViewFrameLayout.removeWidget(self.canvas)
         self.initialize_interactor()
-
-        uids = self.parent.geol_coll.df.loc[
-            (self.parent.geol_coll.df["topology"] == "VertexSet")
-            | (self.parent.geol_coll.df["topology"] == "XsVertexSet"),
-            "uid",
-        ]
 
         if self.contours == None:
             self.contours = False
@@ -401,35 +433,8 @@ class ViewStereoplot(ViewMPL):
             self.contours = None
             self.print_terminal("Contours disabled")
 
-        for uid in uids:
-            show = self.actor_shown(uid=uid)
-
-            self.remove_actor_in_view(uid, redraw=False)
-
-            this_actor = self.show_actor_with_property(
-                uid=uid, coll_name="geol_coll", show_property=None, visible=show
-            )
-            self.actors_df = pd_concat(
-                [
-                    self.actors_df,
-                    pd_DataFrame(
-                        [
-                            {
-                                "uid": uid,
-                                "actor": this_actor,
-                                "show": show,
-                                "collection": "geol_coll",
-                                "show_property": "poles",
-                            }
-                        ]
-                    ),
-                ],
-                ignore_index=True,
-            )
-        previously_active_keys = [key for key, actor in self.analysis_actors.items() if actor is not None]
-        self.analysis_actors = {}
-        for key in previously_active_keys:
-            self._show_analysis_actor(key)
+        self._rebuild_all_entity_actors()
+        self._rebuild_analysis_actors()
 
     def toggle_grid(self):
         """
@@ -984,9 +989,10 @@ class ViewStereoplot(ViewMPL):
                 if vtk_obj is None:
                     self.print_terminal(f"uid {uid}: not found, skipped while saving clusters.")
                     continue
-                vtk_obj.init_point_data(data_key=property_name, dimension=1)
+                self.parent.geol_coll.append_uid_property(uid=uid, property_name=property_name, property_components=1)
                 vtk_obj.set_point_data(data_key=property_name, attribute_matrix=cluster_values)
                 self.print_terminal(f"Saved '{property_name}' on uid {uid} ({kind}).")
+        self.parent.prop_legend.update_widget(self.parent)
     
     def prompt_and_save_clusters(self):
         """Ask the user for a property name, then save the current cluster
