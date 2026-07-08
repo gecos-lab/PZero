@@ -2,7 +2,6 @@
 PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
-import traceback
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QSpinBox, QWidgetAction
 
@@ -19,7 +18,7 @@ from pandas import concat as pd_concat
 # PZero imports____
 from .abstract_view_mpl import ViewMPL
 from ..entities_factory import VertexSet, XsVertexSet, Attitude
-from pzero.orientation_analysis import fisherparams, kentparams, bingham, kmeans_clusters
+from pzero.orientation_analysis import fisherparams, kentparams, bingham, kmeans_clusters, resolve_lower_hemisphere
 from pzero.helpers.helper_dialogs import multiple_input_dialog
 
 # mplstereonet import____
@@ -32,6 +31,11 @@ import matplotlib.cm as cm
 
 
 class ViewStereoplot(ViewMPL):
+
+    Z_CONTOURS = 1
+    Z_GRID = 2
+    Z_ENTITIES = 3
+    Z_STATS = 4
 
     def __init__(self, *args, **kwargs):
         # Some properties need to be set before calling super.__init__ to import the parent class.
@@ -52,8 +56,15 @@ class ViewStereoplot(ViewMPL):
         self.analysis_action_for_key = {}
         self.kmeans_k = 1 # default value
         self.is_normals = None
-        self.is_lineation = None
+        self.is_lineations = None
         self.auto_recompute = False
+        self.picking_seeds = False
+        self.seed_pick_kind = None       
+        self.seed_pick_target = 0         
+        self.seed_pick_normals = []
+        self.seed_pick_lineations = []
+        self.seed_pick_actors = []
+        self.seed_pick_cid = None
 
         super(ViewStereoplot, self).__init__(*args, **kwargs)
         self.setWindowTitle("Stereoplot View")
@@ -106,6 +117,14 @@ class ViewStereoplot(ViewMPL):
         self.menuAnalysis.addAction(self.kmeans_k_widget_action)
         
         # ---- Normals analysis actors ----
+        self.menuAnalysis.addSection("Normals - Fisher")
+
+        self.actionNormalsFisher = QAction("Mean direction as pole", self)
+        self.actionNormalsFisher.setCheckable(True)
+        self.actionNormalsFisher.triggered.connect(lambda: self.toggle_analysis_actor("normals_fisher_mean_pole"))
+        self.menuAnalysis.addAction(self.actionNormalsFisher)
+        self.analysis_action_for_key["normals_fisher_mean_pole"] = self.actionNormalsFisher
+        
         self.menuAnalysis.addSection("Normals - Bingham")
 
         self.actionNormalsBinghamMajorPole = QAction("Major axis as pole", self)
@@ -132,6 +151,20 @@ class ViewStereoplot(ViewMPL):
         self.menuAnalysis.addAction(self.actionNormalsBinghamMinorGC)
         self.analysis_action_for_key["normals_bingham_minor_gc"] = self.actionNormalsBinghamMinorGC
 
+        self.menuAnalysis.addSection("Normals - Kent")
+
+        self.actionNormalsKentMeanDir = QAction("Mean direction as pole", self)
+        self.actionNormalsKentMeanDir.setCheckable(True)
+        self.actionNormalsKentMeanDir.triggered.connect(lambda: self.toggle_analysis_actor("normals_kent_mean_pole"))
+        self.menuAnalysis.addAction(self.actionNormalsKentMeanDir)
+        self.analysis_action_for_key["normals_kent_mean_pole"] = self.actionNormalsKentMeanDir
+
+        self.actionNormalsKentMeanGC = QAction("Great circle ⊥ mean direction", self)
+        self.actionNormalsKentMeanGC.setCheckable(True)
+        self.actionNormalsKentMeanGC.triggered.connect(lambda: self.toggle_analysis_actor("normals_kent_mean_gc"))
+        self.menuAnalysis.addAction(self.actionNormalsKentMeanGC)
+        self.analysis_action_for_key["normals_kent_mean_gc"] = self.actionNormalsKentMeanGC
+        
 
         self.menuAnalysis.addSection("Normals - K-means")
 
@@ -146,8 +179,20 @@ class ViewStereoplot(ViewMPL):
         self.actionNormalsKmeansColor.triggered.connect(lambda: self.toggle_analysis_actor("normals_kmeans_color"))
         self.menuAnalysis.addAction(self.actionNormalsKmeansColor)
         self.analysis_action_for_key["normals_kmeans_color"] = self.actionNormalsKmeansColor
+        
+        self.actionSeedPickingNormals = QAction("Seed picking for clustering", self)
+        self.actionSeedPickingNormals.triggered.connect(lambda : self.seed_picking("normals"))
+        self.menuAnalysis.addAction(self.actionSeedPickingNormals)
 
         # ---- Lineations analysis actors ----
+        self.menuAnalysis.addSection("Lineations - Fisher")
+
+        self.actionLineationsFisher = QAction("Mean direction as pole", self)
+        self.actionLineationsFisher.setCheckable(True)
+        self.actionLineationsFisher.triggered.connect(lambda: self.toggle_analysis_actor("lineations_fisher_mean_pole"))
+        self.menuAnalysis.addAction(self.actionLineationsFisher)
+        self.analysis_action_for_key["lineations_fisher_mean_pole"] = self.actionLineationsFisher
+        
         self.menuAnalysis.addSection("Lineations - Bingham")
 
         self.actionLineationsBinghamMajorPole = QAction("Major axis as pole", self)
@@ -173,6 +218,20 @@ class ViewStereoplot(ViewMPL):
         self.actionLineationsBinghamMinorGC.triggered.connect(lambda: self.toggle_analysis_actor("lineations_bingham_minor_gc"))
         self.menuAnalysis.addAction(self.actionLineationsBinghamMinorGC)
         self.analysis_action_for_key["lineations_bingham_minor_gc"] = self.actionLineationsBinghamMinorGC
+        
+        self.menuAnalysis.addSection("Lineations - Kent")
+
+        self.actionLineationsKentDir = QAction("Mean direction as pole", self)
+        self.actionLineationsKentDir.setCheckable(True)
+        self.actionLineationsKentDir.triggered.connect(lambda: self.toggle_analysis_actor("lineations_kent_mean_pole"))
+        self.menuAnalysis.addAction(self.actionLineationsKentDir)
+        self.analysis_action_for_key["lineations_kent_mean_pole"] = self.actionLineationsKentDir
+        
+        self.actionLineationsKentMeanGC = QAction("Great circle ⊥ mean direction", self)
+        self.actionLineationsKentMeanGC.setCheckable(True)
+        self.actionLineationsKentMeanGC.triggered.connect(lambda: self.toggle_analysis_actor("lineations_kent_mean_gc"))
+        self.menuAnalysis.addAction(self.actionLineationsKentMeanGC)
+        self.analysis_action_for_key["lineations_kent_mean_gc"] = self.actionLineationsKentMeanGC
 
         self.menuAnalysis.addSection("Lineations - K-means")
 
@@ -187,6 +246,10 @@ class ViewStereoplot(ViewMPL):
         self.actionLineationsKmeansColor.triggered.connect(lambda: self.toggle_analysis_actor("lineations_kmeans_color"))
         self.menuAnalysis.addAction(self.actionLineationsKmeansColor)
         self.analysis_action_for_key["lineations_kmeans_color"] = self.actionLineationsKmeansColor
+        
+        self.actionSeedPickingLineations = QAction("Seed picking for clustering", self)
+        self.actionSeedPickingLineations.triggered.connect(lambda : self.seed_picking("lineations"))
+        self.menuAnalysis.addAction(self.actionSeedPickingLineations)
         
     def connect_all_signals(self):
         super().connect_all_signals()
@@ -234,9 +297,11 @@ class ViewStereoplot(ViewMPL):
         if self.grid_kind == "hidden":
             self.ax.grid(False)
         elif self.grid_kind == "equatorial":
-            self.ax.grid(True, kind="arbitrary", color="k", ls=":")
+            self.ax.grid(True, kind="arbitrary", color="k", ls=":", zorder=self.Z_GRID)
         elif self.grid_kind == "polar":
-            self.ax.grid(True, kind="polar", color="k", ls=":")
+            self.ax.grid(True, kind="polar", color="k", ls=":", zorder=self.Z_GRID)
+            
+        self.seed_pick_cid = self.canvas.mpl_connect("button_press_event", self._on_seed_pick)
 
     def show_actor_with_property(
         self,
@@ -288,14 +353,15 @@ class ViewStereoplot(ViewMPL):
                                 color=color_RGB,
                                 linewidth=line_thick,
                                 alpha=opacity,
+                                zorder=self.Z_ENTITIES,
                             )[0]
 
                         elif show_property in ["none", "Poles", None]:
                             if self.contours is not None and visible is True:
                                 if self.contours:
-                                    self.ax.density_contourf(strike, dip, measurement="poles")
+                                    self.ax.density_contourf(strike, dip, measurement="poles", zorder=self.Z_CONTOURS)
                                 else:
-                                    self.ax.density_contour(strike, dip, measurement="poles")
+                                    self.ax.density_contour(strike, dip, measurement="poles", zorder=self.Z_CONTOURS)
 
                             this_actor = self.ax.pole(
                                 strike,
@@ -303,6 +369,7 @@ class ViewStereoplot(ViewMPL):
                                 color=color_RGB,
                                 markersize=point_size,
                                 alpha=opacity,
+                                zorder=self.Z_ENTITIES,
                             )[0]
 
                         else:
@@ -339,6 +406,7 @@ class ViewStereoplot(ViewMPL):
                                 cmap=show_property_cmap,
                                 s=point_size**2,
                                 alpha=opacity,
+                                zorder=self.Z_ENTITIES,
                             )
                     else:
                         this_actor = None
@@ -396,6 +464,7 @@ class ViewStereoplot(ViewMPL):
         self.analysis_actors = {}
         for key in previously_active_keys:
             self._show_analysis_actor(key)
+            
 
     # --- View display toggles ---
     def toggle_projection(self):
@@ -574,6 +643,7 @@ class ViewStereoplot(ViewMPL):
         # Get the objects
         normals_df, lineations_df = self.get_normals_and_lineations_for_analysis()
         normals_array = normals_df[["x", "y", "z"]].to_numpy()
+        normals_array = resolve_lower_hemisphere(normals_array)
         lineations_array = lineations_df[["x", "y", "z"]].to_numpy()
         self.last_normals_array = normals_array
         self.last_lineations_array = lineations_array
@@ -584,28 +654,28 @@ class ViewStereoplot(ViewMPL):
             self.is_normals = True
             # Fisher parameters calculation
             try:
-                fisher_result = fisherparams(normals_array)
+                fisher_result = fisherparams(normals_array, is_axial=True)
             except ValueError as e:
                 self.print_terminal(f"Fisher stats failed: {e}")
                 fisher_result = None
                 
             # Kent parameters calculation
             try:
-                kent_result = kentparams(normals_array)
+                kent_result = kentparams(normals_array, is_axial=True)
             except ValueError as e:
                 self.print_terminal(f"Kent stats failed: {e}")
                 kent_result = None
                 
             # Bingham parameters calculation
             try:
-                bingham_result = bingham(normals_array)
+                bingham_result = bingham(normals_array, is_axial=True)
             except ValueError as e:
                 self.print_terminal(f"Bingham stats failed: {e}")
                 bingham_result = None
                 
             # K-means clusters calculation
             try:
-                kmean_result = kmeans_clusters(normals_array, k)
+                kmean_result = kmeans_clusters(normals_array, k, is_axial=True)
             except ValueError as e:
                 self.print_terminal(f"K-means clusters failed: {e}")
                 kmean_result = None
@@ -632,7 +702,7 @@ class ViewStereoplot(ViewMPL):
                 
         # Statistics calculation block for the "Lineation" objects
         if lineations_array.shape[0] > 0:
-            self.is_lineation = True
+            self.is_lineations = True
             # Fisher parameters calculation
             try:
                 fisher_result = fisherparams(lineations_array)
@@ -661,7 +731,7 @@ class ViewStereoplot(ViewMPL):
                 self.print_terminal(f"K-means clusters failed: {e}")
                 kmean_result = None
         else:
-            self.is_lineation = False
+            self.is_lineations = False
             fisher_result = None
             kent_result = None
             bingham_result = None
@@ -698,11 +768,20 @@ class ViewStereoplot(ViewMPL):
         k = self.kmeans_k
 
         if self.is_normals:
-            try:
-                kmean_result = kmeans_clusters(self.last_normals_array, k)
-            except ValueError as e:
-                self.print_terminal(f"K-means clusters failed: {e}")
-                kmean_result = None
+            if len(self.seed_pick_normals) == k:
+                try:
+                    kmean_result = kmeans_clusters(self.last_normals_array, k,
+                                                   seeds=np_asarray(self.seed_pick_normals), is_axial=True)
+                except ValueError as e:
+                    self.print_terminal(f"K-means clusters failed: {e}")
+                    kmean_result = None
+            else:    
+                try:
+                    kmean_result = kmeans_clusters(self.last_normals_array, k, is_axial=True)
+                except ValueError as e:
+                    self.print_terminal(f"K-means clusters failed: {e}")
+                    kmean_result = None
+                    
             self.analysis_results["normals"]["kmeans"] = kmean_result
             df_temp = self.last_normals_df.copy()
             if kmean_result is not None:
@@ -715,12 +794,21 @@ class ViewStereoplot(ViewMPL):
                     self._hide_analysis_actor(key)
                     self._show_analysis_actor(key)
 
-        if self.is_lineation:
-            try:
-                kmean_result = kmeans_clusters(self.last_lineations_array, k)
-            except ValueError as e:
-                self.print_terminal(f"K-means clusters failed: {e}")
-                kmean_result = None
+        if self.is_lineations:
+            if len(self.seed_pick_lineations) == k:
+                try:
+                    kmean_result = kmeans_clusters(self.last_lineations_array, k,
+                                                   seeds=np_asarray(self.seed_pick_lineations))
+                except ValueError as e:
+                    self.print_terminal(f"K-means clusters failed: {e}")
+                    kmean_result = None
+            else:
+                try:
+                    kmean_result = kmeans_clusters(self.last_lineations_array, k)
+                except ValueError as e:
+                    self.print_terminal(f"K-means clusters failed: {e}")
+                    kmean_result = None
+                    
             self.analysis_results["lineations"]["kmeans"] = kmean_result
             df_temp = self.last_lineations_df.copy()
             if kmean_result is not None:
@@ -736,10 +824,135 @@ class ViewStereoplot(ViewMPL):
     def set_kmeans_k(self, value):
         self.kmeans_k = value
         self.recompute_kmeans_only()
-       
-       
+
+    def _on_seed_pick(self, event):
+        """
+        Function that create the concrete picking on the stereonet.
+        """
+        
+        if not self.picking_seeds:
+            return
+        
+        if event.xdata is None or event.ydata is None:
+            return
+        
+        if event.xdata**2 + event.ydata**2 > 1.0:
+            return
+
+        if self.seed_pick_kind == "normals":
+            vectors = self.last_normals_array
+            seeds = self.seed_pick_normals
+        elif self.seed_pick_kind == "lineations":
+            vectors = self.last_lineations_array
+            seeds = self.seed_pick_lineations
+        else:
+            return
+
+        if vectors is None or len(vectors) == 0:
+            self.print_terminal("No vectors available for seed picking.")
+            return
+
+        lon, lat = self._project_vectors_to_stereonet(vectors)
+
+        points_xy = np_asarray([lon, lat]).T
+        points_pixels = self.ax.transData.transform(points_xy)
+
+        dx = points_pixels[:, 0] - event.x
+        dy = points_pixels[:, 1] - event.y
+        idx = int((dx * dx + dy * dy).argmin())
+
+        seed = vectors[idx]
+
+        # Avoid picking the same data point twice.
+        for existing_seed in seeds:
+            if np_all(existing_seed == seed):
+                return
+
+        seeds.append(seed)
+
+        actor = self._draw_pole(seed, color="lime",marker='o' ,markersize=10)
+        self.seed_pick_actors.append(actor)
+        self.figure.canvas.draw()
+
+        self.print_terminal(
+            f"Picked {len(seeds)} / {self.seed_pick_target} {self.seed_pick_kind} seed(s)."
+        )
+
+        if len(seeds) >= self.seed_pick_target:
+            self.picking_seeds = False
+            self.print_terminal("Seed picking complete. Recomputing k-means.")
+            self.recompute_kmeans_only()
+            self._clear_seed_pick_actors()
+    
+    def seed_picking(self, kind):
+        """
+        Function that launch the seed picking. The user select
+        the number of cluster he want to calculate in a dialog
+        window and then pick the seeds for the clustering.
+        """
+        
+        self._clear_seed_pick_actors()
+        if not hasattr(self, "last_normals_array") or not hasattr(self, "last_lineations_array"):
+            self.recompute_values()
+        
+        input_dict = {"number_of_clusters": ["Number of clusters: ", str(self.kmeans_k)]}
+        result = multiple_input_dialog(title="Number of clusters", input_dict=input_dict)
+        if result is None:
+            return
+
+        try:
+            k = int(result["number_of_clusters"])
+        except (TypeError, ValueError):
+            self.print_terminal("Invalid number of clusters.")
+            return
+
+        self.kmeans_k = k
+        self.seed_pick_kind = kind
+        self.seed_pick_target = k
+        self.picking_seeds = True
+
+        if kind == "normals":
+            self.seed_pick_normals = []
+        elif kind == "lineations":
+            self.seed_pick_lineations = []
+
+        self.print_terminal(f"Pick {k} {kind} seed(s) on the stereonet.")
+        
+    def _project_vectors_to_stereonet(self, vectors):
+        """
+        Helper that project the existing vectors to the stereonet
+        to find the closest point for seed picking.
+        """
+        
+        vectors = np_asarray(vectors, dtype=float)
+        plunge, bearing = mplstereonet.vector2plunge_bearing(
+            vectors[:, 0],
+            vectors[:, 1],
+            vectors[:, 2],
+        )
+        strike, dip = mplstereonet.plunge_bearing2pole(plunge, bearing)
+        lon, lat = mplstereonet.pole(strike, dip)
+        return np_asarray(lon), np_asarray(lat)
+
+    def _clear_seed_pick_actors(self):
+        """"
+        Helper to erase the lime seeds once they are picked.
+        """
+        for actor in self.seed_pick_actors:
+            self.remove_artist(actor)
+        self.seed_pick_actors = []
+        if hasattr(self, "figure") and self.figure is not None:
+            self.figure.canvas.draw()
+
+
     # --- Orientation analysis: selection-driven auto-recompute ---       
     def on_selection_changed(self, collection):
+        """
+        Detect the selection changes, if there is nothing
+        selected anymore, it toggle off all the statitics
+        in the Analysis menu.
+        """
+        
         if collection is not self.parent.geol_coll:
             return
         has_selection = bool(self.parent.geol_coll.selected_uids)
@@ -749,6 +962,11 @@ class ViewStereoplot(ViewMPL):
         self.recompute_values()      
       
     def toggle_auto_recompute(self):
+        """
+        Toggle the auto recomputing of the statistics when
+        the selection has changed. It also disable the manual
+        recomputing.
+        """
         self.auto_recompute = self.actionAutoRecompute.isChecked()
         self.actionRecompute.setEnabled(not self.auto_recompute)
         if self.auto_recompute:
@@ -784,7 +1002,7 @@ class ViewStereoplot(ViewMPL):
                 self.print_terminal("No Bingham result available for Normals.")
             else:
                 major_axis = bingham_result["axes"][0]
-                new_actor = self._draw_pole(major_axis, color="red", marker="s")
+                new_actor = self._draw_pole(major_axis, color="red", marker="s", markersize=10)
 
         elif key == "normals_bingham_intermediate_pole":
             bingham_result = self.analysis_results.get("normals", {}).get("bingham")
@@ -792,7 +1010,7 @@ class ViewStereoplot(ViewMPL):
                 self.print_terminal("No Bingham result available for Normals.")
             else:
                 intermediate_axis = bingham_result["axes"][1]
-                new_actor = self._draw_pole(intermediate_axis, color="green", marker="s")
+                new_actor = self._draw_pole(intermediate_axis, color="green", marker="s", markersize=10)
 
         elif key == "normals_bingham_minor_pole":
             bingham_result = self.analysis_results.get("normals", {}).get("bingham")
@@ -800,7 +1018,7 @@ class ViewStereoplot(ViewMPL):
                 self.print_terminal("No Bingham result available for Normals.")
             else:
                 minor_axis = bingham_result["axes"][2]
-                new_actor = self._draw_pole(minor_axis, color="blue", marker="s")
+                new_actor = self._draw_pole(minor_axis, color="blue", marker="s", markersize=10)
 
         elif key == "normals_bingham_minor_gc":
             bingham_result = self.analysis_results.get("normals", {}).get("bingham")
@@ -821,7 +1039,7 @@ class ViewStereoplot(ViewMPL):
                     if norm == 0:
                         continue
                     unit_centroid = centroid / norm
-                    new_actor.append(self._draw_pole(unit_centroid, color="black", marker="^"))
+                    new_actor.append(self._draw_pole(unit_centroid, color="black", marker="^", markersize=8))
                     
         elif key == "normals_kmeans_color":
             kmeans_result = self.analysis_results.get("normals", {}).get("kmeans")
@@ -833,8 +1051,36 @@ class ViewStereoplot(ViewMPL):
                     vectors = group[["x", "y", "z"]].to_numpy()
                     palette = cm.get_cmap("tab10")
                     color = palette(cluster_id % 10)
-                    actor = self._draw_pole(vectors, color=color)
+                    actor = self._draw_pole(vectors, color=color, markersize=8)
                     new_actor.append(actor)
+                    
+        elif key == "normals_fisher_mean_pole":
+            fisher_result = self.analysis_results.get("normals", {}).get("fisher")
+            if fisher_result is None:
+                self.print_terminal("No fisher results available for Normals.")
+            else:
+                mean_direction = fisher_result["mean_direction"][0]
+                new_actor = self._draw_pole(mean_direction, color="purple", marker="s", markersize=10)
+                self.print_terminal(f"Fisher parameter : {fisher_result["kappa"]}")
+                
+        elif key == "normals_kent_mean_pole":
+            kent_result = self.analysis_results.get("normals", {}).get("kent")
+            if kent_result is None:
+                self.print_terminal("No kent results available for Normals.")
+            else:
+                mean_direction = kent_result["axes"][0]
+                new_actor = self._draw_pole(mean_direction, color="lightsteelblue", marker="s", markersize=10)
+                self.print_terminal(f"Kent parameters : {kent_result["kappa"]}, {kent_result["beta"]}")
+                
+        elif key == "normals_kent_mean_gc":
+            kent_result = self.analysis_results.get("normals", {}).get("kent")
+            if kent_result is None:
+                self.print_terminal("No kent results available for Normals.")
+            else:
+                mean_gc = kent_result["axes"][0]
+                new_actor = self._draw_great_circle(mean_gc, color="lightsteelblue")
+                self.print_terminal(f"Kent parameters : {kent_result["kappa"]}, {kent_result["beta"]}")
+                
 
         elif key == "lineations_bingham_major_pole":
             bingham_result = self.analysis_results.get("lineations", {}).get("bingham")
@@ -842,7 +1088,7 @@ class ViewStereoplot(ViewMPL):
                 self.print_terminal("No Bingham result available for Lineations.")
             else:
                 major_axis = bingham_result["axes"][0]
-                new_actor = self._draw_pole(major_axis, color="red", marker="o")
+                new_actor = self._draw_pole(major_axis, color="red", marker="o", markersize=10)
 
         elif key == "lineations_bingham_intermediate_pole":
             bingham_result = self.analysis_results.get("lineations", {}).get("bingham")
@@ -850,7 +1096,7 @@ class ViewStereoplot(ViewMPL):
                 self.print_terminal("No Bingham result available for Lineations.")
             else:
                 intermediate_axis = bingham_result["axes"][1]
-                new_actor = self._draw_pole(intermediate_axis, color="green", marker="o")
+                new_actor = self._draw_pole(intermediate_axis, color="green", marker="o", markersize=10)
 
         elif key == "lineations_bingham_minor_pole":
             bingham_result = self.analysis_results.get("lineations", {}).get("bingham")
@@ -858,7 +1104,7 @@ class ViewStereoplot(ViewMPL):
                 self.print_terminal("No Bingham result available for Lineations.")
             else:
                 minor_axis = bingham_result["axes"][2]
-                new_actor = self._draw_pole(minor_axis, color="blue", marker="o")
+                new_actor = self._draw_pole(minor_axis, color="blue", marker="o", markersize=10)
 
         elif key == "lineations_bingham_minor_gc":
             bingham_result = self.analysis_results.get("lineations", {}).get("bingham")
@@ -879,7 +1125,7 @@ class ViewStereoplot(ViewMPL):
                     if norm == 0:
                         continue
                     unit_centroid = centroid / norm
-                    new_actor.append(self._draw_pole(unit_centroid, color="black", marker="^"))
+                    new_actor.append(self._draw_pole(unit_centroid, color="black", marker="^", markersize=8))
                     
         elif key == "lineations_kmeans_color":
             kmeans_result = self.analysis_results.get("lineations", {}).get("kmeans")
@@ -891,8 +1137,35 @@ class ViewStereoplot(ViewMPL):
                     vectors = group[["x", "y", "z"]].to_numpy()
                     palette = cm.get_cmap("tab10")
                     color = palette(cluster_id % 10)
-                    actor = self._draw_pole(vectors, color=color)
+                    actor = self._draw_pole(vectors, color=color, markersize=8)
                     new_actor.append(actor)
+                    
+        elif key == "lineations_fisher_mean_pole":
+            fisher_result = self.analysis_results.get("lineations", {}).get("fisher")
+            if fisher_result is None:
+                self.print_terminal("No fisher results available for lineations.")
+            else:
+                mean_direction = fisher_result["mean_direction"][0]
+                new_actor = self._draw_pole(mean_direction, color="purple", marker='o', markersize=10)
+                self.print_terminal(f"Fisher parameter : {fisher_result["kappa"]}")
+                
+        elif key == "lineations_kent_mean_pole":
+            kent_result = self.analysis_results.get("lineations", {}).get("kent")
+            if kent_result is None:
+                self.print_terminal("No kent results available for Lineations.")
+            else:
+                mean_direction = kent_result["axes"][0]
+                new_actor = self._draw_pole(mean_direction, color="lightsteelblue", marker="o", markersize=10)
+                self.print_terminal(f"Kent parameters : {kent_result["kappa"]}, {kent_result["beta"]}")
+                
+        elif key == "lineations_kent_mean_gc":
+            kent_result = self.analysis_results.get("lineations", {}).get("kent")
+            if kent_result is None:
+                self.print_terminal("No kent results available for Lineations.")
+            else:
+                mean_gc = kent_result["axes"][0]
+                new_actor = self._draw_great_circle(mean_gc, color="lightsteelblue")
+                self.print_terminal(f"Kent parameters : {kent_result["kappa"]}, {kent_result["beta"]}")
 
         else:
             self.print_terminal(f"Unknown analysis actor key: '{key}'")
@@ -936,6 +1209,7 @@ class ViewStereoplot(ViewMPL):
         Returns the matplotlib artist created.
         """
         vector = np_asarray(vector, dtype=float)
+        kwargs.setdefault("zorder", self.Z_STATS)
 
         if vector.ndim == 1:
             x, y, z = vector
@@ -956,6 +1230,7 @@ class ViewStereoplot(ViewMPL):
         Returns the matplotlib artist created.
         """
         vector = np_asarray(vector, dtype=float)
+        kwargs.setdefault("zorder", self.Z_STATS)
 
         if vector.ndim == 1:
             x, y, z = vector
