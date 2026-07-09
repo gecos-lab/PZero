@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pyvista as pv
+from PySide6.QtCore import Qt
 from vtk import vtkCellArray, vtkPoints, vtkTriangle
 from vtkmodules.util.numpy_support import vtk_to_numpy
 from PySide6.QtGui import QColor
@@ -35,6 +36,236 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+
+
+class PSCSectionSeedSelectionDialog(QDialog):
+    """Small selector for PZero section seeds used as PSC seed overrides."""
+
+    COL_INCLUDE = 0
+    COL_UID = 1
+    COL_NAME = 2
+    COL_TYPE = 3
+    COL_FEATURE = 4
+    COL_ROLE = 5
+    COL_SCENARIO = 6
+    COL_MATCH = 7
+    COL_STATUS = 8
+
+    def __init__(
+        self,
+        parent,
+        seed_rows: List[Dict[str, Any]],
+        merged_seed_rows: Optional[List[Dict[str, Any]]] = None,
+        saved_source_keys: Optional[set] = None,
+        merge_eroded: bool = False,
+    ):
+        super().__init__(parent)
+        self._normal_seed_rows = list(seed_rows)
+        self._merged_seed_rows = list(merged_seed_rows or seed_rows)
+        self._saved_source_keys = saved_source_keys
+        self._updating = False
+        self._has_eroded_candidates = any(
+            bool(row.get("can_merge_eroded")) for row in self._merged_seed_rows
+        )
+        self._merge_eroded_enabled = bool(merge_eroded and self._has_eroded_candidates)
+        self._seed_rows = (
+            list(self._merged_seed_rows)
+            if self._merge_eroded_enabled
+            else list(self._normal_seed_rows)
+        )
+
+        self.setWindowTitle("Section Seeds for PSC")
+        self.resize(1040, 480)
+
+        layout = QVBoxLayout(self)
+        label = QLabel(
+            "Select PZero XsVertex/XsVertexSet objects to use as PSC seed coordinates."
+        )
+        label.setWordWrap(True)
+        layout.addWidget(label)
+
+        controls = QHBoxLayout()
+        select_all_btn = QPushButton("Select all")
+        select_all_btn.clicked.connect(lambda: self._set_importable_checked(True))
+        controls.addWidget(select_all_btn)
+        matched_btn = QPushButton("Matched only")
+        matched_btn.clicked.connect(self._select_matched_only)
+        controls.addWidget(matched_btn)
+        self.merge_eroded_btn = QPushButton("Merge eroded")
+        self.merge_eroded_btn.setCheckable(True)
+        self.merge_eroded_btn.setChecked(self._merge_eroded_enabled)
+        self.merge_eroded_btn.setEnabled(self._has_eroded_candidates)
+        self.merge_eroded_btn.setToolTip(
+            "Match section seeds with feature suffix '_eroded' to the PSC material 'eroded'."
+        )
+        self.merge_eroded_btn.toggled.connect(self._set_merge_eroded)
+        controls.addWidget(self.merge_eroded_btn)
+        clear_btn = QPushButton("Clear")
+        clear_btn.clicked.connect(lambda: self._set_importable_checked(False))
+        controls.addWidget(clear_btn)
+        controls.addStretch(1)
+        layout.addLayout(controls)
+
+        self.table = QTableWidget(0, 9, self)
+        self.table.setHorizontalHeaderLabels(
+            [
+                "Include",
+                "UID",
+                "Name",
+                "Type",
+                "Feature",
+                "Role",
+                "Scenario",
+                "Target material",
+                "Status",
+            ]
+        )
+        self.table.verticalHeader().setVisible(False)
+        self.table.setAlternatingRowColors(True)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        layout.addWidget(self.table, 1)
+
+        header = self.table.horizontalHeader()
+        for col_idx in range(self.table.columnCount()):
+            if col_idx in (self.COL_NAME, self.COL_UID):
+                header.setSectionResizeMode(col_idx, QHeaderView.Stretch)
+            else:
+                header.setSectionResizeMode(col_idx, QHeaderView.ResizeToContents)
+
+        self.summary_label = QLabel("")
+        self.summary_label.setWordWrap(True)
+        layout.addWidget(self.summary_label)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self._populate_table()
+        self.table.itemChanged.connect(self._update_summary)
+        self._update_summary()
+
+    def selected_seed_rows(self) -> List[Dict[str, Any]]:
+        """Return checked, importable section seed rows."""
+        selected = []
+        for row_idx in range(self.table.rowCount()):
+            item = self.table.item(row_idx, self.COL_INCLUDE)
+            if item is None or item.checkState() != Qt.Checked:
+                continue
+            seed_row = item.data(Qt.UserRole)
+            if isinstance(seed_row, dict) and seed_row.get("target_unit_key"):
+                selected.append(seed_row)
+        return selected
+
+    def selected_source_keys(self) -> List[str]:
+        """Return stable source keys for the current checked rows."""
+        return [
+            str(row.get("source_key", ""))
+            for row in self.selected_seed_rows()
+            if str(row.get("source_key", ""))
+        ]
+
+    def merge_eroded_enabled(self) -> bool:
+        """Return True when the eroded merge toggle is active."""
+        return self._merge_eroded_enabled
+
+    def _populate_table(self) -> None:
+        self._updating = True
+        try:
+            self.table.setRowCount(len(self._seed_rows))
+            has_saved_selection = bool(self._saved_source_keys)
+            for row_idx, seed_row in enumerate(self._seed_rows):
+                importable = bool(seed_row.get("target_unit_key"))
+                source_key = str(seed_row.get("source_key", ""))
+                checked = importable and (
+                    not has_saved_selection or source_key in self._saved_source_keys
+                )
+
+                include_item = QTableWidgetItem("")
+                include_item.setData(Qt.UserRole, seed_row)
+                flags = Qt.ItemIsEnabled | Qt.ItemIsSelectable
+                if importable:
+                    flags |= Qt.ItemIsUserCheckable
+                include_item.setFlags(flags)
+                include_item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+                self.table.setItem(row_idx, self.COL_INCLUDE, include_item)
+
+                values = [
+                    seed_row.get("uid", ""),
+                    seed_row.get("name", ""),
+                    seed_row.get("topology", ""),
+                    seed_row.get("feature", ""),
+                    seed_row.get("role", ""),
+                    seed_row.get("scenario", ""),
+                    seed_row.get("matched_unit", ""),
+                    seed_row.get("status", ""),
+                ]
+                for offset, value in enumerate(values, start=1):
+                    item = QTableWidgetItem(str(value) if value not in (None, "") else "-")
+                    if offset == self.COL_UID:
+                        item.setToolTip(str(value))
+                    if offset == self.COL_STATUS and not importable:
+                        item.setForeground(QColor(190, 95, 0))
+                    elif offset == self.COL_STATUS:
+                        item.setForeground(QColor(40, 95, 170))
+                    self.table.setItem(row_idx, offset, item)
+        finally:
+            self._updating = False
+
+    def _set_importable_checked(self, checked: bool) -> None:
+        self._updating = True
+        try:
+            for row_idx in range(self.table.rowCount()):
+                item = self.table.item(row_idx, self.COL_INCLUDE)
+                seed_row = item.data(Qt.UserRole) if item is not None else None
+                if isinstance(seed_row, dict) and seed_row.get("target_unit_key"):
+                    item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+        finally:
+            self._updating = False
+        self._update_summary()
+
+    def _select_matched_only(self) -> None:
+        self._updating = True
+        try:
+            for row_idx in range(self.table.rowCount()):
+                item = self.table.item(row_idx, self.COL_INCLUDE)
+                seed_row = item.data(Qt.UserRole) if item is not None else None
+                checked = (
+                    isinstance(seed_row, dict)
+                    and seed_row.get("status_key")
+                    in {"matched", "matched_feature", "eroded"}
+                )
+                if isinstance(seed_row, dict) and seed_row.get("target_unit_key"):
+                    item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+        finally:
+            self._updating = False
+        self._update_summary()
+
+    def _set_merge_eroded(self, checked: bool) -> None:
+        current_selection = set(self.selected_source_keys())
+        if current_selection:
+            self._saved_source_keys = current_selection
+        self._merge_eroded_enabled = bool(checked and self._has_eroded_candidates)
+        self._seed_rows = (
+            list(self._merged_seed_rows)
+            if self._merge_eroded_enabled
+            else list(self._normal_seed_rows)
+        )
+        self._populate_table()
+        self._update_summary()
+
+    def _update_summary(self, *_args) -> None:
+        if self._updating:
+            return
+        selected_rows = self.selected_seed_rows()
+        importable = sum(1 for row in self._seed_rows if row.get("target_unit_key"))
+        mode = " | Merge eroded: on" if self._merge_eroded_enabled else ""
+        self.summary_label.setText(
+            f"Selected: {len(selected_rows)} object(s). "
+            f"Importable candidates: {importable}/{len(self._seed_rows)}.{mode}"
+        )
 
 
 class PiecewiseStructuralComplex:
@@ -136,6 +367,7 @@ class PiecewiseStructuralComplex:
     
         preview_state = {"psc_model": None, "mapping": None, "rows": []}
         seed_overrides: Dict[str, List[List[float]]] = {}
+        seed_override_metadata: Dict[str, Dict[str, Any]] = {}
     
         def unit_seed_key(unit_info: Dict[str, Any]) -> str:
             return str(
@@ -147,6 +379,7 @@ class PiecewiseStructuralComplex:
     
         def load_seed_overrides(table_name: str) -> None:
             seed_overrides.clear()
+            seed_override_metadata.clear()
             project = self._pzero_project()
             options = {}
             if project is not None:
@@ -158,6 +391,11 @@ class PiecewiseStructuralComplex:
                 seed_points = self._psc_normalize_seed_points(seed_value)
                 if seed_points:
                     seed_overrides[str(unit_key)] = seed_points
+            raw_metadata = options.get("psc_seed_override_metadata", {})
+            if isinstance(raw_metadata, dict):
+                for unit_key, metadata in raw_metadata.items():
+                    if str(unit_key) in seed_overrides and isinstance(metadata, dict):
+                        seed_override_metadata[str(unit_key)] = dict(metadata)
     
         def save_seed_overrides(table_name: str) -> None:
             project = self._pzero_project()
@@ -172,23 +410,103 @@ class PiecewiseStructuralComplex:
                     unit_key: self._psc_seed_override_storage(seed_points)
                     for unit_key, seed_points in seed_overrides.items()
                 }
+                metadata = {
+                    unit_key: dict(seed_override_metadata.get(unit_key, {}))
+                    for unit_key in seed_overrides
+                    if seed_override_metadata.get(unit_key)
+                }
+                if metadata:
+                    options["psc_seed_override_metadata"] = metadata
+                else:
+                    options.pop("psc_seed_override_metadata", None)
             else:
                 options.pop("psc_seed_overrides", None)
+                options.pop("psc_seed_override_metadata", None)
+            table_options[table_name] = options
+
+        def load_section_seed_selection(table_name: str) -> Optional[set]:
+            project = self._pzero_project()
+            if project is None:
+                return None
+            options = getattr(project, "custom_table_options", {}).get(table_name, {}) or {}
+            source_keys = options.get("psc_section_seed_selection")
+            if not isinstance(source_keys, (list, tuple, set)):
+                return None
+            return {str(source_key) for source_key in source_keys if str(source_key)}
+
+        def load_section_seed_merge_eroded(table_name: str) -> bool:
+            project = self._pzero_project()
+            if project is None:
+                return False
+            options = getattr(project, "custom_table_options", {}).get(table_name, {}) or {}
+            return bool(options.get("psc_section_seed_merge_eroded", False))
+
+        def save_section_seed_selection(
+            table_name: str,
+            source_keys: List[str],
+            merge_eroded: bool,
+        ) -> None:
+            project = self._pzero_project()
+            if project is None:
+                return
+            table_options = getattr(project, "custom_table_options", None)
+            if table_options is None:
+                return
+            options = dict(table_options.get(table_name, {}) or {})
+            if source_keys:
+                options["psc_section_seed_selection"] = sorted(
+                    {str(source_key) for source_key in source_keys if str(source_key)}
+                )
+            else:
+                options.pop("psc_section_seed_selection", None)
+            if merge_eroded:
+                options["psc_section_seed_merge_eroded"] = True
+            else:
+                options.pop("psc_section_seed_merge_eroded", None)
             table_options[table_name] = options
 
         def apply_seed_overrides(mapping: Dict[str, Any]) -> None:
+            matched_keys = set()
             for unit_info in mapping.get("units", []) or []:
                 unit_key = unit_seed_key(unit_info)
+                matched_keys.add(unit_key)
                 if unit_key in seed_overrides:
                     seed_points = [list(seed) for seed in seed_overrides[unit_key]]
                     unit_info["seed_points"] = seed_points
                     unit_info["seed_point"] = seed_points[0] if seed_points else None
                     unit_info["seed_override"] = True
+            for unit_key, seed_points in seed_overrides.items():
+                if unit_key in matched_keys:
+                    continue
+                metadata = dict(seed_override_metadata.get(unit_key, {}))
+                feature = self._psc_text(metadata.get("feature", "")) or str(unit_key)
+                name = self._psc_text(metadata.get("name", "")) or feature
+                role = self._psc_text(metadata.get("unit_role", ""))
+                clean_points = [list(seed) for seed in seed_points]
+                mapping.setdefault("units", []).append(
+                    {
+                        "key": unit_key,
+                        "name": name,
+                        "feature": feature,
+                        "unit_role": role,
+                        "boundaries": [],
+                        "matched_surfaces": [],
+                        "matched_surface_indices": [],
+                        "model_boundary_indices": [],
+                        "missing_boundaries": [],
+                        "seed_points": clean_points,
+                        "seed_point": clean_points[0] if clean_points else None,
+                        "seed_override": True,
+                        "psc_virtual_unit": True,
+                        "psc_virtual_source": metadata.get("source", "section_seed"),
+                    }
+                )
     
         def refresh_preview():
             table_name = table_combo.currentText()
             psc_model = self._build_psc_model_from_stm(table_name)
             mapping = self._map_psc_boundaries_to_tetra_surfaces(psc_model)
+            apply_seed_overrides(mapping)
             preview_state["psc_model"] = psc_model
             preview_state["mapping"] = mapping
     
@@ -306,30 +624,65 @@ class PiecewiseStructuralComplex:
             if not rows:
                 refresh_preview()
                 rows = list(preview_state.get("rows", []))
-            imported, skipped, unmatched = self._psc_section_seed_overrides_for_units(
+            table_name = table_combo.currentText()
+            seed_rows = self._psc_section_seed_match_rows(
                 rows,
                 unit_seed_key,
             )
-            if not imported:
+            if not seed_rows:
                 self.print_terminal(
-                    "No matching XsVertexSet section seeds found for the current PSC units "
-                    f"(skipped={skipped}, unmatched={unmatched})."
+                    "No XsVertex/XsVertexSet section seeds with PSC roles were found in geol_coll."
                 )
                 return
+            merged_seed_rows = self._psc_section_seed_match_rows(
+                rows,
+                unit_seed_key,
+                merge_eroded=True,
+            )
+            selection_dialog = PSCSectionSeedSelectionDialog(
+                dialog,
+                seed_rows,
+                merged_seed_rows,
+                load_section_seed_selection(table_name),
+                load_section_seed_merge_eroded(table_name),
+            )
+            if selection_dialog.exec() != QDialog.Accepted:
+                return
+            selected_seed_rows = selection_dialog.selected_seed_rows()
+            imported = self._psc_section_seed_overrides_from_rows(selected_seed_rows)
+            imported_metadata = self._psc_section_seed_metadata_from_rows(selected_seed_rows)
+            if not imported:
+                self.print_terminal(
+                    "No matching section seed was selected for the current PSC units."
+                )
+                return
+            save_section_seed_selection(
+                table_name,
+                selection_dialog.selected_source_keys(),
+                selection_dialog.merge_eroded_enabled(),
+            )
             seed_overrides.clear()
             seed_overrides.update(imported)
-            save_seed_overrides(table_combo.currentText())
+            seed_override_metadata.clear()
+            seed_override_metadata.update(imported_metadata)
+            save_seed_overrides(table_name)
             refresh_preview()
             seed_count = sum(len(points) for points in imported.values())
+            unmatched = sum(
+                1 for row in seed_rows
+                if row.get("status_key") in {"no_match", "ambiguous"}
+            )
             self.print_terminal(
                 f"Imported {seed_count} section seed(s) for {len(imported)} PSC material(s) "
-                f"(skipped={skipped}, unmatched={unmatched})."
+                f"from {len(selected_seed_rows)} selected PZero object(s) "
+                f"(unmatched_or_ambiguous={unmatched})."
             )
 
         def clear_seed_overrides():
             if not seed_overrides:
                 return
             seed_overrides.clear()
+            seed_override_metadata.clear()
             save_seed_overrides(table_combo.currentText())
             refresh_preview()
     
@@ -464,12 +817,19 @@ class PiecewiseStructuralComplex:
                 name = self._psc_text(geol_coll.get_uid_name(uid))
             except Exception:
                 name = ""
+            try:
+                scenario = self._psc_text(geol_coll.get_uid_scenario(uid))
+            except Exception:
+                scenario = ""
             entries.append(
                 {
                     "uid": uid,
                     "name": name,
+                    "topology": topology,
                     "role": role,
                     "feature": feature,
+                    "scenario": scenario,
+                    "source_key": str(uid),
                     "feature_key": self._psc_key(feature),
                     "role_key": self._psc_key(role),
                     "seed_points": seed_points,
@@ -483,26 +843,92 @@ class PiecewiseStructuralComplex:
         unit_seed_key,
     ) -> Tuple[Dict[str, List[List[float]]], int, int]:
         """Match section XsVertexSet seeds to mapped PSC units."""
+        seed_rows = self._psc_section_seed_match_rows(mapped_units, unit_seed_key)
+        selected_rows = [
+            row for row in seed_rows
+            if row.get("target_unit_key")
+            and row.get("status_key")
+            in {"matched", "matched_feature", "eroded"}
+        ]
+        overrides = self._psc_section_seed_overrides_from_rows(selected_rows)
+        skipped = 0
+        unmatched = 0
+        for row in seed_rows:
+            if row.get("target_unit_key"):
+                continue
+            if row.get("status_key") in {"no_match", "ambiguous"}:
+                unmatched += 1
+            else:
+                skipped += 1
+        return overrides, skipped, unmatched
+
+    def _psc_unit_match_rows(
+        self,
+        mapped_units: List[Dict[str, Any]],
+        unit_seed_key,
+    ) -> List[Dict[str, Any]]:
+        """Return normalized PSC unit records used to match section seeds."""
         unit_matches = []
         for unit_info in mapped_units or []:
+            unit_key = unit_seed_key(unit_info)
             unit_matches.append(
                 {
                     "unit_info": unit_info,
-                    "unit_key": unit_seed_key(unit_info),
+                    "unit_key": unit_key,
+                    "unit_name": self._psc_text(
+                        unit_info.get("name")
+                        or unit_info.get("feature")
+                        or unit_key
+                    ),
                     "material_keys": self._psc_unit_match_keys(unit_info),
                     "role_key": self._psc_key(unit_info.get("unit_role", "")),
                 }
             )
+        return unit_matches
 
-        overrides: Dict[str, List[List[float]]] = {}
-        skipped = 0
-        unmatched = 0
+    def _psc_section_seed_match_rows(
+        self,
+        mapped_units: List[Dict[str, Any]],
+        unit_seed_key,
+        merge_eroded: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """Return section seed candidates annotated with PSC matching status."""
+        unit_matches = self._psc_unit_match_rows(mapped_units, unit_seed_key)
+        seed_rows = []
         for entry in self._psc_section_seed_entries():
+            seed_row = dict(entry)
             feature_key = entry.get("feature_key", "")
             role_key = entry.get("role_key", "")
-            if not feature_key:
-                skipped += 1
+            is_eroded = self._psc_feature_is_eroded(entry.get("feature", ""))
+            seed_row["can_merge_eroded"] = is_eroded
+            if is_eroded:
+                target_feature = "eroded" if merge_eroded else entry.get("feature", "")
+                target_unit_key = (
+                    "section_seed:eroded"
+                    if merge_eroded
+                    else f"section_seed:{feature_key}"
+                )
+                seed_row.update(
+                    {
+                        "target_unit_key": target_unit_key,
+                        "matched_unit": target_feature,
+                        "status_key": "eroded",
+                        "status": "eroded",
+                        "target_metadata": {
+                            "name": target_feature,
+                            "feature": target_feature,
+                            "unit_role": "" if merge_eroded else entry.get("role", ""),
+                            "source": "section_eroded_seed",
+                            "source_feature": entry.get("feature", ""),
+                        },
+                    }
+                )
+                seed_rows.append(seed_row)
                 continue
+            target = None
+            status_key = "no_match"
+            status = "No PSC match"
+
             role_matches = [
                 unit
                 for unit in unit_matches
@@ -510,6 +936,11 @@ class PiecewiseStructuralComplex:
             ]
             if len(role_matches) == 1:
                 target = role_matches[0]
+                status_key = "matched"
+                status = "Matched"
+            elif len(role_matches) > 1:
+                status_key = "ambiguous"
+                status = "Ambiguous"
             else:
                 material_matches = [
                     unit
@@ -518,17 +949,51 @@ class PiecewiseStructuralComplex:
                 ]
                 if len(material_matches) == 1:
                     target = material_matches[0]
-                else:
-                    unmatched += 1
-                    continue
-            unit_key = target["unit_key"]
+                    status_key = "matched_feature"
+                    status = "Matched by feature"
+                elif len(material_matches) > 1:
+                    status_key = "ambiguous"
+                    status = "Ambiguous"
+
+            if target is not None:
+                seed_row["target_unit_key"] = target.get("unit_key", "")
+                seed_row["matched_unit"] = target.get("unit_name", "")
+            else:
+                seed_row["target_unit_key"] = ""
+                seed_row["matched_unit"] = ""
+            seed_row["status_key"] = status_key
+            seed_row["status"] = status
+            seed_rows.append(seed_row)
+        return seed_rows
+
+    def _psc_section_seed_overrides_from_rows(
+        self,
+        seed_rows: List[Dict[str, Any]],
+    ) -> Dict[str, List[List[float]]]:
+        """Build PSC seed overrides from selected section seed rows."""
+        overrides: Dict[str, List[List[float]]] = {}
+        for seed_row in seed_rows or []:
+            unit_key = str(seed_row.get("target_unit_key", ""))
             if not unit_key:
-                skipped += 1
                 continue
             overrides.setdefault(unit_key, []).extend(
-                [list(point) for point in entry.get("seed_points", [])]
+                [list(point) for point in seed_row.get("seed_points", [])]
             )
-        return overrides, skipped, unmatched
+        return overrides
+
+    def _psc_section_seed_metadata_from_rows(
+        self,
+        seed_rows: List[Dict[str, Any]],
+    ) -> Dict[str, Dict[str, Any]]:
+        """Build metadata for section seed overrides that are not STm units."""
+        metadata_by_key: Dict[str, Dict[str, Any]] = {}
+        for seed_row in seed_rows or []:
+            unit_key = str(seed_row.get("target_unit_key", ""))
+            metadata = seed_row.get("target_metadata")
+            if not unit_key or not isinstance(metadata, dict):
+                continue
+            metadata_by_key.setdefault(unit_key, dict(metadata))
+        return metadata_by_key
     
     def _available_stm_tables(self) -> List[str]:
         """Return STm table names from the embedded PZero project."""
@@ -755,6 +1220,10 @@ class PiecewiseStructuralComplex:
             pass
         text = str(value).strip()
         return "" if text.casefold() in {"nan", "nat", "<na>", "none"} else text
+
+    def _psc_feature_is_eroded(self, value: Any) -> bool:
+        """Return True when a feature name uses the PSC eroded suffix."""
+        return self._psc_key(value).endswith("_eroded")
 
     @staticmethod
     def _psc_sort_key(value: Any) -> float:
@@ -2475,6 +2944,8 @@ class PiecewiseStructuralComplex:
                     "matched_surface_indices": list(unit_info.get("matched_surface_indices", [])),
                     "missing_boundaries": list(unit_info.get("missing_boundaries", [])),
                     "seed_override": bool(unit_info.get("seed_override", False)),
+                    "psc_virtual_unit": bool(unit_info.get("psc_virtual_unit", False)),
+                    "psc_virtual_source": unit_info.get("psc_virtual_source", ""),
                     "psc_seed_count": len(seed_points),
                     "seed_topology_signatures": list(
                         unit_info.get("seed_topology_signatures", []) or []
