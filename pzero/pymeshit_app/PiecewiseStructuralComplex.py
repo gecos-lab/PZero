@@ -3488,6 +3488,8 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             )
 
     def _default_section_tolerance(self, section_uid: str) -> float:
+        "Calculates a geometric tolerance for the active Xsection based on its diagonal length."
+        "logic is section diagonal = sqrt(length^2 + height^2), tolerance = max(diagonal * 1e-6, 0.001)"
         project = self._pzero_project()
         try:
             length = float(project.xsect_coll.get_uid_length(section_uid))
@@ -3498,6 +3500,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         return max(diagonal * 1.0e-6, 0.001)
 
     def _available_boundary_options(self) -> List[Tuple[str, str]]:
+        "Returns a list of available boundary options for the active Xsection."
         project = self._pzero_project()
         options = [("Xsection frame", self.FRAME_BOUNDARY_KEY)]
         boundary_coll = getattr(project, "boundary_coll", None)
@@ -3514,6 +3517,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         return options
 
     def _available_domxs_cut_options(self) -> List[Tuple[str, str]]:
+        "Returns a list of available DomXs options for the active Xsection."
         project = self._pzero_project()
         section_uid = getattr(self.host, "this_x_section_uid", "")
         dom_coll = getattr(project, "dom_coll", None)
@@ -3532,6 +3536,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         return options
 
     def _default_domxs_cut_uid(self, domxs_uids: List[str]) -> Optional[str]:
+        """Returns the default DomXs cut UID for the active Xsection, preferring any selected DomXs if available."""
         if not domxs_uids:
             return None
         project = self._pzero_project()
@@ -3544,6 +3549,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         return domxs_uids[0]
 
     def _section_polyline_uids(self, use_selected: bool = False) -> List[str]:
+        """Returns a list of XsPolyLine UIDs in the active Xsection, optionally filtered by selection."""
         project = self._pzero_project()
         section_uid = getattr(self.host, "this_x_section_uid", "")
         geol_coll = getattr(project, "geol_coll", None)
@@ -3574,6 +3580,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         polygonize_full,
         unary_union,
     ):
+        "Returns a Shapely Polygon representing the section boundary for the given boundary UID."
         project = self._pzero_project()
         section_uid = getattr(self.host, "this_x_section_uid", "")
         if boundary_uid == self.FRAME_BOUNDARY_KEY:
@@ -3662,6 +3669,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         return max(polygons, key=lambda polygon: polygon.area)
 
     def _line_strings_from_polydata(self, vtk_obj, line_cls) -> List[Any]:
+        "Returns a list of Shapely LineString objects from the given VTK polydata object, projected into the Xsection plane."
         project = self._pzero_project()
         section_uid = getattr(self.host, "this_x_section_uid", "")
         if vtk_obj is None:
@@ -3733,6 +3741,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
 
     @staticmethod
     def _drop_consecutive_duplicate_coords(coords: np.ndarray) -> np.ndarray:
+        "Returns a new array of coordinates with consecutive duplicates removed."
         coords = np.asarray(coords, dtype=float)
         if coords.shape[0] <= 1:
             return coords
@@ -3743,6 +3752,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         return np.asarray(keep, dtype=float)
 
     def _section_line_entries(self, line_uids, boundary_polygon, line_cls) -> List[Dict[str, Any]]:
+        "Returns a list of line entries for the given XsPolyLine UIDs, clipped to the boundary polygon."
         project = self._pzero_project()
         geol_coll = project.geol_coll
         entries = []
@@ -3776,6 +3786,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         line_cls,
         tolerance: float,
     ) -> List[Dict[str, Any]]:
+        "Returns a list of line entries for the given DomXs cut UID, clipped to the boundary polygon."
         if not dom_cut_uid:
             return []
         project = self._pzero_project()
@@ -3816,6 +3827,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         dom_cut_entries: List[Dict[str, Any]],
         tolerance: float,
     ) -> str:
+        "Returns 'subsurface' if the polygon is below the DomXs cut, 'eroded' if above, or '' if within tolerance."
         if polygon is None or not dom_cut_entries:
             return ""
         try:
@@ -3851,6 +3863,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         polygon,
         parent_area_infos: List[Dict[str, Any]],
     ) -> Optional[Dict[str, Any]]:
+        "Returns the parent area info that contains the polygon, or the one with the largest overlap, or None."
         if polygon is None or not parent_area_infos:
             return None
         try:
@@ -3883,6 +3896,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         unary_union,
         tolerance: float,
     ) -> Tuple[List[Any], int, int, int, bool]:
+        "Polygonizes the given network geometries and returns the resulting polygons and problem counts."
         noded_network = unary_union(network_geometries)
         polygons_geom, dangles_geom, cuts_geom, invalids_geom = polygonize_full(
             noded_network
@@ -3928,6 +3942,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         line_entries: List[Dict[str, Any]],
         tolerance: float,
     ) -> List[str]:
+        "Returns a list of boundary labels for the given polygon, based on its intersection with the boundary polygon and line entries."
         min_length = max(float(tolerance or 0.0), 1.0e-9)
         labels = []
         if self._geometry_length(polygon.boundary.intersection(boundary_polygon.boundary)) > min_length:
@@ -3944,6 +3959,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         return labels
 
     def _unit_for_boundary_labels(self, psc_model: Dict[str, Any], labels: List[str]):
+        "Returns the unit info from the PSC model that matches the given boundary labels, or None if no match is found."
         target_keys = {
             self._psc_key(label)
             for label in labels
@@ -3967,6 +3983,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         labels: List[str],
         max_missing_boundaries: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
+        "Returns a list of candidate units from the PSC model that match the given boundary labels, allowing for some missing boundaries."
         if max_missing_boundaries is None:
             max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
         try:
@@ -4050,6 +4067,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         boundary_roles_by_key: Dict[str, str],
         tolerance: float,
     ) -> Dict[str, Any]:
+        "Returns the best assignment for the given area_info based on candidates and conflict checks."
         candidates = list(area_info.get("candidates", []) or [])
         if not candidates:
             return {"status": "UNASSIGNED"}
@@ -4113,6 +4131,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         candidates: List[Dict[str, Any]],
         assigned_counts: Dict[str, int],
     ) -> Dict[str, Any]:
+        "Chooses the best candidate from the list based on assigned counts, polarity, feature, and unit_key."
         return min(
             candidates,
             key=lambda candidate: (
@@ -4130,6 +4149,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         candidate_pool: List[Dict[str, Any]],
         assigned_counts: Dict[str, int],
     ) -> Dict[str, Any]:
+        "Returns a dictionary containing the assignment payload for the given candidate, status, and candidate pool."
         candidate_pool = list(candidate_pool or [candidate])
         return {
             "status": status,
@@ -4150,6 +4170,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         self,
         psc_model: Dict[str, Any],
     ) -> Dict[str, str]:
+        "Returns a dictionary mapping boundary feature keys to their unit roles from the PSC model."
         roles_by_key: Dict[str, str] = {}
         for boundary_info in psc_model.get("boundary_order", []) or []:
             if not isinstance(boundary_info, dict):
@@ -4173,6 +4194,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         boundary_roles_by_key: Dict[str, str],
         tolerance: float,
     ) -> List[str]:
+        "Returns a list of boundary labels that conflict with the candidate's unit assignment across adjacent areas."
         unit_key = str(candidate.get("unit_key", ""))
         if not unit_key:
             return []
@@ -4207,6 +4229,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         line_entries: List[Dict[str, Any]],
         tolerance: float,
     ) -> List[str]:
+        "Returns a list of boundary labels that are shared between the two polygons, based on their intersection with line entries."
         if polygon is None or other_polygon is None:
             return []
         min_length = max(float(tolerance or 0.0), 1.0e-9)
@@ -4251,6 +4274,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         boundary_labels: List[str],
         assignment: Dict[str, Any],
     ) -> None:
+        "Prints the assignment status and details for a given area in the section."
         status = str(assignment.get("status", "UNASSIGNED"))
         details = [f"boundaries={self._format_section_labels(boundary_labels)}"]
         missing_labels = assignment.get("missing_labels", []) or []
@@ -4295,6 +4319,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         unit_info: Optional[Dict[str, Any]],
         feature: str,
     ) -> Optional[List[float]]:
+        "Returns the RGB color for the given PSC unit info, or falls back to the legend color for the feature."
         if unit_info is not None and unit_info.get("source") == "extra":
             try:
                 return [
@@ -4311,6 +4336,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         color: Optional[List[float]],
         factor: float = 0.45,
     ) -> Optional[List[float]]:
+        "Returns a lightened version of the given RGB color by the specified factor."
         if color is None:
             return None
         try:
@@ -4321,6 +4347,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         return [value + (255.0 - value) * factor for value in rgb]
 
     def _legend_color_for_feature(self, feature: str) -> Optional[List[float]]:
+        "Returns the RGB color for the given feature from the legend DataFrame, or None if not found."
         project = self._pzero_project()
         legend_df = getattr(project.geol_coll, "legend_df", None)
         if legend_df is None or legend_df.empty:
@@ -4348,6 +4375,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         color: Optional[List[float]] = None,
         parent_uid: Optional[str] = None,
     ) -> Optional[str]:
+        "Creates a seed vertex entity in the project with the given name, role, feature, and coordinates."
         from pzero.entities_factory import XsVertexSet
 
         project = self._pzero_project()
@@ -4371,6 +4399,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         vtk_obj,
         color: Optional[List[float]] = None,
     ) -> Optional[str]:
+        "Creates an area surface entity in the project with the given name, role, feature, and VTK object."
         project = self._pzero_project()
         section_uid = getattr(self.host, "this_x_section_uid", "")
         area_dict = deepcopy(project.geol_coll.entity_dict)
@@ -4388,6 +4417,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
 
     @staticmethod
     def _psc_linked_parent_uid(section_uid: str, linked_uid: str) -> str:
+        "Returns a combined UID string for the section and linked parent, or just the section UID if linked is empty."
         return ";".join(
             str(uid).strip()
             for uid in (section_uid, linked_uid)
@@ -4395,6 +4425,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         )
 
     def _triangulated_polygon_surface(self, polygon, triangulate_func):
+        "Returns a TriSurf object representing the triangulated surface of the given polygon, or None if triangulation fails."
         from pzero.entities_factory import TriSurf
 
         project = self._pzero_project()
@@ -4456,6 +4487,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         return trisurf
 
     def _problem_edge_count(self, geometry, tolerance: float) -> int:
+        "Returns the count of line geometries in the given geometry that have a length greater than the specified tolerance."
         min_length = max(float(tolerance or 0.0), 1.0e-9)
         return sum(
             1
@@ -4464,6 +4496,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         )
 
     def _iter_geometries(self, geometry) -> List[Any]:
+        "Recursively iterates through the given geometry and returns a flat list of all contained geometries."
         if geometry is None or getattr(geometry, "is_empty", True):
             return []
         if hasattr(geometry, "geoms"):
@@ -4474,6 +4507,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         return [geometry]
 
     def _iter_line_geometries(self, geometry) -> List[Any]:
+        "Returns a list of all line geometries contained in the given geometry."
         return [
             geom
             for geom in self._iter_geometries(geometry)
@@ -4481,6 +4515,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         ]
 
     def _geometry_length(self, geometry) -> float:
+        "Returns the total length of the given geometry, summing lengths of all contained line geometries."
         if geometry is None or getattr(geometry, "is_empty", True):
             return 0.0
         try:
@@ -4489,6 +4524,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             return sum(float(getattr(geom, "length", 0.0)) for geom in self._iter_geometries(geometry))
 
     def _unique_polygons(self, polygons: List[Any]) -> List[Any]:
+        "Returns a list of unique polygons from the given list, sorted by area and bounds."
         seen = set()
         unique = []
         for polygon in polygons:
