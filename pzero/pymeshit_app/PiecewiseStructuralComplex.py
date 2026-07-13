@@ -272,6 +272,7 @@ class PiecewiseStructuralComplex:
     """Controller for PSC preview, seed placement, and material assignment."""
 
     SECTION_SEED_ROLES = {"TMU", "TSU", "SU", "IU", "SZ"}
+    DISCONTINUITY_UNIT_ROLE = "Discontinuity"
 
     def __init__(self, host):
         object.__setattr__(self, "host", host)
@@ -1267,6 +1268,16 @@ class PiecewiseStructuralComplex:
     
         table_df = getattr(project, "custom_tables", {}).get(table_name)
         options = getattr(project, "custom_table_options", {}).get(table_name, {}) or {}
+        unit_renames = {}
+        raw_unit_renames = options.get("unit_renames", {})
+        if isinstance(raw_unit_renames, dict):
+            unit_renames = {
+                str(unit_key).strip(): self._psc_text(unit_name)
+                for unit_key, unit_name in raw_unit_renames.items()
+                if str(unit_key or "").strip().startswith("unit:")
+                and not str(unit_key or "").strip().startswith("unit:manual:")
+                and self._psc_text(unit_name)
+            }
         units: Dict[str, Dict[str, Any]] = {}
         boundary_features = set()
         boundary_order = []
@@ -1275,7 +1286,7 @@ class PiecewiseStructuralComplex:
             domain_columns = self._psc_domain_columns(table_df)
             for row_idx, row in table_df.iterrows():
                 feature = self._psc_text(row.get("Feature", ""))
-                unit_role = self._psc_text(row.get("Unit Role", "NonVolumetric")) or "NonVolumetric"
+                unit_role = self._psc_text(row.get("Unit Role", "Discontinuity")) or "Discontinuity"
                 polarity = self._psc_sort_key(row.get("Structural Polarity", ""))
                 domains = [
                     self._psc_text(row.get(column_name, ""))
@@ -1294,10 +1305,10 @@ class PiecewiseStructuralComplex:
                         "domains": domains,
                     }
                 )
-                if unit_role == "NonVolumetric":
+                if unit_role == "Discontinuity":
                     continue
                 unit_key = f"unit:{feature}"
-                unit_name = f"{feature}_{unit_role}"
+                unit_name = unit_renames.get(unit_key, f"{feature}_{unit_role}")
                 units[unit_key] = {
                     "key": unit_key,
                     "name": unit_name,
@@ -4179,8 +4190,8 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             if not feature_key or feature_key in roles_by_key:
                 continue
             roles_by_key[feature_key] = (
-                self._psc_text(boundary_info.get("unit_role", "NonVolumetric"))
-                or "NonVolumetric"
+                self._psc_text(boundary_info.get("unit_role", "Discontinuity"))
+                or "Discontinuity"
             )
         return roles_by_key
 
@@ -4215,9 +4226,9 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                     continue
                 role = boundary_roles_by_key.get(label_key, "")
                 # Repeated unit assignment across adjacent areas is allowed only
-                # across explicit NonVolumetric boundaries. Volumetric
+                # across explicit Discontinuity boundaries. Volumetric
                 # representatives, including SZ, must separate distinct areas.
-                if self._psc_key(role) != self._psc_key("NonVolumetric"):
+                if not self._psc_role_is_discontinuity(role):
                     conflict_labels.append(self._psc_text(label))
 
         return sorted(set(conflict_labels), key=str.casefold)

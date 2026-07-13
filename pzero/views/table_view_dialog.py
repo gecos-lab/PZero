@@ -8,7 +8,7 @@ from pandas import DataFrame as pd_DataFrame
 from pandas import isna as pd_isna
 from pandas import to_numeric as pd_to_numeric
 
-from PySide6.QtCore import QAbstractTableModel, Qt, QTimer
+from PySide6.QtCore import QAbstractTableModel, QRectF, Qt, QTimer
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -16,6 +16,7 @@ from PySide6.QtGui import (
     QPen,
     QFont,
     QFontMetrics,
+    QImage,
     QPainter,
     QTransform,
 )
@@ -69,7 +70,7 @@ STRUCTURAL_TOPOLOGY_UNIT_VALUES = [
     "SU",
     "IU",
     "SZ",
-    "NonVolumetric",
+    "Discontinuity",
 ]
 
 
@@ -98,8 +99,7 @@ def normalise_structural_topology_unit_role(raw_value):
         str(valid_value).casefold(): str(valid_value)
         for valid_value in STRUCTURAL_TOPOLOGY_UNIT_VALUES
     }
-    return valid_by_casefold.get(value.casefold(), value or "NonVolumetric")
-
+    return valid_by_casefold.get(value.casefold(), value or "Discontinuity")
 
 def structural_topology_sort_key(raw_value):
     """Return a sortable numeric polarity value."""
@@ -162,7 +162,7 @@ class ZoomableGraphicsView(QGraphicsView):
 
 
 class STmGraphicsScene(QGraphicsScene):
-    """Graphics scene that forwards node clicks back to the STm dialog."""
+    """Graphics scene that forwards graph-item clicks back to the STm dialog."""
 
     def __init__(self, dialog=None, parent=None):
         super().__init__(parent)
@@ -171,9 +171,13 @@ class STmGraphicsScene(QGraphicsScene):
     def mousePressEvent(self, event):
         clicked_item = self.itemAt(event.scenePos(), QTransform())
         while clicked_item is not None:
-            node_key = clicked_item.data(0)
-            if node_key and self.dialog is not None:
-                self.dialog.on_node_clicked(str(node_key))
+            item_key = clicked_item.data(0)
+            if item_key and self.dialog is not None:
+                item_key = str(item_key)
+                if item_key.startswith("domain:"):
+                    self.dialog.on_domain_clicked(item_key)
+                else:
+                    self.dialog.on_node_clicked(item_key)
                 event.accept()
                 return
             clicked_item = clicked_item.parentItem()
@@ -214,7 +218,7 @@ class ManualSTmUnitDialog(QDialog):
             [
                 value
                 for value in STRUCTURAL_TOPOLOGY_UNIT_VALUES
-                if value != "NonVolumetric"
+                if value != "Discontinuity"
             ]
         )
         unit_role = normalise_structural_topology_unit_role(
@@ -347,9 +351,12 @@ class STmBuildDialog(QDialog):
         self.options_provider = options_provider
         self.options_updater = options_updater
         self.selected_node_key = None
+        self.selected_domain_key = None
         self.manual_connections = self._load_manual_connections()
         self.manual_units = self._load_manual_units()
+        self.unit_renames = self._load_unit_renames()
         self.node_items = {}
+        self.domain_items = {}
         self.editing_enabled = False
         self.setWindowTitle(f"Build STm - {self.table_name}")
         self.resize(1120, 860)
@@ -383,6 +390,9 @@ class STmBuildDialog(QDialog):
         self.clear_selection_button = QPushButton("Clear selection")
         self.clear_selection_button.clicked.connect(self.clear_selection)
         buttons_layout.addWidget(self.clear_selection_button)
+        self.rename_unit_button = QPushButton("Rename unit")
+        self.rename_unit_button.clicked.connect(self.rename_selected_generated_unit)
+        buttons_layout.addWidget(self.rename_unit_button)
         self.clear_manual_button = QPushButton("Clear manual links")
         self.clear_manual_button.clicked.connect(self.clear_manual_connections)
         buttons_layout.addWidget(self.clear_manual_button)
@@ -407,6 +417,10 @@ class STmBuildDialog(QDialog):
         reset_zoom_button.setToolTip("Fit scene to view")
         reset_zoom_button.clicked.connect(self.reset_zoom_to_fit)
         buttons_layout.addWidget(reset_zoom_button)
+        export_image_button = QPushButton("Export image")
+        export_image_button.setToolTip("Save the STm graph as an image")
+        export_image_button.clicked.connect(self.export_scene_image)
+        buttons_layout.addWidget(export_image_button)
         zoom_hint_label = QLabel("Ctrl + mouse wheel to zoom")
         buttons_layout.addWidget(zoom_hint_label)
         buttons_layout.addStretch(1)
@@ -430,6 +444,7 @@ class STmBuildDialog(QDialog):
         self.editing_enabled = bool(checked)
         if not self.editing_enabled:
             self.selected_node_key = None
+            self.selected_domain_key = None
         self.update_editing_ui()
         self._update_node_highlight()
 
@@ -439,6 +454,9 @@ class STmBuildDialog(QDialog):
             "Disable editing" if self.editing_enabled else "Enable editing"
         )
         self.clear_selection_button.setEnabled(self.editing_enabled)
+        self.rename_unit_button.setEnabled(
+            self.editing_enabled and self._selected_generated_unit_key() is not None
+        )
         self.clear_manual_button.setEnabled(
             self.editing_enabled and bool(self.manual_connections)
         )
@@ -454,6 +472,7 @@ class STmBuildDialog(QDialog):
         """Rebuild the graphics scene from the current STm table."""
         self.scene.clear()
         self.node_items = {}
+        self.domain_items = {}
         dataframe = pd_DataFrame()
         if callable(self.dataframe_provider):
             current_df = self.dataframe_provider()
@@ -472,6 +491,57 @@ class STmBuildDialog(QDialog):
         scene_rect = self.scene.itemsBoundingRect().adjusted(-80, -80, 80, 80)
         self.scene.setSceneRect(scene_rect)
         self.graphics_view.fit_scene(scene_rect)
+
+    def export_scene_image(self):
+        """Save the current STm graph scene to a raster image."""
+        scene_rect = self.scene.itemsBoundingRect().adjusted(-40, -40, 40, 40)
+        if scene_rect.isEmpty():
+            QMessageBox.information(self, "Export image", "There is no STm graph to export.")
+            return
+
+        safe_table_name = "".join(
+            char if char.isalnum() or char in "._-" else "_"
+            for char in self.table_name
+        ).strip("_")
+        default_name = f"{safe_table_name or 'STm'}_graph.png"
+        file_path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Export STm graph image",
+            default_name,
+            "PNG image (*.png);;JPEG image (*.jpg);;BMP image (*.bmp);;All files (*.*)",
+        )
+        if not file_path:
+            return
+
+        if not os_path.splitext(file_path)[1]:
+            extension_by_filter = {
+                "PNG image (*.png)": ".png",
+                "JPEG image (*.jpg)": ".jpg",
+                "BMP image (*.bmp)": ".bmp",
+            }
+            file_path = f"{file_path}{extension_by_filter.get(selected_filter, '.png')}"
+
+        width = max(1, int(scene_rect.width()) + 1)
+        height = max(1, int(scene_rect.height()) + 1)
+        image = QImage(width, height, QImage.Format_ARGB32_Premultiplied)
+        image.fill(Qt.transparent)
+
+        painter = QPainter(image)
+        try:
+            self.scene.render(
+                painter,
+                QRectF(0, 0, width, height),
+                scene_rect,
+            )
+        finally:
+            painter.end()
+
+        if not image.save(file_path):
+            QMessageBox.warning(
+                self,
+                "Export image",
+                f'Could not save image "{file_path}".',
+            )
 
     def _draw_scene(self, dataframe):
         """Populate the scene with STm nodes and the automatically-derived links."""
@@ -516,7 +586,7 @@ class STmBuildDialog(QDialog):
             row_color_dark = row_color.darker(150)
             row_nodes = []
             has_unit = (
-                row_info[STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN] != "NonVolumetric"
+                row_info[STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN] != "Discontinuity"
             )
 
             if has_unit:
@@ -524,17 +594,23 @@ class STmBuildDialog(QDialog):
                     unit_key = f'unit:manual:{row_info["Manual Unit ID"]}'
                 else:
                     unit_key = f'unit:{row_info[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN]}'
+                default_unit_label = (
+                    f'{row_info[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN]}_'
+                    f'{row_info[STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN]}'
+                )
+                unit_label = default_unit_label
+                if not row_info.get("Manual"):
+                    unit_label = self.unit_renames.get(unit_key, default_unit_label)
                 unit_nodes.append(
                     {
                         "key": unit_key,
-                        "label": (
-                            f'{row_info[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN]}_'
-                            f'{row_info[STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN]}'
-                        ),
+                        "label": unit_label,
+                        "default_label": default_unit_label,
                         "polarity": row_info[STRUCTURAL_TOPOLOGY_POLARITY_COLUMN],
                         "brush": row_color,
                         "pen": row_color_dark,
                         "row_idx": row_idx,
+                        "manual": bool(row_info.get("Manual")),
                     }
                 )
                 row_nodes.append(unit_key)
@@ -584,7 +660,7 @@ class STmBuildDialog(QDialog):
         )
 
         for node_info in unit_nodes:
-            self.node_items[node_info["key"]] = self._add_node(
+            item_info = self._add_node(
                 center_x=self.LEFT_X,
                 center_y=self.TOP_Y + node_info["row_idx"] * self.Y_STEP,
                 label=node_info["label"],
@@ -593,6 +669,9 @@ class STmBuildDialog(QDialog):
                 node_key=node_info["key"],
                 node_side="unit",
             )
+            item_info["default_label"] = node_info.get("default_label", "")
+            item_info["manual"] = bool(node_info.get("manual"))
+            self.node_items[node_info["key"]] = item_info
 
         for node_info in surface_nodes:
             row_idx = node_info["row_idx"]
@@ -656,7 +735,9 @@ class STmBuildDialog(QDialog):
             if not feature_name:
                 continue
             unit_role = normalise_structural_topology_unit_role(
-                row.get(STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN, "NonVolumetric")
+                row.get(
+                    STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN, "Discontinuity"
+                )
             )
             domains = []
             for column_name in ordered_df.columns.tolist():
@@ -687,8 +768,9 @@ class STmBuildDialog(QDialog):
                 unit_info.get("unit_role", "SU")
             )
             unit_id = str(unit_info.get("id", "")).strip()
-            if not feature_name or not unit_id or unit_role == "NonVolumetric":
-                continue
+            if not feature_name or not unit_id or unit_role == "Discontinuity":
+               continue
+        
             domains = []
             for domain_info in unit_info.get("domains", []):
                 if not isinstance(domain_info, dict):
@@ -775,7 +857,7 @@ class STmBuildDialog(QDialog):
             unit_role = normalise_structural_topology_unit_role(
                 unit_info.get("unit_role", "SU")
             )
-            if not feature_name or unit_role == "NonVolumetric":
+            if not feature_name or unit_role == "Discontinuity":
                 continue
             unit_id = str(unit_info.get("id", "")).strip()
             if not unit_id:
@@ -809,6 +891,34 @@ class STmBuildDialog(QDialog):
         if not callable(self.options_updater):
             return
         self.options_updater({"manual_units": list(self.manual_units)})
+
+    def _load_unit_renames(self):
+        """Load display-name overrides for automatically generated STm units."""
+        options = {}
+        if callable(self.options_provider):
+            options = self.options_provider() or {}
+
+        unit_renames = {}
+        raw_renames = options.get("unit_renames", {})
+        if not isinstance(raw_renames, dict):
+            return unit_renames
+        for unit_key, unit_name in raw_renames.items():
+            key_text = str(unit_key or "").strip()
+            name_text = str(unit_name or "").strip()
+            if (
+                not key_text.startswith("unit:")
+                or key_text.startswith("unit:manual:")
+                or not name_text
+            ):
+                continue
+            unit_renames[key_text] = name_text
+        return unit_renames
+
+    def _save_unit_renames(self):
+        """Persist display-name overrides for automatically generated STm units."""
+        if not callable(self.options_updater):
+            return
+        self.options_updater({"unit_renames": dict(self.unit_renames)})
 
     def _make_manual_unit_id(self, feature_name):
         """Return a stable-ish unique id for a manual unit."""
@@ -910,6 +1020,55 @@ class STmBuildDialog(QDialog):
             return None
         return node_key[len(prefix) :].strip() or None
 
+    def _selected_generated_unit_key(self):
+        """Return the selected generated unit key, if one is selected."""
+        node_key = str(self.selected_node_key or "").strip()
+        if (
+            not node_key.startswith("unit:")
+            or node_key.startswith("unit:manual:")
+            or node_key not in self.node_items
+        ):
+            return None
+        if self.node_items[node_key].get("side") != "unit":
+            return None
+        return node_key
+
+    def rename_selected_generated_unit(self):
+        """Rename only the selected automatically generated unit node."""
+        if not self.editing_enabled:
+            return
+        unit_key = self._selected_generated_unit_key()
+        if not unit_key:
+            return
+        node_info = self.node_items.get(unit_key, {})
+        default_name = str(node_info.get("default_label", "")).strip()
+        current_name = str(
+            self.unit_renames.get(unit_key, node_info.get("label", default_name))
+        ).strip()
+        new_name = input_text_dialog(
+            parent=self,
+            title="Rename unit",
+            label="Unit name",
+            default_text=current_name or default_name,
+        )
+        if not new_name:
+            return
+        new_name = str(new_name).strip()
+        if not new_name:
+            return
+        if default_name and new_name == default_name:
+            self.unit_renames.pop(unit_key, None)
+        else:
+            self.unit_renames[unit_key] = new_name
+        self._save_unit_renames()
+        self.rebuild_scene()
+        if unit_key in self.node_items:
+            self.selected_node_key = unit_key
+        else:
+            self.selected_node_key = None
+        self._update_node_highlight()
+        self.update_editing_ui()
+
     def remove_selected_manual_unit(self):
         """Remove the selected extra unit and any links attached to it."""
         if not self.editing_enabled:
@@ -959,6 +1118,7 @@ class STmBuildDialog(QDialog):
     def clear_selection(self):
         """Clear the active node selection."""
         self.selected_node_key = None
+        self.selected_domain_key = None
         self._update_node_highlight()
         self.update_editing_ui()
 
@@ -983,8 +1143,18 @@ class STmBuildDialog(QDialog):
             self.clear_selection()
             return
 
+        if self.selected_domain_key is not None:
+            if self._connect_domain_to_surface(self.selected_domain_key, node_key):
+                return
+            self.selected_domain_key = None
+            self.selected_node_key = node_key
+            self._update_node_highlight()
+            self.update_editing_ui()
+            return
+
         if self.selected_node_key is None:
             self.selected_node_key = node_key
+            self.selected_domain_key = None
             self._update_node_highlight()
             self.update_editing_ui()
             return
@@ -1001,6 +1171,7 @@ class STmBuildDialog(QDialog):
 
         if source_info["side"] == target_info["side"]:
             self.selected_node_key = node_key
+            self.selected_domain_key = None
             self._update_node_highlight()
             self.update_editing_ui()
             return
@@ -1017,8 +1188,69 @@ class STmBuildDialog(QDialog):
 
         self._save_manual_connections()
         self.selected_node_key = None
+        self.selected_domain_key = None
         self.rebuild_scene()
         self.update_editing_ui()
+
+    def on_domain_clicked(self, domain_key=None):
+        """Select a domain box or connect it to a selected external surface."""
+        if not self.editing_enabled:
+            return
+        domain_key = str(domain_key or "").strip()
+        if domain_key not in self.domain_items:
+            self.clear_selection()
+            return
+
+        if self.selected_node_key is not None:
+            if self._connect_domain_to_surface(domain_key, self.selected_node_key):
+                return
+            self.selected_node_key = None
+
+        if self.selected_domain_key == domain_key:
+            self.clear_selection()
+            return
+
+        self.selected_domain_key = domain_key
+        self.selected_node_key = None
+        self._update_node_highlight()
+        self.update_editing_ui()
+
+    def _connect_domain_to_surface(self, domain_key, surface_key) -> bool:
+        """Toggle manual links from all domain units to an external surface."""
+        domain_info = self.domain_items.get(str(domain_key or ""))
+        surface_info = self.node_items.get(str(surface_key or ""))
+        if domain_info is None or surface_info is None:
+            return False
+        if surface_info.get("side") != "surface":
+            return False
+
+        surface_key = str(surface_key)
+        if surface_key in set(domain_info.get("surface_keys", [])):
+            return False
+
+        unit_keys = [
+            unit_key
+            for unit_key in domain_info.get("unit_keys", [])
+            if unit_key in self.node_items
+        ]
+        if not unit_keys:
+            return False
+
+        connection_keys = {(unit_key, surface_key) for unit_key in unit_keys}
+        # Bulk-toggle domain links: if every domain unit is already linked to the
+        # selected surface, remove all those links; if none or only some are linked,
+        # add the missing links so the whole domain becomes connected.
+        if connection_keys.issubset(self.manual_connections):
+            self.manual_connections.difference_update(connection_keys)
+        else:
+            self.manual_connections.update(connection_keys)
+
+        self._save_manual_connections()
+        self.selected_node_key = None
+        self.selected_domain_key = None
+        self.rebuild_scene()
+        self.update_editing_ui()
+        return True
 
     def _update_node_highlight(self):
         """Refresh node highlight based on the current selection."""
@@ -1028,6 +1260,13 @@ class STmBuildDialog(QDialog):
             if node_key == self.selected_node_key:
                 outline_pen.setColor(QColor(0, 140, 255))
             node_info["rect_item"].setPen(outline_pen)
+        for domain_key, domain_info in self.domain_items.items():
+            outline_pen = QPen(domain_info["base_pen_color"])
+            outline_pen.setWidth(5 if domain_key == self.selected_domain_key else 3)
+            outline_pen.setStyle(Qt.DashLine)
+            if domain_key == self.selected_domain_key:
+                outline_pen.setColor(QColor(0, 140, 255))
+            domain_info["rect_item"].setPen(outline_pen)
 
     def _add_node(
         self,
@@ -1092,10 +1331,30 @@ class STmBuildDialog(QDialog):
             if len(group_info.get("rows", set())) < 2:
                 continue
             node_keys = group_info.get("nodes", set())
-            available_nodes = [node_items[node_key] for node_key in node_keys if node_key in node_items]
+            available_nodes = [
+                node_items[node_key] for node_key in node_keys if node_key in node_items
+            ]
             if len(available_nodes) < 2:
                 continue
 
+            unit_keys = sorted(
+                [
+                    node_key
+                    for node_key in node_keys
+                    if node_key in node_items
+                    and node_items[node_key].get("side") == "unit"
+                ],
+                key=str.casefold,
+            )
+            surface_keys = sorted(
+                [
+                    node_key
+                    for node_key in node_keys
+                    if node_key in node_items
+                    and node_items[node_key].get("side") == "surface"
+                ],
+                key=str.casefold,
+            )
             order_value = structural_topology_domain_order(domain_column) or 1
             margin = self.DOMAIN_MARGIN + (order_value - 1) * 14
             left = min(node_info["left"] for node_info in available_nodes) - margin
@@ -1107,20 +1366,32 @@ class STmBuildDialog(QDialog):
             domain_pen = QPen(domain_color)
             domain_pen.setWidth(3)
             domain_pen.setStyle(Qt.DashLine)
+            domain_key = f"domain:{domain_column}:{domain_value}"
+            domain_brush_color = QColor(domain_color)
+            domain_brush_color.setAlpha(1)
             domain_rect = self.scene.addRect(
                 left,
                 top,
                 right - left,
                 bottom - top,
                 domain_pen,
-                QBrush(Qt.NoBrush),
+                QBrush(domain_brush_color),
             )
             domain_rect.setZValue(-25 - order_value)
+            domain_rect.setData(0, domain_key)
 
             domain_label = self.scene.addText(f"D{order_value}: {domain_value}")
             domain_label.setDefaultTextColor(domain_color)
             domain_label.setPos(left + 12, top - 30)
             domain_label.setZValue(-24 - order_value)
+            domain_label.setData(0, domain_key)
+            self.domain_items[domain_key] = {
+                "rect_item": domain_rect,
+                "label_item": domain_label,
+                "unit_keys": unit_keys,
+                "surface_keys": surface_keys,
+                "base_pen_color": domain_color,
+            }
 
 
 class ComboBoxItemDelegate(QStyledItemDelegate):
@@ -1803,7 +2074,9 @@ class ViewTable(QWidget):
         if STRUCTURAL_TOPOLOGY_FEATURE_COLUMN not in out_df.columns:
             out_df[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN] = ""
         if STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN not in out_df.columns:
-            out_df[STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN] = "NonVolumetric"
+            out_df[STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN] = (
+                "Discontinuity"
+            )
         if STRUCTURAL_TOPOLOGY_POLARITY_COLUMN not in out_df.columns:
             out_df[STRUCTURAL_TOPOLOGY_POLARITY_COLUMN] = ""
         for row_label in out_df.index.tolist():
@@ -1890,7 +2163,9 @@ class ViewTable(QWidget):
                 continue
             units_map[feature_name] = {
                 STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: feature_name,
-                STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: "NonVolumetric",
+                STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: (
+                    "Discontinuity"
+                ),
                 STRUCTURAL_TOPOLOGY_POLARITY_COLUMN: row.get("time", 0.0),
                 "Domain_1": "",
                 "feature": feature_name,

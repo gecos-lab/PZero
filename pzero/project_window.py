@@ -3868,7 +3868,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 continue
             units_map[feature_name] = {
                 "Feature": feature_name,
-                "Unit Role": "NonVolumetric",
+                "Unit Role": "Discontinuity",
                 "Structural Polarity": row.get("time", 0.0),
                 "Domain_1": "",
                 "feature": feature_name,
@@ -3949,7 +3949,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             if "Feature" not in table_df.columns:
                 table_df["Feature"] = ""
             if "Unit Role" not in table_df.columns:
-                table_df["Unit Role"] = "NonVolumetric"
+                table_df["Unit Role"] = "Discontinuity"
             if "Structural Polarity" not in table_df.columns:
                 table_df["Structural Polarity"] = ""
             if not any(str(column).startswith("Domain") for column in table_df.columns):

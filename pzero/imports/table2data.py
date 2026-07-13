@@ -47,7 +47,7 @@ STRUCTURAL_TOPOLOGY_UNIT_VALUES = [
     "SU",
     "IU",
     "SZ",
-    "NonVolumetric",
+    "Discontinuity",
 ]
 
 
@@ -58,7 +58,10 @@ def _normalise_stm_unit_role(raw_value):
         str(valid_value).casefold(): str(valid_value)
         for valid_value in STRUCTURAL_TOPOLOGY_UNIT_VALUES
     }
-    return valid_by_casefold.get(value.casefold(), value or "NonVolumetric")
+    return valid_by_casefold.get(
+        value.casefold(),
+        value or "Discontinuity",
+    )
 
 
 def _count_file_lines(file_path):
