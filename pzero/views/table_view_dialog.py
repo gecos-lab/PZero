@@ -1,6 +1,7 @@
 """table_view_dialog.py
 Dockable table view used to manage user-defined editable tables."""
 
+import json
 from os import path as os_path
 from hashlib import md5
 
@@ -64,6 +65,9 @@ STRUCTURAL_TOPOLOGY_PROTECTED_COLUMNS = {
     STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN,
     STRUCTURAL_TOPOLOGY_POLARITY_COLUMN,
 }
+STRUCTURAL_TOPOLOGY_EXPORT_MARKER_BEGIN = "# PZERO_STM_EXPORT BEGIN"
+STRUCTURAL_TOPOLOGY_EXPORT_MARKER_END = "# PZERO_STM_EXPORT END"
+STRUCTURAL_TOPOLOGY_EXPORT_SCHEMA = "pzero.stm.export"
 STRUCTURAL_TOPOLOGY_UNIT_VALUES = [
     "TMU",
     "TSU",
@@ -115,6 +119,36 @@ def structural_topology_color(raw_key):
     digest = md5(key_text).hexdigest()
     hue = int(digest[:4], 16) % 360
     return QColor.fromHsv(hue, 80, 245)
+
+
+def _stm_color_to_dict(color_value):
+    """Return a serialisable RGB payload for a QColor-like value."""
+    if isinstance(color_value, QColor):
+        return {
+            "color_R": int(color_value.red()),
+            "color_G": int(color_value.green()),
+            "color_B": int(color_value.blue()),
+        }
+    if isinstance(color_value, dict):
+        try:
+            return {
+                "color_R": int(float(color_value.get("color_R", 255))),
+                "color_G": int(float(color_value.get("color_G", 255))),
+                "color_B": int(float(color_value.get("color_B", 255))),
+            }
+        except (TypeError, ValueError):
+            return {"color_R": 255, "color_G": 255, "color_B": 255}
+    return {"color_R": 255, "color_G": 255, "color_B": 255}
+
+
+def _stm_write_export_footer(output_stream, export_payload):
+    """Append a JSON footer that keeps STm metadata inside the CSV file."""
+    output_stream.write("\n")
+    output_stream.write(f"{STRUCTURAL_TOPOLOGY_EXPORT_MARKER_BEGIN}\n")
+    json_text = json.dumps(export_payload, ensure_ascii=True, indent=2)
+    for line in json_text.splitlines():
+        output_stream.write(f"# {line}\n")
+    output_stream.write(f"{STRUCTURAL_TOPOLOGY_EXPORT_MARKER_END}\n")
 
 
 class ZoomableGraphicsView(QGraphicsView):
@@ -2149,31 +2183,61 @@ class ViewTable(QWidget):
             )
     def _available_stm_units(self):
         if hasattr(self.parent, "get_structural_topology_legend_units"):
-            return self.parent.get_structural_topology_legend_units()
+            units = list(self.parent.get_structural_topology_legend_units() or [])
+        else:
+            units = []
 
         legend_df = getattr(getattr(self.parent, "geol_coll", None), "legend_df", None)
-        if legend_df is None or legend_df.empty:
-            return []
+        current_options = dict(self.current_table_options or {})
+        stored_color_codes = current_options.get("stm_color_codes", {})
+        feature_color_map = {}
+        if isinstance(stored_color_codes, dict):
+            feature_color_map = {
+                str(feature_name).strip(): _stm_color_to_dict(color_info)
+                for feature_name, color_info in stored_color_codes.get("features", {}).items()
+                if str(feature_name).strip()
+            }
 
         units_map = {}
-        for _, row in legend_df.iterrows():
-            feature_name = str(row.get("feature", "")).strip()
-            role_name = str(row.get("role", "")).strip()
-            if not feature_name or feature_name in units_map:
+        for unit_info in units:
+            feature_name = str(unit_info.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")).strip()
+            if not feature_name:
                 continue
-            units_map[feature_name] = {
-                STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: feature_name,
-                STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: (
-                    "Discontinuity"
-                ),
-                STRUCTURAL_TOPOLOGY_POLARITY_COLUMN: row.get("time", 0.0),
-                "Domain_1": "",
-                "feature": feature_name,
-                "role": role_name,
-                "color_R": row.get("color_R", 255),
-                "color_G": row.get("color_G", 255),
-                "color_B": row.get("color_B", 255),
-            }
+            unit_payload = dict(unit_info)
+            unit_payload.update(feature_color_map.get(feature_name, {}))
+            units_map[feature_name] = unit_payload
+
+        if legend_df is not None and not legend_df.empty:
+            for _, row in legend_df.iterrows():
+                feature_name = str(row.get("feature", "")).strip()
+                role_name = str(row.get("role", "")).strip()
+                if not feature_name or feature_name in units_map:
+                    continue
+                color_override = feature_color_map.get(feature_name, {})
+                units_map[feature_name] = {
+                    STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: feature_name,
+                    STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: "Discontinuity",
+                    STRUCTURAL_TOPOLOGY_POLARITY_COLUMN: row.get("time", 0.0),
+                    "Domain_1": "",
+                    "feature": feature_name,
+                    "role": role_name,
+                    "color_R": color_override.get("color_R", row.get("color_R", 255)),
+                    "color_G": color_override.get("color_G", row.get("color_G", 255)),
+                    "color_B": color_override.get("color_B", row.get("color_B", 255)),
+                }
+        elif feature_color_map:
+            for feature_name, color_info in feature_color_map.items():
+                units_map[feature_name] = {
+                    STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: feature_name,
+                    STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: "Discontinuity",
+                    STRUCTURAL_TOPOLOGY_POLARITY_COLUMN: 0.0,
+                    "Domain_1": "",
+                    "feature": feature_name,
+                    "role": "",
+                    "color_R": color_info.get("color_R", 255),
+                    "color_G": color_info.get("color_G", 255),
+                    "color_B": color_info.get("color_B", 255),
+                }
 
         return sorted(
             units_map.values(),
@@ -2567,12 +2631,58 @@ class ViewTable(QWidget):
         )
 
         try:
-            self.parent.custom_tables[table_name].to_csv(
-                output_path,
-                sep=delimiter,
-                index=False,
-                encoding="utf-8",
-            )
+            dataframe = self.parent.custom_tables[table_name]
+            if self.current_table_type == STRUCTURAL_TOPOLOGY_TABLE_TYPE:
+                export_options = dict(self.parent.custom_table_options.get(table_name, {}))
+                feature_colors = {}
+                stored_color_codes = export_options.get("stm_color_codes", {})
+                if isinstance(stored_color_codes, dict):
+                    feature_colors.update(
+                        {
+                            str(feature_name).strip(): _stm_color_to_dict(color_info)
+                            for feature_name, color_info in stored_color_codes.get("features", {}).items()
+                            if str(feature_name).strip()
+                        }
+                    )
+                if STRUCTURAL_TOPOLOGY_FEATURE_COLUMN in dataframe.columns:
+                    for feature_name in dataframe[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN].tolist():
+                        feature_text = str(feature_name or "").strip()
+                        if not feature_text or feature_text in feature_colors:
+                            continue
+                        feature_colors[feature_text] = _stm_color_to_dict(
+                            structural_topology_color(feature_text)
+                        )
+                for unit_info in self._available_stm_units():
+                    feature_text = str(
+                        unit_info.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")
+                    ).strip()
+                    if feature_text:
+                        feature_colors[feature_text] = _stm_color_to_dict(unit_info)
+                export_options["stm_color_codes"] = {"features": feature_colors}
+
+                with open(output_path, "w", encoding="utf-8", newline="") as output_stream:
+                    dataframe.to_csv(
+                        output_stream,
+                        sep=delimiter,
+                        index=False,
+                    )
+                    _stm_write_export_footer(
+                        output_stream,
+                        {
+                            "schema": STRUCTURAL_TOPOLOGY_EXPORT_SCHEMA,
+                            "version": 1,
+                            "table_name": table_name,
+                            "table_type": STRUCTURAL_TOPOLOGY_TABLE_TYPE,
+                            "options": export_options,
+                        },
+                    )
+            else:
+                dataframe.to_csv(
+                    output_path,
+                    sep=delimiter,
+                    index=False,
+                    encoding="utf-8",
+                )
             self.parent.print_terminal(
                 f'Exported table "{table_name}" to {output_path}'
             )

@@ -1,6 +1,7 @@
 """table2data.py
 Generic importer for custom editable project tables."""
 
+import json
 from os import path as os_path
 
 from pandas import read_csv as pd_read_csv
@@ -41,6 +42,9 @@ STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS = [
     STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN,
     STRUCTURAL_TOPOLOGY_POLARITY_COLUMN,
 ]
+STRUCTURAL_TOPOLOGY_EXPORT_MARKER_BEGIN = "# PZERO_STM_EXPORT BEGIN"
+STRUCTURAL_TOPOLOGY_EXPORT_MARKER_END = "# PZERO_STM_EXPORT END"
+STRUCTURAL_TOPOLOGY_EXPORT_SCHEMA = "pzero.stm.export"
 STRUCTURAL_TOPOLOGY_UNIT_VALUES = [
     "TMU",
     "TSU",
@@ -99,6 +103,51 @@ def _unique_table_name(existing_names, base_name):
         suffix += 1
 
 
+def _read_stm_export_payload(file_path):
+    """Read the structured STm footer embedded in an exported CSV file."""
+    try:
+        with open(file_path, "r", encoding="utf-8") as input_stream:
+            file_lines = input_stream.readlines()
+    except OSError:
+        return None
+
+    end_index = None
+    for line_index in range(len(file_lines) - 1, -1, -1):
+        if file_lines[line_index].strip() == STRUCTURAL_TOPOLOGY_EXPORT_MARKER_END:
+            end_index = line_index
+            break
+    if end_index is None:
+        return None
+
+    start_index = None
+    for line_index in range(end_index - 1, -1, -1):
+        if file_lines[line_index].strip() == STRUCTURAL_TOPOLOGY_EXPORT_MARKER_BEGIN:
+            start_index = line_index + 1
+            break
+    if start_index is None:
+        return None
+
+    json_lines = []
+    for line in file_lines[start_index:end_index]:
+        stripped_line = line.lstrip()
+        if not stripped_line.startswith("#"):
+            continue
+        json_lines.append(stripped_line[1:].lstrip())
+
+    payload_text = "\n".join(json_lines).strip()
+    if not payload_text:
+        return None
+
+    try:
+        payload = json.loads(payload_text)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+    if payload.get("schema") != STRUCTURAL_TOPOLOGY_EXPORT_SCHEMA:
+        return None
+    return payload
+
+
 class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
     """Dialog used to preview and map generic tabular files into custom tables."""
 
@@ -115,6 +164,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         self.input_data_df = None
         self.rename_dict = {}
         self._is_populating_table = False
+        self.preview_stm_payload = None
         self.preview_path = self._pick_preview_path()
 
         self.setWindowTitle("Import tables")
@@ -254,6 +304,13 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             detected_sep = auto_sep(self.preview_path)
         except Exception:
             detected_sep = ","
+
+        self.preview_stm_payload = _read_stm_export_payload(self.preview_path)
+        if self.preview_stm_payload is not None and self.preview_stm_payload.get(
+            "table_type"
+        ) == STRUCTURAL_TOPOLOGY_TABLE_TYPE:
+            self.ImportAsSTmCheckBox.setChecked(True)
+            self.ImportAsColormapCheckBox.setChecked(False)
 
         detected_label = None
         for label, sep in self.sep_dict.items():
@@ -799,6 +856,14 @@ def import_tables(self=None, in_file_names=None):
 
     for in_file_name in import_config.get("in_file_names", []):
         try:
+            stm_payload = _read_stm_export_payload(in_file_name)
+            import_as_colormap = bool(import_config.get("import_as_colormap", False))
+            import_as_stm = bool(import_config.get("import_as_stm", False))
+            stm_options = {}
+            if stm_payload is not None and stm_payload.get("table_type") == STRUCTURAL_TOPOLOGY_TABLE_TYPE:
+                import_as_stm = True
+                import_as_colormap = False
+                stm_options = dict(stm_payload.get("options", {}))
             imported_df = _read_table_dataframe(
                 file_path=in_file_name,
                 import_config=import_config,
@@ -808,19 +873,19 @@ def import_tables(self=None, in_file_names=None):
                 existing_names=set(self.custom_tables.keys()),
                 base_name=base_name,
             )
-            if import_config.get("import_as_stm", False):
+            if import_as_stm:
                 imported_df = _normalise_stm_dataframe(imported_df)
             self.custom_tables[table_name] = imported_df
-            if import_config.get("import_as_colormap", False):
+            if import_as_colormap:
                 self.custom_table_types[table_name] = (
                     PropertiesCMaps.custom_colormap_table_type
                 )
                 self.custom_table_options[table_name] = {
                     "mode": import_config.get("colormap_mode", "continuous")
                 }
-            elif import_config.get("import_as_stm", False):
+            elif import_as_stm:
                 self.custom_table_types[table_name] = STRUCTURAL_TOPOLOGY_TABLE_TYPE
-                self.custom_table_options[table_name] = {}
+                self.custom_table_options[table_name] = stm_options
             else:
                 self.custom_table_types[table_name] = "manual"
                 self.custom_table_options[table_name] = {}
