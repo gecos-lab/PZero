@@ -76,13 +76,19 @@ class ViewMPL(BaseView):
         for uid in updated_uids:
             if uid in self.uids_in_view:
                 # Get color from legend
+                actor = self.mpl_actors[uid]
+                if actor is None:
+                    continue
                 color_R = collection.get_uid_legend(uid=uid)["color_R"]
                 color_G = collection.get_uid_legend(uid=uid)["color_G"]
                 color_B = collection.get_uid_legend(uid=uid)["color_B"]
                 color_RGB = [color_R / 255, color_G / 255, color_B / 255]
                 # Now update color for actor uid
-                self.mpl_actors[uid].set_color(color_RGB)
-                self.mpl_actors[uid].figure.canvas.draw()
+                actor.set_color(color_RGB)
+                try:
+                    actor.figure.canvas.draw()
+                except Exception as e:
+                    self.print_terminal(f"Could not redraw after color change: {e}")
             else:
                 continue
 
@@ -90,11 +96,17 @@ class ViewMPL(BaseView):
         """Change opacity for actor uid"""
         for uid in updated_uids:
             if uid in self.uids_in_view:
+                actor = self.mpl_actors[uid]
+                if actor is None:
+                    continue
                 # Get color from legend
                 opacity = collection.get_uid_legend(uid=uid)["opacity"] / 100
                 # Now update color for actor uid
-                self.mpl_actors[uid].set_alpha(opacity)
-                self.mpl_actors[uid].figure.canvas.draw()
+                actor.set_alpha(opacity)
+                try:
+                    actor.figure.canvas.draw()
+                except Exception as e:
+                    self.print_terminal(f"Could not redraw after opacity change: {e}")
             else:
                 continue
 
@@ -102,11 +114,17 @@ class ViewMPL(BaseView):
         """Change line thickness for actor uid"""
         for uid in updated_uids:
             if uid in self.uids_in_view:
+                actor = self.mpl_actors[uid]
+                if actor is None:
+                    continue
                 # Get color from legend
                 line_thick = collection.get_uid_legend(uid=uid)["line_thick"]
                 # Now update color for actor uid
-                self.mpl_actors[uid].set_linewidth(line_thick)
-                self.mpl_actors[uid].figure.canvas.draw()
+                actor.set_linewidth(line_thick)
+                try:
+                    actor.figure.canvas.draw()
+                except Exception as e:
+                    self.print_terminal(f"Could not redraw after line thick change: {e}")
             else:
                 continue
 
@@ -118,11 +136,16 @@ class ViewMPL(BaseView):
                 point_size = collection.get_uid_legend(uid=uid)["point_size"]
                 # Now update color for actor uid
                 actor = self.mpl_actors[uid]
+                if actor is None:
+                    continue
                 if hasattr(actor, "set_markersize"):
                     actor.set_markersize(point_size)
                 elif hasattr(actor, "set_sizes"):
                     actor.set_sizes([point_size**2])
-                self.mpl_actors[uid].figure.canvas.draw()
+                try:
+                    actor.figure.canvas.draw()
+                except Exception as e:
+                    self.print_terminal(f"Could not redraw after point size change: {e}")
             else:
                 continue
 

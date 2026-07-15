@@ -107,77 +107,77 @@ class View3D(ViewVTK):
 
     # ================================  General methods shared by all views - built incrementally =====================
 
-    def initialize_menu_tools(self):
-        """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
-        # append code from superclass
-        super().initialize_menu_tools()
+    # def initialize_menu_tools(self):
+    #     """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
+    #     # append code from superclass
+    #     super().initialize_menu_tools()
 
-        # Remove 2D line drawing from 3D view (use "Draw line (3D mode)" instead)
-        if hasattr(self, "drawLineButton"):
-            self.drawLineButton.setEnabled(False)
-            self.drawLineButton.setVisible(False)
-            if hasattr(self, "menuCreate"):
-                self.menuCreate.removeAction(self.drawLineButton)
+    #     # Remove 2D line drawing from 3D view (use "Draw line (3D mode)" instead)
+    #     if hasattr(self, "drawLineButton"):
+    #         self.drawLineButton.setEnabled(False)
+    #         self.drawLineButton.setVisible(False)
+    #         if hasattr(self, "menuCreate"):
+    #             self.menuCreate.removeAction(self.drawLineButton)
 
-        # Ensure any inherited 3D line action is removed before re-adding it here
-        if hasattr(self, "drawLine3DButton") and hasattr(self, "menuCreate"):
-            self.menuCreate.removeAction(self.drawLine3DButton)
+    #     # Ensure any inherited 3D line action is removed before re-adding it here
+    #     if hasattr(self, "drawLine3DButton") and hasattr(self, "menuCreate"):
+    #         self.menuCreate.removeAction(self.drawLine3DButton)
 
-        # then add new code specific to this class
-        self.saveHomeView = QAction("Save home view", self)
-        self.saveHomeView.triggered.connect(self.save_home_view)
-        self.menuView.insertAction(self.zoomActive, self.saveHomeView)
+    #     # then add new code specific to this class
+    #     self.saveHomeView = QAction("Save home view", self)
+    #     self.saveHomeView.triggered.connect(self.save_home_view)
+    #     self.menuView.insertAction(self.zoomActive, self.saveHomeView)
 
-        self.zoomHomeView = QAction("Zoom to home", self)
-        self.zoomHomeView.triggered.connect(self.zoom_home_view)
-        self.menuView.insertAction(self.zoomActive, self.zoomHomeView)
+    #     self.zoomHomeView = QAction("Zoom to home", self)
+    #     self.zoomHomeView.triggered.connect(self.zoom_home_view)
+    #     self.menuView.insertAction(self.zoomActive, self.zoomHomeView)
 
-        # Add 3D-specific line drawing tool that uses point picking
-        # proper connection to the action
-        self.drawLine3DButton = QAction("Draw line (3D mode)", self)
-        self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
-        self.menuCreate.addAction(self.drawLine3DButton)
+    #     # Add 3D-specific line drawing tool that uses point picking
+    #     # proper connection to the action
+    #     self.drawLine3DButton = QAction("Draw line (3D mode)", self)
+    #     self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
+    #     self.menuCreate.addAction(self.drawLine3DButton)
 
-        self.menuBoreTraceVis = QMenu("Borehole visualization methods", self)
+    #     self.menuBoreTraceVis = QMenu("Borehole visualization methods", self)
 
-        self.actionBoreTrace = QAction("Trace", self)
-        self.actionBoreTrace.triggered.connect(lambda: self.change_bore_vis("trace"))
+    #     self.actionBoreTrace = QAction("Trace", self)
+    #     self.actionBoreTrace.triggered.connect(lambda: self.change_bore_vis("trace"))
 
-        self.actionBoreCylinder = QAction("Cylinder", self)
-        self.actionBoreCylinder.triggered.connect(
-            lambda: self.change_bore_vis("cylinder")
-        )
+    #     self.actionBoreCylinder = QAction("Cylinder", self)
+    #     self.actionBoreCylinder.triggered.connect(
+    #         lambda: self.change_bore_vis("cylinder")
+    #     )
 
-        self.actionToggleLithology = QAction("Toggle lithology", self)
-        self.actionToggleLithology.triggered.connect(
-            lambda: self.change_bore_vis("litho")
-        )
+    #     self.actionToggleLithology = QAction("Toggle lithology", self)
+    #     self.actionToggleLithology.triggered.connect(
+    #         lambda: self.change_bore_vis("litho")
+    #     )
 
-        self.actionToggleGeology = QAction("Toggle geology", self)
-        self.actionToggleGeology.triggered.connect(lambda: self.change_bore_vis("geo"))
+    #     self.actionToggleGeology = QAction("Toggle geology", self)
+    #     self.actionToggleGeology.triggered.connect(lambda: self.change_bore_vis("geo"))
 
-        self.menuBoreTraceVis.addAction(self.actionBoreTrace)
-        self.menuBoreTraceVis.addAction(self.actionBoreCylinder)
-        self.menuBoreTraceVis.addAction(self.actionToggleLithology)
-        self.menuBoreTraceVis.addAction(self.actionToggleGeology)
+    #     self.menuBoreTraceVis.addAction(self.actionBoreTrace)
+    #     self.menuBoreTraceVis.addAction(self.actionBoreCylinder)
+    #     self.menuBoreTraceVis.addAction(self.actionToggleLithology)
+    #     self.menuBoreTraceVis.addAction(self.actionToggleGeology)
 
-        self.menuView.addMenu(self.menuBoreTraceVis)
+    #     self.menuView.addMenu(self.menuBoreTraceVis)
 
-        self.actionExportGltf = QAction("Export as GLTF", self)
-        self.actionExportGltf.triggered.connect(self.export_gltf)
-        self.menuView.addAction(self.actionExportGltf)
+    #     self.actionExportGltf = QAction("Export as GLTF", self)
+    #     self.actionExportGltf.triggered.connect(self.export_gltf)
+    #     self.menuView.addAction(self.actionExportGltf)
 
-        self.actionExportHtml = QAction("Export as HTML", self)
-        self.actionExportHtml.triggered.connect(self.export_html)
-        self.menuView.addAction(self.actionExportHtml)
+    #     self.actionExportHtml = QAction("Export as HTML", self)
+    #     self.actionExportHtml.triggered.connect(self.export_html)
+    #     self.menuView.addAction(self.actionExportHtml)
 
-        self.actionExportObj = QAction("Export as OBJ", self)
-        self.actionExportObj.triggered.connect(self.export_obj)
-        self.menuView.addAction(self.actionExportObj)
+    #     self.actionExportObj = QAction("Export as OBJ", self)
+    #     self.actionExportObj.triggered.connect(self.export_obj)
+    #     self.menuView.addAction(self.actionExportObj)
 
-        self.actionExportVtkJSON = QAction("Export as vtkJSON scene", self)
-        self.actionExportVtkJSON.triggered.connect(self.export_vtkJS)
-        self.menuView.addAction(self.actionExportVtkJSON)
+    #     self.actionExportVtkJSON = QAction("Export as vtkJSON scene", self)
+    #     self.actionExportVtkJSON.triggered.connect(self.export_vtkJS)
+    #     self.menuView.addAction(self.actionExportVtkJSON)
 
         # self.menuOrbit = QMenu("Orbit around", self)
         # self.actionOrbitEntity = QAction("Entity", self)
@@ -568,6 +568,7 @@ class View3D(ViewVTK):
 
     def act_att(self):
         """Used to activate pkd_point, which returns data from picking on point clouds."""
+        print("start picking")
         if self.tog_att == -1:
             input_dict = {
                 "name": ["Set name: ", "Set_0"],
@@ -2923,6 +2924,10 @@ class View3D(ViewVTK):
         self.drawLine3DButton = QAction("Draw line (3D mode)", self)
         self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
         self.menuCreate.addAction(self.drawLine3DButton)
+        
+        self.actionManual_picking = QAction("Pick", self)
+        self.actionManual_picking.triggered.connect(lambda: self.act_att())
+        self.menuCreate.addAction(self.actionManual_picking)
 
         # Create Mesh Tools menu if it doesn't exist
         if not hasattr(self, "menuMeshTools"):

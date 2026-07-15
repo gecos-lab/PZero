@@ -10,6 +10,9 @@ from numpy import all as np_all
 from numpy import ndarray as np_ndarray
 from numpy.linalg import norm as np_linalg_norm
 from numpy import asarray as np_asarray
+from numpy import atleast_1d as np_atleast_1d
+from numpy import concatenate as np_concatenate
+from numpy import vstack as np_vstack
 
 # Pandas imports____
 from pandas import DataFrame as pd_DataFrame
@@ -18,7 +21,7 @@ from pandas import concat as pd_concat
 # PZero imports____
 from .abstract_view_mpl import ViewMPL
 from ..entities_factory import VertexSet, XsVertexSet, Attitude
-from pzero.orientation_analysis import fisherparams, kentparams, bingham, kmeans_clusters, resolve_lower_hemisphere
+from pzero.orientation_analysis import fisherparams, bingham, kmeans_clusters, resolve_lower_hemisphere, kmedoids_clusters   #kentparams,
 from pzero.helpers.helper_dialogs import multiple_input_dialog
 
 # mplstereonet import____
@@ -116,138 +119,75 @@ class ViewStereoplot(ViewMPL):
         self.kmeans_k_widget_action.setDefaultWidget(self.kmeans_k_spinbox)
         self.menuAnalysis.addAction(self.kmeans_k_widget_action)
         
-        # ---- Normals analysis actors ----
-        self.menuAnalysis.addSection("Normals - Fisher")
+        # ---- Analysis actors ----
+        self.menuAnalysis.addSection("Fisher")
 
-        self.actionNormalsFisher = QAction("Mean direction as pole", self)
-        self.actionNormalsFisher.setCheckable(True)
-        self.actionNormalsFisher.triggered.connect(lambda: self.toggle_analysis_actor("normals_fisher_mean_pole"))
-        self.menuAnalysis.addAction(self.actionNormalsFisher)
-        self.analysis_action_for_key["normals_fisher_mean_pole"] = self.actionNormalsFisher
+        self.actionFisher = QAction("Mean direction as pole", self)
+        self.actionFisher.setCheckable(True)
+        self.actionFisher.triggered.connect(lambda: self.toggle_analysis_actor("fisher_mean_pole"))
+        self.menuAnalysis.addAction(self.actionFisher)
+        self.analysis_action_for_key["fisher_mean_pole"] = self.actionFisher
         
-        self.menuAnalysis.addSection("Normals - Bingham")
+        self.menuAnalysis.addSection("Bingham")
 
-        self.actionNormalsBinghamMajorPole = QAction("Major axis as pole", self)
-        self.actionNormalsBinghamMajorPole.setCheckable(True)
-        self.actionNormalsBinghamMajorPole.triggered.connect(lambda: self.toggle_analysis_actor("normals_bingham_major_pole"))
-        self.menuAnalysis.addAction(self.actionNormalsBinghamMajorPole)
-        self.analysis_action_for_key["normals_bingham_major_pole"] = self.actionNormalsBinghamMajorPole
+        self.actionBinghamMajorPole = QAction("Major axis as pole", self)
+        self.actionBinghamMajorPole.setCheckable(True)
+        self.actionBinghamMajorPole.triggered.connect(lambda: self.toggle_analysis_actor("bingham_major_pole"))
+        self.menuAnalysis.addAction(self.actionBinghamMajorPole)
+        self.analysis_action_for_key["bingham_major_pole"] = self.actionBinghamMajorPole
 
-        self.actionNormalsBinghamIntermediatePole = QAction("Intermediate axis as pole", self)
-        self.actionNormalsBinghamIntermediatePole.setCheckable(True)
-        self.actionNormalsBinghamIntermediatePole.triggered.connect(lambda: self.toggle_analysis_actor("normals_bingham_intermediate_pole"))
-        self.menuAnalysis.addAction(self.actionNormalsBinghamIntermediatePole)
-        self.analysis_action_for_key["normals_bingham_intermediate_pole"] = self.actionNormalsBinghamIntermediatePole
+        self.actionBinghamIntermediatePole = QAction("Intermediate axis as pole", self)
+        self.actionBinghamIntermediatePole.setCheckable(True)
+        self.actionBinghamIntermediatePole.triggered.connect(lambda: self.toggle_analysis_actor("bingham_intermediate_pole"))
+        self.menuAnalysis.addAction(self.actionBinghamIntermediatePole)
+        self.analysis_action_for_key["bingham_intermediate_pole"] = self.actionBinghamIntermediatePole
 
-        self.actionNormalsBinghamMinorPole = QAction("Minor axis as pole", self)
-        self.actionNormalsBinghamMinorPole.setCheckable(True)
-        self.actionNormalsBinghamMinorPole.triggered.connect(lambda: self.toggle_analysis_actor("normals_bingham_minor_pole"))
-        self.menuAnalysis.addAction(self.actionNormalsBinghamMinorPole)
-        self.analysis_action_for_key["normals_bingham_minor_pole"] = self.actionNormalsBinghamMinorPole
+        self.actionBinghamMinorPole = QAction("Minor axis as pole", self)
+        self.actionBinghamMinorPole.setCheckable(True)
+        self.actionBinghamMinorPole.triggered.connect(lambda: self.toggle_analysis_actor("bingham_minor_pole"))
+        self.menuAnalysis.addAction(self.actionBinghamMinorPole)
+        self.analysis_action_for_key["bingham_minor_pole"] = self.actionBinghamMinorPole
 
-        self.actionNormalsBinghamMinorGC = QAction("Great circle ⊥ minor axis", self)
-        self.actionNormalsBinghamMinorGC.setCheckable(True)
-        self.actionNormalsBinghamMinorGC.triggered.connect(lambda: self.toggle_analysis_actor("normals_bingham_minor_gc"))
-        self.menuAnalysis.addAction(self.actionNormalsBinghamMinorGC)
-        self.analysis_action_for_key["normals_bingham_minor_gc"] = self.actionNormalsBinghamMinorGC
+        self.actionBinghamMinorGC = QAction("Great circle ⊥ minor axis", self)
+        self.actionBinghamMinorGC.setCheckable(True)
+        self.actionBinghamMinorGC.triggered.connect(lambda: self.toggle_analysis_actor("bingham_minor_gc"))
+        self.menuAnalysis.addAction(self.actionBinghamMinorGC)
+        self.analysis_action_for_key["bingham_minor_gc"] = self.actionBinghamMinorGC
 
-        self.menuAnalysis.addSection("Normals - Kent")
+        # self.menuAnalysis.addSection("Kent")
 
-        self.actionNormalsKentMeanDir = QAction("Mean direction as pole", self)
-        self.actionNormalsKentMeanDir.setCheckable(True)
-        self.actionNormalsKentMeanDir.triggered.connect(lambda: self.toggle_analysis_actor("normals_kent_mean_pole"))
-        self.menuAnalysis.addAction(self.actionNormalsKentMeanDir)
-        self.analysis_action_for_key["normals_kent_mean_pole"] = self.actionNormalsKentMeanDir
+        # self.actionKentMeanDir = QAction("Mean direction as pole", self)
+        # self.actionKentMeanDir.setCheckable(True)
+        # self.actionKentMeanDir.triggered.connect(lambda: self.toggle_analysis_actor("kent_mean_pole"))
+        # self.menuAnalysis.addAction(self.actionKentMeanDir)
+        # self.analysis_action_for_key["kent_mean_pole"] = self.actionKentMeanDir
 
-        self.actionNormalsKentMeanGC = QAction("Great circle ⊥ mean direction", self)
-        self.actionNormalsKentMeanGC.setCheckable(True)
-        self.actionNormalsKentMeanGC.triggered.connect(lambda: self.toggle_analysis_actor("normals_kent_mean_gc"))
-        self.menuAnalysis.addAction(self.actionNormalsKentMeanGC)
-        self.analysis_action_for_key["normals_kent_mean_gc"] = self.actionNormalsKentMeanGC
+        # self.actionKentMeanGC = QAction("Great circle ⊥ mean direction", self)
+        # self.actionKentMeanGC.setCheckable(True)
+        # self.actionKentMeanGC.triggered.connect(lambda: self.toggle_analysis_actor("kent_mean_gc"))
+        # self.menuAnalysis.addAction(self.actionKentMeanGC)
+        # self.analysis_action_for_key["kent_mean_gc"] = self.actionKentMeanGC
         
 
-        self.menuAnalysis.addSection("Normals - K-means")
+        self.menuAnalysis.addSection("K-means")
 
-        self.actionNormalsKmeansCenters = QAction("Cluster centers as poles", self)
-        self.actionNormalsKmeansCenters.setCheckable(True)
-        self.actionNormalsKmeansCenters.triggered.connect(lambda: self.toggle_analysis_actor("normals_kmeans_centers"))
-        self.menuAnalysis.addAction(self.actionNormalsKmeansCenters)
-        self.analysis_action_for_key["normals_kmeans_centers"] = self.actionNormalsKmeansCenters
+        self.actionKmeansCenters = QAction("Cluster centers as poles", self)
+        self.actionKmeansCenters.setCheckable(True)
+        self.actionKmeansCenters.triggered.connect(lambda: self.toggle_analysis_actor("kmeans_centers"))
+        self.menuAnalysis.addAction(self.actionKmeansCenters)
+        self.analysis_action_for_key["kmeans_centers"] = self.actionKmeansCenters
         
-        self.actionNormalsKmeansColor = QAction("Color Clusters", self)
-        self.actionNormalsKmeansColor.setCheckable(True)
-        self.actionNormalsKmeansColor.triggered.connect(lambda: self.toggle_analysis_actor("normals_kmeans_color"))
-        self.menuAnalysis.addAction(self.actionNormalsKmeansColor)
-        self.analysis_action_for_key["normals_kmeans_color"] = self.actionNormalsKmeansColor
+        self.actionKmeansColor = QAction("Color Clusters", self)
+        self.actionKmeansColor.setCheckable(True)
+        self.actionKmeansColor.triggered.connect(lambda: self.toggle_analysis_actor("kmeans_color"))
+        self.menuAnalysis.addAction(self.actionKmeansColor)
+        self.analysis_action_for_key["kmeans_color"] = self.actionKmeansColor
         
-        self.actionSeedPickingNormals = QAction("Seed picking for clustering", self)
+        self.actionSeedPickingNormals = QAction("Seed picking for clustering (Normals objects)", self)
         self.actionSeedPickingNormals.triggered.connect(lambda : self.seed_picking("normals"))
         self.menuAnalysis.addAction(self.actionSeedPickingNormals)
 
-        # ---- Lineations analysis actors ----
-        self.menuAnalysis.addSection("Lineations - Fisher")
-
-        self.actionLineationsFisher = QAction("Mean direction as pole", self)
-        self.actionLineationsFisher.setCheckable(True)
-        self.actionLineationsFisher.triggered.connect(lambda: self.toggle_analysis_actor("lineations_fisher_mean_pole"))
-        self.menuAnalysis.addAction(self.actionLineationsFisher)
-        self.analysis_action_for_key["lineations_fisher_mean_pole"] = self.actionLineationsFisher
-        
-        self.menuAnalysis.addSection("Lineations - Bingham")
-
-        self.actionLineationsBinghamMajorPole = QAction("Major axis as pole", self)
-        self.actionLineationsBinghamMajorPole.setCheckable(True)
-        self.actionLineationsBinghamMajorPole.triggered.connect(lambda: self.toggle_analysis_actor("lineations_bingham_major_pole"))
-        self.menuAnalysis.addAction(self.actionLineationsBinghamMajorPole)
-        self.analysis_action_for_key["lineations_bingham_major_pole"] = self.actionLineationsBinghamMajorPole
-
-        self.actionLineationsBinghamIntermediatePole = QAction("Intermediate axis as pole", self)
-        self.actionLineationsBinghamIntermediatePole.setCheckable(True)
-        self.actionLineationsBinghamIntermediatePole.triggered.connect(lambda: self.toggle_analysis_actor("lineations_bingham_intermediate_pole"))
-        self.menuAnalysis.addAction(self.actionLineationsBinghamIntermediatePole)
-        self.analysis_action_for_key["lineations_bingham_intermediate_pole"] = self.actionLineationsBinghamIntermediatePole
-
-        self.actionLineationsBinghamMinorPole = QAction("Minor axis as pole", self)
-        self.actionLineationsBinghamMinorPole.setCheckable(True)
-        self.actionLineationsBinghamMinorPole.triggered.connect(lambda: self.toggle_analysis_actor("lineations_bingham_minor_pole"))
-        self.menuAnalysis.addAction(self.actionLineationsBinghamMinorPole)
-        self.analysis_action_for_key["lineations_bingham_minor_pole"] = self.actionLineationsBinghamMinorPole
-
-        self.actionLineationsBinghamMinorGC = QAction("Great circle ⊥ minor axis", self)
-        self.actionLineationsBinghamMinorGC.setCheckable(True)
-        self.actionLineationsBinghamMinorGC.triggered.connect(lambda: self.toggle_analysis_actor("lineations_bingham_minor_gc"))
-        self.menuAnalysis.addAction(self.actionLineationsBinghamMinorGC)
-        self.analysis_action_for_key["lineations_bingham_minor_gc"] = self.actionLineationsBinghamMinorGC
-        
-        self.menuAnalysis.addSection("Lineations - Kent")
-
-        self.actionLineationsKentDir = QAction("Mean direction as pole", self)
-        self.actionLineationsKentDir.setCheckable(True)
-        self.actionLineationsKentDir.triggered.connect(lambda: self.toggle_analysis_actor("lineations_kent_mean_pole"))
-        self.menuAnalysis.addAction(self.actionLineationsKentDir)
-        self.analysis_action_for_key["lineations_kent_mean_pole"] = self.actionLineationsKentDir
-        
-        self.actionLineationsKentMeanGC = QAction("Great circle ⊥ mean direction", self)
-        self.actionLineationsKentMeanGC.setCheckable(True)
-        self.actionLineationsKentMeanGC.triggered.connect(lambda: self.toggle_analysis_actor("lineations_kent_mean_gc"))
-        self.menuAnalysis.addAction(self.actionLineationsKentMeanGC)
-        self.analysis_action_for_key["lineations_kent_mean_gc"] = self.actionLineationsKentMeanGC
-
-        self.menuAnalysis.addSection("Lineations - K-means")
-
-        self.actionLineationsKmeansCenters = QAction("Cluster centers as poles", self)
-        self.actionLineationsKmeansCenters.setCheckable(True)
-        self.actionLineationsKmeansCenters.triggered.connect(lambda: self.toggle_analysis_actor("lineations_kmeans_centers"))
-        self.menuAnalysis.addAction(self.actionLineationsKmeansCenters)
-        self.analysis_action_for_key["lineations_kmeans_centers"] = self.actionLineationsKmeansCenters
-        
-        self.actionLineationsKmeansColor = QAction("Color Cluster", self)
-        self.actionLineationsKmeansColor.setCheckable(True)
-        self.actionLineationsKmeansColor.triggered.connect(lambda: self.toggle_analysis_actor("lineations_kmeans_color"))
-        self.menuAnalysis.addAction(self.actionLineationsKmeansColor)
-        self.analysis_action_for_key["lineations_kmeans_color"] = self.actionLineationsKmeansColor
-        
-        self.actionSeedPickingLineations = QAction("Seed picking for clustering", self)
+        self.actionSeedPickingLineations = QAction("Seed picking for clustering (Lineations objects)", self)
         self.actionSeedPickingLineations.triggered.connect(lambda : self.seed_picking("lineations"))
         self.menuAnalysis.addAction(self.actionSeedPickingLineations)
         
@@ -441,9 +381,14 @@ class ViewStereoplot(ViewMPL):
             collection_name = row["collection"]
             show_property = row["show_property"]
 
-            this_actor = self.show_actor_with_property(
-                uid=uid, coll_name=collection_name, show_property=show_property, visible=show
-            )
+            if show:
+                this_actor = self.show_actor_with_property(
+                    uid=uid, coll_name=collection_name,
+                    show_property=show_property, visible=True)
+            else:
+                this_actor = None
+                self.mpl_actors[uid] = None
+
             new_rows.append(
                 {
                     "uid": uid,
@@ -455,6 +400,7 @@ class ViewStereoplot(ViewMPL):
             )
 
         self.actors_df = pd_DataFrame(new_rows)
+        self.figure.canvas.draw()
 
     def _rebuild_analysis_actors(self):
         """Redraw every currently-active analysis visual on the current self.ax,
@@ -659,12 +605,12 @@ class ViewStereoplot(ViewMPL):
                 self.print_terminal(f"Fisher stats failed: {e}")
                 fisher_result = None
                 
-            # Kent parameters calculation
-            try:
-                kent_result = kentparams(normals_array, is_axial=True)
-            except ValueError as e:
-                self.print_terminal(f"Kent stats failed: {e}")
-                kent_result = None
+            # # Kent parameters calculation
+            # try:
+            #     kent_result = kentparams(normals_array, is_axial=True)
+            # except ValueError as e:
+            #     self.print_terminal(f"Kent stats failed: {e}")
+            #     kent_result = None
                 
             # Bingham parameters calculation
             try:
@@ -676,13 +622,14 @@ class ViewStereoplot(ViewMPL):
             # K-means clusters calculation
             try:
                 kmean_result = kmeans_clusters(normals_array, k, is_axial=True)
+                # kmean_result = kmedoids_clusters(normals_array, k, is_axial=True)
             except ValueError as e:
                 self.print_terminal(f"K-means clusters failed: {e}")
                 kmean_result = None
         else:
             self.is_normals = False
             fisher_result = None
-            kent_result = None
+            # kent_result = None
             bingham_result = None
             kmean_result = None
             
@@ -695,7 +642,7 @@ class ViewStereoplot(ViewMPL):
                 
         self.analysis_results['normals'] = {
             "fisher": fisher_result,
-            "kent": kent_result,
+            # "kent": kent_result,
             "bingham": bingham_result,
             "kmeans": kmean_result,
         }
@@ -710,12 +657,12 @@ class ViewStereoplot(ViewMPL):
                 self.print_terminal(f"Fisher stats failed: {e}")
                 fisher_result = None
                 
-            # Kent parameters calculation
-            try:
-                kent_result = kentparams(lineations_array)
-            except ValueError as e:
-                self.print_terminal(f"Kent stats failed: {e}")
-                kent_result = None
+            # # Kent parameters calculation
+            # try:
+            #     kent_result = kentparams(lineations_array)
+            # except ValueError as e:
+            #     self.print_terminal(f"Kent stats failed: {e}")
+            #     kent_result = None
                 
             # Bingham parameters calculation
             try:
@@ -746,7 +693,7 @@ class ViewStereoplot(ViewMPL):
             
         self.analysis_results['lineations'] = {
             "fisher": fisher_result,
-            "kent": kent_result,
+            # "kent": kent_result,
             "bingham": bingham_result,
             "kmeans": kmean_result,
         }
@@ -772,6 +719,8 @@ class ViewStereoplot(ViewMPL):
                 try:
                     kmean_result = kmeans_clusters(self.last_normals_array, k,
                                                    seeds=np_asarray(self.seed_pick_normals), is_axial=True)
+                    # kmean_result = kmedoids_clusters(self.last_normals_array, k,
+                    #                                seeds=np_asarray(self.seed_pick_normals), is_axial=True)
                 except ValueError as e:
                     self.print_terminal(f"K-means clusters failed: {e}")
                     kmean_result = None
@@ -789,7 +738,7 @@ class ViewStereoplot(ViewMPL):
             else:
                 df_temp["clusters"] = None
             self.last_normals_df = df_temp
-            for key in ["normals_kmeans_centers", "normals_kmeans_color"]:
+            for key in ["kmeans_centers", "kmeans_color"]:
                 if self.analysis_actors.get(key) is not None:
                     self._hide_analysis_actor(key)
                     self._show_analysis_actor(key)
@@ -816,7 +765,7 @@ class ViewStereoplot(ViewMPL):
             else:
                 df_temp["clusters"] = None
             self.last_lineations_df = df_temp
-            for key in ["lineations_kmeans_centers", "lineations_kmeans_color"]:
+            for key in ["kmeans_centers", "kmeans_color"]:
                 if self.analysis_actors.get(key) is not None:
                     self._hide_analysis_actor(key)
                     self._show_analysis_actor(key)
@@ -852,16 +801,14 @@ class ViewStereoplot(ViewMPL):
             self.print_terminal("No vectors available for seed picking.")
             return
 
-        lon, lat = self._project_vectors_to_stereonet(vectors)
-
-        points_xy = np_asarray([lon, lat]).T
+        points_xy = np_asarray([self.seed_pick_projected_lon, self.seed_pick_projected_lat]).T
         points_pixels = self.ax.transData.transform(points_xy)
 
         dx = points_pixels[:, 0] - event.x
         dy = points_pixels[:, 1] - event.y
         idx = int((dx * dx + dy * dy).argmin())
 
-        seed = vectors[idx]
+        seed = self.seed_pick_source_vectors[idx]
 
         # Avoid picking the same data point twice.
         for existing_seed in seeds:
@@ -890,11 +837,11 @@ class ViewStereoplot(ViewMPL):
         the number of cluster he want to calculate in a dialog
         window and then pick the seeds for the clustering.
         """
-        
         self._clear_seed_pick_actors()
+
         if not hasattr(self, "last_normals_array") or not hasattr(self, "last_lineations_array"):
             self.recompute_values()
-        
+
         input_dict = {"number_of_clusters": ["Number of clusters: ", str(self.kmeans_k)]}
         result = multiple_input_dialog(title="Number of clusters", input_dict=input_dict)
         if result is None:
@@ -915,6 +862,39 @@ class ViewStereoplot(ViewMPL):
             self.seed_pick_normals = []
         elif kind == "lineations":
             self.seed_pick_lineations = []
+
+        # Build projected points from the same source as show_actor_with_property
+        # so click-matching lands on the actual drawn positions, not a re-derived position
+        projected_lons = []
+        projected_lats = []
+        source_vectors = []
+
+        for uid in self.parent.geol_coll.selected_uids:
+            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            if vtk_obj is None:
+                continue
+            if kind == "normals" and "Normals" not in vtk_obj.point_data_keys:
+                continue
+            if kind == "lineations" and "Lineations" not in vtk_obj.point_data_keys:
+                continue
+            strike = (vtk_obj.points_map_dip_direction - 90) % 360
+            dip = vtk_obj.points_map_dip
+            lon, lat = mplstereonet.pole(strike, dip)
+            projected_lons.append(np_atleast_1d(lon))
+            projected_lats.append(np_atleast_1d(lat))
+            vectors = vtk_obj.get_point_data("Normals" if kind == "normals" else "Lineations")
+            if vectors.ndim == 1:
+                vectors = vectors.reshape(1, -1)
+            source_vectors.append(vectors)
+
+        if not projected_lons:
+            self.print_terminal("No data available for seed picking.")
+            self.picking_seeds = False
+            return
+
+        self.seed_pick_projected_lon = np_concatenate(projected_lons)
+        self.seed_pick_projected_lat = np_concatenate(projected_lats)
+        self.seed_pick_source_vectors = np_vstack(source_vectors)
 
         self.print_terminal(f"Pick {k} {kind} seed(s) on the stereonet.")
         
@@ -996,176 +976,135 @@ class ViewStereoplot(ViewMPL):
         """
         new_actor = None
                 
-        if key == "normals_bingham_major_pole":
-            bingham_result = self.analysis_results.get("normals", {}).get("bingham")
-            if bingham_result is None:
-                self.print_terminal("No Bingham result available for Normals.")
-            else:
+        if key == "bingham_major_pole":
+            new_actor = []
+            for kind in ["normals", "lineations"]:
+                bingham_result = self.analysis_results.get(kind, {}).get("bingham")
+                if bingham_result is None:
+                    self.print_terminal(f"No Bingham result available for {kind}.")
+                    continue
                 major_axis = bingham_result["axes"][0]
-                new_actor = self._draw_pole(major_axis, color="red", marker="s", markersize=10)
+                marker = "s" if kind == "normals" else "o"
+                new_actor.append(self._draw_pole(major_axis, color="red", marker=marker, markersize=10))
+                self.print_terminal(f"Bingham major pole : {major_axis}")
+            if not new_actor:
+                new_actor = None
 
-        elif key == "normals_bingham_intermediate_pole":
-            bingham_result = self.analysis_results.get("normals", {}).get("bingham")
-            if bingham_result is None:
-                self.print_terminal("No Bingham result available for Normals.")
-            else:
+        elif key == "bingham_intermediate_pole":              
+            new_actor = []
+            for kind in ["normals", "lineations"]:
+                bingham_result = self.analysis_results.get(kind, {}).get("bingham")
+                if bingham_result is None:
+                    self.print_terminal(f"No Bingham result available for {kind}.")
+                    continue
                 intermediate_axis = bingham_result["axes"][1]
-                new_actor = self._draw_pole(intermediate_axis, color="green", marker="s", markersize=10)
+                marker = "s" if kind == "normals" else "o"
+                new_actor.append(self._draw_pole(intermediate_axis, color="green", marker=marker, markersize=10))
+                self.print_terminal(f"Bingham intermediate pole : {intermediate_axis}")
+            if not new_actor:
+                new_actor = None
 
-        elif key == "normals_bingham_minor_pole":
-            bingham_result = self.analysis_results.get("normals", {}).get("bingham")
-            if bingham_result is None:
-                self.print_terminal("No Bingham result available for Normals.")
-            else:
+        elif key == "bingham_minor_pole":
+            new_actor = []
+            for kind in ["normals", "lineations"]:
+                bingham_result = self.analysis_results.get(kind, {}).get("bingham")
+                if bingham_result is None:
+                    self.print_terminal(f"No Bingham result available for {kind}.")
+                    continue
                 minor_axis = bingham_result["axes"][2]
-                new_actor = self._draw_pole(minor_axis, color="blue", marker="s", markersize=10)
+                marker = "s" if kind == "normals" else "o"
+                new_actor.append(self._draw_pole(minor_axis, color="blue", marker=marker, markersize=10))
+                self.print_terminal(f"Bingham minor pole : {minor_axis}")
+            if not new_actor:
+                new_actor = None
 
-        elif key == "normals_bingham_minor_gc":
-            bingham_result = self.analysis_results.get("normals", {}).get("bingham")
-            if bingham_result is None:
-                self.print_terminal("No Bingham result available for Normals.")
-            else:
+        elif key == "bingham_minor_gc":
+            new_actor = []
+            for kind in ["normals", "lineations"]:
+                bingham_result = self.analysis_results.get(kind, {}).get("bingham")
+                if bingham_result is None:
+                    self.print_terminal(f"No Bingham result available for {kind}.")
+                    continue
                 minor_axis = bingham_result["axes"][2]
-                new_actor = self._draw_great_circle(minor_axis, color="blue")
+                new_actor.append(self._draw_great_circle(minor_axis, color="blue"))
+            if not new_actor:
+                new_actor = None
 
-        elif key == "normals_kmeans_centers":
-            kmeans_result = self.analysis_results.get("normals", {}).get("kmeans")
-            if kmeans_result is None:
-                self.print_terminal("No k-means result available for Normals.")
-            else:
-                new_actor = []
-                for centroid in kmeans_result["centroids"]:
+        elif key == "kmeans_centers":
+            new_actor = []
+            for kind in ["normals", "lineations"]:
+                cluster_result = self.analysis_results.get(kind, {}).get("kmeans")
+                if cluster_result is None:
+                    self.print_terminal(f"No clustering result available for {kind}.")
+                    continue
+                self.print_terminal(f"Kmeans centers :")
+                for centroid in cluster_result["centroids"]:
                     norm = np_linalg_norm(centroid)
                     if norm == 0:
                         continue
                     unit_centroid = centroid / norm
-                    new_actor.append(self._draw_pole(unit_centroid, color="black", marker="^", markersize=8))
+                    new_actor.append(self._draw_pole(unit_centroid, color="black", marker="^", markersize=10))
+                    self.print_terminal(f"   {unit_centroid}")
+            if not new_actor:
+                new_actor = None                
                     
-        elif key == "normals_kmeans_color":
-            kmeans_result = self.analysis_results.get("normals", {}).get("kmeans")
-            if kmeans_result is None:
-                self.print_terminal("No k-means result available for Normals.")
-            else:
-                new_actor = []
-                for (uid, cluster_id), group in self.last_normals_df.groupby(["uid", "clusters"]):
+        elif key == "kmeans_color":
+            new_actor = []
+            for kind in ["normals", "lineations"]:
+                cluster_result = self.analysis_results.get(kind, {}).get("kmeans")
+                if cluster_result is None:
+                    self.print_terminal(f"No clustering result available for {kind}.")
+                    continue
+                df = self.last_normals_df if kind == "normals" else self.last_lineations_df
+                for (uid, cluster_id), group in df.groupby(["uid", "clusters"]):
                     vectors = group[["x", "y", "z"]].to_numpy()
                     palette = cm.get_cmap("tab10")
                     color = palette(cluster_id % 10)
-                    actor = self._draw_pole(vectors, color=color, markersize=8)
-                    new_actor.append(actor)
+                    new_actor.append(self._draw_pole(vectors, color=color, markersize=8))
+            if not new_actor:
+                new_actor = None                
                     
-        elif key == "normals_fisher_mean_pole":
-            fisher_result = self.analysis_results.get("normals", {}).get("fisher")
-            if fisher_result is None:
-                self.print_terminal("No fisher results available for Normals.")
-            else:
+        elif key == "fisher_mean_pole":
+            new_actor = []
+            for kind in ["normals", "lineations"]:
+                fisher_result = self.analysis_results.get(kind, {}).get("fisher")
+                if fisher_result is None:
+                    self.print_terminal(f"No fisher result available for {kind}.")
+                    continue
                 mean_direction = fisher_result["mean_direction"][0]
-                new_actor = self._draw_pole(mean_direction, color="purple", marker="s", markersize=10)
+                marker = "s" if kind == "normals" else "o"
+                new_actor.append(self._draw_pole(mean_direction, color="purple", marker=marker, markersize=10))
                 self.print_terminal(f"Fisher parameter : {fisher_result["kappa"]}")
+            if not new_actor:
+                new_actor = None
                 
-        elif key == "normals_kent_mean_pole":
-            kent_result = self.analysis_results.get("normals", {}).get("kent")
-            if kent_result is None:
-                self.print_terminal("No kent results available for Normals.")
-            else:
-                mean_direction = kent_result["axes"][0]
-                new_actor = self._draw_pole(mean_direction, color="lightsteelblue", marker="s", markersize=10)
-                self.print_terminal(f"Kent parameters : {kent_result["kappa"]}, {kent_result["beta"]}")
+        # elif key == "kent_mean_pole":
+        #     new_actor = []
+        #     for kind in ["normals", "lineations"]:
+        #         kent_result = self.analysis_results.get(kind, {}).get("kent")
+        #         if kent_result is None:
+        #             self.print_terminal(f"No kent result available for {kind}.")
+        #             continue
+        #         mean_direction = kent_result["axes"][0]
+        #         marker = "s" if kind == "normals" else "o"
+        #         new_actor.append(self._draw_pole(mean_direction, color="lightsteelblue", marker=marker, markersize=10))
+        #         self.print_terminal(f"Kent parameters : {kent_result["kappa"]}, {kent_result["beta"]}")
+        #     if not new_actor:
+        #         new_actor = None
                 
-        elif key == "normals_kent_mean_gc":
-            kent_result = self.analysis_results.get("normals", {}).get("kent")
-            if kent_result is None:
-                self.print_terminal("No kent results available for Normals.")
-            else:
-                mean_gc = kent_result["axes"][0]
-                new_actor = self._draw_great_circle(mean_gc, color="lightsteelblue")
-                self.print_terminal(f"Kent parameters : {kent_result["kappa"]}, {kent_result["beta"]}")
-                
+        # elif key == "kent_mean_gc":
+        #     new_actor = []
+        #     for kind in ["normals", "lineations"]:
+        #         kent_result = self.analysis_results.get(kind, {}).get("kent")
+        #         if kent_result is None:
+        #             self.print_terminal(f"No kent result available for {kind}.")
+        #             continue
+        #         mean_gc = kent_result["axes"][0]
+        #         new_actor.append(self._draw_great_circle(mean_gc, color="lightsteelblue"))
+        #         self.print_terminal(f"Kent parameters : {kent_result["kappa"]}, {kent_result["beta"]}")
+        #     if not new_actor:
+        #         new_actor = None                
 
-        elif key == "lineations_bingham_major_pole":
-            bingham_result = self.analysis_results.get("lineations", {}).get("bingham")
-            if bingham_result is None:
-                self.print_terminal("No Bingham result available for Lineations.")
-            else:
-                major_axis = bingham_result["axes"][0]
-                new_actor = self._draw_pole(major_axis, color="red", marker="o", markersize=10)
-
-        elif key == "lineations_bingham_intermediate_pole":
-            bingham_result = self.analysis_results.get("lineations", {}).get("bingham")
-            if bingham_result is None:
-                self.print_terminal("No Bingham result available for Lineations.")
-            else:
-                intermediate_axis = bingham_result["axes"][1]
-                new_actor = self._draw_pole(intermediate_axis, color="green", marker="o", markersize=10)
-
-        elif key == "lineations_bingham_minor_pole":
-            bingham_result = self.analysis_results.get("lineations", {}).get("bingham")
-            if bingham_result is None:
-                self.print_terminal("No Bingham result available for Lineations.")
-            else:
-                minor_axis = bingham_result["axes"][2]
-                new_actor = self._draw_pole(minor_axis, color="blue", marker="o", markersize=10)
-
-        elif key == "lineations_bingham_minor_gc":
-            bingham_result = self.analysis_results.get("lineations", {}).get("bingham")
-            if bingham_result is None:
-                self.print_terminal("No Bingham result available for Lineations.")
-            else:
-                minor_axis = bingham_result["axes"][2]
-                new_actor = self._draw_great_circle(minor_axis, color="blue")
-
-        elif key == "lineations_kmeans_centers":
-            kmeans_result = self.analysis_results.get("lineations", {}).get("kmeans")
-            if kmeans_result is None:
-                self.print_terminal("No k-means result available for Lineations.")
-            else:
-                new_actor = []
-                for centroid in kmeans_result["centroids"]:
-                    norm = np_linalg_norm(centroid)
-                    if norm == 0:
-                        continue
-                    unit_centroid = centroid / norm
-                    new_actor.append(self._draw_pole(unit_centroid, color="black", marker="^", markersize=8))
-                    
-        elif key == "lineations_kmeans_color":
-            kmeans_result = self.analysis_results.get("lineations", {}).get("kmeans")
-            if kmeans_result is None:
-                self.print_terminal("No k-means result available for Lineations.")
-            else:
-                new_actor = []
-                for (uid, cluster_id), group in self.last_lineations_df.groupby(["uid", "clusters"]):
-                    vectors = group[["x", "y", "z"]].to_numpy()
-                    palette = cm.get_cmap("tab10")
-                    color = palette(cluster_id % 10)
-                    actor = self._draw_pole(vectors, color=color, markersize=8)
-                    new_actor.append(actor)
-                    
-        elif key == "lineations_fisher_mean_pole":
-            fisher_result = self.analysis_results.get("lineations", {}).get("fisher")
-            if fisher_result is None:
-                self.print_terminal("No fisher results available for lineations.")
-            else:
-                mean_direction = fisher_result["mean_direction"][0]
-                new_actor = self._draw_pole(mean_direction, color="purple", marker='o', markersize=10)
-                self.print_terminal(f"Fisher parameter : {fisher_result["kappa"]}")
-                
-        elif key == "lineations_kent_mean_pole":
-            kent_result = self.analysis_results.get("lineations", {}).get("kent")
-            if kent_result is None:
-                self.print_terminal("No kent results available for Lineations.")
-            else:
-                mean_direction = kent_result["axes"][0]
-                new_actor = self._draw_pole(mean_direction, color="lightsteelblue", marker="o", markersize=10)
-                self.print_terminal(f"Kent parameters : {kent_result["kappa"]}, {kent_result["beta"]}")
-                
-        elif key == "lineations_kent_mean_gc":
-            kent_result = self.analysis_results.get("lineations", {}).get("kent")
-            if kent_result is None:
-                self.print_terminal("No kent results available for Lineations.")
-            else:
-                mean_gc = kent_result["axes"][0]
-                new_actor = self._draw_great_circle(mean_gc, color="lightsteelblue")
-                self.print_terminal(f"Kent parameters : {kent_result["kappa"]}, {kent_result["beta"]}")
 
         else:
             self.print_terminal(f"Unknown analysis actor key: '{key}'")

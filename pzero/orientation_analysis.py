@@ -15,12 +15,17 @@ from numpy import dot as np_dot
 from numpy import argsort as np_argsort
 from numpy import column_stack as np_column_stack
 from numpy import vstack as np_vstack
+from numpy import argmin as np_argmin
+from numpy import where as np_where
+from numpy import all as np_all
 from numpy.linalg import norm as np_linalg_norm
 from numpy.linalg import eigh as np_linalg_eigh
 from numpy.linalg import det as np_linalg_det
+from numpy.random import default_rng as np_random_default_rng
 from numpy import ndarray as np_ndarray
 from numpy import number as np_number
 
+from scipy.spatial.distance import cdist
 from scipy.cluster.vq import kmeans2
 
 from pzero.helpers.helper_dialogs import multiple_input_dialog
@@ -310,77 +315,77 @@ def fisherparams(samplecart, is_axial=False):
     return {"mean_direction": axeshat, "kappa": kappahat}
 
 
-def kentparams(samplecart, is_axial=False):
-    """
-    Calculate kents parameters.
+# def kentparams(samplecart, is_axial=False):
+#     """
+#     Calculate kents parameters.
 
-    Parameters
-    ----------
-    samplecart : ndarray, shape (N, 3)
-        Sample of unit vectors
-    is_axial : bool, optional
-        If True, vectors are resolved to the lower hemisphere before
-        computing. Use for plane normals (axial data). Default False
-        (polar/lineation data).
+#     Parameters
+#     ----------
+#     samplecart : ndarray, shape (N, 3)
+#         Sample of unit vectors
+#     is_axial : bool, optional
+#         If True, vectors are resolved to the lower hemisphere before
+#         computing. Use for plane normals (axial data). Default False
+#         (polar/lineation data).
 
-    Returns
-    -------
-    dict
-        "axes": ndarray, shape (3, 3)
-            Orthonormal axes:
-            axes[0] = mean direction (mu), resolved to lower hemisphere.
-            axes[1] = major axis (gamma1)
-            axes[2] = minor axis (gamma2)
-        "kappa" : float
-            Kent concentration parameter
-        "beta" : float
-            Kent ovalness parameter
-    """
-    samplecart = np_asarray(samplecart, dtype=float)
+#     Returns
+#     -------
+#     dict
+#         "axes": ndarray, shape (3, 3)
+#             Orthonormal axes:
+#             axes[0] = mean direction (mu), resolved to lower hemisphere.
+#             axes[1] = major axis (gamma1)
+#             axes[2] = minor axis (gamma2)
+#         "kappa" : float
+#             Kent concentration parameter
+#         "beta" : float
+#             Kent ovalness parameter
+#     """
+#     samplecart = np_asarray(samplecart, dtype=float)
 
-    if samplecart.ndim != 2 or samplecart.shape[1] != 3:
-        raise ValueError("samplecart must have shape (N, 3)")
+#     if samplecart.ndim != 2 or samplecart.shape[1] != 3:
+#         raise ValueError("samplecart must have shape (N, 3)")
 
-    if is_axial:
-        samplecart = resolve_lower_hemisphere(samplecart)
+#     if is_axial:
+#         samplecart = resolve_lower_hemisphere(samplecart)
 
-    n = samplecart.shape[0]
+#     n = samplecart.shape[0]
 
-    # Scatter matrix
-    S = np_dot(samplecart.T, samplecart) / n
+#     # Scatter matrix
+#     S = np_dot(samplecart.T, samplecart) / n
 
-    # Eigen-decomposition (symmetric matrix)
-    evals, evecs = np_linalg_eigh(S)
+#     # Eigen-decomposition (symmetric matrix)
+#     evals, evecs = np_linalg_eigh(S)
 
-    # Sort eigenvalues descending
-    idx = np_argsort(evals)[::-1]
-    evals = evals[idx]
-    evecs = evecs[:, idx]
+#     # Sort eigenvalues descending
+#     idx = np_argsort(evals)[::-1]
+#     evals = evals[idx]
+#     evecs = evecs[:, idx]
 
-    # Axes: mean direction, major, minor
-    mu = evecs[:, 0]
-    gamma1 = evecs[:, 1]
-    gamma2 = evecs[:, 2]
+#     # Axes: mean direction, major, minor
+#     mu = evecs[:, 0]
+#     gamma1 = evecs[:, 1]
+#     gamma2 = evecs[:, 2]
 
-    # Enforce lower hemisphere on mean direction — eigh returns eigenvectors
-    # with arbitrary sign, so mu and -mu are equally valid mathematically.
-    # For consistent plotting, we resolve to the lower hemisphere here.
-    if mu[2] > 0:
-        mu = -mu
-        # Flip gamma1 too to keep the right-handed system consistent
-        gamma1 = -gamma1
+#     # Enforce lower hemisphere on mean direction — eigh returns eigenvectors
+#     # with arbitrary sign, so mu and -mu are equally valid mathematically.
+#     # For consistent plotting, we resolve to the lower hemisphere here.
+#     if mu[2] > 0:
+#         mu = -mu
+#         # Flip gamma1 too to keep the right-handed system consistent
+#         gamma1 = -gamma1
 
-    # Enforce right-handed coordinate system
-    if np_linalg_det(np_column_stack((mu, gamma1, gamma2))) < 0:
-        gamma2 = -gamma2
+#     # Enforce right-handed coordinate system
+#     if np_linalg_det(np_column_stack((mu, gamma1, gamma2))) < 0:
+#         gamma2 = -gamma2
 
-    axes = np_vstack((mu, gamma1, gamma2))
+#     axes = np_vstack((mu, gamma1, gamma2))
 
-    # Kent parameters (moment estimates)
-    kappahat = n * (evals[0] - evals[2])
-    betahat = n * (evals[1] - evals[2]) / 2.0
+#     # Kent parameters (moment estimates)
+#     kappahat = n * (evals[0] - evals[2])
+#     betahat = n * (evals[1] - evals[2]) / 2.0
 
-    return {"axes": axes, "kappa": kappahat, "beta": betahat}
+#     return {"axes": axes, "kappa": kappahat, "beta": betahat}
 
 
 def bingham(samplecart, is_axial=False):
@@ -463,10 +468,8 @@ def kmeans_clusters(samplecart, k, seeds=None, is_axial=False):
         points (minit='matrix'). If None, k-means++ initialization is used.
     is_axial : bool, optional
         If True, the data is treated as axial (e.g. plane normals), and the
-        dataset is doubled by appending antipodal vectors before clustering.
-        This prevents clusters that straddle the stereonet equator from being
-        split into two phantom clusters. Only the labels for the original N
-        vectors are returned. Default is False (polar/lineation data).
+        vectors and optional seeds are first resolved to the lower hemisphere
+        before clustering. Default is False (polar/lineation data).
 
     Returns
     -------
@@ -496,20 +499,121 @@ def kmeans_clusters(samplecart, k, seeds=None, is_axial=False):
             f"k ({k}) cannot be greater than the number of data points ({n})"
         )
 
-    if is_axial:
-        samplecart_input = double_axial(samplecart)
-        if seeds is not None:
-            centroids, labels_doubled = kmeans2(samplecart_input, seeds, minit="matrix")
-        else:
-            centroids, labels_doubled = kmeans2(samplecart_input, k, minit="++")
-        labels = labels_doubled[:n]
+    samplecart_input = resolve_lower_hemisphere(samplecart) if is_axial else samplecart
+
+    if seeds is not None:
+        seeds = np_asarray(seeds, dtype=float)
+        if seeds.shape != (k, 3):
+            raise ValueError(f"seeds must have shape ({k}, 3), got {seeds.shape}")
+        seeds_input = resolve_lower_hemisphere(seeds) if is_axial else seeds
+        centroids, labels = kmeans2(samplecart_input, seeds_input, minit="matrix")
     else:
-        if seeds is not None:
-            centroids, labels = kmeans2(samplecart, seeds, minit="matrix")
-        else:
-            centroids, labels = kmeans2(samplecart, k, minit="++")
+        centroids, labels = kmeans2(samplecart_input, k, minit="++")
 
     return {"centroids": centroids, "labels": labels}
+
+
+def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
+    """
+    Calculate k-medoids clusters using the PAM algorithm.
+    Unlike k-means, medoids are actual data points rather than arithmetic
+    means, making them more appropriate for directional/spherical data where
+    the mean of unit vectors is not itself a unit vector.
+
+    Parameters
+    ----------
+    samplecart : ndarray, shape (N, 3)
+        Sample of unit vectors
+    k : int
+        Number of clusters to form
+    seeds : ndarray, shape (k, 3), optional
+        Initial medoid vectors. Each seed is matched to its nearest actual
+        data point, which becomes the initial medoid. If None, k random
+        data points are chosen as initial medoids.
+    is_axial : bool, optional
+        If True, the data is treated as axial (plane normals) and doubled
+        before clustering to prevent border-straddling splits. Only the
+        labels for the original N vectors are returned. Default False.
+
+    Returns
+    -------
+    dict
+        "centroids" : ndarray, shape (k, 3)
+            Medoid vectors — actual data points from samplecart, guaranteed
+            to be unit vectors. Named "centroids" for interface compatibility
+            with kmeans_clusters.
+        "labels" : ndarray, shape (N,)
+            Cluster index (0 to k-1) assigned to each input vector.
+    """
+    samplecart = np_asarray(samplecart, dtype=float)
+
+
+    ### Clause guard part ###
+    if samplecart.ndim != 2 or samplecart.shape[1] != 3:
+        raise ValueError("samplecart must have shape (N, 3)")
+
+    n = samplecart.shape[0]
+
+    if k < 1:
+        raise ValueError("k must be at least 1")
+
+    if is_axial:    #Double the data for planes
+        samplecart_input = double_axial(samplecart)
+    else:
+        samplecart_input = samplecart
+
+    n_input = samplecart_input.shape[0]
+
+    if k > n_input:
+        raise ValueError(
+            f"k ({k}) cannot be greater than the number of data points ({n_input})"
+        )
+
+    # Initialize medoid indices
+    if seeds is not None:
+        seeds = np_asarray(seeds, dtype=float)
+        if seeds.shape[0] != k:
+            raise ValueError(f"seeds must have shape (k, 3), got {seeds.shape}")
+        # Match each seed to its nearest actual data point
+        D_seeds = cdist(seeds, samplecart_input)    #If seed picking, initialize the medoid with the closest point
+        medoid_indices = np_argmin(D_seeds, axis=1) #for each seed
+    else:
+        rng = np_random_default_rng(42) #If no seed picking, random pick
+        medoid_indices = rng.choice(n_input, k, replace=False)
+
+    # PAM update loop
+    ### The actual loop that is the method ###
+    for _ in range(300):    # 300 should be enough to converge
+        D = cdist(samplecart_input, samplecart_input[medoid_indices])   # Distance between all poles and the current medoids
+        labels_input = np_argmin(D, axis=1) # Find the nearest medoid for each point
+
+        new_medoid_indices = medoid_indices.copy()
+        for j in range(k):  #For each cluster j
+            cluster_mask = labels_input == j    #Test if there are poles in that cluster   
+            if not cluster_mask.any():
+                continue
+            cluster_indices = np_where(cluster_mask)[0] #Take all the points assigned to that cluster
+            D_cluster = cdist(
+                samplecart_input[cluster_indices],
+                samplecart_input[cluster_indices])  #Distance between each points of that cluster 
+            best = cluster_indices[np_argmin(D_cluster.sum(axis=1))]    #Sum each row giving total distance from point i to every other 
+                                                                        #points in the cluster and keep the smallest one
+            new_medoid_indices[j] = best    #Make this point the new medoid
+
+        if np_all(new_medoid_indices == medoid_indices):    #If the medoid didn't changed, it converge, break the loop
+            break
+        medoid_indices = new_medoid_indices
+
+    # Final assignment
+    D = cdist(samplecart_input, samplecart_input[medoid_indices])
+    labels_input = np_argmin(D, axis=1) #Label all the points to their cluster
+
+    # For axial data, keep only labels for the original N vectors
+    ### That part is just because we doubled the data for planes ###
+    labels = labels_input[:n]
+    medoids = samplecart_input[medoid_indices]
+
+    return {"centroids": medoids, "labels": labels}
 
 
 def resolve_lower_hemisphere(vectors):
