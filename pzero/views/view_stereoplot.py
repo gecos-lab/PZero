@@ -784,9 +784,6 @@ class ViewStereoplot(ViewMPL):
         
         if event.xdata is None or event.ydata is None:
             return
-        
-        if event.xdata**2 + event.ydata**2 > 1.0:
-            return
 
         if self.seed_pick_kind == "normals":
             vectors = self.last_normals_array

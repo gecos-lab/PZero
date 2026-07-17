@@ -467,19 +467,19 @@ def kmeans_clusters(samplecart, k, seeds=None, is_axial=False):
         Initial centroids for k-means. If provided, used directly as starting
         points (minit='matrix'). If None, k-means++ initialization is used.
     is_axial : bool, optional
-        If True, the data is treated as axial (e.g. plane normals), and the
-        vectors and optional seeds are first resolved to the lower hemisphere
-        before clustering. Default is False (polar/lineation data).
+        If True, the data is treated as axial (e.g. plane normals). Vectors
+        are first resolved to the lower hemisphere, then doubled by appending
+        their antipodes before clustering. This prevents clusters that straddle
+        the stereonet equator from being split into two phantom clusters.
+        Only the labels for the original N vectors are returned.
+        Default is False (polar/lineation data).
 
     Returns
     -------
     dict
         "centroids" : ndarray, shape (k, 3)
-            Cluster centroids. Note: these are the arithmetic mean of the
-            unit vectors assigned to each cluster, and are therefore NOT
-            themselves unit vectors - they must be re-normalized before
-            being plotted as poles.
-
+            Cluster centroids. Not guaranteed to be unit vectors — must be
+            re-normalized before plotting as poles.
         "labels" : ndarray, shape (N,)
             Cluster index (0 to k-1) assigned to each input vector, in the
             same order as samplecart.
@@ -494,25 +494,37 @@ def kmeans_clusters(samplecart, k, seeds=None, is_axial=False):
     if k < 1:
         raise ValueError("k must be at least 1")
 
-    if k > n:
-        raise ValueError(
-            f"k ({k}) cannot be greater than the number of data points ({n})"
-        )
+    if is_axial:
+        samplecart_resolved = resolve_lower_hemisphere(samplecart)
+        samplecart_input = double_axial(samplecart_resolved)
+    else:
+        samplecart_input = samplecart
 
-    samplecart_input = resolve_lower_hemisphere(samplecart) if is_axial else samplecart
+    n_input = samplecart_input.shape[0]
+
+    if k > n_input:
+        raise ValueError(
+            f"k ({k}) cannot be greater than the number of data points ({n_input})"
+        )
 
     if seeds is not None:
         seeds = np_asarray(seeds, dtype=float)
         if seeds.shape != (k, 3):
             raise ValueError(f"seeds must have shape ({k}, 3), got {seeds.shape}")
-        seeds_input = resolve_lower_hemisphere(seeds) if is_axial else seeds
-        centroids, labels = kmeans2(samplecart_input, seeds_input, minit="matrix")
+        if is_axial:
+            seeds_input = resolve_lower_hemisphere(seeds)
+        else:
+            seeds_input = seeds
+        centroids, labels_input = kmeans2(samplecart_input, seeds_input, minit="matrix")
     else:
-        centroids, labels = kmeans2(samplecart_input, k, minit="++")
+        centroids, labels_input = kmeans2(samplecart_input, k, minit="++")
+
+    # For axial data, keep only labels for the original N vectors
+    labels = labels_input[:n]
 
     return {"centroids": centroids, "labels": labels}
-
-
+    
+    
 def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
     """
     Calculate k-medoids clusters using the PAM algorithm.
