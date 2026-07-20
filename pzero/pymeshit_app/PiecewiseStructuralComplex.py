@@ -1226,6 +1226,15 @@ class PiecewiseStructuralComplex:
         """Return True when a feature name uses the PSC eroded suffix."""
         return self._psc_key(value).endswith("_eroded")
 
+    def _psc_role_is_discontinuity(self, role: Any) -> bool:
+        """Return True when the given unit/role represents an explicit discontinuity."""
+        try:
+            return str(role or "").strip().casefold() == str(
+                self.DISCONTINUITY_UNIT_ROLE
+            ).casefold()
+        except Exception:
+            return False
+
     @staticmethod
     def _psc_sort_key(value: Any) -> float:
         """Return a numeric STm polarity key."""

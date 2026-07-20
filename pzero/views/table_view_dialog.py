@@ -685,7 +685,7 @@ class STmBuildDialog(QDialog):
         surface_nodes.append(
             {
                 "key": "surface:boundary",
-                "label": "Boundary",
+                "label": "Model Boundary",
                 "polarity": float("inf"),
                 "brush": QColor(255, 255, 255),
                 "pen": QColor(30, 30, 30),
@@ -1843,7 +1843,7 @@ class ImportStructuralTopologyUnitsDialog(QDialog):
 
     def __init__(self, parent=None, units_provider=None, existing_names=None):
         super().__init__(parent)
-        self.setWindowTitle("Import Boundary")
+        self.setWindowTitle("Import boundaries")
         self.resize(460, 420)
         self.units_provider = units_provider
         self.existing_names = set(existing_names or [])
@@ -2415,8 +2415,8 @@ class ViewTable(QWidget):
             "Disable editing" if self.editing_enabled else "Enable editing"
         )
         if is_stm_table:
-            self.add_row_button.setText("Import Boundary")
-            self.delete_row_button.setText("Remove Boundary")
+            self.add_row_button.setText("Import boundaries")
+            self.delete_row_button.setText("Remove boundaries")
             self.add_field_button.setText("Add domain")
             self.rename_field_button.setText("Rename domain")
             self.delete_field_button.setText("Delete domain")
