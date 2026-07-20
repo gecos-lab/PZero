@@ -551,6 +551,7 @@ class PiecewiseStructuralComplex:
                             unit_info,
                             psc_model,
                             rows,
+                            max_missing_boundaries=int(max_missing_spin.value()),
                         )
                         unit_info["seed_points"] = seed_points
                         unit_info["seed_point"] = seed_points[0] if seed_points else None
@@ -680,15 +681,17 @@ class PiecewiseStructuralComplex:
                 return
             first_unit = rows[selected_rows[0]]
             second_unit = rows[selected_rows[1]]
-            first_seed = first_unit.get("seed_point")
-            second_seed = second_unit.get("seed_point")
-            if first_seed is None or second_seed is None:
-                self.print_terminal("Both selected units need a valid seed before swapping.")
+            swapped_points = self._psc_swapped_seed_points(first_unit, second_unit)
+            if swapped_points is None:
+                self.print_terminal(
+                    "Both selected units need at least one valid seed before swapping."
+                )
                 return
             first_key = unit_seed_key(first_unit)
             second_key = unit_seed_key(second_unit)
-            seed_overrides[first_key] = [[float(value) for value in second_seed[:3]]]
-            seed_overrides[second_key] = [[float(value) for value in first_seed[:3]]]
+            first_points, second_points = swapped_points
+            seed_overrides[first_key] = first_points
+            seed_overrides[second_key] = second_points
             save_seed_overrides(table_combo.currentText())
             refresh_preview()
     
@@ -848,6 +851,25 @@ class PiecewiseStructuralComplex:
         if len(clean_points) == 1:
             return [float(value) for value in clean_points[0]]
         return [[float(value) for value in point] for point in clean_points]
+
+    def _psc_swapped_seed_points(
+        self,
+        first_unit: Dict[str, Any],
+        second_unit: Dict[str, Any],
+    ) -> Optional[Tuple[List[List[float]], List[List[float]]]]:
+        """Return complete seed lists swapped between two PSC units."""
+        first_points = self._psc_normalize_seed_points(
+            first_unit.get("seed_points") or first_unit.get("seed_point")
+        )
+        second_points = self._psc_normalize_seed_points(
+            second_unit.get("seed_points") or second_unit.get("seed_point")
+        )
+        if not first_points or not second_points:
+            return None
+        return (
+            [list(point) for point in second_points],
+            [list(point) for point in first_points],
+        )
 
     def _psc_unit_match_keys(self, unit_info: Dict[str, Any]) -> set:
         """Return normalized material keys accepted for a PSC mapped unit."""
@@ -1284,8 +1306,9 @@ class PiecewiseStructuralComplex:
     def _psc_topology_components(
         self,
         mapped_units: List[Dict[str, Any]],
+        include_inferred_local: bool = False,
     ) -> List[Dict[str, Any]]:
-        """Return global and inferred-local topology signatures for mapped units."""
+        """Return global and geometrically realized local topology signatures."""
         components = []
         for unit_info in mapped_units or []:
             unit_key = str(
@@ -1297,12 +1320,59 @@ class PiecewiseStructuralComplex:
             if not unit_key:
                 continue
 
-            boundary_sets = [list(unit_info.get("boundaries", []) or [])]
-            boundary_sets.extend(
-                self._psc_local_boundary_sets_for_unit(unit_info, mapped_units)
-            )
+            global_boundaries = list(unit_info.get("boundaries", []) or [])
+            boundary_sets = [
+                {
+                    "boundaries": global_boundaries,
+                    "component_index": -1,
+                    "is_local": False,
+                }
+            ]
+            # A set-theoretic subset is only a possible local signature.  It
+            # becomes a classification candidate after seed generation has
+            # actually found a point for that signature.  This prevents, for
+            # example, a valid global Int2 seed from becoming ambiguous merely
+            # because another unit happens to contain Int2's boundary set.
+            for entry_index, entry in enumerate(
+                unit_info.get("seed_topology_signatures", []) or []
+            ):
+                if not isinstance(entry, dict):
+                    continue
+                entry_boundaries = list(entry.get("boundaries", []) or [])
+                if not entry_boundaries:
+                    continue
+                boundary_sets.append(
+                    {
+                        "boundaries": entry_boundaries,
+                        "component_index": int(
+                            entry.get("component_index", entry_index)
+                        ),
+                        "is_local": {
+                            self._psc_key(label)
+                            for label in entry_boundaries
+                            if self._psc_key(label)
+                        }
+                        != {
+                            self._psc_key(label)
+                            for label in global_boundaries
+                            if self._psc_key(label)
+                        },
+                    }
+                )
+            if include_inferred_local:
+                for component_index, boundaries in enumerate(
+                    self._psc_local_boundary_sets_for_unit(unit_info, mapped_units)
+                ):
+                    boundary_sets.append(
+                        {
+                            "boundaries": list(boundaries),
+                            "component_index": component_index,
+                            "is_local": True,
+                        }
+                    )
             seen_signatures = set()
-            for component_index, boundaries in enumerate(boundary_sets):
+            for component in boundary_sets:
+                boundaries = component["boundaries"]
                 labels_by_key = {}
                 for boundary in boundaries:
                     label = self._psc_text(boundary)
@@ -1317,8 +1387,8 @@ class PiecewiseStructuralComplex:
                     {
                         "unit_info": unit_info,
                         "unit_key": unit_key,
-                        "component_index": component_index - 1,
-                        "is_local": component_index > 0,
+                        "component_index": int(component["component_index"]),
+                        "is_local": bool(component["is_local"]),
                         "boundaries": [
                             labels_by_key[key] for key in sorted(labels_by_key)
                         ],
@@ -1328,6 +1398,46 @@ class PiecewiseStructuralComplex:
                     }
                 )
         return components
+
+    def _psc_candidate_observation_quality(
+        self,
+        candidate: Dict[str, Any],
+        observed_labels: List[str],
+    ) -> Dict[str, Any]:
+        """Score one intended unit signature against the surfaces near its seed."""
+        candidate = dict(candidate)
+        labels_by_key = {}
+        for label in candidate.get("boundaries", []) or []:
+            label_text = self._psc_text(label)
+            label_key = self._psc_key(label_text)
+            if label_key and label_key not in labels_by_key:
+                labels_by_key[label_key] = label_text
+        signature_keys = set(candidate.get("signature_keys", set()) or set(labels_by_key))
+
+        observed_by_key = {}
+        for label in observed_labels or []:
+            label_text = self._psc_text(label)
+            label_key = self._psc_key(label_text)
+            if label_key and label_key not in observed_by_key:
+                observed_by_key[label_key] = label_text
+        observed_keys = set(observed_by_key)
+        missing_keys = signature_keys - observed_keys
+        extra_keys = observed_keys - signature_keys
+        candidate.update(
+            {
+                "exact": not missing_keys and not extra_keys,
+                "missing_count": len(missing_keys),
+                "missing_labels": [
+                    labels_by_key.get(key, key) for key in sorted(missing_keys)
+                ],
+                "extra_count": len(extra_keys),
+                "extra_labels": [
+                    observed_by_key.get(key, key) for key in sorted(extra_keys)
+                ],
+                "observed_count": len(observed_keys),
+            }
+        )
+        return candidate
 
     def _psc_unit_candidates_for_topology_signature(
         self,
@@ -1506,7 +1616,7 @@ class PiecewiseStructuralComplex:
         psc_model: Dict[str, Any],
         max_missing_boundaries: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """Classify and redistribute generated 3D topology-component seeds."""
+        """Classify 3D seeds without losing their intended topology signature."""
         if max_missing_boundaries is None:
             max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
         try:
@@ -1536,9 +1646,12 @@ class PiecewiseStructuralComplex:
                     or []
                 )
                 observed_labels = list(signature.get("closest", []) or [])
-                if not observed_labels and unit_info.get("seed_override"):
-                    # Explicit overrides are trusted, but still participate in
-                    # candidate balancing and repeat-adjacency checks.
+                is_override = bool(unit_info.get("seed_override"))
+                if not observed_labels and (is_override or boundaries):
+                    # Explicit overrides are authoritative.  The fallback for
+                    # legacy generated seeds also keeps their STm signature
+                    # instead of allowing a seed to migrate to an unrelated
+                    # unit solely because nearest-surface data is absent.
                     observed_labels = list(boundaries)
                     signature.setdefault("target", list(boundaries))
                     signature.setdefault("closest", list(boundaries))
@@ -1551,46 +1664,101 @@ class PiecewiseStructuralComplex:
                     if self._psc_key(key)
                     and isinstance(value, (int, np.integer))
                 }
-                if observed_labels and not closest_indices:
-                    closest_indices = self._psc_closest_surface_indices_for_point(
-                        seed_point,
+                # Repeat-adjacency checks need all surfaces in the intended
+                # signature, including a representative surface omitted from
+                # a partial observed signature and Boundary in mixed
+                # surface+Boundary signatures.
+                required_closest_labels = list(observed_labels)
+                required_closest_labels.extend(boundaries)
+                required_indices = self._psc_closest_surface_indices_for_point(
+                    seed_point,
+                    required_closest_labels,
+                )
+                required_indices.update(closest_indices)
+                closest_indices = required_indices
+
+                source_candidate = {
+                    "unit_info": unit_info,
+                    "unit_key": source_unit_key,
+                    "component_index": int(entry.get("component_index", -1)),
+                    "is_local": {
+                        self._psc_key(label)
+                        for label in boundaries
+                        if self._psc_key(label)
+                    }
+                    != {
+                        self._psc_key(label)
+                        for label in unit_info.get("boundaries", []) or []
+                        if self._psc_key(label)
+                    },
+                    "boundaries": list(boundaries),
+                    "signature_keys": {
+                        self._psc_key(label)
+                        for label in boundaries
+                        if self._psc_key(label)
+                    },
+                    "polarity": self._psc_sort_key(unit_info.get("polarity", "")),
+                    "feature": self._psc_text(unit_info.get("feature", "")),
+                }
+
+                if is_override or unit_info.get("psc_virtual_unit") or not boundaries:
+                    candidates = [source_candidate]
+                else:
+                    # Candidate ownership comes from the intended global/local
+                    # STm signature.  Nearest-surface observations only score
+                    # that candidate pool; they must not redirect an Int1 seed,
+                    # for example, to an unrelated Top unit.
+                    candidates = self._psc_unit_candidates_for_topology_signature(
+                        mapped_units,
+                        boundaries,
+                        max_missing_boundaries=0,
+                    )
+                    if not any(
+                        candidate.get("unit_key") == source_unit_key
+                        and set(candidate.get("signature_keys", set()))
+                        == set(source_candidate["signature_keys"])
+                        for candidate in candidates
+                    ):
+                        candidates.append(source_candidate)
+
+                scored_candidates = []
+                for candidate in candidates:
+                    scored = self._psc_candidate_observation_quality(
+                        candidate,
                         observed_labels,
                     )
-                candidates = self._psc_unit_candidates_for_topology_signature(
-                    mapped_units,
-                    observed_labels,
-                    max_missing_boundaries=max_missing_boundaries,
+                    if is_override:
+                        scored.update(
+                            {
+                                "exact": True,
+                                "missing_count": 0,
+                                "missing_labels": [],
+                                "extra_count": 0,
+                                "extra_labels": [],
+                            }
+                        )
+                    if int(scored.get("missing_count", 0)) > max_missing_boundaries:
+                        continue
+                    scored_candidates.append(scored)
+                candidates = sorted(
+                    scored_candidates,
+                    key=lambda candidate: (
+                        0 if candidate.get("exact") else 1,
+                        int(candidate.get("missing_count", 0)),
+                        int(candidate.get("extra_count", 0)),
+                        -int(candidate.get("observed_count", 0)),
+                        float(candidate.get("polarity", float("inf"))),
+                        str(candidate.get("feature", "")).casefold(),
+                        str(candidate.get("unit_key", "")).casefold(),
+                    ),
                 )
-                if unit_info.get("psc_virtual_unit") or not boundaries:
-                    candidates = [
-                        {
-                            "unit_info": unit_info,
-                            "unit_key": source_unit_key,
-                            "component_index": -1,
-                            "is_local": False,
-                            "boundaries": list(boundaries),
-                            "signature_keys": {
-                                self._psc_key(label)
-                                for label in boundaries
-                                if self._psc_key(label)
-                            },
-                            "polarity": self._psc_sort_key(
-                                unit_info.get("polarity", "")
-                            ),
-                            "feature": self._psc_text(
-                                unit_info.get("feature", "")
-                            ),
-                            "exact": True,
-                            "missing_count": 0,
-                            "missing_labels": [],
-                            "observed_count": len(observed_labels),
-                        }
-                    ]
-                best_quality = (2, 10**9)
+                best_quality = (2, 10**9, 10**9, 0)
                 if candidates:
                     best_quality = (
                         0 if candidates[0].get("exact") else 1,
                         int(candidates[0].get("missing_count", 0)),
+                        int(candidates[0].get("extra_count", 0)),
+                        -int(candidates[0].get("observed_count", 0)),
                     )
                 records.append(
                     {
@@ -1603,6 +1771,7 @@ class PiecewiseStructuralComplex:
                         "closest_surface_indices": closest_indices,
                         "candidates": candidates,
                         "best_quality": best_quality,
+                        "seed_override": is_override,
                     }
                 )
 
@@ -1659,6 +1828,8 @@ class PiecewiseStructuralComplex:
             best_quality = (
                 0 if best_candidate.get("exact") else 1,
                 int(best_candidate.get("missing_count", 0)),
+                int(best_candidate.get("extra_count", 0)),
+                -int(best_candidate.get("observed_count", 0)),
             )
             best_candidates = [
                 candidate
@@ -1666,6 +1837,8 @@ class PiecewiseStructuralComplex:
                 if (
                     0 if candidate.get("exact") else 1,
                     int(candidate.get("missing_count", 0)),
+                    int(candidate.get("extra_count", 0)),
+                    -int(candidate.get("observed_count", 0)),
                 )
                 == best_quality
             ]
@@ -1679,7 +1852,9 @@ class PiecewiseStructuralComplex:
                 ),
             )
             assigned_before = assigned_counts.get(chosen["unit_key"], 0)
-            if len(best_candidates) > 1 and assigned_before == 0:
+            if record.get("seed_override") and assigned_before == 0:
+                status = "CERTAIN"
+            elif len(best_candidates) > 1 and assigned_before == 0:
                 status = "AMBIGUOUS"
             elif assigned_before > 0:
                 status = "POSSIBLE_REPEAT"
@@ -1708,6 +1883,7 @@ class PiecewiseStructuralComplex:
                 "boundaries": list(chosen.get("boundaries", []) or []),
                 "candidate_names": candidate_names,
                 "missing_labels": list(chosen.get("missing_labels", []) or []),
+                "extra_labels": list(chosen.get("extra_labels", []) or []),
                 "blocked_repeat_labels": sorted(
                     set(blocked_labels), key=str.casefold
                 ),
@@ -3007,6 +3183,7 @@ class PiecewiseStructuralComplex:
         psc_model: Dict[str, Any],
         reference_seed: np.ndarray,
         require_side_match: bool = False,
+        broad_sampling: Optional[bool] = None,
     ) -> np.ndarray:
         """Choose a seed whose nearest-boundary signature matches the STM unit topology."""
         bounds = self._psc_domain_bounds()
@@ -3067,12 +3244,16 @@ class PiecewiseStructuralComplex:
             reference_seed,
             target_surface_map,
         )
+        if broad_sampling is None:
+            broad_sampling = (
+                int(unit_info.get("ambiguity_group_size", 1) or 1) > 1
+            )
         candidate_points = self._psc_seed_candidate_points(
             reference_seed,
             target_surface_indices,
             bounds,
             side_constraints,
-            broad_sampling=int(unit_info.get("ambiguity_group_size", 1) or 1) > 1,
+            broad_sampling=bool(broad_sampling),
         )
         if candidate_points.shape[0] == 0:
             return reference_seed
@@ -3480,12 +3661,55 @@ class PiecewiseStructuralComplex:
         if reference_seed is None or not np.all(np.isfinite(reference_seed)):
             return None
     
+        initial_broad_sampling = (
+            int(unit_info.get("ambiguity_group_size", 1) or 1) > 1
+        )
         refined_seed = self._psc_refine_seed_by_topology_signature(
             unit_info,
             psc_model,
             np.asarray(reference_seed, dtype=float),
             require_side_match=require_side_match,
+            broad_sampling=initial_broad_sampling,
         )
+        first_signature = dict(unit_info.get("seed_topology_signature", {}) or {})
+
+        # The inexpensive local search is normally enough.  If it cannot find
+        # an exact signature, retry over the wider PLC extent.  This recovers
+        # valid or one-boundary-partial 3D seeds without importing any of the
+        # polygon/area machinery used by the section workflow.
+        if not initial_broad_sampling and not first_signature.get("exact", False):
+            unit_info.pop("seed_topology_signature", None)
+            broad_seed = self._psc_refine_seed_by_topology_signature(
+                unit_info,
+                psc_model,
+                np.asarray(reference_seed, dtype=float),
+                require_side_match=require_side_match,
+                broad_sampling=True,
+            )
+            broad_signature = dict(
+                unit_info.get("seed_topology_signature", {}) or {}
+            )
+
+            def signature_quality(signature: Dict[str, Any]) -> Tuple[Any, ...]:
+                if not signature:
+                    return (2, 10**9, 10**9, 10**9, 0, float("inf"))
+                return (
+                    0 if signature.get("exact") else 1,
+                    int(signature.get("missing_count", 0)),
+                    int(signature.get("extra_count", 0)),
+                    int(signature.get("side_mismatches", 0)),
+                    -int(signature.get("observed_count", 0)),
+                    -float(signature.get("score", -float("inf"))),
+                )
+
+            if signature_quality(first_signature) <= signature_quality(broad_signature):
+                refined_seed = np.asarray(refined_seed, dtype=float)
+                if first_signature:
+                    unit_info["seed_topology_signature"] = first_signature
+                else:
+                    unit_info.pop("seed_topology_signature", None)
+            else:
+                refined_seed = np.asarray(broad_seed, dtype=float)
         if require_side_match and not unit_info.get("seed_topology_signature"):
             return None
         return [float(refined_seed[0]), float(refined_seed[1]), float(refined_seed[2])]
@@ -3495,8 +3719,16 @@ class PiecewiseStructuralComplex:
         unit_info: Dict[str, Any],
         psc_model: Dict[str, Any],
         mapped_units: Optional[List[Dict[str, Any]]] = None,
+        max_missing_boundaries: Optional[int] = None,
     ) -> List[List[float]]:
         """Compute one or more PSC seed points for a mapped STm unit."""
+        if max_missing_boundaries is None:
+            max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
+        try:
+            max_missing_boundaries = max(int(max_missing_boundaries), 0)
+        except (TypeError, ValueError):
+            max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
+
         if unit_info.get("seed_override"):
             seed_points = self._psc_normalize_seed_points(
                 unit_info.get("seed_points") or unit_info.get("seed_point")
@@ -3511,8 +3743,7 @@ class PiecewiseStructuralComplex:
             unit_info,
             mapped_units or [],
         )
-        seed_points: List[List[float]] = []
-        seed_signatures = []
+        seed_candidates = []
         bounds = self._psc_domain_bounds()
         duplicate_tolerance = 1e-6
         if bounds is not None:
@@ -3521,10 +3752,11 @@ class PiecewiseStructuralComplex:
                 1e-6,
             )
     
-        def add_seed(
+        def add_candidate(
             seed_point: Optional[List[float]],
             signature: Dict[str, Any],
-            local_boundaries: List[str],
+            boundaries: List[str],
+            component_index: int,
         ) -> None:
             if seed_point is None:
                 return
@@ -3534,60 +3766,92 @@ class PiecewiseStructuralComplex:
                 return
             if len(coords) != 3 or not all(np.isfinite(coords)):
                 return
-            candidate = np.asarray(coords, dtype=float)
-            for existing in seed_points:
-                if np.linalg.norm(candidate - np.asarray(existing, dtype=float)) <= duplicate_tolerance:
-                    return
-            seed_points.append(coords)
-            seed_signatures.append(
+            signature = dict(signature or {})
+            if not signature:
+                return
+            if int(signature.get("missing_count", 0)) > max_missing_boundaries:
+                return
+            seed_candidates.append(
                 {
-                    "boundaries": list(local_boundaries),
-                    "signature": dict(signature or {}),
+                    "seed_point": coords,
+                    "boundaries": list(boundaries),
+                    "signature": signature,
+                    "component_index": int(component_index),
+                    "is_local": component_index >= 0,
                 }
             )
-    
-        if local_boundary_sets:
-            for component_idx, local_boundaries in enumerate(local_boundary_sets):
-                local_info = self._psc_unit_with_local_boundaries(
-                    unit_info,
-                    local_boundaries,
-                    component_idx,
+
+        global_seed = self._psc_seed_point_for_unit(unit_info, psc_model)
+        add_candidate(
+            global_seed,
+            unit_info.get("seed_topology_signature", {}) or {},
+            list(unit_info.get("boundaries", []) or []),
+            -1,
+        )
+
+        for component_idx, local_boundaries in enumerate(local_boundary_sets):
+            local_info = self._psc_unit_with_local_boundaries(
+                unit_info,
+                local_boundaries,
+                component_idx,
+            )
+            local_seed = self._psc_seed_point_for_unit(
+                local_info,
+                psc_model,
+                require_side_match=True,
+            )
+            add_candidate(
+                local_seed,
+                local_info.get("seed_topology_signature", {}) or {},
+                local_boundaries,
+                component_idx,
+            )
+
+        # Prefer the best topology realization when global and local searches
+        # converge to the same physical point.  Distinct valid local components
+        # remain separate seeds and will pass through repeat-adjacency checks.
+        seed_candidates.sort(
+            key=lambda candidate: (
+                0 if candidate["signature"].get("exact") else 1,
+                int(candidate["signature"].get("missing_count", 0)),
+                int(candidate["signature"].get("extra_count", 0)),
+                int(candidate["signature"].get("side_mismatches", 0)),
+                0 if not candidate.get("is_local") else 1,
+                -int(candidate["signature"].get("observed_count", 0)),
+                tuple(round(value, 8) for value in candidate["seed_point"]),
+            )
+        )
+        selected_candidates = []
+        for candidate in seed_candidates:
+            candidate_point = np.asarray(candidate["seed_point"], dtype=float)
+            if any(
+                np.linalg.norm(
+                    candidate_point - np.asarray(existing["seed_point"], dtype=float)
                 )
-                local_seed = self._psc_seed_point_for_unit(
-                    local_info,
-                    psc_model,
-                    require_side_match=True,
-                )
-                add_seed(
-                    local_seed,
-                    local_info.get("seed_topology_signature", {}) or {},
-                    local_boundaries,
-                )
-    
-            if seed_points:
-                unit_info["seed_points"] = seed_points
-                unit_info["seed_point"] = seed_points[0]
-                unit_info["seed_topology_signatures"] = seed_signatures
-                unit_info["seed_topology_signature"] = seed_signatures[0].get("signature", {})
-                return seed_points
-    
-            unit_info["seed_points"] = []
-            unit_info["seed_topology_signatures"] = []
-            return []
-    
-        seed_point = self._psc_seed_point_for_unit(unit_info, psc_model)
-        if seed_point is None:
-            unit_info["seed_points"] = []
-            return []
-        unit_info["seed_points"] = [seed_point]
-        unit_info["seed_point"] = seed_point
-        unit_info["seed_topology_signatures"] = [
-            {
-                "boundaries": list(unit_info.get("boundaries", []) or []),
-                "signature": dict(unit_info.get("seed_topology_signature", {}) or {}),
-            }
+                <= duplicate_tolerance
+                for existing in selected_candidates
+            ):
+                continue
+            selected_candidates.append(candidate)
+
+        seed_points = [
+            list(candidate["seed_point"]) for candidate in selected_candidates
         ]
-        return [seed_point]
+        seed_signatures = [
+            {
+                "boundaries": list(candidate["boundaries"]),
+                "signature": dict(candidate["signature"]),
+                "component_index": int(candidate["component_index"]),
+            }
+            for candidate in selected_candidates
+        ]
+        unit_info["seed_points"] = seed_points
+        unit_info["seed_point"] = seed_points[0] if seed_points else None
+        unit_info["seed_topology_signatures"] = seed_signatures
+        unit_info["seed_topology_signature"] = (
+            dict(seed_signatures[0]["signature"]) if seed_signatures else {}
+        )
+        return seed_points
     
     def _assign_psc_materials(
         self,
@@ -3615,6 +3879,7 @@ class PiecewiseStructuralComplex:
                 unit_info,
                 psc_model,
                 mapped_units,
+                max_missing_boundaries=max_missing_boundaries,
             )
             unit_info["seed_points"] = seed_points
             unit_info["seed_point"] = seed_points[0] if seed_points else None

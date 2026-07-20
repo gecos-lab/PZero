@@ -1,0 +1,224 @@
+from types import SimpleNamespace
+
+from pzero.pymeshit_app.PiecewiseStructuralComplex import PiecewiseStructuralComplex
+
+
+def _controller():
+    return PiecewiseStructuralComplex(SimpleNamespace(tetra_surface_data={}))
+
+
+def _unit(key, feature, boundaries, point=None, signature_entry=None, **extra):
+    unit = {
+        "key": key,
+        "name": feature,
+        "feature": feature,
+        "unit_role": "TMU",
+        "polarity": 1,
+        "boundaries": list(boundaries),
+        "seed_points": [list(point)] if point is not None else [],
+        "seed_point": list(point) if point is not None else None,
+        "seed_topology_signatures": (
+            [signature_entry] if signature_entry is not None else []
+        ),
+    }
+    unit.update(extra)
+    return unit
+
+
+def _model(*units, representative_role="TMU"):
+    return {
+        "units": {unit["key"]: unit for unit in units},
+        "boundary_order": [
+            {
+                "feature": "Rep",
+                "unit_role": representative_role,
+                "polarity": 1,
+            }
+        ],
+        "boundary_features": {"Boundary", "Rep", "Other"},
+    }
+
+
+def test_partial_observation_stays_anchored_to_intended_3d_signature():
+    controller = _controller()
+    source = _unit(
+        "unit:A",
+        "A",
+        ["Boundary", "A"],
+        point=[0, 0, 0],
+        signature_entry={
+            "boundaries": ["Boundary", "A"],
+            "signature": {
+                "target": ["Boundary", "A"],
+                "closest": ["Boundary", "Other"],
+                "exact": False,
+            },
+        },
+    )
+    unrelated = _unit("unit:Other", "Other", ["Boundary", "Other"])
+
+    payload = controller._psc_classify_seed_assignments(
+        [source, unrelated],
+        _model(source, unrelated),
+        max_missing_boundaries=1,
+    )[0]
+
+    assert payload["unit_key"] == "unit:A"
+    assert payload["status"] == "LIKELY"
+    assert payload["missing_labels"] == ["A"]
+    assert payload["extra_labels"] == ["Other"]
+
+
+def test_mixed_surface_and_boundary_signature_keeps_boundary_as_missing_label():
+    controller = _controller()
+    source = _unit(
+        "unit:A",
+        "A",
+        ["Boundary", "Rep"],
+        point=[0, 0, 0],
+        signature_entry={
+            "boundaries": ["Boundary", "Rep"],
+            "signature": {
+                "target": ["Boundary", "Rep"],
+                "closest": ["Rep"],
+                "exact": False,
+            },
+        },
+    )
+
+    payload = controller._psc_classify_seed_assignments(
+        [source],
+        _model(source),
+        max_missing_boundaries=1,
+    )[0]
+
+    assert payload["unit_key"] == "unit:A"
+    assert payload["status"] == "LIKELY"
+    assert payload["missing_labels"] == ["Boundary"]
+
+
+def test_explicit_seed_override_is_pinned_to_its_source_unit():
+    controller = _controller()
+    first = _unit(
+        "unit:A",
+        "A",
+        ["Boundary", "Rep"],
+        point=[1, 2, 3],
+        seed_override=True,
+    )
+    second = _unit("unit:B", "B", ["Boundary", "Rep"])
+
+    payload = controller._psc_classify_seed_assignments(
+        [first, second],
+        _model(first, second),
+        max_missing_boundaries=1,
+    )[0]
+
+    assert payload["unit_key"] == "unit:A"
+    assert payload["status"] == "CERTAIN"
+    assert payload["candidate_names"] == ["A"]
+    assert first["seed_points"] == [[1.0, 2.0, 3.0]]
+    assert second["seed_points"] == []
+
+
+def test_swap_preserves_every_seed_in_both_selected_rows():
+    controller = _controller()
+    first = {"seed_points": [[1, 2, 3], [4, 5, 6]]}
+    second = {"seed_points": [[7, 8, 9], [10, 11, 12]]}
+
+    swapped = controller._psc_swapped_seed_points(first, second)
+
+    assert swapped == (
+        [[7.0, 8.0, 9.0], [10.0, 11.0, 12.0]],
+        [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
+    )
+
+
+def test_local_signature_repeat_is_blocked_across_representative_surface():
+    controller = _controller()
+    controller._psc_closest_surface_indices_for_point = (
+        lambda point, labels: {"rep": 5}
+    )
+    controller._psc_signed_distance_to_surface = (
+        lambda point, surface_idx: float(point[0])
+    )
+    controller.host.tetra_surface_data = {
+        5: {"feature": "Rep", "name": "Representative"}
+    }
+    local_signature = {
+        "boundaries": ["Rep"],
+        "component_index": 0,
+        "signature": {
+            "target": ["Rep"],
+            "closest": ["Rep"],
+            "exact": True,
+            "closest_surface_indices": {"rep": 5},
+        },
+    }
+    repeated = _unit(
+        "unit:Repeated",
+        "Repeated",
+        ["Rep", "Other"],
+        point=[-1, 0, 0],
+    )
+    repeated["seed_points"] = [[-1, 0, 0], [1, 0, 0]]
+    repeated["seed_topology_signatures"] = [
+        dict(local_signature),
+        dict(local_signature),
+    ]
+    representative = _unit("unit:Rep", "Rep", ["Rep"])
+
+    payloads = controller._psc_classify_seed_assignments(
+        [repeated],
+        _model(repeated, representative, representative_role="TMU"),
+        max_missing_boundaries=1,
+    )
+
+    assert [payload["status"] for payload in payloads] == ["CERTAIN", "UNASSIGNED"]
+    assert payloads[1]["blocked_repeat_labels"] == ["Rep"]
+
+
+def test_local_signature_repeat_is_allowed_across_discontinuity():
+    controller = _controller()
+    controller._psc_closest_surface_indices_for_point = (
+        lambda point, labels: {"rep": 5}
+    )
+    controller._psc_signed_distance_to_surface = (
+        lambda point, surface_idx: float(point[0])
+    )
+    controller.host.tetra_surface_data = {
+        5: {"feature": "Rep", "name": "Representative"}
+    }
+    local_signature = {
+        "boundaries": ["Rep"],
+        "component_index": 0,
+        "signature": {
+            "target": ["Rep"],
+            "closest": ["Rep"],
+            "exact": True,
+            "closest_surface_indices": {"rep": 5},
+        },
+    }
+    repeated = _unit(
+        "unit:Repeated",
+        "Repeated",
+        ["Rep", "Other"],
+        point=[-1, 0, 0],
+    )
+    repeated["seed_points"] = [[-1, 0, 0], [1, 0, 0]]
+    repeated["seed_topology_signatures"] = [
+        dict(local_signature),
+        dict(local_signature),
+    ]
+    representative = _unit("unit:Rep", "Rep", ["Rep"])
+
+    payloads = controller._psc_classify_seed_assignments(
+        [repeated],
+        _model(repeated, representative, representative_role="Discontinuity"),
+        max_missing_boundaries=1,
+    )
+
+    assert [payload["status"] for payload in payloads] == [
+        "CERTAIN",
+        "POSSIBLE_REPEAT",
+    ]
