@@ -57,7 +57,7 @@ class ViewStereoplot(ViewMPL):
         self.analysis_results = {}
         self.analysis_actors = {}
         self.analysis_action_for_key = {}
-        self.kmeans_k = 1 # default value
+        self.kmedoids_k = 1 # default value
         self.is_normals = None
         self.is_lineations = None
         self.auto_recompute = False
@@ -108,16 +108,16 @@ class ViewStereoplot(ViewMPL):
         self.actionSaveClusters.triggered.connect(self.prompt_and_save_clusters)
         self.menuAnalysis.addAction(self.actionSaveClusters)
         
-        self.menuAnalysis.addSection("K-means clusters")
+        self.menuAnalysis.addSection("Kmedoids clusters")
 
-        self.kmeans_k_spinbox = QSpinBox()
-        self.kmeans_k_spinbox.setMinimum(1)
-        self.kmeans_k_spinbox.setValue(self.kmeans_k)
-        self.kmeans_k_spinbox.valueChanged.connect(self.set_kmeans_k)
+        self.kmedoids_k_spinbox = QSpinBox()
+        self.kmedoids_k_spinbox.setMinimum(1)
+        self.kmedoids_k_spinbox.setValue(self.kmedoids_k)
+        self.kmedoids_k_spinbox.valueChanged.connect(self.set_kmedoids_k)
 
-        self.kmeans_k_widget_action = QWidgetAction(self)
-        self.kmeans_k_widget_action.setDefaultWidget(self.kmeans_k_spinbox)
-        self.menuAnalysis.addAction(self.kmeans_k_widget_action)
+        self.kmedoids_k_widget_action = QWidgetAction(self)
+        self.kmedoids_k_widget_action.setDefaultWidget(self.kmedoids_k_spinbox)
+        self.menuAnalysis.addAction(self.kmedoids_k_widget_action)
         
         # ---- Analysis actors ----
         self.menuAnalysis.addSection("Fisher")
@@ -169,19 +169,19 @@ class ViewStereoplot(ViewMPL):
         # self.analysis_action_for_key["kent_mean_gc"] = self.actionKentMeanGC
         
 
-        self.menuAnalysis.addSection("K-means")
+        self.menuAnalysis.addSection("K-medoids")
 
-        self.actionKmeansCenters = QAction("Cluster centers as poles", self)
-        self.actionKmeansCenters.setCheckable(True)
-        self.actionKmeansCenters.triggered.connect(lambda: self.toggle_analysis_actor("kmeans_centers"))
-        self.menuAnalysis.addAction(self.actionKmeansCenters)
-        self.analysis_action_for_key["kmeans_centers"] = self.actionKmeansCenters
+        self.actionKmedoidsCenters = QAction("Cluster centers as poles", self)
+        self.actionKmedoidsCenters.setCheckable(True)
+        self.actionKmedoidsCenters.triggered.connect(lambda: self.toggle_analysis_actor("kmedoids_centers"))
+        self.menuAnalysis.addAction(self.actionKmedoidsCenters)
+        self.analysis_action_for_key["kmedoids_centers"] = self.actionKmedoidsCenters
         
-        self.actionKmeansColor = QAction("Color Clusters", self)
-        self.actionKmeansColor.setCheckable(True)
-        self.actionKmeansColor.triggered.connect(lambda: self.toggle_analysis_actor("kmeans_color"))
-        self.menuAnalysis.addAction(self.actionKmeansColor)
-        self.analysis_action_for_key["kmeans_color"] = self.actionKmeansColor
+        self.actionKmedoidsColor = QAction("Color Clusters", self)
+        self.actionKmedoidsColor.setCheckable(True)
+        self.actionKmedoidsColor.triggered.connect(lambda: self.toggle_analysis_actor("kmedoids_color"))
+        self.menuAnalysis.addAction(self.actionKmedoidsColor)
+        self.analysis_action_for_key["kmedoids_color"] = self.actionKmedoidsColor
         
         self.actionSeedPickingNormals = QAction("Seed picking for clustering (Normals objects)", self)
         self.actionSeedPickingNormals.triggered.connect(lambda : self.seed_picking("normals"))
@@ -553,7 +553,7 @@ class ViewStereoplot(ViewMPL):
                
     def recompute_values(self):
         """
-        Recompute all orientation statistics (Fisher, Kent, Bingham, k-means)
+        Recompute all orientation statistics (Fisher, Kent, Bingham, k-medoids)
         for the entities currently in self.selected_uids.
 
         This is a destructive recompute: any previously drawn analysis actors
@@ -565,7 +565,7 @@ class ViewStereoplot(ViewMPL):
         self.analysis_results : dict
             Rebuilt with keys "normals" and/or "lineations",
             each mapping to a dict with keys "fisher",
-            "kent", "bingham", "kmeans" - each value either the corresponding
+            "kent", "bingham", "kmedoids" - each value either the corresponding
             function's result dict, or None if that computation failed.
         self.analysis_actors : dict
             Cleared to {} after removing any live matplotlib artists it held.
@@ -593,7 +593,7 @@ class ViewStereoplot(ViewMPL):
         lineations_array = lineations_df[["x", "y", "z"]].to_numpy()
         self.last_normals_array = normals_array
         self.last_lineations_array = lineations_array
-        k = self.kmeans_k # The number of searched clusters
+        k = self.kmedoids_k # The number of searched clusters
         
         # Statistics calculation block for the "Normals" objects  
         if normals_array.shape[0] > 0:
@@ -619,12 +619,12 @@ class ViewStereoplot(ViewMPL):
                 self.print_terminal(f"Bingham stats failed: {e}")
                 bingham_result = None
                 
-            # K-means clusters calculation
+            # K-medoids clusters calculation
             try:
-                kmean_result = kmeans_clusters(normals_array, k, is_axial=True)
-                # kmean_result = kmedoids_clusters(normals_array, k, is_axial=True)
+                # kmean_result = kmeans_clusters(normals_array, k, is_axial=True)
+                kmean_result = kmedoids_clusters(normals_array, k, is_axial=True)
             except ValueError as e:
-                self.print_terminal(f"K-means clusters failed: {e}")
+                self.print_terminal(f"K-medoids clusters failed: {e}")
                 kmean_result = None
         else:
             self.is_normals = False
@@ -644,7 +644,7 @@ class ViewStereoplot(ViewMPL):
             "fisher": fisher_result,
             # "kent": kent_result,
             "bingham": bingham_result,
-            "kmeans": kmean_result,
+            "kmedoids": kmean_result,
         }
                 
         # Statistics calculation block for the "Lineation" objects
@@ -671,11 +671,12 @@ class ViewStereoplot(ViewMPL):
                 self.print_terminal(f"Bingham stats failed: {e}")
                 bingham_result = None
                 
-            # K-means clusters calculation
+            # K-medoids clusters calculation
             try:
-                kmean_result = kmeans_clusters(lineations_array, k)
+                # kmean_result = kmeans_clusters(lineations_array, k)
+                kmean_result = kmedoids_clusters(lineations_array, k)
             except ValueError as e:
-                self.print_terminal(f"K-means clusters failed: {e}")
+                self.print_terminal(f"K-medoids clusters failed: {e}")
                 kmean_result = None
         else:
             self.is_lineations = False
@@ -695,50 +696,51 @@ class ViewStereoplot(ViewMPL):
             "fisher": fisher_result,
             # "kent": kent_result,
             "bingham": bingham_result,
-            "kmeans": kmean_result,
+            "kmedoids": kmean_result,
         }
         
         for key in previously_active_keys:
             self.toggle_analysis_actor(key)
     
-    def recompute_kmeans_only(self):
+    def recompute_kmedoids_only(self):
         """
-        Re-run k-means clustering only, using the same pooled vectors from the
-        most recent full recompute_values() call , with the current self.kmeans_k. 
+        Re-run k-medoids clustering only, using the same pooled vectors from the
+        most recent full recompute_values() call , with the current self.kmedoids_k. 
         Leaves fisher/kent/bingham results untouched.
         Does nothing if recompute_values has not yet run at least once.
         """
         if not hasattr(self, "last_normals_array"):
-            self.print_terminal("No data to recompute k-means on yet - run Recompute first.")
+            self.print_terminal("No data to recompute k-medoids on yet - run Recompute first.")
             return
 
-        k = self.kmeans_k
+        k = self.kmedoids_k
 
         if self.is_normals:
             if len(self.seed_pick_normals) == k:
                 try:
-                    kmean_result = kmeans_clusters(self.last_normals_array, k,
-                                                   seeds=np_asarray(self.seed_pick_normals), is_axial=True)
-                    # kmean_result = kmedoids_clusters(self.last_normals_array, k,
+                    # kmean_result = kmeans_clusters(self.last_normals_array, k,
                     #                                seeds=np_asarray(self.seed_pick_normals), is_axial=True)
+                    kmean_result = kmedoids_clusters(self.last_normals_array, k,
+                                                   seeds=np_asarray(self.seed_pick_normals), is_axial=True)
                 except ValueError as e:
-                    self.print_terminal(f"K-means clusters failed: {e}")
+                    self.print_terminal(f"K-medoids clusters failed: {e}")
                     kmean_result = None
             else:    
                 try:
-                    kmean_result = kmeans_clusters(self.last_normals_array, k, is_axial=True)
+                    # kmean_result = kmeans_clusters(self.last_normals_array, k, is_axial=True)
+                    kmean_result = kmedoids_clusters(self.last_normals_array, k, is_axial=True)
                 except ValueError as e:
-                    self.print_terminal(f"K-means clusters failed: {e}")
+                    self.print_terminal(f"K-medoids clusters failed: {e}")
                     kmean_result = None
                     
-            self.analysis_results["normals"]["kmeans"] = kmean_result
+            self.analysis_results["normals"]["kmedoids"] = kmean_result
             df_temp = self.last_normals_df.copy()
             if kmean_result is not None:
                 df_temp["clusters"] = kmean_result["labels"]
             else:
                 df_temp["clusters"] = None
             self.last_normals_df = df_temp
-            for key in ["kmeans_centers", "kmeans_color"]:
+            for key in ["kmedoids_centers", "kmedoids_color"]:
                 if self.analysis_actors.get(key) is not None:
                     self._hide_analysis_actor(key)
                     self._show_analysis_actor(key)
@@ -746,33 +748,36 @@ class ViewStereoplot(ViewMPL):
         if self.is_lineations:
             if len(self.seed_pick_lineations) == k:
                 try:
-                    kmean_result = kmeans_clusters(self.last_lineations_array, k,
+                    # kmean_result = kmeans_clusters(self.last_lineations_array, k,
+                    #                                seeds=np_asarray(self.seed_pick_lineations))
+                    kmean_result = kmedoids_clusters(self.last_lineations_array, k,
                                                    seeds=np_asarray(self.seed_pick_lineations))
                 except ValueError as e:
-                    self.print_terminal(f"K-means clusters failed: {e}")
+                    self.print_terminal(f"K-medoids clusters failed: {e}")
                     kmean_result = None
             else:
                 try:
-                    kmean_result = kmeans_clusters(self.last_lineations_array, k)
+                    # kmean_result = kmeans_clusters(self.last_lineations_array, k)
+                    kmean_result = kmedoids_clusters(self.last_lineations_array, k)
                 except ValueError as e:
-                    self.print_terminal(f"K-means clusters failed: {e}")
+                    self.print_terminal(f"K-medoids clusters failed: {e}")
                     kmean_result = None
                     
-            self.analysis_results["lineations"]["kmeans"] = kmean_result
+            self.analysis_results["lineations"]["kmedoids"] = kmean_result
             df_temp = self.last_lineations_df.copy()
             if kmean_result is not None:
                 df_temp["clusters"] = kmean_result["labels"]
             else:
                 df_temp["clusters"] = None
             self.last_lineations_df = df_temp
-            for key in ["kmeans_centers", "kmeans_color"]:
+            for key in ["kmedoids_centers", "kmedoids_color"]:
                 if self.analysis_actors.get(key) is not None:
                     self._hide_analysis_actor(key)
                     self._show_analysis_actor(key)
             
-    def set_kmeans_k(self, value):
-        self.kmeans_k = value
-        self.recompute_kmeans_only()
+    def set_kmedoids_k(self, value):
+        self.kmedoids_k = value
+        self.recompute_kmedoids_only()
 
     def _on_seed_pick(self, event):
         """
@@ -824,8 +829,8 @@ class ViewStereoplot(ViewMPL):
 
         if len(seeds) >= self.seed_pick_target:
             self.picking_seeds = False
-            self.print_terminal("Seed picking complete. Recomputing k-means.")
-            self.recompute_kmeans_only()
+            self.print_terminal("Seed picking complete. Recomputing k-medoids.")
+            self.recompute_kmedoids_only()
             self._clear_seed_pick_actors()
     
     def seed_picking(self, kind):
@@ -839,7 +844,7 @@ class ViewStereoplot(ViewMPL):
         if not hasattr(self, "last_normals_array") or not hasattr(self, "last_lineations_array"):
             self.recompute_values()
 
-        input_dict = {"number_of_clusters": ["Number of clusters: ", str(self.kmeans_k)]}
+        input_dict = {"number_of_clusters": ["Number of clusters: ", str(self.kmedoids_k)]}
         result = multiple_input_dialog(title="Number of clusters", input_dict=input_dict)
         if result is None:
             return
@@ -850,7 +855,7 @@ class ViewStereoplot(ViewMPL):
             self.print_terminal("Invalid number of clusters.")
             return
 
-        self.kmeans_k = k
+        self.kmedoids_k = k
         self.seed_pick_kind = kind
         self.seed_pick_target = k
         self.picking_seeds = True
@@ -1027,14 +1032,14 @@ class ViewStereoplot(ViewMPL):
             if not new_actor:
                 new_actor = None
 
-        elif key == "kmeans_centers":
+        elif key == "kmedoids_centers":
             new_actor = []
             for kind in ["normals", "lineations"]:
-                cluster_result = self.analysis_results.get(kind, {}).get("kmeans")
+                cluster_result = self.analysis_results.get(kind, {}).get("kmedoids")
                 if cluster_result is None:
                     self.print_terminal(f"No clustering result available for {kind}.")
                     continue
-                self.print_terminal(f"Kmeans centers :")
+                self.print_terminal(f"Kmedoids centers :")
                 for centroid in cluster_result["centroids"]:
                     norm = np_linalg_norm(centroid)
                     if norm == 0:
@@ -1045,10 +1050,10 @@ class ViewStereoplot(ViewMPL):
             if not new_actor:
                 new_actor = None                
                     
-        elif key == "kmeans_color":
+        elif key == "kmedoids_color":
             new_actor = []
             for kind in ["normals", "lineations"]:
-                cluster_result = self.analysis_results.get(kind, {}).get("kmeans")
+                cluster_result = self.analysis_results.get(kind, {}).get("kmedoids")
                 if cluster_result is None:
                     self.print_terminal(f"No clustering result available for {kind}.")
                     continue
@@ -1129,7 +1134,7 @@ class ViewStereoplot(ViewMPL):
     
     def _remove_analysis_actor(self, actor):
         """Remove one analysis actor, which may be a single matplotlib artist
-        or a list of artists (e.g. k-means centers, one per cluster)."""
+        or a list of artists (e.g. k-medoids centers, one per cluster)."""
         
         actors_to_remove = actor if isinstance(actor, list) else [actor]
         for single_actor in actors_to_remove:
@@ -1182,7 +1187,7 @@ class ViewStereoplot(ViewMPL):
     # --- Clusters saving: saving the clusters as property ---
     def save_clusters_as_property(self, property_name):
         """
-        Write the most recently computed k-means cluster assignment (currently
+        Write the most recently computed k-medoids cluster assignment (currently
         cached in self.last_normals_df / self.last_lineations_df) onto each
         contributing entity in geol_coll, as a new 1-component point-data
         property named property_name.

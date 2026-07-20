@@ -8,6 +8,7 @@ from numpy import greater as np_greater
 from numpy import less_equal as np_less_equal
 from numpy import array as np_array
 from numpy import asarray as np_asarray
+from numpy import arange as np_arange
 from numpy import cross as np_cross
 from numpy import squeeze as np_squeeze
 from numpy import sum as np_sum
@@ -569,8 +570,9 @@ def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
     if k < 1:
         raise ValueError("k must be at least 1")
 
-    if is_axial:    #Double the data for planes
-        samplecart_input = double_axial(samplecart)
+    if is_axial:
+        samplecart_resolved = resolve_lower_hemisphere(samplecart)
+        samplecart_input = double_axial(samplecart_resolved)
     else:
         samplecart_input = samplecart
 
@@ -617,13 +619,39 @@ def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
         medoid_indices = new_medoid_indices
 
     # Final assignment
-    D = cdist(samplecart_input, samplecart_input[medoid_indices])
-    labels_input = np_argmin(D, axis=1) #Label all the points to their cluster
+    # For axial data, keep only labels for the original N vectors
+    if is_axial:
+        medoid_indices_resolved = np_where(medoid_indices >= n,medoid_indices - n,medoid_indices)
+        
+        seen = []
+        used = set()
+        all_indices = np_arange(n)
+        for i, idx in enumerate(medoid_indices_resolved):
+            if idx not in used:
+                used.add(idx)
+                seen.append(idx)
+            else:
+                # Find nearest unused data point to the original medoid
+                unused = np_array([j for j in all_indices if j not in used])
+                D_unused = cdist(
+                    samplecart_input[idx:idx+1],
+                    samplecart_input[unused]
+                )
+                replacement = unused[np_argmin(D_unused)]
+                used.add(replacement)
+                seen.append(replacement)
+        medoid_indices_resolved = np_array(seen)
+        
+    else:
+        medoid_indices_resolved = medoid_indices
+
+    D = cdist(samplecart_input, samplecart_input[medoid_indices_resolved])
+    labels_input = np_argmin(D, axis=1)
 
     # For axial data, keep only labels for the original N vectors
     ### That part is just because we doubled the data for planes ###
-    labels = labels_input[:n]
-    medoids = samplecart_input[medoid_indices]
+    labels = labels_input[:n]   #Label all the points to their cluster
+    medoids = samplecart_input[medoid_indices_resolved]
 
     return {"centroids": medoids, "labels": labels}
 
