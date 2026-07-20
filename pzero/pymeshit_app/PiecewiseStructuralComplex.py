@@ -342,7 +342,8 @@ class PiecewiseStructuralComplex:
         selector_layout.addWidget(from_sections_button)
         use_calculated_button = QPushButton("Use calculated", dialog)
         use_calculated_button.setToolTip(
-            "Clear saved PSC seed overrides and return to PyMeshIt-calculated seed locations."
+            "Clear saved PSC seed overrides and return to automatically calculated "
+            "locations, constrained by matching section seeds when available."
         )
         selector_layout.addWidget(use_calculated_button)
         layout.addLayout(selector_layout)
@@ -529,6 +530,7 @@ class PiecewiseStructuralComplex:
             preview_state["mapping"] = mapping
     
             rows = list(mapping.get("units", []))
+            self._psc_attach_section_seed_guides(rows, unit_seed_key)
             preview_state["rows"] = rows
             previous_side_context = getattr(self, "_psc_side_context", {})
             self._psc_side_context = self._psc_prepare_topology_side_context(
@@ -538,6 +540,7 @@ class PiecewiseStructuralComplex:
             preview_table.setRowCount(len(rows))
             missing_count = 0
             seed_location_count = 0
+            section_guided_count = 0
             try:
                 for unit_info in rows:
                     unit_key = unit_seed_key(unit_info)
@@ -581,6 +584,18 @@ class PiecewiseStructuralComplex:
                     missing_count += len(missing_boundaries)
                     seed_points = list(unit_info.get("seed_points", []) or [])
                     seed_location_count += len(seed_points or [])
+                    is_section_guided = any(
+                        bool(
+                            (entry.get("signature", {}) or {}).get(
+                                "section_guided", False
+                            )
+                        )
+                        for entry in unit_info.get(
+                            "seed_topology_signatures", []
+                        ) or []
+                    )
+                    if is_section_guided:
+                        section_guided_count += len(seed_points)
                     seed_text = self._psc_format_seed_list(seed_points)
                     if unit_info.get("seed_override") and seed_text:
                         seed_text += " *"
@@ -605,6 +620,13 @@ class PiecewiseStructuralComplex:
                                 "(manual swap or From sections)."
                             )
                             item.setForeground(QColor(40, 95, 170))
+                        elif col_idx == 4 and is_section_guided:
+                            item.setToolTip(
+                                "Automatic 3D seed: section U/V coordinates are "
+                                "preserved and the normal coordinate is selected "
+                                "from the tetra-surface topology."
+                            )
+                            item.setForeground(QColor(35, 120, 80))
                         if col_idx == 5 and missing_boundaries:
                             item.setForeground(QColor(190, 40, 40))
                         if col_idx == 6 and assignment_status in {
@@ -637,6 +659,7 @@ class PiecewiseStructuralComplex:
             status_label.setText(
                 f"Units: {len(rows)} | "
                 f"Seed locations: {seed_location_count} | "
+                f"Section-guided: {section_guided_count} | "
                 f"Known boundaries: {len(psc_model.get('boundary_features', set()))} | "
                 f"Missing matches: {missing_count} | "
                 f"Saved seed overrides: {len(seed_overrides)} | "
@@ -912,6 +935,17 @@ class PiecewiseStructuralComplex:
                 points = np.asarray(getattr(vtk_obj, "points", []), dtype=float)
             except Exception:
                 continue
+            parent_uid = ""
+            try:
+                parent_uid = self._psc_text(geol_coll.get_uid_x_section(uid))
+            except Exception:
+                pass
+            vtk_section_uid = self._psc_text(
+                getattr(vtk_obj, "x_section_uid", "")
+            )
+            section_uid = self._psc_section_uid_from_candidates(
+                [parent_uid, vtk_section_uid]
+            )
             if points.ndim == 1:
                 points = points.reshape(1, -1)
             if points.ndim != 2 or points.shape[1] < 3 or points.shape[0] == 0:
@@ -943,9 +977,88 @@ class PiecewiseStructuralComplex:
                     "feature_key": self._psc_key(feature),
                     "role_key": self._psc_key(role),
                     "seed_points": seed_points,
+                    "section_uid": section_uid,
                 }
             )
         return entries
+
+    def _psc_section_uid_from_candidates(self, values: List[Any]) -> str:
+        """Resolve a section UID from plain or linked PZero parent UID values."""
+        project = self._pzero_project()
+        xsect_coll = getattr(project, "xsect_coll", None)
+        valid_uids = {
+            str(uid)
+            for uid in (getattr(xsect_coll, "get_uids", []) or [])
+            if str(uid)
+        }
+        fallback = ""
+        for value in values or []:
+            for token in str(value or "").split(";"):
+                token = token.strip()
+                if not token:
+                    continue
+                if not fallback:
+                    fallback = token
+                if token in valid_uids:
+                    return token
+        return fallback if not valid_uids else ""
+
+    def _psc_attach_section_seed_guides(
+        self,
+        mapped_units: List[Dict[str, Any]],
+        unit_seed_key=None,
+    ) -> int:
+        """Attach uniquely matched section points as automatic 3D seed guides."""
+        if unit_seed_key is None:
+            unit_seed_key = lambda unit: str(
+                unit.get("key")
+                or unit.get("name")
+                or unit.get("feature")
+                or ""
+            )
+        units_by_key = {
+            str(unit_seed_key(unit_info)): unit_info
+            for unit_info in mapped_units or []
+            if str(unit_seed_key(unit_info))
+        }
+        for unit_info in units_by_key.values():
+            unit_info.pop("section_seed_guides", None)
+
+        guide_count = 0
+        seen = set()
+        for seed_row in self._psc_section_seed_match_rows(
+            mapped_units,
+            unit_seed_key,
+        ):
+            unit_key = str(seed_row.get("target_unit_key", ""))
+            section_uid = self._psc_text(seed_row.get("section_uid", ""))
+            if (
+                unit_key not in units_by_key
+                or not section_uid
+                or seed_row.get("status_key") not in {"matched", "matched_feature"}
+            ):
+                continue
+            for point in self._psc_normalize_seed_points(
+                seed_row.get("seed_points", [])
+            ):
+                guide_key = (
+                    unit_key,
+                    section_uid,
+                    tuple(round(float(value), 8) for value in point),
+                )
+                if guide_key in seen:
+                    continue
+                seen.add(guide_key)
+                units_by_key[unit_key].setdefault("section_seed_guides", []).append(
+                    {
+                        "section_uid": section_uid,
+                        "seed_point": list(point),
+                        "source_uid": str(seed_row.get("uid", "")),
+                        "source_name": self._psc_text(seed_row.get("name", "")),
+                    }
+                )
+                guide_count += 1
+        return guide_count
 
     def _psc_section_seed_overrides_for_units(
         self,
@@ -3184,6 +3297,7 @@ class PiecewiseStructuralComplex:
         reference_seed: np.ndarray,
         require_side_match: bool = False,
         broad_sampling: Optional[bool] = None,
+        candidate_points_override: Optional[np.ndarray] = None,
     ) -> np.ndarray:
         """Choose a seed whose nearest-boundary signature matches the STM unit topology."""
         bounds = self._psc_domain_bounds()
@@ -3244,17 +3358,32 @@ class PiecewiseStructuralComplex:
             reference_seed,
             target_surface_map,
         )
-        if broad_sampling is None:
-            broad_sampling = (
-                int(unit_info.get("ambiguity_group_size", 1) or 1) > 1
+        if candidate_points_override is not None:
+            candidate_points = np.asarray(
+                candidate_points_override,
+                dtype=float,
             )
-        candidate_points = self._psc_seed_candidate_points(
-            reference_seed,
-            target_surface_indices,
-            bounds,
-            side_constraints,
-            broad_sampling=bool(broad_sampling),
-        )
+            if candidate_points.ndim == 1:
+                candidate_points = candidate_points.reshape(1, -1)
+            if candidate_points.ndim != 2 or candidate_points.shape[1] < 3:
+                candidate_points = np.empty((0, 3), dtype=float)
+            else:
+                candidate_points = candidate_points[:, :3]
+                candidate_points = candidate_points[
+                    np.all(np.isfinite(candidate_points), axis=1)
+                ]
+        else:
+            if broad_sampling is None:
+                broad_sampling = (
+                    int(unit_info.get("ambiguity_group_size", 1) or 1) > 1
+                )
+            candidate_points = self._psc_seed_candidate_points(
+                reference_seed,
+                target_surface_indices,
+                bounds,
+                side_constraints,
+                broad_sampling=bool(broad_sampling),
+            )
         if candidate_points.shape[0] == 0:
             return reference_seed
     
@@ -3643,7 +3772,176 @@ class PiecewiseStructuralComplex:
         if seed is None:
             return None
         return np.asarray(seed, dtype=float)
-    
+
+    def _psc_section_normal_candidate_points(
+        self,
+        section_uid: str,
+        section_seed_point: List[float],
+        calculated_seed: List[float],
+    ) -> np.ndarray:
+        """Keep section U/V fixed and sample only the missing normal coordinate."""
+        project = self._pzero_project()
+        xsect_coll = getattr(project, "xsect_coll", None)
+        bounds = self._psc_domain_bounds()
+        if xsect_coll is None or bounds is None or not section_uid:
+            return np.empty((0, 3), dtype=float)
+        try:
+            origin = np.asarray(
+                xsect_coll.get_uid_origin(uid=section_uid),
+                dtype=float,
+            ).reshape(3)
+            strike = np.asarray(
+                xsect_coll.get_uid_strike_vect(section_uid=section_uid),
+                dtype=float,
+            ).reshape(3)
+            dip = np.asarray(
+                xsect_coll.get_uid_dip_vect(section_uid=section_uid),
+                dtype=float,
+            ).reshape(3)
+            normal = np.asarray(
+                xsect_coll.get_uid_normal_vect(section_uid=section_uid),
+                dtype=float,
+            ).reshape(3)
+            guide = np.asarray(section_seed_point, dtype=float).reshape(3)
+            calculated = np.asarray(calculated_seed, dtype=float).reshape(3)
+        except (AttributeError, TypeError, ValueError):
+            return np.empty((0, 3), dtype=float)
+        if not all(
+            np.all(np.isfinite(vector))
+            for vector in (origin, strike, dip, normal, guide, calculated)
+        ):
+            return np.empty((0, 3), dtype=float)
+        strike_norm = float(np.linalg.norm(strike))
+        dip_norm = float(np.linalg.norm(dip))
+        normal_norm = float(np.linalg.norm(normal))
+        if min(strike_norm, dip_norm, normal_norm) <= 1e-12:
+            return np.empty((0, 3), dtype=float)
+        strike = strike / strike_norm
+        dip = dip / dip_norm
+        normal = normal / normal_norm
+
+        guide_offset = guide - origin
+        section_u = float(np.dot(guide_offset, strike))
+        section_v = float(np.dot(guide_offset, dip))
+        plane_point = origin + section_u * strike + section_v * dip
+        calculated_w = float(np.dot(calculated - origin, normal))
+
+        bounds_min, bounds_max = bounds
+        w_min = -float("inf")
+        w_max = float("inf")
+        for axis_idx in range(3):
+            component = float(normal[axis_idx])
+            if abs(component) <= 1e-12:
+                if (
+                    plane_point[axis_idx] < bounds_min[axis_idx] - 1e-8
+                    or plane_point[axis_idx] > bounds_max[axis_idx] + 1e-8
+                ):
+                    return np.empty((0, 3), dtype=float)
+                continue
+            axis_values = sorted(
+                (
+                    float((bounds_min[axis_idx] - plane_point[axis_idx]) / component),
+                    float((bounds_max[axis_idx] - plane_point[axis_idx]) / component),
+                )
+            )
+            w_min = max(w_min, axis_values[0])
+            w_max = min(w_max, axis_values[1])
+        if not np.isfinite(w_min) or not np.isfinite(w_max) or w_min > w_max:
+            return np.empty((0, 3), dtype=float)
+
+        diagonal = max(float(np.linalg.norm(bounds_max - bounds_min)), 1e-9)
+        margin = min(diagonal * 1e-5, max((w_max - w_min) * 0.01, 0.0))
+        inner_min = w_min + margin
+        inner_max = w_max - margin
+        if inner_min > inner_max:
+            inner_min, inner_max = w_min, w_max
+        normal_values = list(np.linspace(inner_min, inner_max, 33))
+        normal_values.append(float(np.clip(calculated_w, inner_min, inner_max)))
+        if inner_min <= 0.0 <= inner_max:
+            normal_values.append(0.0)
+        span = max(inner_max - inner_min, 0.0)
+        for fraction in (-0.1, -0.05, -0.02, 0.02, 0.05, 0.1):
+            normal_values.append(
+                float(
+                    np.clip(
+                        calculated_w + span * fraction,
+                        inner_min,
+                        inner_max,
+                    )
+                )
+            )
+
+        points = np.asarray(
+            [plane_point + value * normal for value in normal_values],
+            dtype=float,
+        )
+        rounded = np.round(points, decimals=8)
+        _, unique_indices = np.unique(rounded, axis=0, return_index=True)
+        return points[np.sort(unique_indices)]
+
+    def _psc_section_guided_seed_point_for_unit(
+        self,
+        unit_info: Dict[str, Any],
+        psc_model: Dict[str, Any],
+        calculated_seed: Optional[List[float]],
+        require_side_match: bool = False,
+    ) -> Optional[List[float]]:
+        """Refine a calculated seed along a matched section point's normal line."""
+        if calculated_seed is None:
+            return None
+        guides = list(unit_info.get("section_seed_guides", []) or [])
+        if not guides:
+            return list(calculated_seed)
+
+        trials = []
+        for guide in guides:
+            candidate_points = self._psc_section_normal_candidate_points(
+                self._psc_text(guide.get("section_uid", "")),
+                guide.get("seed_point", []),
+                calculated_seed,
+            )
+            if candidate_points.shape[0] == 0:
+                continue
+            trial_info = dict(unit_info)
+            trial_info.pop("seed_topology_signature", None)
+            refined_seed = self._psc_refine_seed_by_topology_signature(
+                trial_info,
+                psc_model,
+                np.asarray(calculated_seed, dtype=float),
+                require_side_match=require_side_match,
+                candidate_points_override=candidate_points,
+            )
+            signature = dict(
+                trial_info.get("seed_topology_signature", {}) or {}
+            )
+            if not signature:
+                continue
+            refined_seed = np.asarray(refined_seed, dtype=float).reshape(3)
+            if not np.all(np.isfinite(refined_seed)):
+                continue
+            quality = (
+                0 if signature.get("exact") else 1,
+                int(signature.get("missing_count", 0)),
+                int(signature.get("extra_count", 0)),
+                int(signature.get("side_mismatches", 0)),
+                -int(signature.get("observed_count", 0)),
+                -float(signature.get("score", -float("inf"))),
+                str(guide.get("source_uid", "")).casefold(),
+            )
+            trials.append((quality, refined_seed, signature, dict(guide)))
+
+        if not trials:
+            return list(calculated_seed)
+        _, refined_seed, signature, guide = min(trials, key=lambda item: item[0])
+        signature["section_guided"] = True
+        signature["section_uid"] = self._psc_text(guide.get("section_uid", ""))
+        signature["section_seed_uid"] = str(guide.get("source_uid", ""))
+        signature["section_seed_point"] = list(guide.get("seed_point", []) or [])
+        unit_info["seed_topology_signature"] = signature
+        unit_info["section_seed_guided"] = True
+        unit_info["section_seed_guide"] = guide
+        return [float(value) for value in refined_seed]
+
     def _psc_seed_point_for_unit(
         self,
         unit_info: Dict[str, Any],
@@ -3782,6 +4080,11 @@ class PiecewiseStructuralComplex:
             )
 
         global_seed = self._psc_seed_point_for_unit(unit_info, psc_model)
+        global_seed = self._psc_section_guided_seed_point_for_unit(
+            unit_info,
+            psc_model,
+            global_seed,
+        )
         add_candidate(
             global_seed,
             unit_info.get("seed_topology_signature", {}) or {},
@@ -3800,6 +4103,12 @@ class PiecewiseStructuralComplex:
                 psc_model,
                 require_side_match=True,
             )
+            local_seed = self._psc_section_guided_seed_point_for_unit(
+                local_info,
+                psc_model,
+                local_seed,
+                require_side_match=True,
+            )
             add_candidate(
                 local_seed,
                 local_info.get("seed_topology_signature", {}) or {},
@@ -3810,6 +4119,17 @@ class PiecewiseStructuralComplex:
         # Prefer the best topology realization when global and local searches
         # converge to the same physical point.  Distinct valid local components
         # remain separate seeds and will pass through repeat-adjacency checks.
+        # When a section guide exists, its U/V location is authoritative: do
+        # not retain an unguided local fallback or create a second seed for the
+        # same mapped formation volume.
+        if unit_info.get("section_seed_guides"):
+            guided_candidates = [
+                candidate
+                for candidate in seed_candidates
+                if candidate["signature"].get("section_guided", False)
+            ]
+            if guided_candidates:
+                seed_candidates = guided_candidates
         seed_candidates.sort(
             key=lambda candidate: (
                 0 if candidate["signature"].get("exact") else 1,
@@ -3833,6 +4153,8 @@ class PiecewiseStructuralComplex:
             ):
                 continue
             selected_candidates.append(candidate)
+        if unit_info.get("section_seed_guides") and selected_candidates:
+            selected_candidates = selected_candidates[:1]
 
         seed_points = [
             list(candidate["seed_point"]) for candidate in selected_candidates
@@ -3868,12 +4190,13 @@ class PiecewiseStructuralComplex:
             max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
         assigned_materials = []
         skipped_count = 0
+        mapped_units = list(psc_mapping.get("units", []))
+        self._psc_attach_section_seed_guides(mapped_units)
         self._psc_side_context = self._psc_prepare_topology_side_context(
             psc_model,
-            list(psc_mapping.get("units", [])),
+            mapped_units,
         )
-    
-        mapped_units = list(psc_mapping.get("units", []))
+
         for unit_info in mapped_units:
             seed_points = self._psc_seed_points_for_unit(
                 unit_info,
@@ -3920,6 +4243,16 @@ class PiecewiseStructuralComplex:
                     "psc_virtual_unit": bool(unit_info.get("psc_virtual_unit", False)),
                     "psc_virtual_source": unit_info.get("psc_virtual_source", ""),
                     "psc_seed_count": len(seed_points),
+                    "psc_section_guided": any(
+                        bool(
+                            (entry.get("signature", {}) or {}).get(
+                                "section_guided", False
+                            )
+                        )
+                        for entry in unit_info.get(
+                            "seed_topology_signatures", []
+                        ) or []
+                    ),
                     "psc_assignment_status": unit_info.get(
                         "psc_assignment_status", "UNASSIGNED"
                     ),
