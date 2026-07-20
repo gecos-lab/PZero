@@ -255,8 +255,8 @@ def get_dip_dir_vectors(normals=None, az=False):
         return az_vectors, dir_vectors
     else:
         return dip_vectors, dir_vectors
-    
-    
+
+
 def fisherparams(samplecart, is_axial=False):
     """
     Calculate fisher parameters.
@@ -452,8 +452,8 @@ def bingham(samplecart, is_axial=False):
     axes = np_vstack((mu, gamma1, gamma2))
 
     return {"eigenvalues": eigenvalues, "axes": axes}
-    
-    
+
+
 def kmeans_clusters(samplecart, k, seeds=None, is_axial=False):
     """
     Calculate k-means clusters.
@@ -524,8 +524,8 @@ def kmeans_clusters(samplecart, k, seeds=None, is_axial=False):
     labels = labels_input[:n]
 
     return {"centroids": centroids, "labels": labels}
-    
-    
+
+
 def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
     """
     Calculate k-medoids clusters using the PAM algorithm.
@@ -560,7 +560,6 @@ def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
     """
     samplecart = np_asarray(samplecart, dtype=float)
 
-
     ### Clause guard part ###
     if samplecart.ndim != 2 or samplecart.shape[1] != 3:
         raise ValueError("samplecart must have shape (N, 3)")
@@ -589,40 +588,52 @@ def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
         if seeds.shape[0] != k:
             raise ValueError(f"seeds must have shape (k, 3), got {seeds.shape}")
         # Match each seed to its nearest actual data point
-        D_seeds = cdist(seeds, samplecart_input)    #If seed picking, initialize the medoid with the closest point
-        medoid_indices = np_argmin(D_seeds, axis=1) #for each seed
+        D_seeds = cdist(
+            seeds, samplecart_input
+        )  # If seed picking, initialize the medoid with the closest point
+        medoid_indices = np_argmin(D_seeds, axis=1)  # for each seed
     else:
-        rng = np_random_default_rng(42) #If no seed picking, random pick
+        rng = np_random_default_rng(42)  # If no seed picking, random pick
         medoid_indices = rng.choice(n_input, k, replace=False)
 
     # PAM update loop
     ### The actual loop that is the method ###
-    for _ in range(300):    # 300 should be enough to converge
-        D = cdist(samplecart_input, samplecart_input[medoid_indices])   # Distance between all poles and the current medoids
-        labels_input = np_argmin(D, axis=1) # Find the nearest medoid for each point
+    for _ in range(300):  # 300 should be enough to converge
+        D = cdist(
+            samplecart_input, samplecart_input[medoid_indices]
+        )  # Distance between all poles and the current medoids
+        labels_input = np_argmin(D, axis=1)  # Find the nearest medoid for each point
 
         new_medoid_indices = medoid_indices.copy()
-        for j in range(k):  #For each cluster j
-            cluster_mask = labels_input == j    #Test if there are poles in that cluster   
+        for j in range(k):  # For each cluster j
+            cluster_mask = labels_input == j  # Test if there are poles in that cluster
             if not cluster_mask.any():
                 continue
-            cluster_indices = np_where(cluster_mask)[0] #Take all the points assigned to that cluster
+            cluster_indices = np_where(cluster_mask)[
+                0
+            ]  # Take all the points assigned to that cluster
             D_cluster = cdist(
-                samplecart_input[cluster_indices],
-                samplecart_input[cluster_indices])  #Distance between each points of that cluster 
-            best = cluster_indices[np_argmin(D_cluster.sum(axis=1))]    #Sum each row giving total distance from point i to every other 
-                                                                        #points in the cluster and keep the smallest one
-            new_medoid_indices[j] = best    #Make this point the new medoid
+                samplecart_input[cluster_indices], samplecart_input[cluster_indices]
+            )  # Distance between each points of that cluster
+            best = cluster_indices[
+                np_argmin(D_cluster.sum(axis=1))
+            ]  # Sum each row giving total distance from point i to every other
+            # points in the cluster and keep the smallest one
+            new_medoid_indices[j] = best  # Make this point the new medoid
 
-        if np_all(new_medoid_indices == medoid_indices):    #If the medoid didn't changed, it converge, break the loop
+        if np_all(
+            new_medoid_indices == medoid_indices
+        ):  # If the medoid didn't changed, it converge, break the loop
             break
         medoid_indices = new_medoid_indices
 
     # Final assignment
     # For axial data, keep only labels for the original N vectors
     if is_axial:
-        medoid_indices_resolved = np_where(medoid_indices >= n,medoid_indices - n,medoid_indices)
-        
+        medoid_indices_resolved = np_where(
+            medoid_indices >= n, medoid_indices - n, medoid_indices
+        )
+
         seen = []
         used = set()
         all_indices = np_arange(n)
@@ -634,14 +645,13 @@ def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
                 # Find nearest unused data point to the original medoid
                 unused = np_array([j for j in all_indices if j not in used])
                 D_unused = cdist(
-                    samplecart_input[idx:idx+1],
-                    samplecart_input[unused]
+                    samplecart_input[idx : idx + 1], samplecart_input[unused]
                 )
                 replacement = unused[np_argmin(D_unused)]
                 used.add(replacement)
                 seen.append(replacement)
         medoid_indices_resolved = np_array(seen)
-        
+
     else:
         medoid_indices_resolved = medoid_indices
 
@@ -650,7 +660,7 @@ def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
 
     # For axial data, keep only labels for the original N vectors
     ### That part is just because we doubled the data for planes ###
-    labels = labels_input[:n]   #Label all the points to their cluster
+    labels = labels_input[:n]  # Label all the points to their cluster
     medoids = samplecart_input[medoid_indices_resolved]
 
     return {"centroids": medoids, "labels": labels}

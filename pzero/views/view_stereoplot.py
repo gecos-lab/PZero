@@ -21,7 +21,13 @@ from pandas import concat as pd_concat
 # PZero imports____
 from .abstract_view_mpl import ViewMPL
 from ..entities_factory import VertexSet, XsVertexSet, Attitude
-from pzero.orientation_analysis import fisherparams, bingham, kmeans_clusters, resolve_lower_hemisphere, kmedoids_clusters   #kentparams,
+from pzero.orientation_analysis import (
+    fisherparams,
+    bingham,
+    kmeans_clusters,
+    resolve_lower_hemisphere,
+    kmedoids_clusters,
+)  # kentparams,
 from pzero.helpers.helper_dialogs import multiple_input_dialog
 
 # mplstereonet import____
@@ -57,13 +63,13 @@ class ViewStereoplot(ViewMPL):
         self.analysis_results = {}
         self.analysis_actors = {}
         self.analysis_action_for_key = {}
-        self.kmedoids_k = 1 # default value
+        self.kmedoids_k = 1  # default value
         self.is_normals = None
         self.is_lineations = None
         self.auto_recompute = False
         self.picking_seeds = False
-        self.seed_pick_kind = None       
-        self.seed_pick_target = 0         
+        self.seed_pick_kind = None
+        self.seed_pick_target = 0
         self.seed_pick_normals = []
         self.seed_pick_lineations = []
         self.seed_pick_actors = []
@@ -92,22 +98,22 @@ class ViewStereoplot(ViewMPL):
         self.actionSetPolar = QAction("Toggle grid", self)
         self.actionSetPolar.triggered.connect(self.toggle_grid)
         self.menuView.addAction(self.actionSetPolar)
-        
+
         self.actionRecompute = QAction("Recompute statistics", self)
         self.actionRecompute.setEnabled(not self.auto_recompute)
         self.actionRecompute.triggered.connect(self.recompute_values)
         self.menuAnalysis.addAction(self.actionRecompute)
-        
+
         self.actionAutoRecompute = QAction("Enable auto recomputation", self)
         self.actionAutoRecompute.setCheckable(True)
         self.actionAutoRecompute.setChecked(self.auto_recompute)
         self.actionAutoRecompute.triggered.connect(self.toggle_auto_recompute)
         self.menuAnalysis.addAction(self.actionAutoRecompute)
-        
+
         self.actionSaveClusters = QAction("Save clusters as a property", self)
         self.actionSaveClusters.triggered.connect(self.prompt_and_save_clusters)
         self.menuAnalysis.addAction(self.actionSaveClusters)
-        
+
         self.menuAnalysis.addSection("Kmedoids clusters")
 
         self.kmedoids_k_spinbox = QSpinBox()
@@ -118,39 +124,51 @@ class ViewStereoplot(ViewMPL):
         self.kmedoids_k_widget_action = QWidgetAction(self)
         self.kmedoids_k_widget_action.setDefaultWidget(self.kmedoids_k_spinbox)
         self.menuAnalysis.addAction(self.kmedoids_k_widget_action)
-        
+
         # ---- Analysis actors ----
         self.menuAnalysis.addSection("Fisher")
 
         self.actionFisher = QAction("Mean direction as pole", self)
         self.actionFisher.setCheckable(True)
-        self.actionFisher.triggered.connect(lambda: self.toggle_analysis_actor("fisher_mean_pole"))
+        self.actionFisher.triggered.connect(
+            lambda: self.toggle_analysis_actor("fisher_mean_pole")
+        )
         self.menuAnalysis.addAction(self.actionFisher)
         self.analysis_action_for_key["fisher_mean_pole"] = self.actionFisher
-        
+
         self.menuAnalysis.addSection("Bingham")
 
         self.actionBinghamMajorPole = QAction("Major axis as pole", self)
         self.actionBinghamMajorPole.setCheckable(True)
-        self.actionBinghamMajorPole.triggered.connect(lambda: self.toggle_analysis_actor("bingham_major_pole"))
+        self.actionBinghamMajorPole.triggered.connect(
+            lambda: self.toggle_analysis_actor("bingham_major_pole")
+        )
         self.menuAnalysis.addAction(self.actionBinghamMajorPole)
         self.analysis_action_for_key["bingham_major_pole"] = self.actionBinghamMajorPole
 
         self.actionBinghamIntermediatePole = QAction("Intermediate axis as pole", self)
         self.actionBinghamIntermediatePole.setCheckable(True)
-        self.actionBinghamIntermediatePole.triggered.connect(lambda: self.toggle_analysis_actor("bingham_intermediate_pole"))
+        self.actionBinghamIntermediatePole.triggered.connect(
+            lambda: self.toggle_analysis_actor("bingham_intermediate_pole")
+        )
         self.menuAnalysis.addAction(self.actionBinghamIntermediatePole)
-        self.analysis_action_for_key["bingham_intermediate_pole"] = self.actionBinghamIntermediatePole
+        self.analysis_action_for_key["bingham_intermediate_pole"] = (
+            self.actionBinghamIntermediatePole
+        )
 
         self.actionBinghamMinorPole = QAction("Minor axis as pole", self)
         self.actionBinghamMinorPole.setCheckable(True)
-        self.actionBinghamMinorPole.triggered.connect(lambda: self.toggle_analysis_actor("bingham_minor_pole"))
+        self.actionBinghamMinorPole.triggered.connect(
+            lambda: self.toggle_analysis_actor("bingham_minor_pole")
+        )
         self.menuAnalysis.addAction(self.actionBinghamMinorPole)
         self.analysis_action_for_key["bingham_minor_pole"] = self.actionBinghamMinorPole
 
         self.actionBinghamMinorGC = QAction("Great circle ⊥ minor axis", self)
         self.actionBinghamMinorGC.setCheckable(True)
-        self.actionBinghamMinorGC.triggered.connect(lambda: self.toggle_analysis_actor("bingham_minor_gc"))
+        self.actionBinghamMinorGC.triggered.connect(
+            lambda: self.toggle_analysis_actor("bingham_minor_gc")
+        )
         self.menuAnalysis.addAction(self.actionBinghamMinorGC)
         self.analysis_action_for_key["bingham_minor_gc"] = self.actionBinghamMinorGC
 
@@ -167,39 +185,52 @@ class ViewStereoplot(ViewMPL):
         # self.actionKentMeanGC.triggered.connect(lambda: self.toggle_analysis_actor("kent_mean_gc"))
         # self.menuAnalysis.addAction(self.actionKentMeanGC)
         # self.analysis_action_for_key["kent_mean_gc"] = self.actionKentMeanGC
-        
 
         self.menuAnalysis.addSection("K-medoids")
 
         self.actionKmedoidsCenters = QAction("Cluster centers as poles", self)
         self.actionKmedoidsCenters.setCheckable(True)
-        self.actionKmedoidsCenters.triggered.connect(lambda: self.toggle_analysis_actor("kmedoids_centers"))
+        self.actionKmedoidsCenters.triggered.connect(
+            lambda: self.toggle_analysis_actor("kmedoids_centers")
+        )
         self.menuAnalysis.addAction(self.actionKmedoidsCenters)
         self.analysis_action_for_key["kmedoids_centers"] = self.actionKmedoidsCenters
-        
+
         self.actionKmedoidsColor = QAction("Color Clusters", self)
         self.actionKmedoidsColor.setCheckable(True)
-        self.actionKmedoidsColor.triggered.connect(lambda: self.toggle_analysis_actor("kmedoids_color"))
+        self.actionKmedoidsColor.triggered.connect(
+            lambda: self.toggle_analysis_actor("kmedoids_color")
+        )
         self.menuAnalysis.addAction(self.actionKmedoidsColor)
         self.analysis_action_for_key["kmedoids_color"] = self.actionKmedoidsColor
-        
-        self.actionSeedPickingNormals = QAction("Seed picking for clustering (Normals objects)", self)
-        self.actionSeedPickingNormals.triggered.connect(lambda : self.seed_picking("normals"))
+
+        self.actionSeedPickingNormals = QAction(
+            "Seed picking for clustering (Normals objects)", self
+        )
+        self.actionSeedPickingNormals.triggered.connect(
+            lambda: self.seed_picking("normals")
+        )
         self.menuAnalysis.addAction(self.actionSeedPickingNormals)
 
-        self.actionSeedPickingLineations = QAction("Seed picking for clustering (Lineations objects)", self)
-        self.actionSeedPickingLineations.triggered.connect(lambda : self.seed_picking("lineations"))
+        self.actionSeedPickingLineations = QAction(
+            "Seed picking for clustering (Lineations objects)", self
+        )
+        self.actionSeedPickingLineations.triggered.connect(
+            lambda: self.seed_picking("lineations")
+        )
         self.menuAnalysis.addAction(self.actionSeedPickingLineations)
-        
+
     def connect_all_signals(self):
         super().connect_all_signals()
-        self.sig_selection_lmb = lambda collection: self.on_selection_changed(collection)
+        self.sig_selection_lmb = lambda collection: self.on_selection_changed(
+            collection
+        )
         self.parent.signals.selection_changed.connect(self.sig_selection_lmb)
-    
+
     def disconnect_all_signals(self):
         super().disconnect_all_signals()
         self.parent.signals.selection_changed.disconnect(self.sig_selection_lmb)
-        
+
     # ================================  Methods required by BaseView(), (re-)implemented here =========================
 
     def initialize_interactor(self):
@@ -226,7 +257,7 @@ class ViewStereoplot(ViewMPL):
             plt_close(self.figure)
             self.canvas.setParent(None)
             self.canvas.deleteLater()
-            
+
         self.figure, self.ax = mplstereonet.subplots(projection=self.proj_type)
 
         # get a reference to the canvas that contains the figure
@@ -240,8 +271,10 @@ class ViewStereoplot(ViewMPL):
             self.ax.grid(True, kind="arbitrary", color="k", ls=":", zorder=self.Z_GRID)
         elif self.grid_kind == "polar":
             self.ax.grid(True, kind="polar", color="k", ls=":", zorder=self.Z_GRID)
-            
-        self.seed_pick_cid = self.canvas.mpl_connect("button_press_event", self._on_seed_pick)
+
+        self.seed_pick_cid = self.canvas.mpl_connect(
+            "button_press_event", self._on_seed_pick
+        )
 
     def show_actor_with_property(
         self,
@@ -266,7 +299,7 @@ class ViewStereoplot(ViewMPL):
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
             point_size = this_coll.get_uid_legend(uid=uid)["point_size"]
             line_thick = this_coll.get_uid_legend(uid=uid)["line_thick"]
-            opacity = this_coll.get_uid_legend(uid=uid)["opacity"]/100
+            opacity = this_coll.get_uid_legend(uid=uid)["opacity"] / 100
             plot_entity = this_coll.get_uid_vtk_obj(uid)
         else:
             # catch errors
@@ -299,9 +332,19 @@ class ViewStereoplot(ViewMPL):
                         elif show_property in ["none", "Poles", None]:
                             if self.contours is not None and visible is True:
                                 if self.contours:
-                                    self.ax.density_contourf(strike, dip, measurement="poles", zorder=self.Z_CONTOURS)
+                                    self.ax.density_contourf(
+                                        strike,
+                                        dip,
+                                        measurement="poles",
+                                        zorder=self.Z_CONTOURS,
+                                    )
                                 else:
-                                    self.ax.density_contour(strike, dip, measurement="poles", zorder=self.Z_CONTOURS)
+                                    self.ax.density_contour(
+                                        strike,
+                                        dip,
+                                        measurement="poles",
+                                        zorder=self.Z_CONTOURS,
+                                    )
 
                             this_actor = self.ax.pole(
                                 strike,
@@ -321,21 +364,28 @@ class ViewStereoplot(ViewMPL):
                                 prop_values = plot_entity.points_Y
                             elif show_property == "Z":
                                 prop_values = plot_entity.points_Z
-                            elif isinstance(show_property, str) and show_property.endswith("]"):
+                            elif isinstance(
+                                show_property, str
+                            ) and show_property.endswith("]"):
                                 pos1 = show_property.index("[")
                                 pos2 = show_property.index("]")
                                 original_prop = show_property[:pos1]
                                 comp_index = int(show_property[pos1 + 1 : pos2])
-                                prop_values = plot_entity.get_point_data(original_prop)[:, comp_index]
+                                prop_values = plot_entity.get_point_data(original_prop)[
+                                    :, comp_index
+                                ]
                                 show_property_title = original_prop
                             else:
                                 prop_values = plot_entity.get_point_data(show_property)
 
                             cmap_row = self.parent.prop_legend_df.loc[
-                                self.parent.prop_legend_df["property_name"] == show_property_title,
+                                self.parent.prop_legend_df["property_name"]
+                                == show_property_title,
                                 "colormap",
                             ]
-                            show_property_cmap = cmap_row.values[0] if len(cmap_row) else "rainbow"
+                            show_property_cmap = (
+                                cmap_row.values[0] if len(cmap_row) else "rainbow"
+                            )
 
                             prop_values = np_asarray(prop_values).reshape(-1)
                             lon, lat = mplstereonet.pole(strike, dip)
@@ -383,8 +433,11 @@ class ViewStereoplot(ViewMPL):
 
             if show:
                 this_actor = self.show_actor_with_property(
-                    uid=uid, coll_name=collection_name,
-                    show_property=show_property, visible=True)
+                    uid=uid,
+                    coll_name=collection_name,
+                    show_property=show_property,
+                    visible=True,
+                )
             else:
                 this_actor = None
                 self.mpl_actors[uid] = None
@@ -406,11 +459,12 @@ class ViewStereoplot(ViewMPL):
         """Redraw every currently-active analysis visual on the current self.ax,
         for the same reason as _rebuild_all_entity_actors: the old artists belong
         to a now-destroyed figure."""
-        previously_active_keys = [key for key, actor in self.analysis_actors.items() if actor is not None]
+        previously_active_keys = [
+            key for key, actor in self.analysis_actors.items() if actor is not None
+        ]
         self.analysis_actors = {}
         for key in previously_active_keys:
             self._show_analysis_actor(key)
-            
 
     # --- View display toggles ---
     def toggle_projection(self):
@@ -477,9 +531,8 @@ class ViewStereoplot(ViewMPL):
     def stop_event_loops(self):
         """Terminate running event loops. It looks like we do not use this method."""
         self.figure.canvas.stop_event_loop()
-        
-        
-    # --- Orientation analysis: data pipeline ---   
+
+    # --- Orientation analysis: data pipeline ---
     def get_normals_and_lineations_for_analysis(self):
         """
         Walk through self.selected_uids and pull orientation data for statistical
@@ -497,7 +550,7 @@ class ViewStereoplot(ViewMPL):
         """
         normals_rows = []
         lineations_rows = []
-        
+
         if not self.parent.geol_coll.selected_uids:
             self.print_terminal("No entities selected for analysis.")
             return (
@@ -549,8 +602,8 @@ class ViewStereoplot(ViewMPL):
         normals_df = pd_DataFrame(normals_rows, columns=["uid", "x", "y", "z"])
         lineations_df = pd_DataFrame(lineations_rows, columns=["uid", "x", "y", "z"])
 
-        return normals_df, lineations_df          
-               
+        return normals_df, lineations_df
+
     def recompute_values(self):
         """
         Recompute all orientation statistics (Fisher, Kent, Bingham, k-medoids)
@@ -569,9 +622,11 @@ class ViewStereoplot(ViewMPL):
             function's result dict, or None if that computation failed.
         self.analysis_actors : dict
             Cleared to {} after removing any live matplotlib artists it held.
-        """       
-        previously_active_keys = [key for key, actor in self.analysis_actors.items() if actor is not None]
-        
+        """
+        previously_active_keys = [
+            key for key, actor in self.analysis_actors.items() if actor is not None
+        ]
+
         # Clear the old state
         # Remove any previously-drawn analysis artists from the canvas, then reset
         for key, actor in self.analysis_actors.items():
@@ -582,10 +637,9 @@ class ViewStereoplot(ViewMPL):
 
         if hasattr(self, "figure"):
             self.figure.canvas.draw()
-            
+
         self.analysis_results = {}
-        
-        
+
         # Get the objects
         normals_df, lineations_df = self.get_normals_and_lineations_for_analysis()
         normals_array = normals_df[["x", "y", "z"]].to_numpy()
@@ -593,9 +647,9 @@ class ViewStereoplot(ViewMPL):
         lineations_array = lineations_df[["x", "y", "z"]].to_numpy()
         self.last_normals_array = normals_array
         self.last_lineations_array = lineations_array
-        k = self.kmedoids_k # The number of searched clusters
-        
-        # Statistics calculation block for the "Normals" objects  
+        k = self.kmedoids_k  # The number of searched clusters
+
+        # Statistics calculation block for the "Normals" objects
         if normals_array.shape[0] > 0:
             self.is_normals = True
             # Fisher parameters calculation
@@ -604,21 +658,21 @@ class ViewStereoplot(ViewMPL):
             except ValueError as e:
                 self.print_terminal(f"Fisher stats failed: {e}")
                 fisher_result = None
-                
+
             # # Kent parameters calculation
             # try:
             #     kent_result = kentparams(normals_array, is_axial=True)
             # except ValueError as e:
             #     self.print_terminal(f"Kent stats failed: {e}")
             #     kent_result = None
-                
+
             # Bingham parameters calculation
             try:
                 bingham_result = bingham(normals_array, is_axial=True)
             except ValueError as e:
                 self.print_terminal(f"Bingham stats failed: {e}")
                 bingham_result = None
-                
+
             # K-medoids clusters calculation
             try:
                 # kmean_result = kmeans_clusters(normals_array, k, is_axial=True)
@@ -632,21 +686,21 @@ class ViewStereoplot(ViewMPL):
             # kent_result = None
             bingham_result = None
             kmean_result = None
-            
+
         df_temp = normals_df.copy()
         if kmean_result is not None:
             df_temp["clusters"] = kmean_result["labels"]
         else:
             df_temp["clusters"] = None
         self.last_normals_df = df_temp
-                
-        self.analysis_results['normals'] = {
+
+        self.analysis_results["normals"] = {
             "fisher": fisher_result,
             # "kent": kent_result,
             "bingham": bingham_result,
             "kmedoids": kmean_result,
         }
-                
+
         # Statistics calculation block for the "Lineation" objects
         if lineations_array.shape[0] > 0:
             self.is_lineations = True
@@ -656,21 +710,21 @@ class ViewStereoplot(ViewMPL):
             except ValueError as e:
                 self.print_terminal(f"Fisher stats failed: {e}")
                 fisher_result = None
-                
+
             # # Kent parameters calculation
             # try:
             #     kent_result = kentparams(lineations_array)
             # except ValueError as e:
             #     self.print_terminal(f"Kent stats failed: {e}")
             #     kent_result = None
-                
+
             # Bingham parameters calculation
             try:
                 bingham_result = bingham(lineations_array)
             except ValueError as e:
                 self.print_terminal(f"Bingham stats failed: {e}")
                 bingham_result = None
-                
+
             # K-medoids clusters calculation
             try:
                 # kmean_result = kmeans_clusters(lineations_array, k)
@@ -684,33 +738,35 @@ class ViewStereoplot(ViewMPL):
             kent_result = None
             bingham_result = None
             kmean_result = None
-            
+
         df_temp = lineations_df.copy()
         if kmean_result is not None:
             df_temp["clusters"] = kmean_result["labels"]
         else:
             df_temp["clusters"] = None
         self.last_lineations_df = df_temp
-            
-        self.analysis_results['lineations'] = {
+
+        self.analysis_results["lineations"] = {
             "fisher": fisher_result,
             # "kent": kent_result,
             "bingham": bingham_result,
             "kmedoids": kmean_result,
         }
-        
+
         for key in previously_active_keys:
             self.toggle_analysis_actor(key)
-    
+
     def recompute_kmedoids_only(self):
         """
         Re-run k-medoids clustering only, using the same pooled vectors from the
-        most recent full recompute_values() call , with the current self.kmedoids_k. 
+        most recent full recompute_values() call , with the current self.kmedoids_k.
         Leaves fisher/kent/bingham results untouched.
         Does nothing if recompute_values has not yet run at least once.
         """
         if not hasattr(self, "last_normals_array"):
-            self.print_terminal("No data to recompute k-medoids on yet - run Recompute first.")
+            self.print_terminal(
+                "No data to recompute k-medoids on yet - run Recompute first."
+            )
             return
 
         k = self.kmedoids_k
@@ -720,19 +776,25 @@ class ViewStereoplot(ViewMPL):
                 try:
                     # kmean_result = kmeans_clusters(self.last_normals_array, k,
                     #                                seeds=np_asarray(self.seed_pick_normals), is_axial=True)
-                    kmean_result = kmedoids_clusters(self.last_normals_array, k,
-                                                   seeds=np_asarray(self.seed_pick_normals), is_axial=True)
+                    kmean_result = kmedoids_clusters(
+                        self.last_normals_array,
+                        k,
+                        seeds=np_asarray(self.seed_pick_normals),
+                        is_axial=True,
+                    )
                 except ValueError as e:
                     self.print_terminal(f"K-medoids clusters failed: {e}")
                     kmean_result = None
-            else:    
+            else:
                 try:
                     # kmean_result = kmeans_clusters(self.last_normals_array, k, is_axial=True)
-                    kmean_result = kmedoids_clusters(self.last_normals_array, k, is_axial=True)
+                    kmean_result = kmedoids_clusters(
+                        self.last_normals_array, k, is_axial=True
+                    )
                 except ValueError as e:
                     self.print_terminal(f"K-medoids clusters failed: {e}")
                     kmean_result = None
-                    
+
             self.analysis_results["normals"]["kmedoids"] = kmean_result
             df_temp = self.last_normals_df.copy()
             if kmean_result is not None:
@@ -750,8 +812,11 @@ class ViewStereoplot(ViewMPL):
                 try:
                     # kmean_result = kmeans_clusters(self.last_lineations_array, k,
                     #                                seeds=np_asarray(self.seed_pick_lineations))
-                    kmean_result = kmedoids_clusters(self.last_lineations_array, k,
-                                                   seeds=np_asarray(self.seed_pick_lineations))
+                    kmean_result = kmedoids_clusters(
+                        self.last_lineations_array,
+                        k,
+                        seeds=np_asarray(self.seed_pick_lineations),
+                    )
                 except ValueError as e:
                     self.print_terminal(f"K-medoids clusters failed: {e}")
                     kmean_result = None
@@ -762,7 +827,7 @@ class ViewStereoplot(ViewMPL):
                 except ValueError as e:
                     self.print_terminal(f"K-medoids clusters failed: {e}")
                     kmean_result = None
-                    
+
             self.analysis_results["lineations"]["kmedoids"] = kmean_result
             df_temp = self.last_lineations_df.copy()
             if kmean_result is not None:
@@ -774,7 +839,7 @@ class ViewStereoplot(ViewMPL):
                 if self.analysis_actors.get(key) is not None:
                     self._hide_analysis_actor(key)
                     self._show_analysis_actor(key)
-            
+
     def set_kmedoids_k(self, value):
         self.kmedoids_k = value
         self.recompute_kmedoids_only()
@@ -783,10 +848,10 @@ class ViewStereoplot(ViewMPL):
         """
         Function that create the concrete picking on the stereonet.
         """
-        
+
         if not self.picking_seeds:
             return
-        
+
         if event.xdata is None or event.ydata is None:
             return
 
@@ -803,7 +868,9 @@ class ViewStereoplot(ViewMPL):
             self.print_terminal("No vectors available for seed picking.")
             return
 
-        points_xy = np_asarray([self.seed_pick_projected_lon, self.seed_pick_projected_lat]).T
+        points_xy = np_asarray(
+            [self.seed_pick_projected_lon, self.seed_pick_projected_lat]
+        ).T
         points_pixels = self.ax.transData.transform(points_xy)
 
         dx = points_pixels[:, 0] - event.x
@@ -819,7 +886,7 @@ class ViewStereoplot(ViewMPL):
 
         seeds.append(seed)
 
-        actor = self._draw_pole(seed, color="lime",marker='o' ,markersize=10)
+        actor = self._draw_pole(seed, color="lime", marker="o", markersize=10)
         self.seed_pick_actors.append(actor)
         self.figure.canvas.draw()
 
@@ -832,7 +899,7 @@ class ViewStereoplot(ViewMPL):
             self.print_terminal("Seed picking complete. Recomputing k-medoids.")
             self.recompute_kmedoids_only()
             self._clear_seed_pick_actors()
-    
+
     def seed_picking(self, kind):
         """
         Function that launch the seed picking. The user select
@@ -841,11 +908,17 @@ class ViewStereoplot(ViewMPL):
         """
         self._clear_seed_pick_actors()
 
-        if not hasattr(self, "last_normals_array") or not hasattr(self, "last_lineations_array"):
+        if not hasattr(self, "last_normals_array") or not hasattr(
+            self, "last_lineations_array"
+        ):
             self.recompute_values()
 
-        input_dict = {"number_of_clusters": ["Number of clusters: ", str(self.kmedoids_k)]}
-        result = multiple_input_dialog(title="Number of clusters", input_dict=input_dict)
+        input_dict = {
+            "number_of_clusters": ["Number of clusters: ", str(self.kmedoids_k)]
+        }
+        result = multiple_input_dialog(
+            title="Number of clusters", input_dict=input_dict
+        )
         if result is None:
             return
 
@@ -884,7 +957,9 @@ class ViewStereoplot(ViewMPL):
             lon, lat = mplstereonet.pole(strike, dip)
             projected_lons.append(np_atleast_1d(lon))
             projected_lats.append(np_atleast_1d(lat))
-            vectors = vtk_obj.get_point_data("Normals" if kind == "normals" else "Lineations")
+            vectors = vtk_obj.get_point_data(
+                "Normals" if kind == "normals" else "Lineations"
+            )
             if vectors.ndim == 1:
                 vectors = vectors.reshape(1, -1)
             source_vectors.append(vectors)
@@ -899,13 +974,13 @@ class ViewStereoplot(ViewMPL):
         self.seed_pick_source_vectors = np_vstack(source_vectors)
 
         self.print_terminal(f"Pick {k} {kind} seed(s) on the stereonet.")
-        
+
     def _project_vectors_to_stereonet(self, vectors):
         """
         Helper that project the existing vectors to the stereonet
         to find the closest point for seed picking.
         """
-        
+
         vectors = np_asarray(vectors, dtype=float)
         plunge, bearing = mplstereonet.vector2plunge_bearing(
             vectors[:, 0],
@@ -917,7 +992,7 @@ class ViewStereoplot(ViewMPL):
         return np_asarray(lon), np_asarray(lat)
 
     def _clear_seed_pick_actors(self):
-        """"
+        """ "
         Helper to erase the lime seeds once they are picked.
         """
         for actor in self.seed_pick_actors:
@@ -926,23 +1001,22 @@ class ViewStereoplot(ViewMPL):
         if hasattr(self, "figure") and self.figure is not None:
             self.figure.canvas.draw()
 
-
-    # --- Orientation analysis: selection-driven auto-recompute ---       
+    # --- Orientation analysis: selection-driven auto-recompute ---
     def on_selection_changed(self, collection):
         """
         Detect the selection changes, if there is nothing
         selected anymore, it toggle off all the statitics
         in the Analysis menu.
         """
-        
+
         if collection is not self.parent.geol_coll:
             return
         has_selection = bool(self.parent.geol_coll.selected_uids)
         self.actionRecompute.setEnabled(has_selection and not self.auto_recompute)
         if not self.auto_recompute:
             return
-        self.recompute_values()      
-      
+        self.recompute_values()
+
     def toggle_auto_recompute(self):
         """
         Toggle the auto recomputing of the statistics when
@@ -952,9 +1026,8 @@ class ViewStereoplot(ViewMPL):
         self.auto_recompute = self.actionAutoRecompute.isChecked()
         self.actionRecompute.setEnabled(not self.auto_recompute)
         if self.auto_recompute:
-            self.recompute_values() 
+            self.recompute_values()
 
-          
     # --- Orientation analysis: drawing and visibility ---
     def toggle_analysis_actor(self, key):
         """
@@ -977,7 +1050,7 @@ class ViewStereoplot(ViewMPL):
         never claims something is shown when it isn't.
         """
         new_actor = None
-                
+
         if key == "bingham_major_pole":
             new_actor = []
             for kind in ["normals", "lineations"]:
@@ -987,12 +1060,16 @@ class ViewStereoplot(ViewMPL):
                     continue
                 major_axis = bingham_result["axes"][0]
                 marker = "s" if kind == "normals" else "o"
-                new_actor.append(self._draw_pole(major_axis, color="red", marker=marker, markersize=10))
+                new_actor.append(
+                    self._draw_pole(
+                        major_axis, color="red", marker=marker, markersize=10
+                    )
+                )
                 self.print_terminal(f"Bingham major pole : {major_axis}")
             if not new_actor:
                 new_actor = None
 
-        elif key == "bingham_intermediate_pole":              
+        elif key == "bingham_intermediate_pole":
             new_actor = []
             for kind in ["normals", "lineations"]:
                 bingham_result = self.analysis_results.get(kind, {}).get("bingham")
@@ -1001,7 +1078,11 @@ class ViewStereoplot(ViewMPL):
                     continue
                 intermediate_axis = bingham_result["axes"][1]
                 marker = "s" if kind == "normals" else "o"
-                new_actor.append(self._draw_pole(intermediate_axis, color="green", marker=marker, markersize=10))
+                new_actor.append(
+                    self._draw_pole(
+                        intermediate_axis, color="green", marker=marker, markersize=10
+                    )
+                )
                 self.print_terminal(f"Bingham intermediate pole : {intermediate_axis}")
             if not new_actor:
                 new_actor = None
@@ -1015,7 +1096,11 @@ class ViewStereoplot(ViewMPL):
                     continue
                 minor_axis = bingham_result["axes"][2]
                 marker = "s" if kind == "normals" else "o"
-                new_actor.append(self._draw_pole(minor_axis, color="blue", marker=marker, markersize=10))
+                new_actor.append(
+                    self._draw_pole(
+                        minor_axis, color="blue", marker=marker, markersize=10
+                    )
+                )
                 self.print_terminal(f"Bingham minor pole : {minor_axis}")
             if not new_actor:
                 new_actor = None
@@ -1045,11 +1130,15 @@ class ViewStereoplot(ViewMPL):
                     if norm == 0:
                         continue
                     unit_centroid = centroid / norm
-                    new_actor.append(self._draw_pole(unit_centroid, color="black", marker="^", markersize=10))
+                    new_actor.append(
+                        self._draw_pole(
+                            unit_centroid, color="black", marker="^", markersize=10
+                        )
+                    )
                     self.print_terminal(f"   {unit_centroid}")
             if not new_actor:
-                new_actor = None                
-                    
+                new_actor = None
+
         elif key == "kmedoids_color":
             new_actor = []
             for kind in ["normals", "lineations"]:
@@ -1057,15 +1146,21 @@ class ViewStereoplot(ViewMPL):
                 if cluster_result is None:
                     self.print_terminal(f"No clustering result available for {kind}.")
                     continue
-                df = self.last_normals_df if kind == "normals" else self.last_lineations_df
+                df = (
+                    self.last_normals_df
+                    if kind == "normals"
+                    else self.last_lineations_df
+                )
                 for (uid, cluster_id), group in df.groupby(["uid", "clusters"]):
                     vectors = group[["x", "y", "z"]].to_numpy()
                     palette = cm.get_cmap("tab10")
                     color = palette(cluster_id % 10)
-                    new_actor.append(self._draw_pole(vectors, color=color, markersize=8))
+                    new_actor.append(
+                        self._draw_pole(vectors, color=color, markersize=8)
+                    )
             if not new_actor:
-                new_actor = None                
-                    
+                new_actor = None
+
         elif key == "fisher_mean_pole":
             new_actor = []
             for kind in ["normals", "lineations"]:
@@ -1075,11 +1170,15 @@ class ViewStereoplot(ViewMPL):
                     continue
                 mean_direction = fisher_result["mean_direction"][0]
                 marker = "s" if kind == "normals" else "o"
-                new_actor.append(self._draw_pole(mean_direction, color="purple", marker=marker, markersize=10))
+                new_actor.append(
+                    self._draw_pole(
+                        mean_direction, color="purple", marker=marker, markersize=10
+                    )
+                )
                 self.print_terminal(f"Fisher parameter : {fisher_result["kappa"]}")
             if not new_actor:
                 new_actor = None
-                
+
         # elif key == "kent_mean_pole":
         #     new_actor = []
         #     for kind in ["normals", "lineations"]:
@@ -1093,7 +1192,7 @@ class ViewStereoplot(ViewMPL):
         #         self.print_terminal(f"Kent parameters : {kent_result["kappa"]}, {kent_result["beta"]}")
         #     if not new_actor:
         #         new_actor = None
-                
+
         # elif key == "kent_mean_gc":
         #     new_actor = []
         #     for kind in ["normals", "lineations"]:
@@ -1105,8 +1204,7 @@ class ViewStereoplot(ViewMPL):
         #         new_actor.append(self._draw_great_circle(mean_gc, color="lightsteelblue"))
         #         self.print_terminal(f"Kent parameters : {kent_result["kappa"]}, {kent_result["beta"]}")
         #     if not new_actor:
-        #         new_actor = None                
-
+        #         new_actor = None
 
         else:
             self.print_terminal(f"Unknown analysis actor key: '{key}'")
@@ -1131,15 +1229,15 @@ class ViewStereoplot(ViewMPL):
             self._remove_analysis_actor(existing_actor)
             self.analysis_actors[key] = None
             self.figure.canvas.draw()
-    
+
     def _remove_analysis_actor(self, actor):
         """Remove one analysis actor, which may be a single matplotlib artist
         or a list of artists (e.g. k-medoids centers, one per cluster)."""
-        
+
         actors_to_remove = actor if isinstance(actor, list) else [actor]
         for single_actor in actors_to_remove:
             self.remove_artist(single_actor)
-    
+
     def _draw_pole(self, vector, **kwargs):
         """
         Convert one or more cartesian unit vectors into strike/dip and plot
@@ -1183,7 +1281,6 @@ class ViewStereoplot(ViewMPL):
         actor = self.ax.plane(strike, dip, **kwargs)[0]
         return actor
 
-
     # --- Clusters saving: saving the clusters as property ---
     def save_clusters_as_property(self, property_name):
         """
@@ -1192,8 +1289,10 @@ class ViewStereoplot(ViewMPL):
         contributing entity in geol_coll, as a new 1-component point-data
         property named property_name.
         """
-        for df, kind in [(getattr(self, "last_normals_df", None), "Normals"),
-                        (getattr(self, "last_lineations_df", None), "Lineations")]:
+        for df, kind in [
+            (getattr(self, "last_normals_df", None), "Normals"),
+            (getattr(self, "last_lineations_df", None), "Lineations"),
+        ]:
             if df is None or "clusters" not in df.columns:
                 continue
             if df["clusters"].isnull().all():
@@ -1203,18 +1302,26 @@ class ViewStereoplot(ViewMPL):
                 cluster_values = group["clusters"].to_numpy().reshape(-1, 1)
                 vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
                 if vtk_obj is None:
-                    self.print_terminal(f"uid {uid}: not found, skipped while saving clusters.")
+                    self.print_terminal(
+                        f"uid {uid}: not found, skipped while saving clusters."
+                    )
                     continue
-                self.parent.geol_coll.append_uid_property(uid=uid, property_name=property_name, property_components=1)
-                vtk_obj.set_point_data(data_key=property_name, attribute_matrix=cluster_values)
+                self.parent.geol_coll.append_uid_property(
+                    uid=uid, property_name=property_name, property_components=1
+                )
+                vtk_obj.set_point_data(
+                    data_key=property_name, attribute_matrix=cluster_values
+                )
                 self.print_terminal(f"Saved '{property_name}' on uid {uid} ({kind}).")
         self.parent.prop_legend.update_widget(self.parent)
-    
+
     def prompt_and_save_clusters(self):
         """Ask the user for a property name, then save the current cluster
         assignment onto each contributing entity under that name."""
         input_dict = {"property_name": ["Property name: ", "clusters"]}
-        updt_dict = multiple_input_dialog(title="Save clusters as property", input_dict=input_dict)
+        updt_dict = multiple_input_dialog(
+            title="Save clusters as property", input_dict=input_dict
+        )
         if updt_dict is None:
             return
         property_name = updt_dict["property_name"]
