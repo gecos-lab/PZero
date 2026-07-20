@@ -273,6 +273,7 @@ class PiecewiseStructuralComplex:
 
     SECTION_SEED_ROLES = {"TMU", "TSU", "SU", "IU", "SZ"}
     DISCONTINUITY_UNIT_ROLE = "Discontinuity"
+    MAX_RELAXED_MISSING_BOUNDARIES = 1
 
     def __init__(self, host):
         object.__setattr__(self, "host", host)
@@ -321,6 +322,14 @@ class PiecewiseStructuralComplex:
         table_combo = QComboBox(dialog)
         table_combo.addItems(stm_tables)
         selector_layout.addWidget(table_combo, 1)
+        selector_layout.addWidget(QLabel("Max missing"))
+        max_missing_spin = QSpinBox(dialog)
+        max_missing_spin.setRange(0, 10)
+        max_missing_spin.setValue(self.MAX_RELAXED_MISSING_BOUNDARIES)
+        max_missing_spin.setToolTip(
+            "Maximum number of absent boundaries accepted for a LIKELY topology match."
+        )
+        selector_layout.addWidget(max_missing_spin)
         swap_seed_button = QPushButton("Swap selected seeds", dialog)
         swap_seed_button.setToolTip(
             "Select two ambiguous units in the preview table and swap their seed coordinates."
@@ -338,9 +347,17 @@ class PiecewiseStructuralComplex:
         selector_layout.addWidget(use_calculated_button)
         layout.addLayout(selector_layout)
     
-        preview_table = QTableWidget(0, 6, dialog)
+        preview_table = QTableWidget(0, 7, dialog)
         preview_table.setHorizontalHeaderLabels(
-            ["Unit", "Unit Role", "Boundaries", "Matched surfaces", "Seed point", "Missing"]
+            [
+                "Unit",
+                "Unit Role",
+                "Boundaries",
+                "Matched surfaces",
+                "Seed point",
+                "Missing",
+                "Assignment",
+            ]
         )
         preview_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         preview_table.verticalHeader().setVisible(False)
@@ -522,11 +539,7 @@ class PiecewiseStructuralComplex:
             missing_count = 0
             seed_location_count = 0
             try:
-                for row_idx, unit_info in enumerate(rows):
-                    boundaries = unit_info.get("boundaries", [])
-                    matched_surfaces = unit_info.get("matched_surfaces", [])
-                    missing_boundaries = unit_info.get("missing_boundaries", [])
-                    missing_count += len(missing_boundaries)
+                for unit_info in rows:
                     unit_key = unit_seed_key(unit_info)
                     if unit_key in seed_overrides:
                         seed_points = [list(seed) for seed in seed_overrides[unit_key]]
@@ -541,10 +554,39 @@ class PiecewiseStructuralComplex:
                         )
                         unit_info["seed_points"] = seed_points
                         unit_info["seed_point"] = seed_points[0] if seed_points else None
+
+                assignment_payloads = self._psc_classify_seed_assignments(
+                    rows,
+                    psc_model,
+                    max_missing_boundaries=int(max_missing_spin.value()),
+                )
+                status_counts = {}
+                for payload in assignment_payloads:
+                    status = str(payload.get("status", "UNASSIGNED"))
+                    status_counts[status] = status_counts.get(status, 0) + 1
+
+                for row_idx, unit_info in enumerate(rows):
+                    boundaries = unit_info.get("boundaries", [])
+                    matched_surfaces = unit_info.get("matched_surfaces", [])
+                    missing_boundaries = list(unit_info.get("missing_boundaries", []) or [])
+                    for assignment in unit_info.get("psc_assignments", []) or []:
+                        missing_boundaries.extend(
+                            assignment.get("missing_labels", []) or []
+                        )
+                    missing_boundaries = sorted(
+                        {self._psc_text(label) for label in missing_boundaries if self._psc_text(label)},
+                        key=str.casefold,
+                    )
+                    missing_count += len(missing_boundaries)
+                    seed_points = list(unit_info.get("seed_points", []) or [])
                     seed_location_count += len(seed_points or [])
                     seed_text = self._psc_format_seed_list(seed_points)
                     if unit_info.get("seed_override") and seed_text:
                         seed_text += " *"
+                    assignment_status = unit_info.get(
+                        "psc_assignment_status",
+                        "UNASSIGNED",
+                    )
                     values = [
                         unit_info.get("feature", ""),
                         unit_info.get("unit_role", ""),
@@ -552,6 +594,7 @@ class PiecewiseStructuralComplex:
                         ", ".join(matched_surfaces),
                         seed_text,
                         ", ".join(missing_boundaries),
+                        assignment_status,
                     ]
                     for col_idx, value in enumerate(values):
                         item = QTableWidgetItem(str(value))
@@ -563,6 +606,29 @@ class PiecewiseStructuralComplex:
                             item.setForeground(QColor(40, 95, 170))
                         if col_idx == 5 and missing_boundaries:
                             item.setForeground(QColor(190, 40, 40))
+                        if col_idx == 6 and assignment_status in {
+                            "LIKELY",
+                            "AMBIGUOUS",
+                            "POSSIBLE_REPEAT",
+                            "UNASSIGNED",
+                        }:
+                            item.setForeground(QColor(190, 95, 20))
+                            blocked = sorted(
+                                {
+                                    label
+                                    for assignment in unit_info.get(
+                                        "psc_rejected_assignments", []
+                                    )
+                                    for label in assignment.get(
+                                        "blocked_repeat_labels", []
+                                    )
+                                },
+                                key=str.casefold,
+                            )
+                            if blocked:
+                                item.setToolTip(
+                                    "Blocked repeat across: " + ", ".join(blocked)
+                                )
                         preview_table.setItem(row_idx, col_idx, item)
             finally:
                 self._psc_side_context = previous_side_context
@@ -572,7 +638,13 @@ class PiecewiseStructuralComplex:
                 f"Seed locations: {seed_location_count} | "
                 f"Known boundaries: {len(psc_model.get('boundary_features', set()))} | "
                 f"Missing matches: {missing_count} | "
-                f"Saved seed overrides: {len(seed_overrides)}"
+                f"Saved seed overrides: {len(seed_overrides)} | "
+                "Assignments: "
+                f"CERTAIN={status_counts.get('CERTAIN', 0)}, "
+                f"LIKELY={status_counts.get('LIKELY', 0)}, "
+                f"AMBIGUOUS={status_counts.get('AMBIGUOUS', 0)}, "
+                f"POSSIBLE_REPEAT={status_counts.get('POSSIBLE_REPEAT', 0)}, "
+                f"UNASSIGNED={status_counts.get('UNASSIGNED', 0)}"
             )
             ambiguity_groups = self._psc_ambiguity_groups(rows)
             if ambiguity_groups:
@@ -695,6 +767,7 @@ class PiecewiseStructuralComplex:
         from_sections_button.clicked.connect(import_section_seeds)
         use_calculated_button.clicked.connect(clear_seed_overrides)
         table_combo.currentTextChanged.connect(lambda _text: on_table_changed())
+        max_missing_spin.valueChanged.connect(lambda _value: refresh_preview())
         load_seed_overrides(table_combo.currentText())
         refresh_preview()
     
@@ -708,6 +781,7 @@ class PiecewiseStructuralComplex:
         assigned_count, skipped_count = self._assign_psc_materials(
             self.psc_model,
             self.psc_mapping,
+            max_missing_boundaries=int(max_missing_spin.value()),
         )
         if assigned_count == 0:
             self.print_terminal(
@@ -716,10 +790,23 @@ class PiecewiseStructuralComplex:
             return
     
         seed_count = int(getattr(self, "_psc_last_seed_count", assigned_count))
+        assignment_counts = getattr(self, "_psc_last_assignment_counts", {}) or {}
         self.print_terminal(
             f"Assigned {assigned_count} material(s) with "
             f"{seed_count} seed location(s) from STm table '{table_name}'."
             + (f" Skipped {skipped_count} unit(s) without a valid seed." if skipped_count else "")
+            + " Assignments: "
+            + ", ".join(
+                f"{status}={assignment_counts.get(status, 0)}"
+                for status in (
+                    "CERTAIN",
+                    "LIKELY",
+                    "AMBIGUOUS",
+                    "POSSIBLE_REPEAT",
+                    "UNASSIGNED",
+                )
+            )
+            + "."
         )
 
     def _psc_normalize_seed_points(self, value: Any) -> List[List[float]]:
@@ -1193,6 +1280,509 @@ class PiecewiseStructuralComplex:
         local_info.pop("seed_point", None)
         local_info.pop("seed_points", None)
         return local_info
+
+    def _psc_topology_components(
+        self,
+        mapped_units: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Return global and inferred-local topology signatures for mapped units."""
+        components = []
+        for unit_info in mapped_units or []:
+            unit_key = str(
+                unit_info.get("key")
+                or unit_info.get("feature")
+                or unit_info.get("name")
+                or ""
+            )
+            if not unit_key:
+                continue
+
+            boundary_sets = [list(unit_info.get("boundaries", []) or [])]
+            boundary_sets.extend(
+                self._psc_local_boundary_sets_for_unit(unit_info, mapped_units)
+            )
+            seen_signatures = set()
+            for component_index, boundaries in enumerate(boundary_sets):
+                labels_by_key = {}
+                for boundary in boundaries:
+                    label = self._psc_text(boundary)
+                    key = self._psc_key(label)
+                    if key and key not in labels_by_key:
+                        labels_by_key[key] = label
+                signature_key = tuple(sorted(labels_by_key))
+                if not signature_key or signature_key in seen_signatures:
+                    continue
+                seen_signatures.add(signature_key)
+                components.append(
+                    {
+                        "unit_info": unit_info,
+                        "unit_key": unit_key,
+                        "component_index": component_index - 1,
+                        "is_local": component_index > 0,
+                        "boundaries": [
+                            labels_by_key[key] for key in sorted(labels_by_key)
+                        ],
+                        "signature_keys": set(labels_by_key),
+                        "polarity": self._psc_sort_key(unit_info.get("polarity", "")),
+                        "feature": self._psc_text(unit_info.get("feature", "")),
+                    }
+                )
+        return components
+
+    def _psc_unit_candidates_for_topology_signature(
+        self,
+        mapped_units: List[Dict[str, Any]],
+        observed_labels: List[str],
+        max_missing_boundaries: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Match an observed 3D signature to global and local unit signatures."""
+        if max_missing_boundaries is None:
+            max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
+        try:
+            max_missing_boundaries = max(int(max_missing_boundaries), 0)
+        except (TypeError, ValueError):
+            max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
+
+        observed_labels_by_key = {}
+        for label in observed_labels or []:
+            label_text = self._psc_text(label)
+            label_key = self._psc_key(label_text)
+            if label_key and label_key not in observed_labels_by_key:
+                observed_labels_by_key[label_key] = label_text
+        observed_keys = set(observed_labels_by_key)
+        if not observed_keys:
+            return []
+
+        best_by_unit = {}
+        for component in self._psc_topology_components(mapped_units):
+            unit_keys = set(component.get("signature_keys", set()) or set())
+            extra_keys = observed_keys - unit_keys
+            if extra_keys:
+                continue
+            missing_keys = unit_keys - observed_keys
+            if len(missing_keys) > max_missing_boundaries:
+                continue
+            unit_info = component["unit_info"]
+            labels_by_key = self._psc_boundary_labels_by_key(unit_info)
+            candidate = {
+                **component,
+                "exact": not missing_keys,
+                "missing_count": len(missing_keys),
+                "missing_labels": [
+                    labels_by_key.get(key, key) for key in sorted(missing_keys)
+                ],
+                "observed_count": len(observed_keys),
+            }
+            quality = (
+                0 if candidate["exact"] else 1,
+                candidate["missing_count"],
+                -candidate["observed_count"],
+                candidate["polarity"],
+                candidate["feature"].casefold(),
+                candidate["unit_key"].casefold(),
+            )
+            existing = best_by_unit.get(candidate["unit_key"])
+            if existing is None or quality < existing[0]:
+                best_by_unit[candidate["unit_key"]] = (quality, candidate)
+
+        return [
+            item[1]
+            for item in sorted(best_by_unit.values(), key=lambda item: item[0])
+        ]
+
+    def _psc_boundary_roles_by_key(
+        self,
+        psc_model: Dict[str, Any],
+    ) -> Dict[str, str]:
+        """Return normalized STM boundary roles keyed by feature."""
+        roles_by_key = {}
+        for boundary_info in psc_model.get("boundary_order", []) or []:
+            if not isinstance(boundary_info, dict):
+                continue
+            feature_key = self._psc_key(boundary_info.get("feature", ""))
+            if feature_key and feature_key not in roles_by_key:
+                roles_by_key[feature_key] = (
+                    self._psc_text(boundary_info.get("unit_role", "Discontinuity"))
+                    or "Discontinuity"
+                )
+        return roles_by_key
+
+    def _psc_repeat_conflict_labels(
+        self,
+        unit_key: str,
+        seed_point: List[float],
+        closest_surface_indices: Dict[str, int],
+        assignments: List[Dict[str, Any]],
+        psc_model: Dict[str, Any],
+    ) -> List[str]:
+        """Return representative surfaces across which a unit repeat is forbidden."""
+        unit_key = str(unit_key or "")
+        if not unit_key:
+            return []
+        try:
+            seed = np.asarray(seed_point, dtype=float).reshape(3)
+        except (TypeError, ValueError):
+            return []
+
+        boundary_key = self._psc_key("Boundary")
+        representative_keys = self._psc_volumetric_feature_keys(psc_model)
+        roles_by_key = self._psc_boundary_roles_by_key(psc_model)
+        bounds = self._psc_domain_bounds()
+        tolerance = 1.0e-8
+        if bounds is not None:
+            tolerance = max(float(np.linalg.norm(bounds[1] - bounds[0])) * 0.002, tolerance)
+
+        conflicts = []
+        for assignment in assignments or []:
+            if assignment.get("unit_key", "") != unit_key:
+                continue
+            other_indices = assignment.get("closest_surface_indices", {}) or {}
+            shared_keys = set(closest_surface_indices).intersection(other_indices)
+            for feature_key in sorted(shared_keys):
+                if feature_key == boundary_key or feature_key not in representative_keys:
+                    continue
+                if self._psc_role_is_discontinuity(roles_by_key.get(feature_key, "")):
+                    continue
+                try:
+                    surface_idx = int(closest_surface_indices[feature_key])
+                    other_surface_idx = int(other_indices[feature_key])
+                except (TypeError, ValueError):
+                    continue
+                if surface_idx != other_surface_idx:
+                    continue
+                other_point = assignment.get("seed_point")
+                try:
+                    other_seed = np.asarray(other_point, dtype=float).reshape(3)
+                except (TypeError, ValueError):
+                    continue
+                sign = self._psc_sign(
+                    self._psc_signed_distance_to_surface(seed, surface_idx),
+                    tolerance,
+                )
+                other_sign = self._psc_sign(
+                    self._psc_signed_distance_to_surface(other_seed, surface_idx),
+                    tolerance,
+                )
+                if sign == 0 or other_sign == 0 or sign != other_sign:
+                    conflicts.append(
+                        self._psc_text(self._psc_surface_feature(surface_idx))
+                        or feature_key
+                    )
+        return sorted(set(conflicts), key=str.casefold)
+
+    def _psc_closest_surface_indices_for_point(
+        self,
+        point: List[float],
+        boundary_labels: List[str],
+    ) -> Dict[str, int]:
+        """Return the closest concrete PLC surface for each observed feature."""
+        try:
+            point_array = np.asarray(point, dtype=float).reshape(1, 3)
+        except (TypeError, ValueError):
+            return {}
+        closest = {}
+        for boundary in boundary_labels or []:
+            boundary_key = self._psc_key(boundary)
+            if not boundary_key:
+                continue
+            best = None
+            for surface_idx in self._psc_surface_indices_for_boundary(boundary):
+                distances = self._psc_points_to_surface_distances(
+                    point_array,
+                    int(surface_idx),
+                )
+                if not distances.size or not np.isfinite(distances[0]):
+                    continue
+                candidate = (float(distances[0]), int(surface_idx))
+                if best is None or candidate < best:
+                    best = candidate
+            if best is not None:
+                closest[boundary_key] = best[1]
+        return closest
+
+    def _psc_classify_seed_assignments(
+        self,
+        mapped_units: List[Dict[str, Any]],
+        psc_model: Dict[str, Any],
+        max_missing_boundaries: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Classify and redistribute generated 3D topology-component seeds."""
+        if max_missing_boundaries is None:
+            max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
+        try:
+            max_missing_boundaries = max(int(max_missing_boundaries), 0)
+        except (TypeError, ValueError):
+            max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
+
+        records = []
+        for unit_info in mapped_units or []:
+            source_unit_key = str(
+                unit_info.get("key")
+                or unit_info.get("feature")
+                or unit_info.get("name")
+                or ""
+            )
+            seed_points = self._psc_normalize_seed_points(
+                unit_info.get("seed_points") or unit_info.get("seed_point")
+            )
+            signature_entries = list(unit_info.get("seed_topology_signatures", []) or [])
+            for seed_index, seed_point in enumerate(seed_points):
+                entry = signature_entries[seed_index] if seed_index < len(signature_entries) else {}
+                signature = dict(entry.get("signature", {}) or {})
+                boundaries = list(
+                    entry.get("boundaries")
+                    or signature.get("target")
+                    or unit_info.get("boundaries", [])
+                    or []
+                )
+                observed_labels = list(signature.get("closest", []) or [])
+                if not observed_labels and unit_info.get("seed_override"):
+                    # Explicit overrides are trusted, but still participate in
+                    # candidate balancing and repeat-adjacency checks.
+                    observed_labels = list(boundaries)
+                    signature.setdefault("target", list(boundaries))
+                    signature.setdefault("closest", list(boundaries))
+                    signature.setdefault("exact", True)
+                closest_indices = {
+                    self._psc_key(key): int(value)
+                    for key, value in (
+                        signature.get("closest_surface_indices", {}) or {}
+                    ).items()
+                    if self._psc_key(key)
+                    and isinstance(value, (int, np.integer))
+                }
+                if observed_labels and not closest_indices:
+                    closest_indices = self._psc_closest_surface_indices_for_point(
+                        seed_point,
+                        observed_labels,
+                    )
+                candidates = self._psc_unit_candidates_for_topology_signature(
+                    mapped_units,
+                    observed_labels,
+                    max_missing_boundaries=max_missing_boundaries,
+                )
+                if unit_info.get("psc_virtual_unit") or not boundaries:
+                    candidates = [
+                        {
+                            "unit_info": unit_info,
+                            "unit_key": source_unit_key,
+                            "component_index": -1,
+                            "is_local": False,
+                            "boundaries": list(boundaries),
+                            "signature_keys": {
+                                self._psc_key(label)
+                                for label in boundaries
+                                if self._psc_key(label)
+                            },
+                            "polarity": self._psc_sort_key(
+                                unit_info.get("polarity", "")
+                            ),
+                            "feature": self._psc_text(
+                                unit_info.get("feature", "")
+                            ),
+                            "exact": True,
+                            "missing_count": 0,
+                            "missing_labels": [],
+                            "observed_count": len(observed_labels),
+                        }
+                    ]
+                best_quality = (2, 10**9)
+                if candidates:
+                    best_quality = (
+                        0 if candidates[0].get("exact") else 1,
+                        int(candidates[0].get("missing_count", 0)),
+                    )
+                records.append(
+                    {
+                        "source_unit_key": source_unit_key,
+                        "seed_index": seed_index,
+                        "seed_point": list(seed_point),
+                        "signature": signature,
+                        "boundaries": boundaries,
+                        "observed_labels": observed_labels,
+                        "closest_surface_indices": closest_indices,
+                        "candidates": candidates,
+                        "best_quality": best_quality,
+                    }
+                )
+
+        records.sort(
+            key=lambda record: (
+                record["best_quality"],
+                tuple(round(float(value), 8) for value in record["seed_point"]),
+                record["source_unit_key"].casefold(),
+                int(record["seed_index"]),
+            )
+        )
+
+        assigned_counts = {}
+        accepted = []
+        rejected_by_source = {}
+        payloads = []
+        for record in records:
+            filtered_candidates = []
+            blocked_labels = []
+            for candidate in record["candidates"]:
+                conflict_labels = self._psc_repeat_conflict_labels(
+                    unit_key=candidate["unit_key"],
+                    seed_point=record["seed_point"],
+                    closest_surface_indices=record["closest_surface_indices"],
+                    assignments=accepted,
+                    psc_model=psc_model,
+                )
+                if conflict_labels:
+                    blocked_labels.extend(conflict_labels)
+                    continue
+                filtered_candidates.append(candidate)
+
+            if not filtered_candidates:
+                payload = {
+                    "status": "UNASSIGNED",
+                    "unit_key": "",
+                    "source_unit_key": record["source_unit_key"],
+                    "seed_point": list(record["seed_point"]),
+                    "candidate_names": [],
+                    "missing_labels": [],
+                    "blocked_repeat_labels": sorted(
+                        set(blocked_labels), key=str.casefold
+                    ),
+                    "closest_surface_indices": dict(
+                        record["closest_surface_indices"]
+                    ),
+                    "signature": dict(record["signature"]),
+                }
+                payloads.append(payload)
+                rejected_by_source.setdefault(record["source_unit_key"], []).append(payload)
+                continue
+
+            best_candidate = filtered_candidates[0]
+            best_quality = (
+                0 if best_candidate.get("exact") else 1,
+                int(best_candidate.get("missing_count", 0)),
+            )
+            best_candidates = [
+                candidate
+                for candidate in filtered_candidates
+                if (
+                    0 if candidate.get("exact") else 1,
+                    int(candidate.get("missing_count", 0)),
+                )
+                == best_quality
+            ]
+            chosen = min(
+                best_candidates,
+                key=lambda candidate: (
+                    assigned_counts.get(candidate["unit_key"], 0),
+                    float(candidate.get("polarity", float("inf"))),
+                    str(candidate.get("feature", "")).casefold(),
+                    str(candidate.get("unit_key", "")).casefold(),
+                ),
+            )
+            assigned_before = assigned_counts.get(chosen["unit_key"], 0)
+            if len(best_candidates) > 1 and assigned_before == 0:
+                status = "AMBIGUOUS"
+            elif assigned_before > 0:
+                status = "POSSIBLE_REPEAT"
+            elif chosen.get("exact"):
+                status = "CERTAIN"
+            else:
+                status = "LIKELY"
+
+            candidate_names = []
+            for candidate in best_candidates:
+                name = (
+                    self._psc_text(candidate["unit_info"].get("name", ""))
+                    or self._psc_text(candidate["unit_info"].get("feature", ""))
+                    or candidate["unit_key"]
+                )
+                if candidate.get("is_local"):
+                    name = f"{name} (local signature)"
+                if name not in candidate_names:
+                    candidate_names.append(name)
+
+            payload = {
+                "status": status,
+                "unit_key": chosen["unit_key"],
+                "source_unit_key": record["source_unit_key"],
+                "seed_point": list(record["seed_point"]),
+                "boundaries": list(chosen.get("boundaries", []) or []),
+                "candidate_names": candidate_names,
+                "missing_labels": list(chosen.get("missing_labels", []) or []),
+                "blocked_repeat_labels": sorted(
+                    set(blocked_labels), key=str.casefold
+                ),
+                "assigned_before": int(assigned_before),
+                "exact": bool(chosen.get("exact")),
+                "local_signature": bool(chosen.get("is_local")),
+                "component_index": int(chosen.get("component_index", -1)),
+                "closest_surface_indices": dict(record["closest_surface_indices"]),
+                "signature": dict(record["signature"]),
+            }
+            accepted.append(payload)
+            payloads.append(payload)
+            assigned_counts[chosen["unit_key"]] = assigned_before + 1
+
+        units_by_key = {
+            str(
+                unit_info.get("key")
+                or unit_info.get("feature")
+                or unit_info.get("name")
+                or ""
+            ): unit_info
+            for unit_info in mapped_units or []
+        }
+        for unit_key, unit_info in units_by_key.items():
+            unit_info["seed_points"] = []
+            unit_info["seed_point"] = None
+            unit_info["seed_topology_signature"] = {}
+            unit_info["seed_topology_signatures"] = []
+            unit_info["psc_assignments"] = []
+            unit_info["psc_rejected_assignments"] = list(
+                rejected_by_source.get(unit_key, [])
+            )
+
+        for payload in accepted:
+            unit_info = units_by_key.get(payload["unit_key"])
+            if unit_info is None:
+                continue
+            point = list(payload["seed_point"])
+            unit_info["seed_points"].append(point)
+            unit_info["seed_point"] = unit_info["seed_points"][0]
+            unit_info["seed_topology_signatures"].append(
+                {
+                    "boundaries": list(payload.get("boundaries", []) or []),
+                    "signature": dict(payload.get("signature", {}) or {}),
+                    "assignment": dict(payload),
+                }
+            )
+            unit_info["seed_topology_signature"] = dict(
+                unit_info["seed_topology_signatures"][0].get("signature", {})
+            )
+            unit_info["psc_assignments"].append(dict(payload))
+
+        status_priority = {
+            "CERTAIN": 0,
+            "LIKELY": 1,
+            "POSSIBLE_REPEAT": 2,
+            "AMBIGUOUS": 3,
+            "UNASSIGNED": 4,
+        }
+        for unit_key, unit_info in units_by_key.items():
+            statuses = [
+                assignment.get("status", "UNASSIGNED")
+                for assignment in unit_info.get("psc_assignments", [])
+            ]
+            statuses.extend(
+                assignment.get("status", "UNASSIGNED")
+                for assignment in unit_info.get("psc_rejected_assignments", [])
+            )
+            if not statuses:
+                statuses = ["UNASSIGNED"]
+            unit_info["psc_assignment_status"] = max(
+                statuses,
+                key=lambda status: status_priority.get(status, 4),
+            )
+        return payloads
     
     @staticmethod
     def _psc_key(value: Any) -> str:
@@ -2424,24 +3014,30 @@ class PiecewiseStructuralComplex:
             return reference_seed
     
         unit_boundaries = self._psc_target_boundaries_for_unit(unit_info)
-        structural_boundaries = [
-            boundary
-            for boundary in unit_boundaries
-            if self._psc_key(boundary) != self._psc_key("Boundary")
-        ]
-        if len(structural_boundaries) >= 2:
-            target_boundaries = structural_boundaries
-        else:
-            target_boundaries = unit_boundaries
-        boundary_as_context_only = (
-            len(structural_boundaries) >= 2
-            and any(
-                self._psc_key(boundary) == self._psc_key("Boundary")
-                for boundary in unit_boundaries
-            )
-        )
+        target_boundaries = list(unit_boundaries)
+        expected_labels_by_key = {
+            self._psc_key(boundary): self._psc_text(boundary)
+            for boundary in target_boundaries
+            if self._psc_key(boundary)
+        }
+        expected_set = set(expected_labels_by_key)
         target_surface_map = self._psc_surface_indices_for_boundaries(target_boundaries)
         if not target_surface_map:
+            unit_info["seed_topology_signature"] = {
+                "target": [
+                    expected_labels_by_key[key] for key in sorted(expected_labels_by_key)
+                ],
+                "closest": [],
+                "exact": False,
+                "missing_count": len(expected_set),
+                "missing_labels": [
+                    expected_labels_by_key[key] for key in sorted(expected_set)
+                ],
+                "extra_count": 0,
+                "extra_labels": [],
+                "candidate_count": 0,
+                "inside_model": True,
+            }
             return reference_seed
     
         feature_candidates = list(psc_model.get("boundary_features", set()) or [])
@@ -2451,8 +3047,6 @@ class PiecewiseStructuralComplex:
             boundary_text = self._psc_text(boundary)
             boundary_key = self._psc_key(boundary_text)
             if not boundary_key:
-                continue
-            if boundary_as_context_only and boundary_key == self._psc_key("Boundary"):
                 continue
             boundary_map = self._psc_surface_indices_for_boundaries([boundary_text])
             if boundary_key in boundary_map:
@@ -2487,7 +3081,7 @@ class PiecewiseStructuralComplex:
         if not distance_arrays:
             return reference_seed
     
-        target_set = set(target_keys)
+        target_set = set(expected_set)
         all_keys = [key for key in feature_surface_map.keys() if key in distance_arrays]
         if not all_keys:
             return reference_seed
@@ -2525,7 +3119,10 @@ class PiecewiseStructuralComplex:
                 all_keys,
                 key=lambda key: float(distance_arrays[key][candidate_idx]),
             )
-            closest_count = min(len(target_set), len(ranked_keys))
+            # Only mapped expected features determine the observed signature
+            # cardinality. Unmapped expected features remain explicit missing
+            # labels instead of being replaced by unrelated surfaces.
+            closest_count = min(len(target_keys), len(ranked_keys))
             closest_keys = ranked_keys[:closest_count]
             closest_set = set(closest_keys)
             missing_count = len(target_set - closest_set)
@@ -2591,15 +3188,40 @@ class PiecewiseStructuralComplex:
             key: feature_surface_map.get(key, {}).get("label", key)
             for key in feature_surface_map
         }
-        target_labels = [label_by_key.get(key, key) for key in target_keys]
+        target_labels = [
+            expected_labels_by_key.get(key, label_by_key.get(key, key))
+            for key in sorted(expected_set)
+        ]
         closest_labels = [
             label_by_key.get(key, key)
             for key in best_details.get("closest_keys", [])
         ]
+        missing_labels = [
+            expected_labels_by_key.get(key, label_by_key.get(key, key))
+            for key in sorted(
+                expected_set - set(best_details.get("closest_keys", []))
+            )
+        ]
+        extra_labels = [
+            label_by_key.get(key, key)
+            for key in sorted(
+                set(best_details.get("closest_keys", [])) - expected_set
+            )
+        ]
+        closest_surface_indices = self._psc_closest_surface_indices_for_point(
+            best_seed,
+            closest_labels,
+        )
         unit_info["seed_topology_signature"] = {
             "target": target_labels,
             "closest": closest_labels,
             "exact": bool(best_details.get("exact_signature", False)),
+            "missing_count": int(best_details.get("missing_count", 0)),
+            "missing_labels": missing_labels,
+            "extra_count": int(best_details.get("extra_count", 0)),
+            "extra_labels": extra_labels,
+            "observed_count": len(closest_labels),
+            "closest_surface_indices": closest_surface_indices,
             "score": float(best_score),
             "candidate_count": int(best_details.get("candidate_count", 0)),
             "min_target_distance": float(best_details.get("min_target_distance", 0.0)),
@@ -2673,6 +3295,49 @@ class PiecewiseStructuralComplex:
         seed = np.mean(np.asarray(points, dtype=float), axis=0)
         seed = self._psc_clamp_seed_to_bounds(seed, bounds)
         return self._psc_move_seed_off_boundaries(seed, surface_indices, bounds)
+
+    def _psc_seed_between_structural_surfaces_and_model_boundary(
+        self,
+        surface_indices: List[int],
+        unit_info: Dict[str, Any],
+        psc_model: Dict[str, Any],
+    ) -> Optional[np.ndarray]:
+        """Place a seed between structural surfaces and the closest Boundary face."""
+        structural_seed = self._psc_seed_between_structural_surfaces(
+            surface_indices,
+            psc_model,
+        )
+        if structural_seed is None:
+            return None
+
+        boundary_indices = list(unit_info.get("model_boundary_indices", []) or [])
+        if not boundary_indices:
+            boundary_indices = self._psc_surface_indices_for_boundary("Boundary")
+        boundary_points = []
+        for surface_idx in boundary_indices:
+            vertices = self._psc_surface_vertices(int(surface_idx))
+            if vertices.shape[0] == 0:
+                continue
+            distances = np.linalg.norm(vertices - structural_seed, axis=1)
+            if distances.size:
+                boundary_points.append(
+                    (
+                        float(np.min(distances)),
+                        np.asarray(vertices[int(np.argmin(distances))], dtype=float),
+                    )
+                )
+        if not boundary_points:
+            return structural_seed
+
+        _, boundary_point = min(boundary_points, key=lambda item: item[0])
+        seed = (np.asarray(structural_seed, dtype=float) + boundary_point) / 2.0
+        bounds = self._psc_domain_bounds()
+        seed = self._psc_clamp_seed_to_bounds(seed, bounds)
+        return self._psc_move_seed_off_boundaries(
+            seed,
+            list(surface_indices) + [int(value) for value in boundary_indices],
+            bounds,
+        )
     
     def _psc_seed_between_surface_and_model_boundary(
         self,
@@ -2746,7 +3411,17 @@ class PiecewiseStructuralComplex:
         )
     
         if len(surface_indices) >= 2:
-            seed = self._psc_seed_between_structural_surfaces(surface_indices, psc_model)
+            if has_model_boundary:
+                seed = self._psc_seed_between_structural_surfaces_and_model_boundary(
+                    surface_indices,
+                    unit_info,
+                    psc_model,
+                )
+            else:
+                seed = self._psc_seed_between_structural_surfaces(
+                    surface_indices,
+                    psc_model,
+                )
             return seed
     
         if len(surface_indices) == 1 and has_model_boundary:
@@ -2918,8 +3593,15 @@ class PiecewiseStructuralComplex:
         self,
         psc_model: Dict[str, Any],
         psc_mapping: Dict[str, Any],
+        max_missing_boundaries: Optional[int] = None,
     ) -> Tuple[int, int]:
         """Replace formation materials with PSC-derived unit materials."""
+        if max_missing_boundaries is None:
+            max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
+        try:
+            max_missing_boundaries = max(int(max_missing_boundaries), 0)
+        except (TypeError, ValueError):
+            max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
         assigned_materials = []
         skipped_count = 0
         self._psc_side_context = self._psc_prepare_topology_side_context(
@@ -2928,23 +3610,28 @@ class PiecewiseStructuralComplex:
         )
     
         mapped_units = list(psc_mapping.get("units", []))
-        for unit_info in psc_mapping.get("units", []):
-            if unit_info.get("seed_override") and unit_info.get("seed_point") is not None:
-                seed_points = self._psc_seed_points_for_unit(
-                    unit_info,
-                    psc_model,
-                    mapped_units,
-                )
-                seed_point = seed_points[0] if seed_points else None
-            else:
-                seed_points = self._psc_seed_points_for_unit(
-                    unit_info,
-                    psc_model,
-                    mapped_units,
-                )
-                seed_point = seed_points[0] if seed_points else None
+        for unit_info in mapped_units:
+            seed_points = self._psc_seed_points_for_unit(
+                unit_info,
+                psc_model,
+                mapped_units,
+            )
             unit_info["seed_points"] = seed_points
-            unit_info["seed_point"] = seed_point
+            unit_info["seed_point"] = seed_points[0] if seed_points else None
+
+        assignment_payloads = self._psc_classify_seed_assignments(
+            mapped_units,
+            psc_model,
+            max_missing_boundaries=max_missing_boundaries,
+        )
+        assignment_counts = {}
+        for payload in assignment_payloads:
+            status = str(payload.get("status", "UNASSIGNED"))
+            assignment_counts[status] = assignment_counts.get(status, 0) + 1
+        self._psc_last_assignment_counts = assignment_counts
+
+        for unit_info in mapped_units:
+            seed_points = list(unit_info.get("seed_points", []) or [])
             if not seed_points:
                 skipped_count += 1
                 continue
@@ -2958,6 +3645,7 @@ class PiecewiseStructuralComplex:
                     "type": "FORMATION",
                     "source": "PSC",
                     "psc_table": psc_model.get("table_name", ""),
+                    "psc_max_missing_boundaries": max_missing_boundaries,
                     "feature": unit_info.get("feature", ""),
                     "unit_role": unit_info.get("unit_role", ""),
                     "boundaries": list(unit_info.get("boundaries", [])),
@@ -2967,6 +3655,15 @@ class PiecewiseStructuralComplex:
                     "psc_virtual_unit": bool(unit_info.get("psc_virtual_unit", False)),
                     "psc_virtual_source": unit_info.get("psc_virtual_source", ""),
                     "psc_seed_count": len(seed_points),
+                    "psc_assignment_status": unit_info.get(
+                        "psc_assignment_status", "UNASSIGNED"
+                    ),
+                    "psc_assignments": list(
+                        unit_info.get("psc_assignments", []) or []
+                    ),
+                    "psc_rejected_assignments": list(
+                        unit_info.get("psc_rejected_assignments", []) or []
+                    ),
                     "seed_topology_signatures": list(
                         unit_info.get("seed_topology_signatures", []) or []
                     ),
@@ -3273,7 +3970,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             return
 
         psc_model = self._build_psc_model_from_stm(table_name)
-        boundary_roles_by_key = self._section_boundary_roles_by_key(psc_model)
+        boundary_roles_by_key = self._psc_boundary_roles_by_key(psc_model)
         created_seed_count = 0
         created_area_count = 0
         status_counts = {
@@ -4185,24 +4882,6 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             ),
             "exact": bool(candidate.get("exact")),
         }
-
-    def _section_boundary_roles_by_key(
-        self,
-        psc_model: Dict[str, Any],
-    ) -> Dict[str, str]:
-        "Returns a dictionary mapping boundary feature keys to their unit roles from the PSC model."
-        roles_by_key: Dict[str, str] = {}
-        for boundary_info in psc_model.get("boundary_order", []) or []:
-            if not isinstance(boundary_info, dict):
-                continue
-            feature_key = self._psc_key(boundary_info.get("feature", ""))
-            if not feature_key or feature_key in roles_by_key:
-                continue
-            roles_by_key[feature_key] = (
-                self._psc_text(boundary_info.get("unit_role", "Discontinuity"))
-                or "Discontinuity"
-            )
-        return roles_by_key
 
     def _section_candidate_repeat_conflict_labels(
         self,
