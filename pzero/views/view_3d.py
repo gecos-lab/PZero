@@ -107,106 +107,106 @@ class View3D(ViewVTK):
 
     # ================================  General methods shared by all views - built incrementally =====================
 
-    def initialize_menu_tools(self):
-        """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
-        # append code from superclass
-        super().initialize_menu_tools()
+    # def initialize_menu_tools(self):
+    #     """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
+    #     # append code from superclass
+    #     super().initialize_menu_tools()
 
-        # Remove 2D line drawing from 3D view (use "Draw line (3D mode)" instead)
-        if hasattr(self, "drawLineButton"):
-            self.drawLineButton.setEnabled(False)
-            self.drawLineButton.setVisible(False)
-            if hasattr(self, "menuCreate"):
-                self.menuCreate.removeAction(self.drawLineButton)
+    #     # Remove 2D line drawing from 3D view (use "Draw line (3D mode)" instead)
+    #     if hasattr(self, "drawLineButton"):
+    #         self.drawLineButton.setEnabled(False)
+    #         self.drawLineButton.setVisible(False)
+    #         if hasattr(self, "menuCreate"):
+    #             self.menuCreate.removeAction(self.drawLineButton)
 
-        # Ensure any inherited 3D line action is removed before re-adding it here
-        if hasattr(self, "drawLine3DButton") and hasattr(self, "menuCreate"):
-            self.menuCreate.removeAction(self.drawLine3DButton)
+    #     # Ensure any inherited 3D line action is removed before re-adding it here
+    #     if hasattr(self, "drawLine3DButton") and hasattr(self, "menuCreate"):
+    #         self.menuCreate.removeAction(self.drawLine3DButton)
 
-        # then add new code specific to this class
-        self.saveHomeView = QAction("Save home view", self)
-        self.saveHomeView.triggered.connect(self.save_home_view)
-        self.menuView.insertAction(self.zoomActive, self.saveHomeView)
+    #     # then add new code specific to this class
+    #     self.saveHomeView = QAction("Save home view", self)
+    #     self.saveHomeView.triggered.connect(self.save_home_view)
+    #     self.menuView.insertAction(self.zoomActive, self.saveHomeView)
 
-        self.zoomHomeView = QAction("Zoom to home", self)
-        self.zoomHomeView.triggered.connect(self.zoom_home_view)
-        self.menuView.insertAction(self.zoomActive, self.zoomHomeView)
+    #     self.zoomHomeView = QAction("Zoom to home", self)
+    #     self.zoomHomeView.triggered.connect(self.zoom_home_view)
+    #     self.menuView.insertAction(self.zoomActive, self.zoomHomeView)
 
-        # Add 3D-specific line drawing tool that uses point picking
-        # proper connection to the action
-        self.drawLine3DButton = QAction("Draw line (3D mode)", self)
-        self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
-        self.menuCreate.addAction(self.drawLine3DButton)
+    #     # Add 3D-specific line drawing tool that uses point picking
+    #     # proper connection to the action
+    #     self.drawLine3DButton = QAction("Draw line (3D mode)", self)
+    #     self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
+    #     self.menuCreate.addAction(self.drawLine3DButton)
 
-        self.menuBoreTraceVis = QMenu("Borehole visualization methods", self)
+    #     self.menuBoreTraceVis = QMenu("Borehole visualization methods", self)
 
-        self.actionBoreTrace = QAction("Trace", self)
-        self.actionBoreTrace.triggered.connect(lambda: self.change_bore_vis("trace"))
+    #     self.actionBoreTrace = QAction("Trace", self)
+    #     self.actionBoreTrace.triggered.connect(lambda: self.change_bore_vis("trace"))
 
-        self.actionBoreCylinder = QAction("Cylinder", self)
-        self.actionBoreCylinder.triggered.connect(
-            lambda: self.change_bore_vis("cylinder")
-        )
+    #     self.actionBoreCylinder = QAction("Cylinder", self)
+    #     self.actionBoreCylinder.triggered.connect(
+    #         lambda: self.change_bore_vis("cylinder")
+    #     )
 
-        self.actionToggleLithology = QAction("Toggle lithology", self)
-        self.actionToggleLithology.triggered.connect(
-            lambda: self.change_bore_vis("litho")
-        )
+    #     self.actionToggleLithology = QAction("Toggle lithology", self)
+    #     self.actionToggleLithology.triggered.connect(
+    #         lambda: self.change_bore_vis("litho")
+    #     )
 
-        self.actionToggleGeology = QAction("Toggle geology", self)
-        self.actionToggleGeology.triggered.connect(lambda: self.change_bore_vis("geo"))
+    #     self.actionToggleGeology = QAction("Toggle geology", self)
+    #     self.actionToggleGeology.triggered.connect(lambda: self.change_bore_vis("geo"))
 
-        self.menuBoreTraceVis.addAction(self.actionBoreTrace)
-        self.menuBoreTraceVis.addAction(self.actionBoreCylinder)
-        self.menuBoreTraceVis.addAction(self.actionToggleLithology)
-        self.menuBoreTraceVis.addAction(self.actionToggleGeology)
+    #     self.menuBoreTraceVis.addAction(self.actionBoreTrace)
+    #     self.menuBoreTraceVis.addAction(self.actionBoreCylinder)
+    #     self.menuBoreTraceVis.addAction(self.actionToggleLithology)
+    #     self.menuBoreTraceVis.addAction(self.actionToggleGeology)
 
-        self.menuView.addMenu(self.menuBoreTraceVis)
+    #     self.menuView.addMenu(self.menuBoreTraceVis)
 
-        self.actionExportGltf = QAction("Export as GLTF", self)
-        self.actionExportGltf.triggered.connect(self.export_gltf)
-        self.menuView.addAction(self.actionExportGltf)
+    #     self.actionExportGltf = QAction("Export as GLTF", self)
+    #     self.actionExportGltf.triggered.connect(self.export_gltf)
+    #     self.menuView.addAction(self.actionExportGltf)
 
-        self.actionExportHtml = QAction("Export as HTML", self)
-        self.actionExportHtml.triggered.connect(self.export_html)
-        self.menuView.addAction(self.actionExportHtml)
+    #     self.actionExportHtml = QAction("Export as HTML", self)
+    #     self.actionExportHtml.triggered.connect(self.export_html)
+    #     self.menuView.addAction(self.actionExportHtml)
 
-        self.actionExportObj = QAction("Export as OBJ", self)
-        self.actionExportObj.triggered.connect(self.export_obj)
-        self.menuView.addAction(self.actionExportObj)
+    #     self.actionExportObj = QAction("Export as OBJ", self)
+    #     self.actionExportObj.triggered.connect(self.export_obj)
+    #     self.menuView.addAction(self.actionExportObj)
 
-        self.actionExportVtkJSON = QAction("Export as vtkJSON scene", self)
-        self.actionExportVtkJSON.triggered.connect(self.export_vtkJS)
-        self.menuView.addAction(self.actionExportVtkJSON)
+    #     self.actionExportVtkJSON = QAction("Export as vtkJSON scene", self)
+    #     self.actionExportVtkJSON.triggered.connect(self.export_vtkJS)
+    #     self.menuView.addAction(self.actionExportVtkJSON)
 
-        # self.menuOrbit = QMenu("Orbit around", self)
-        # self.actionOrbitEntity = QAction("Entity", self)
-        # self.actionOrbitEntity.triggered.connect(lambda: self.orbit_entity())
-        # self.menuOrbit.addAction(self.actionOrbitEntity)
-        # self.menuWindow.addMenu(self.menuOrbit)
-        #
-        # self.actionThresholdf.triggered.connect(lambda: thresh_filt(self))
-        # self.actionSurface_densityf.triggered.connect(lambda: self.surf_den_filt())
-        # self.actionRoughnessf.triggered.connect(lambda: self.rough_filt())
-        # self.actionCurvaturef.triggered.connect(lambda: self.curv_filt())
-        # self.actionNormalsf.triggered.connect(lambda: self.norm_filt())
-        # self.actionManualBoth.triggered.connect(lambda: cut_pc(self))
-        # self.actionManualInner.triggered.connect(lambda: cut_pc(self, "inner"))
-        # self.actionManualOuter.triggered.connect(lambda: cut_pc(self, "outer"))
-        #
-        # self.actionCalibration.triggered.connect(lambda: calibration_pc(self))
-        # self.actionManual_picking.triggered.connect(lambda: self.act_att())
-        # self.actionSegment.triggered.connect(lambda: segment_pc(self))
-        # self.actionPick.triggered.connect(lambda: auto_pick(self))
-        # self.actionFacets.triggered.connect(lambda: facets_pc(self))
-        #
-        # # self.actionCalculate_normals.triggered.connect(lambda: self.normalGeometry())
-        # self.actionNormals_to_DDR.triggered.connect(lambda: normals2dd(self))
-        #
-        # self.showOct = QAction("Show octree structure", self)
-        # self.showOct.triggered.connect(self.show_octree)
-        # self.menuBaseView.addAction(self.showOct)
-        # self.toolBarBase.addAction(self.showOct)
+    # self.menuOrbit = QMenu("Orbit around", self)
+    # self.actionOrbitEntity = QAction("Entity", self)
+    # self.actionOrbitEntity.triggered.connect(lambda: self.orbit_entity())
+    # self.menuOrbit.addAction(self.actionOrbitEntity)
+    # self.menuWindow.addMenu(self.menuOrbit)
+    #
+    # self.actionThresholdf.triggered.connect(lambda: thresh_filt(self))
+    # self.actionSurface_densityf.triggered.connect(lambda: self.surf_den_filt())
+    # self.actionRoughnessf.triggered.connect(lambda: self.rough_filt())
+    # self.actionCurvaturef.triggered.connect(lambda: self.curv_filt())
+    # self.actionNormalsf.triggered.connect(lambda: self.norm_filt())
+    # self.actionManualBoth.triggered.connect(lambda: cut_pc(self))
+    # self.actionManualInner.triggered.connect(lambda: cut_pc(self, "inner"))
+    # self.actionManualOuter.triggered.connect(lambda: cut_pc(self, "outer"))
+    #
+    # self.actionCalibration.triggered.connect(lambda: calibration_pc(self))
+    # self.actionManual_picking.triggered.connect(lambda: self.act_att())
+    # self.actionSegment.triggered.connect(lambda: segment_pc(self))
+    # self.actionPick.triggered.connect(lambda: auto_pick(self))
+    # self.actionFacets.triggered.connect(lambda: facets_pc(self))
+    #
+    # # self.actionCalculate_normals.triggered.connect(lambda: self.normalGeometry())
+    # self.actionNormals_to_DDR.triggered.connect(lambda: normals2dd(self))
+    #
+    # self.showOct = QAction("Show octree structure", self)
+    # self.showOct.triggered.connect(self.show_octree)
+    # self.menuBaseView.addAction(self.showOct)
+    # self.toolBarBase.addAction(self.showOct)
 
     # Called by BaseView.toggle_property after main actor's property changes via tree combo
     def on_property_toggled(self, collection_name=None, uid=None, prop_text=None):
@@ -568,6 +568,7 @@ class View3D(ViewVTK):
 
     def act_att(self):
         """Used to activate pkd_point, which returns data from picking on point clouds."""
+        print("start picking")
         if self.tog_att == -1:
             input_dict = {
                 "name": ["Set name: ", "Set_0"],
@@ -2923,6 +2924,10 @@ class View3D(ViewVTK):
         self.drawLine3DButton = QAction("Draw line (3D mode)", self)
         self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
         self.menuCreate.addAction(self.drawLine3DButton)
+
+        self.actionManual_picking = QAction("Pick", self)
+        self.actionManual_picking.triggered.connect(lambda: self.act_att())
+        self.menuCreate.addAction(self.actionManual_picking)
 
         # Create Mesh Tools menu if it doesn't exist
         if not hasattr(self, "menuMeshTools"):
