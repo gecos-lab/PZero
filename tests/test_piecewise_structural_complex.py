@@ -393,6 +393,8 @@ def test_volumetric_assignment_honours_swapped_seed_overrides():
         point=[0.1, 0.1, 0.2],
         seed_override=True,
     )
+    first.update(ambiguity_group=0, ambiguity_group_size=2)
+    second.update(ambiguity_group=0, ambiguity_group_size=2)
     representative = _unit("unit:Rep", "Rep", ["Rep"])
 
     payloads = controller._psc_assign_volumetric_regions(
@@ -402,5 +404,41 @@ def test_volumetric_assignment_honours_swapped_seed_overrides():
     )
 
     assert [payload["unit_key"] for payload in payloads] == ["unit:B", "unit:A"]
+    assert [payload["status"] for payload in payloads] == [
+        "AMBIGUOUS",
+        "AMBIGUOUS",
+    ]
+    assert payloads[0]["candidate_names"] == ["A", "B"]
+    assert payloads[1]["candidate_names"] == ["A", "B"]
     assert first["seed_points"] == [[0.1, 0.1, -0.2]]
     assert second["seed_points"] == [[0.1, 0.1, 0.2]]
+
+
+def test_volumetric_assignment_keeps_identical_topologies_ambiguous():
+    controller = PiecewiseStructuralComplex(
+        SimpleNamespace(
+            tetra_surface_data={
+                0: {"feature": "Rep"},
+                1: {"feature": "Outer"},
+            }
+        )
+    )
+    partition = _two_tetra_partition(controller, shared_marker=1)
+    controller._psc_build_volumetric_regions = lambda model: partition
+    first = _unit("unit:A", "A", ["Boundary", "Rep"], polarity=1)
+    second = _unit("unit:B", "B", ["Boundary", "Rep"], polarity=2)
+    representative = _unit("unit:Rep", "Rep", ["Rep"])
+
+    payloads = controller._psc_assign_volumetric_regions(
+        [first, second],
+        _model(first, second, representative),
+        max_missing_boundaries=1,
+    )
+
+    assert [payload["unit_key"] for payload in payloads] == ["unit:A", "unit:B"]
+    assert [payload["status"] for payload in payloads] == [
+        "AMBIGUOUS",
+        "AMBIGUOUS",
+    ]
+    assert payloads[0]["candidate_names"] == ["A", "B"]
+    assert payloads[1]["candidate_names"] == ["A", "B"]

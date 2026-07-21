@@ -2369,23 +2369,50 @@ class PiecewiseStructuralComplex:
                 ),
             )
             assigned_before = assigned_counts.get(chosen["unit_key"], 0)
-            if record["pinned"] and assigned_before == 0:
-                status = "CERTAIN"
-            elif len(best_candidates) > 1 and assigned_before == 0:
-                status = "AMBIGUOUS"
-            elif assigned_before > 0:
+            topology_peers = [
+                candidate
+                for candidate in record["candidates"]
+                if set(candidate.get("signature_keys", set()))
+                == set(chosen.get("signature_keys", set()))
+            ]
+            ambiguity_group_peers = []
+            ambiguity_group_size = int(
+                chosen["unit_info"].get("ambiguity_group_size", 1) or 1
+            )
+            if ambiguity_group_size > 1:
+                ambiguity_group = chosen["unit_info"].get("ambiguity_group")
+                if ambiguity_group is not None:
+                    ambiguity_group_peers = [
+                        unit_info
+                        for unit_info in mapped_units
+                        if unit_info.get("ambiguity_group") == ambiguity_group
+                    ]
+            topology_is_ambiguous = len(ambiguity_group_peers) > 1 or len(
+                {candidate["unit_key"] for candidate in topology_peers}
+            ) > 1
+            if assigned_before > 0:
                 status = "POSSIBLE_REPEAT"
+            elif topology_is_ambiguous or len(best_candidates) > 1:
+                status = "AMBIGUOUS"
+            elif record["pinned"]:
+                status = "CERTAIN"
             elif chosen["exact"]:
                 status = "CERTAIN"
             else:
                 status = "LIKELY"
 
             candidate_names = []
-            for candidate in best_candidates:
+            display_unit_infos = ambiguity_group_peers or [
+                candidate["unit_info"]
+                for candidate in (
+                    topology_peers if topology_is_ambiguous else best_candidates
+                )
+            ]
+            for unit_info in display_unit_infos:
                 name = (
-                    self._psc_text(candidate["unit_info"].get("name", ""))
-                    or candidate["feature"]
-                    or candidate["unit_key"]
+                    self._psc_text(unit_info.get("name", ""))
+                    or self._psc_text(unit_info.get("feature", ""))
+                    or str(unit_info.get("key", ""))
                 )
                 if name not in candidate_names:
                     candidate_names.append(name)
