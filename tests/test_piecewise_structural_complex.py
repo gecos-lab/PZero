@@ -226,115 +226,181 @@ def test_local_signature_repeat_is_allowed_across_discontinuity():
     ]
 
 
-def test_section_normal_candidates_preserve_section_coordinates():
-    section_uid = "section-1"
-
-    class Sections:
-        get_uids = [section_uid]
-
-        @staticmethod
-        def get_uid_origin(uid=None):
-            return [0, 0, 0]
-
-        @staticmethod
-        def get_uid_strike_vect(section_uid=None):
-            return [0, 1, 0]
-
-        @staticmethod
-        def get_uid_dip_vect(section_uid=None):
-            return [0, 0, 1]
-
-        @staticmethod
-        def get_uid_normal_vect(section_uid=None):
-            return [1, 0, 0]
-
-    project = SimpleNamespace(xsect_coll=Sections())
-    host = SimpleNamespace(
-        pzero_bridge=SimpleNamespace(_project=project),
-        tetra_surface_data={
-            0: {
-                "vertices": np.asarray(
-                    [[-10, -10, -10], [10, 10, 10]],
-                    dtype=float,
-                )
-            }
-        },
+def _two_tetra_partition(controller, shared_marker=1):
+    nodes = np.asarray(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, -1.0],
+        ]
     )
-    controller = PiecewiseStructuralComplex(host)
-
-    points = controller._psc_section_normal_candidate_points(
-        section_uid,
-        section_seed_point=[0, 3, 4],
-        calculated_seed=[7, -8, -9],
+    elements = np.asarray([[0, 1, 2, 3], [0, 2, 1, 4]])
+    trifaces = np.asarray(
+        [
+            [0, 1, 2],
+            [1, 2, 3],
+            [0, 2, 3],
+            [0, 1, 3],
+            [2, 1, 4],
+            [0, 1, 4],
+            [0, 2, 4],
+        ]
+    )
+    markers = np.asarray([shared_marker, 2, 2, 2, 2, 2, 2])
+    return controller._psc_regions_from_tetrahedra(
+        nodes,
+        elements,
+        trifaces,
+        markers,
+        border_surface_indices={1},
     )
 
-    assert points.shape[0] > 2
-    assert np.allclose(points[:, 1], 3)
-    assert np.allclose(points[:, 2], 4)
-    assert np.any(np.isclose(points[:, 0], 7))
-    assert np.all(points[:, 0] >= -10)
-    assert np.all(points[:, 0] <= 10)
 
-
-def test_linked_seed_parent_resolves_to_real_section_uid():
-    project = SimpleNamespace(
-        xsect_coll=SimpleNamespace(get_uids=["section-1", "section-2"])
-    )
+def test_volumetric_partition_splits_only_at_constrained_faces():
     controller = PiecewiseStructuralComplex(
-        SimpleNamespace(pzero_bridge=SimpleNamespace(_project=project))
+        SimpleNamespace(
+            tetra_surface_data={
+                0: {"feature": "Rep"},
+                1: {"feature": "Outer"},
+            }
+        )
     )
 
-    section_uid = controller._psc_section_uid_from_candidates(
-        ["section-1;linked-area", "invalid"]
+    split = _two_tetra_partition(controller, shared_marker=1)
+    joined = _two_tetra_partition(controller, shared_marker=0)
+
+    assert len(split["regions"]) == 2
+    assert len(joined["regions"]) == 1
+    assert split["regions"][0]["boundary_labels"] == ["Boundary", "Rep"]
+    assert split["regions"][0]["adjacent_regions"][1][0]["label"] == "Rep"
+    assert split["regions"][0]["seed_point"][2] > 0
+    assert split["regions"][1]["seed_point"][2] < 0
+
+
+def test_volumetric_assignment_blocks_equal_adjacent_units_on_representative_face():
+    controller = PiecewiseStructuralComplex(
+        SimpleNamespace(
+            tetra_surface_data={
+                0: {"feature": "Rep"},
+                1: {"feature": "Outer"},
+            }
+        )
     )
-
-    assert section_uid == "section-1"
-
-
-def test_section_guidance_keeps_only_one_seed_for_a_mapped_volume():
-    controller = _controller()
+    partition = _two_tetra_partition(controller, shared_marker=1)
+    controller._psc_build_volumetric_regions = lambda model: partition
     unit = _unit("unit:A", "A", ["Boundary", "Rep"])
-    unit["section_seed_guides"] = [
-        {
-            "section_uid": "section-1",
-            "seed_point": [0, 3, 4],
-            "source_uid": "seed-1",
-        }
-    ]
-    controller._psc_local_boundary_sets_for_unit = (
-        lambda unit_info, mapped_units: [["Rep"]]
-    )
+    representative = _unit("unit:Rep", "Rep", ["Rep"])
 
-    def calculated_seed(unit_info, model, require_side_match=False):
-        is_local = unit_info.get("component_index") == 0
-        unit_info["seed_topology_signature"] = {
-            "target": list(unit_info["boundaries"]),
-            "closest": list(unit_info["boundaries"]),
-            "exact": True,
-            "missing_count": 0,
-            "extra_count": 0,
-            "observed_count": len(unit_info["boundaries"]),
-        }
-        return [2 if is_local else 1, 9, 9]
-
-    def guided_seed(unit_info, model, seed, require_side_match=False):
-        signature = dict(unit_info["seed_topology_signature"])
-        if unit_info.get("component_index") != 0:
-            signature["section_guided"] = True
-            unit_info["seed_topology_signature"] = signature
-            return [1, 3, 4]
-        return seed
-
-    controller._psc_seed_point_for_unit = calculated_seed
-    controller._psc_section_guided_seed_point_for_unit = guided_seed
-
-    points = controller._psc_seed_points_for_unit(
-        unit,
-        {"units": {unit["key"]: unit}},
+    payloads = controller._psc_assign_volumetric_regions(
         [unit],
+        _model(unit, representative, representative_role="TMU"),
         max_missing_boundaries=1,
     )
 
-    assert points == [[1.0, 3.0, 4.0]]
-    assert len(unit["seed_topology_signatures"]) == 1
-    assert unit["seed_topology_signatures"][0]["signature"]["section_guided"]
+    assert [payload["status"] for payload in payloads] == ["CERTAIN", "UNASSIGNED"]
+    assert payloads[1]["blocked_repeat_labels"] == ["Rep"]
+    assert len(unit["seed_points"]) == 1
+
+
+def test_volumetric_assignment_allows_repeat_across_discontinuity():
+    controller = PiecewiseStructuralComplex(
+        SimpleNamespace(
+            tetra_surface_data={
+                0: {"feature": "Rep"},
+                1: {"feature": "Outer"},
+            }
+        )
+    )
+    partition = _two_tetra_partition(controller, shared_marker=1)
+    controller._psc_build_volumetric_regions = lambda model: partition
+    unit = _unit("unit:A", "A", ["Boundary", "Rep"])
+    representative = _unit("unit:Rep", "Rep", ["Rep"])
+
+    payloads = controller._psc_assign_volumetric_regions(
+        [unit],
+        _model(unit, representative, representative_role="Discontinuity"),
+        max_missing_boundaries=1,
+    )
+
+    assert [payload["status"] for payload in payloads] == [
+        "CERTAIN",
+        "POSSIBLE_REPEAT",
+    ]
+    assert len(unit["seed_points"]) == 2
+
+
+def test_volumetric_assignment_accepts_one_extra_boundary_as_likely():
+    controller = _controller()
+    unit = _unit("unit:A", "A", ["Boundary", "Rep"])
+    partition = {
+        "regions": [
+            {
+                "region_id": 0,
+                "seed_point": [0.0, 0.0, 0.0],
+                "boundary_labels": ["Boundary", "Rep", "Extra"],
+                "label_surface_indices": {},
+                "adjacent_regions": {},
+                "tetra_count": 1,
+                "clearance": 1.0,
+            }
+        ],
+        "tetra_to_region": np.asarray([0]),
+    }
+    controller._psc_build_volumetric_regions = lambda model: partition
+
+    payload = controller._psc_assign_volumetric_regions(
+        [unit],
+        _model(unit),
+        max_missing_boundaries=1,
+    )[0]
+
+    assert payload["status"] == "LIKELY"
+    assert payload["extra_labels"] == ["Extra"]
+    assert unit["seed_points"] == [[0.0, 0.0, 0.0]]
+
+
+def test_volumetric_assignment_honours_swapped_seed_overrides():
+    controller = PiecewiseStructuralComplex(
+        SimpleNamespace(
+            tetra_surface_data={
+                0: {"feature": "Rep"},
+                1: {"feature": "Outer"},
+            }
+        )
+    )
+    partition = _two_tetra_partition(controller, shared_marker=1)
+
+    class RegionMesh:
+        @staticmethod
+        def find_containing_cell(point):
+            return 0 if float(point[2]) > 0 else 1
+
+    partition["mesh"] = RegionMesh()
+    controller._psc_build_volumetric_regions = lambda model: partition
+    first = _unit(
+        "unit:A",
+        "A",
+        ["Boundary", "Rep"],
+        point=[0.1, 0.1, -0.2],
+        seed_override=True,
+    )
+    second = _unit(
+        "unit:B",
+        "B",
+        ["Boundary", "Rep"],
+        point=[0.1, 0.1, 0.2],
+        seed_override=True,
+    )
+    representative = _unit("unit:Rep", "Rep", ["Rep"])
+
+    payloads = controller._psc_assign_volumetric_regions(
+        [first, second],
+        _model(first, second, representative),
+        max_missing_boundaries=1,
+    )
+
+    assert [payload["unit_key"] for payload in payloads] == ["unit:B", "unit:A"]
+    assert first["seed_points"] == [[0.1, 0.1, -0.2]]
+    assert second["seed_points"] == [[0.1, 0.1, 0.2]]

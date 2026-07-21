@@ -311,8 +311,8 @@ class PiecewiseStructuralComplex:
         layout = QVBoxLayout(dialog)
     
         info_label = QLabel(
-            "Select an STm table. The preview maps STm unit-boundary connections "
-            "to the conforming surfaces loaded in the Tetra Mesh tab."
+            "Select an STm table. PSC discovers the connected 3D volumes formed by "
+            "the conforming surfaces, then matches each volume to an STm signature."
         )
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
@@ -322,12 +322,13 @@ class PiecewiseStructuralComplex:
         table_combo = QComboBox(dialog)
         table_combo.addItems(stm_tables)
         selector_layout.addWidget(table_combo, 1)
-        selector_layout.addWidget(QLabel("Max missing"))
+        selector_layout.addWidget(QLabel("Max differences"))
         max_missing_spin = QSpinBox(dialog)
         max_missing_spin.setRange(0, 10)
         max_missing_spin.setValue(self.MAX_RELAXED_MISSING_BOUNDARIES)
         max_missing_spin.setToolTip(
-            "Maximum number of absent boundaries accepted for a LIKELY topology match."
+            "Maximum number of missing or extra boundaries accepted for a LIKELY "
+            "3D topology match."
         )
         selector_layout.addWidget(max_missing_spin)
         swap_seed_button = QPushButton("Swap selected seeds", dialog)
@@ -343,7 +344,7 @@ class PiecewiseStructuralComplex:
         use_calculated_button = QPushButton("Use calculated", dialog)
         use_calculated_button.setToolTip(
             "Clear saved PSC seed overrides and return to automatically calculated "
-            "locations, constrained by matching section seeds when available."
+            "3D volumetric seed locations."
         )
         selector_layout.addWidget(use_calculated_button)
         layout.addLayout(selector_layout)
@@ -356,7 +357,7 @@ class PiecewiseStructuralComplex:
                 "Boundaries",
                 "Matched surfaces",
                 "Seed point",
-                "Missing",
+                "Signature differences",
                 "Assignment",
             ]
         )
@@ -530,7 +531,6 @@ class PiecewiseStructuralComplex:
             preview_state["mapping"] = mapping
     
             rows = list(mapping.get("units", []))
-            self._psc_attach_section_seed_guides(rows, unit_seed_key)
             preview_state["rows"] = rows
             previous_side_context = getattr(self, "_psc_side_context", {})
             self._psc_side_context = self._psc_prepare_topology_side_context(
@@ -540,16 +540,21 @@ class PiecewiseStructuralComplex:
             preview_table.setRowCount(len(rows))
             missing_count = 0
             seed_location_count = 0
-            section_guided_count = 0
             try:
-                for unit_info in rows:
-                    unit_key = unit_seed_key(unit_info)
-                    if unit_key in seed_overrides:
-                        seed_points = [list(seed) for seed in seed_overrides[unit_key]]
-                        unit_info["seed_point"] = seed_points[0] if seed_points else None
-                        unit_info["seed_points"] = seed_points
-                        unit_info["seed_override"] = True
-                    else:
+                assignment_payloads = self._psc_assign_volumetric_regions(
+                    rows,
+                    psc_model,
+                    max_missing_boundaries=int(max_missing_spin.value()),
+                )
+                if assignment_payloads is None:
+                    for unit_info in rows:
+                        unit_key = unit_seed_key(unit_info)
+                        if unit_key in seed_overrides:
+                            seed_points = [list(seed) for seed in seed_overrides[unit_key]]
+                            unit_info["seed_point"] = seed_points[0] if seed_points else None
+                            unit_info["seed_points"] = seed_points
+                            unit_info["seed_override"] = True
+                            continue
                         seed_points = self._psc_seed_points_for_unit(
                             unit_info,
                             psc_model,
@@ -558,12 +563,11 @@ class PiecewiseStructuralComplex:
                         )
                         unit_info["seed_points"] = seed_points
                         unit_info["seed_point"] = seed_points[0] if seed_points else None
-
-                assignment_payloads = self._psc_classify_seed_assignments(
-                    rows,
-                    psc_model,
-                    max_missing_boundaries=int(max_missing_spin.value()),
-                )
+                    assignment_payloads = self._psc_classify_seed_assignments(
+                        rows,
+                        psc_model,
+                        max_missing_boundaries=int(max_missing_spin.value()),
+                    )
                 status_counts = {}
                 for payload in assignment_payloads:
                     status = str(payload.get("status", "UNASSIGNED"))
@@ -573,29 +577,34 @@ class PiecewiseStructuralComplex:
                     boundaries = unit_info.get("boundaries", [])
                     matched_surfaces = unit_info.get("matched_surfaces", [])
                     missing_boundaries = list(unit_info.get("missing_boundaries", []) or [])
+                    extra_boundaries = []
                     for assignment in unit_info.get("psc_assignments", []) or []:
                         missing_boundaries.extend(
                             assignment.get("missing_labels", []) or []
+                        )
+                        extra_boundaries.extend(
+                            assignment.get("extra_labels", []) or []
                         )
                     missing_boundaries = sorted(
                         {self._psc_text(label) for label in missing_boundaries if self._psc_text(label)},
                         key=str.casefold,
                     )
-                    missing_count += len(missing_boundaries)
+                    extra_boundaries = sorted(
+                        {self._psc_text(label) for label in extra_boundaries if self._psc_text(label)},
+                        key=str.casefold,
+                    )
+                    missing_count += len(missing_boundaries) + len(extra_boundaries)
+                    signature_differences = []
+                    if missing_boundaries:
+                        signature_differences.append(
+                            "Missing: " + ", ".join(missing_boundaries)
+                        )
+                    if extra_boundaries:
+                        signature_differences.append(
+                            "Extra: " + ", ".join(extra_boundaries)
+                        )
                     seed_points = list(unit_info.get("seed_points", []) or [])
                     seed_location_count += len(seed_points or [])
-                    is_section_guided = any(
-                        bool(
-                            (entry.get("signature", {}) or {}).get(
-                                "section_guided", False
-                            )
-                        )
-                        for entry in unit_info.get(
-                            "seed_topology_signatures", []
-                        ) or []
-                    )
-                    if is_section_guided:
-                        section_guided_count += len(seed_points)
                     seed_text = self._psc_format_seed_list(seed_points)
                     if unit_info.get("seed_override") and seed_text:
                         seed_text += " *"
@@ -609,7 +618,7 @@ class PiecewiseStructuralComplex:
                         ", ".join(boundaries),
                         ", ".join(matched_surfaces),
                         seed_text,
-                        ", ".join(missing_boundaries),
+                        "; ".join(signature_differences),
                         assignment_status,
                     ]
                     for col_idx, value in enumerate(values):
@@ -620,14 +629,7 @@ class PiecewiseStructuralComplex:
                                 "(manual swap or From sections)."
                             )
                             item.setForeground(QColor(40, 95, 170))
-                        elif col_idx == 4 and is_section_guided:
-                            item.setToolTip(
-                                "Automatic 3D seed: section U/V coordinates are "
-                                "preserved and the normal coordinate is selected "
-                                "from the tetra-surface topology."
-                            )
-                            item.setForeground(QColor(35, 120, 80))
-                        if col_idx == 5 and missing_boundaries:
+                        if col_idx == 5 and signature_differences:
                             item.setForeground(QColor(190, 40, 40))
                         if col_idx == 6 and assignment_status in {
                             "LIKELY",
@@ -658,10 +660,10 @@ class PiecewiseStructuralComplex:
     
             status_label.setText(
                 f"Units: {len(rows)} | "
+                f"3D volumes: {getattr(self, '_psc_last_volumetric_region_count', 0)} | "
                 f"Seed locations: {seed_location_count} | "
-                f"Section-guided: {section_guided_count} | "
                 f"Known boundaries: {len(psc_model.get('boundary_features', set()))} | "
-                f"Missing matches: {missing_count} | "
+                f"Signature differences: {missing_count} | "
                 f"Saved seed overrides: {len(seed_overrides)} | "
                 "Assignments: "
                 f"CERTAIN={status_counts.get('CERTAIN', 0)}, "
@@ -935,17 +937,6 @@ class PiecewiseStructuralComplex:
                 points = np.asarray(getattr(vtk_obj, "points", []), dtype=float)
             except Exception:
                 continue
-            parent_uid = ""
-            try:
-                parent_uid = self._psc_text(geol_coll.get_uid_x_section(uid))
-            except Exception:
-                pass
-            vtk_section_uid = self._psc_text(
-                getattr(vtk_obj, "x_section_uid", "")
-            )
-            section_uid = self._psc_section_uid_from_candidates(
-                [parent_uid, vtk_section_uid]
-            )
             if points.ndim == 1:
                 points = points.reshape(1, -1)
             if points.ndim != 2 or points.shape[1] < 3 or points.shape[0] == 0:
@@ -977,88 +968,9 @@ class PiecewiseStructuralComplex:
                     "feature_key": self._psc_key(feature),
                     "role_key": self._psc_key(role),
                     "seed_points": seed_points,
-                    "section_uid": section_uid,
                 }
             )
         return entries
-
-    def _psc_section_uid_from_candidates(self, values: List[Any]) -> str:
-        """Resolve a section UID from plain or linked PZero parent UID values."""
-        project = self._pzero_project()
-        xsect_coll = getattr(project, "xsect_coll", None)
-        valid_uids = {
-            str(uid)
-            for uid in (getattr(xsect_coll, "get_uids", []) or [])
-            if str(uid)
-        }
-        fallback = ""
-        for value in values or []:
-            for token in str(value or "").split(";"):
-                token = token.strip()
-                if not token:
-                    continue
-                if not fallback:
-                    fallback = token
-                if token in valid_uids:
-                    return token
-        return fallback if not valid_uids else ""
-
-    def _psc_attach_section_seed_guides(
-        self,
-        mapped_units: List[Dict[str, Any]],
-        unit_seed_key=None,
-    ) -> int:
-        """Attach uniquely matched section points as automatic 3D seed guides."""
-        if unit_seed_key is None:
-            unit_seed_key = lambda unit: str(
-                unit.get("key")
-                or unit.get("name")
-                or unit.get("feature")
-                or ""
-            )
-        units_by_key = {
-            str(unit_seed_key(unit_info)): unit_info
-            for unit_info in mapped_units or []
-            if str(unit_seed_key(unit_info))
-        }
-        for unit_info in units_by_key.values():
-            unit_info.pop("section_seed_guides", None)
-
-        guide_count = 0
-        seen = set()
-        for seed_row in self._psc_section_seed_match_rows(
-            mapped_units,
-            unit_seed_key,
-        ):
-            unit_key = str(seed_row.get("target_unit_key", ""))
-            section_uid = self._psc_text(seed_row.get("section_uid", ""))
-            if (
-                unit_key not in units_by_key
-                or not section_uid
-                or seed_row.get("status_key") not in {"matched", "matched_feature"}
-            ):
-                continue
-            for point in self._psc_normalize_seed_points(
-                seed_row.get("seed_points", [])
-            ):
-                guide_key = (
-                    unit_key,
-                    section_uid,
-                    tuple(round(float(value), 8) for value in point),
-                )
-                if guide_key in seen:
-                    continue
-                seen.add(guide_key)
-                units_by_key[unit_key].setdefault("section_seed_guides", []).append(
-                    {
-                        "section_uid": section_uid,
-                        "seed_point": list(point),
-                        "source_uid": str(seed_row.get("uid", "")),
-                        "source_name": self._psc_text(seed_row.get("name", "")),
-                    }
-                )
-                guide_count += 1
-        return guide_count
 
     def _psc_section_seed_overrides_for_units(
         self,
@@ -1722,6 +1634,867 @@ class PiecewiseStructuralComplex:
             if best is not None:
                 closest[boundary_key] = best[1]
         return closest
+
+    @staticmethod
+    def _psc_tetra_incenter(tetra_points: np.ndarray) -> Tuple[np.ndarray, float]:
+        """Return an interior point and its inscribed-sphere radius for a tetrahedron."""
+        points = np.asarray(tetra_points, dtype=float)
+        if points.shape != (4, 3):
+            return np.zeros(3, dtype=float), 0.0
+
+        opposite_areas = []
+        for vertex_idx in range(4):
+            face = np.delete(points, vertex_idx, axis=0)
+            area = 0.5 * np.linalg.norm(
+                np.cross(face[1] - face[0], face[2] - face[0])
+            )
+            opposite_areas.append(float(area))
+        area_sum = float(sum(opposite_areas))
+        volume = abs(
+            float(
+                np.linalg.det(
+                    np.stack(
+                        (
+                            points[1] - points[0],
+                            points[2] - points[0],
+                            points[3] - points[0],
+                        ),
+                        axis=0,
+                    )
+                )
+            )
+        ) / 6.0
+        if area_sum <= 1.0e-15 or volume <= 1.0e-18:
+            return np.mean(points, axis=0), 0.0
+        weights = np.asarray(opposite_areas, dtype=float)
+        return np.sum(points * weights[:, None], axis=0) / area_sum, 3.0 * volume / area_sum
+
+    def _psc_surface_info_for_index(self, surface_idx: int) -> Dict[str, Any]:
+        """Return conforming-surface metadata for an integer dataset index."""
+        surface_data = getattr(self, "tetra_surface_data", {}) or {}
+        return surface_data.get(surface_idx, surface_data.get(str(surface_idx), {})) or {}
+
+    def _psc_marker_surface(self, marker: Any) -> Optional[int]:
+        """Map a TetGen PLC face marker to its source surface index."""
+        try:
+            marker = int(marker)
+        except (TypeError, ValueError):
+            return None
+        if marker >= 1000:
+            return marker - 1000
+        if marker > 0:
+            return marker - 1
+        return None
+
+    def _psc_region_surface_label(
+        self,
+        surface_idx: int,
+        border_surface_indices: set,
+    ) -> str:
+        """Return the STM-facing label represented by one PLC surface."""
+        if int(surface_idx) in border_surface_indices:
+            return "Boundary"
+        surface_info = self._psc_surface_info_for_index(int(surface_idx))
+        return (
+            self._psc_text(surface_info.get("feature", ""))
+            or self._psc_text(surface_info.get("name", ""))
+            or f"Surface_{surface_idx}"
+        )
+
+    def _psc_regions_from_tetrahedra(
+        self,
+        nodes: Any,
+        elements: Any,
+        trifaces: Any,
+        triface_markers: Any,
+        border_surface_indices: Optional[set] = None,
+    ) -> Dict[str, Any]:
+        """Split an unseeded tetrahedralization at every constrained PLC face."""
+        nodes = np.asarray(nodes, dtype=float)
+        elements = np.asarray(elements, dtype=int)
+        trifaces = np.asarray(trifaces, dtype=int)
+        markers = np.asarray(triface_markers, dtype=int).reshape(-1)
+        border_surface_indices = {
+            int(value) for value in (border_surface_indices or set())
+        }
+        if nodes.ndim != 2 or nodes.shape[1] < 3:
+            raise ValueError("TetGen returned invalid PSC node coordinates.")
+        if elements.ndim != 2 or elements.shape[1] < 4 or not len(elements):
+            raise ValueError("TetGen returned no tetrahedra for PSC volume discovery.")
+        if trifaces.ndim != 2 or trifaces.shape[1] < 3:
+            raise ValueError("TetGen returned invalid PSC face connectivity.")
+        if len(trifaces) != len(markers):
+            raise ValueError("TetGen PSC faces and face markers have different lengths.")
+
+        elements = elements[:, :4]
+        trifaces = trifaces[:, :3]
+        face_owners: Dict[Tuple[int, int, int], List[int]] = {}
+        tetra_faces = ((1, 2, 3), (0, 2, 3), (0, 1, 3), (0, 1, 2))
+        for tetra_idx, tetra in enumerate(elements):
+            for face_vertices in tetra_faces:
+                face_key = tuple(sorted(int(tetra[idx]) for idx in face_vertices))
+                face_owners.setdefault(face_key, []).append(int(tetra_idx))
+
+        marker_by_face: Dict[Tuple[int, int, int], int] = {}
+        for face, marker in zip(trifaces, markers):
+            face_key = tuple(sorted(int(value) for value in face[:3]))
+            marker = int(marker)
+            if marker or face_key not in marker_by_face:
+                marker_by_face[face_key] = marker
+
+        open_adjacency = [set() for _ in range(len(elements))]
+        for face_key, owners in face_owners.items():
+            if len(owners) != 2 or int(marker_by_face.get(face_key, 0)) != 0:
+                continue
+            first, second = owners
+            open_adjacency[first].add(second)
+            open_adjacency[second].add(first)
+
+        tetra_to_region = np.full(len(elements), -1, dtype=int)
+        component_tetrahedra: List[List[int]] = []
+        for start_idx in range(len(elements)):
+            if tetra_to_region[start_idx] >= 0:
+                continue
+            region_idx = len(component_tetrahedra)
+            queue = [start_idx]
+            tetra_to_region[start_idx] = region_idx
+            component = []
+            queue_idx = 0
+            while queue_idx < len(queue):
+                tetra_idx = queue[queue_idx]
+                queue_idx += 1
+                component.append(tetra_idx)
+                for neighbour in open_adjacency[tetra_idx]:
+                    if tetra_to_region[neighbour] >= 0:
+                        continue
+                    tetra_to_region[neighbour] = region_idx
+                    queue.append(neighbour)
+            component_tetrahedra.append(component)
+
+        region_markers = [set() for _ in component_tetrahedra]
+        region_interfaces: List[Dict[int, List[Dict[str, Any]]]] = [
+            {} for _ in component_tetrahedra
+        ]
+        for face_key, owners in face_owners.items():
+            marker = int(marker_by_face.get(face_key, 0))
+            if marker <= 0:
+                continue
+            owner_regions = sorted({int(tetra_to_region[owner]) for owner in owners})
+            for region_idx in owner_regions:
+                region_markers[region_idx].add(marker)
+            if len(owner_regions) != 2:
+                continue
+            first_region, second_region = owner_regions
+            surface_idx = self._psc_marker_surface(marker)
+            if surface_idx is None:
+                continue
+            label = self._psc_region_surface_label(
+                surface_idx,
+                border_surface_indices,
+            )
+            interface = {
+                "marker": marker,
+                "surface_index": int(surface_idx),
+                "label": label,
+            }
+            for source_region, target_region in (
+                (first_region, second_region),
+                (second_region, first_region),
+            ):
+                interfaces = region_interfaces[source_region].setdefault(
+                    target_region, []
+                )
+                interface_key = (marker, int(surface_idx), self._psc_key(label))
+                if not any(
+                    (
+                        int(existing.get("marker", 0)),
+                        int(existing.get("surface_index", -1)),
+                        self._psc_key(existing.get("label", "")),
+                    )
+                    == interface_key
+                    for existing in interfaces
+                ):
+                    interfaces.append(dict(interface))
+
+        regions = []
+        for region_idx, tetra_indices in enumerate(component_tetrahedra):
+            best_point = None
+            best_radius = -1.0
+            for tetra_idx in tetra_indices:
+                tetra_points = nodes[elements[tetra_idx], :3]
+                point, radius = self._psc_tetra_incenter(tetra_points)
+                if radius > best_radius:
+                    best_point = point
+                    best_radius = radius
+            if best_point is None:
+                best_point = np.mean(nodes[elements[tetra_indices[0]], :3], axis=0)
+                best_radius = 0.0
+
+            surface_indices = sorted(
+                {
+                    surface_idx
+                    for marker in region_markers[region_idx]
+                    for surface_idx in [self._psc_marker_surface(marker)]
+                    if surface_idx is not None
+                }
+            )
+            labels_by_key = {}
+            label_surface_indices: Dict[str, List[int]] = {}
+            for surface_idx in surface_indices:
+                label = self._psc_region_surface_label(
+                    surface_idx,
+                    border_surface_indices,
+                )
+                label_key = self._psc_key(label)
+                if not label_key:
+                    continue
+                labels_by_key.setdefault(label_key, label)
+                label_surface_indices.setdefault(label_key, []).append(
+                    int(surface_idx)
+                )
+            regions.append(
+                {
+                    "region_id": int(region_idx),
+                    "tetra_indices": list(tetra_indices),
+                    "tetra_count": len(tetra_indices),
+                    "seed_point": [float(value) for value in best_point[:3]],
+                    "clearance": max(float(best_radius), 0.0),
+                    "boundary_labels": [
+                        labels_by_key[key] for key in sorted(labels_by_key)
+                    ],
+                    "surface_indices": surface_indices,
+                    "surface_markers": sorted(region_markers[region_idx]),
+                    "label_surface_indices": {
+                        key: sorted(set(indices))
+                        for key, indices in label_surface_indices.items()
+                    },
+                    "adjacent_regions": {
+                        int(target): sorted(
+                            interfaces,
+                            key=lambda item: (
+                                self._psc_key(item.get("label", "")),
+                                int(item.get("surface_index", -1)),
+                            ),
+                        )
+                        for target, interfaces in region_interfaces[region_idx].items()
+                    },
+                }
+            )
+
+        return {
+            "regions": regions,
+            "tetra_to_region": tetra_to_region,
+            "nodes": nodes,
+            "elements": elements,
+        }
+
+    def _psc_volumetric_partition_signature(self) -> Tuple[Any, ...]:
+        """Return a lightweight cache key for the current conforming PLC."""
+        surface_data = getattr(self, "tetra_surface_data", {}) or {}
+        descriptors = []
+        for raw_idx, surface_info in sorted(
+            surface_data.items(), key=lambda item: str(item[0])
+        ):
+            try:
+                surface_idx = int(raw_idx)
+            except (TypeError, ValueError):
+                continue
+            vertices = surface_info.get("vertices", [])
+            triangles = surface_info.get("triangles", [])
+            descriptors.append(
+                (
+                    surface_idx,
+                    id(vertices),
+                    tuple(np.shape(vertices)),
+                    id(triangles),
+                    tuple(np.shape(triangles)),
+                    self._psc_key(surface_info.get("feature", "")),
+                    self._psc_key(surface_info.get("name", "")),
+                )
+            )
+        try:
+            border_indices = tuple(sorted(int(i) for i in self._get_border_surface_indices()))
+        except Exception:
+            border_indices = ()
+        try:
+            fault_indices = tuple(sorted(int(i) for i in self._get_fault_surface_indices()))
+        except Exception:
+            fault_indices = ()
+        return tuple(descriptors), border_indices, fault_indices
+
+    def _psc_build_volumetric_regions(
+        self,
+        _psc_model: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Discover the closed 3D regions formed by the loaded conforming surfaces."""
+        signature = self._psc_volumetric_partition_signature()
+        cached = getattr(self, "_psc_volumetric_partition_cache", None)
+        if isinstance(cached, tuple) and len(cached) == 2 and cached[0] == signature:
+            return cached[1]
+
+        surface_data = getattr(self, "tetra_surface_data", {}) or {}
+        selected_surfaces = set()
+        for surface_idx in surface_data:
+            try:
+                selected_surfaces.add(int(surface_idx))
+            except (TypeError, ValueError):
+                continue
+        if not selected_surfaces:
+            self._psc_volumetric_partition_cache = (signature, None)
+            return None
+
+        try:
+            border_indices = {
+                int(value) for value in self._get_border_surface_indices()
+            }
+        except Exception:
+            border_indices = set()
+        try:
+            fault_indices = {
+                int(value) for value in self._get_fault_surface_indices()
+            }
+        except Exception:
+            fault_indices = set()
+        unit_indices = selected_surfaces - border_indices - fault_indices
+
+        raw_datasets = list(getattr(self, "datasets", []) or [])
+        dataset_count = max(len(raw_datasets), max(selected_surfaces) + 1)
+        datasets = []
+        for dataset_idx in range(dataset_count):
+            if dataset_idx < len(raw_datasets) and isinstance(
+                raw_datasets[dataset_idx], dict
+            ):
+                dataset = dict(raw_datasets[dataset_idx])
+            else:
+                dataset = {}
+            if dataset.get("type") == "WELL":
+                dataset["type"] = "IGNORED_FOR_PSC_PARTITION"
+            surface_info = self._psc_surface_info_for_index(dataset_idx)
+            dataset.setdefault(
+                "name", surface_info.get("name", f"Surface_{dataset_idx}")
+            )
+            datasets.append(dataset)
+
+        try:
+            try:
+                from Pymeshit.tetra_mesh_utils import TetrahedralMeshGenerator
+            except ImportError:
+                from pzero.pymeshit_app.Pymeshit.tetra_mesh_utils import (
+                    TetrahedralMeshGenerator,
+                )
+
+            holes = []
+            collect_holes = getattr(self.host, "_collect_holes_from_constraint_tree", None)
+            if callable(collect_holes):
+                holes = collect_holes() or []
+            terminal = getattr(self.host, "print_terminal", None)
+            if callable(terminal):
+                terminal("PSC: discovering connected 3D volumes from conforming surfaces...")
+            generator = TetrahedralMeshGenerator(
+                datasets=datasets,
+                selected_surfaces=selected_surfaces,
+                border_surface_indices=border_indices,
+                unit_surface_indices=unit_indices,
+                fault_surface_indices=fault_indices,
+                materials=[],
+                surface_data=surface_data,
+                holes=holes,
+                well_data={},
+            )
+            mesh = generator.generate_tetrahedral_mesh("pQ")
+            tet = getattr(generator, "tetgen_object", None)
+            if mesh is None or tet is None:
+                raise RuntimeError("the provisional TetGen partition was not produced")
+            partition = self._psc_regions_from_tetrahedra(
+                tet.node,
+                tet.elem,
+                tet.trifaces,
+                tet.triface_markers,
+                border_indices,
+            )
+            partition["mesh"] = mesh
+            partition["border_surface_indices"] = border_indices
+            partition["fault_surface_indices"] = fault_indices
+            self._psc_volumetric_partition_cache = (signature, partition)
+            if callable(terminal):
+                terminal(
+                    f"PSC: discovered {len(partition.get('regions', []))} connected 3D volume(s)."
+                )
+            return partition
+        except Exception as exc:
+            self._psc_volumetric_partition_cache = (signature, None)
+            terminal = getattr(self.host, "print_terminal", None)
+            if callable(terminal):
+                terminal(
+                    "PSC 3D volume discovery failed; using the legacy geometric seed "
+                    f"fallback. Reason: {exc}"
+                )
+            return None
+
+    def _psc_volumetric_region_candidates(
+        self,
+        region: Dict[str, Any],
+        mapped_units: List[Dict[str, Any]],
+        max_missing_boundaries: int,
+    ) -> List[Dict[str, Any]]:
+        """Rank STM units against one physical 3D region boundary signature."""
+        observed_labels = list(region.get("boundary_labels", []) or [])
+        observed_by_key = {
+            self._psc_key(label): self._psc_text(label)
+            for label in observed_labels
+            if self._psc_key(label)
+        }
+        observed_keys = set(observed_by_key)
+        candidates = []
+        for unit_info in mapped_units or []:
+            if unit_info.get("psc_virtual_unit"):
+                continue
+            labels_by_key = self._psc_boundary_labels_by_key(unit_info)
+            unit_keys = set(labels_by_key)
+            if not unit_keys:
+                continue
+            missing_keys = unit_keys - observed_keys
+            extra_keys = observed_keys - unit_keys
+            mismatch_count = len(missing_keys) + len(extra_keys)
+            if mismatch_count > max_missing_boundaries:
+                continue
+            unit_key = str(
+                unit_info.get("key")
+                or unit_info.get("feature")
+                or unit_info.get("name")
+                or ""
+            )
+            if not unit_key:
+                continue
+            candidate = {
+                "unit_info": unit_info,
+                "unit_key": unit_key,
+                "feature": self._psc_text(unit_info.get("feature", "")),
+                "boundaries": [labels_by_key[key] for key in sorted(labels_by_key)],
+                "signature_keys": unit_keys,
+                "exact": mismatch_count == 0,
+                "missing_count": len(missing_keys),
+                "missing_labels": [
+                    labels_by_key.get(key, key) for key in sorted(missing_keys)
+                ],
+                "extra_count": len(extra_keys),
+                "extra_labels": [
+                    observed_by_key.get(key, key) for key in sorted(extra_keys)
+                ],
+                "mismatch_count": mismatch_count,
+                "observed_count": len(observed_keys),
+                "polarity": self._psc_sort_key(unit_info.get("polarity", "")),
+            }
+            candidate["quality"] = (
+                0 if candidate["exact"] else 1,
+                mismatch_count,
+                candidate["missing_count"],
+                candidate["extra_count"],
+                -candidate["observed_count"],
+                candidate["polarity"],
+            )
+            candidates.append(candidate)
+        return sorted(
+            candidates,
+            key=lambda candidate: (
+                candidate["quality"],
+                candidate["feature"].casefold(),
+                candidate["unit_key"].casefold(),
+            ),
+        )
+
+    def _psc_override_region_id(
+        self,
+        point: List[float],
+        partition: Dict[str, Any],
+    ) -> Optional[int]:
+        """Locate an explicit/manual seed in the discovered volumetric partition."""
+        try:
+            coords = np.asarray(point, dtype=float).reshape(3)
+        except (TypeError, ValueError):
+            return None
+        mesh = partition.get("mesh")
+        if mesh is not None and hasattr(mesh, "find_containing_cell"):
+            try:
+                tetra_idx = int(mesh.find_containing_cell(coords))
+                tetra_to_region = np.asarray(partition.get("tetra_to_region", []), dtype=int)
+                if 0 <= tetra_idx < len(tetra_to_region):
+                    return int(tetra_to_region[tetra_idx])
+            except Exception:
+                pass
+        regions = list(partition.get("regions", []) or [])
+        if not regions:
+            return None
+        return int(
+            min(
+                regions,
+                key=lambda region: float(
+                    np.linalg.norm(
+                        coords - np.asarray(region.get("seed_point", coords), dtype=float)
+                    )
+                ),
+            ).get("region_id", -1)
+        )
+
+    def _psc_volumetric_repeat_conflicts(
+        self,
+        unit_key: str,
+        region: Dict[str, Any],
+        assignments: List[Dict[str, Any]],
+        psc_model: Dict[str, Any],
+    ) -> List[str]:
+        """Block equal adjacent units across representative, non-discontinuity faces."""
+        roles_by_key = self._psc_boundary_roles_by_key(psc_model)
+        representative_keys = self._psc_volumetric_feature_keys(psc_model)
+        boundary_key = self._psc_key("Boundary")
+        adjacency = region.get("adjacent_regions", {}) or {}
+        conflicts = []
+        for assignment in assignments or []:
+            if assignment.get("unit_key") != unit_key:
+                continue
+            other_region_id = int(assignment.get("volumetric_region_id", -1))
+            interfaces = adjacency.get(
+                other_region_id, adjacency.get(str(other_region_id), [])
+            )
+            for interface in interfaces or []:
+                label = self._psc_text(interface.get("label", ""))
+                feature_key = self._psc_key(label)
+                if (
+                    not feature_key
+                    or feature_key == boundary_key
+                    or feature_key not in representative_keys
+                    or self._psc_role_is_discontinuity(
+                        roles_by_key.get(feature_key, "")
+                    )
+                ):
+                    continue
+                conflicts.append(label or feature_key)
+        return sorted(set(conflicts), key=str.casefold)
+
+    def _psc_assign_volumetric_regions(
+        self,
+        mapped_units: List[Dict[str, Any]],
+        psc_model: Dict[str, Any],
+        max_missing_boundaries: Optional[int] = None,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """Assign exactly one seed to each connected physical volume of the 3D PLC."""
+        if max_missing_boundaries is None:
+            max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
+        try:
+            max_missing_boundaries = max(int(max_missing_boundaries), 0)
+        except (TypeError, ValueError):
+            max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
+
+        self._psc_last_volumetric_region_count = 0
+        partition = self._psc_build_volumetric_regions(psc_model)
+        if partition is None:
+            return None
+        regions = list(partition.get("regions", []) or [])
+        self._psc_last_volumetric_region_count = len(regions)
+        regions_by_id = {
+            int(region.get("region_id", region_idx)): region
+            for region_idx, region in enumerate(regions)
+        }
+
+        pinned_by_region: Dict[int, Dict[str, Any]] = {}
+        for unit_info in mapped_units or []:
+            if not unit_info.get("seed_override"):
+                continue
+            unit_key = str(
+                unit_info.get("key")
+                or unit_info.get("feature")
+                or unit_info.get("name")
+                or ""
+            )
+            for point in self._psc_normalize_seed_points(
+                unit_info.get("seed_points") or unit_info.get("seed_point")
+            ):
+                region_id = self._psc_override_region_id(point, partition)
+                if region_id is None or region_id not in regions_by_id:
+                    continue
+                pinned_by_region.setdefault(
+                    region_id,
+                    {
+                        "unit_info": unit_info,
+                        "unit_key": unit_key,
+                        "seed_point": list(point),
+                    },
+                )
+
+        records = []
+        for region_id, region in sorted(regions_by_id.items()):
+            pin = pinned_by_region.get(region_id)
+            if pin is not None:
+                unit_info = pin["unit_info"]
+                labels_by_key = self._psc_boundary_labels_by_key(unit_info)
+                candidates = [
+                    {
+                        "unit_info": unit_info,
+                        "unit_key": pin["unit_key"],
+                        "feature": self._psc_text(unit_info.get("feature", "")),
+                        "boundaries": [
+                            labels_by_key[key] for key in sorted(labels_by_key)
+                        ],
+                        "signature_keys": set(labels_by_key),
+                        "exact": True,
+                        "missing_count": 0,
+                        "missing_labels": [],
+                        "extra_count": 0,
+                        "extra_labels": [],
+                        "mismatch_count": 0,
+                        "observed_count": len(
+                            region.get("boundary_labels", []) or []
+                        ),
+                        "polarity": self._psc_sort_key(
+                            unit_info.get("polarity", "")
+                        ),
+                        "quality": (0, 0, 0, 0, 0, 0.0),
+                        "pinned": True,
+                    }
+                ]
+                seed_point = list(pin["seed_point"])
+            else:
+                candidates = self._psc_volumetric_region_candidates(
+                    region,
+                    mapped_units,
+                    max_missing_boundaries,
+                )
+                seed_point = list(region.get("seed_point", []) or [])
+            best_quality = candidates[0]["quality"] if candidates else (9, 9, 9, 9, 9, 9)
+            best_count = sum(
+                1 for candidate in candidates if candidate["quality"] == best_quality
+            )
+            records.append(
+                {
+                    "region_id": region_id,
+                    "region": region,
+                    "seed_point": seed_point,
+                    "candidates": candidates,
+                    "best_quality": best_quality,
+                    "best_count": best_count,
+                    "pinned": pin is not None,
+                }
+            )
+        records.sort(
+            key=lambda record: (
+                0 if record["pinned"] else 1,
+                record["best_quality"],
+                record["best_count"],
+                record["region_id"],
+            )
+        )
+
+        assigned_counts: Dict[str, int] = {}
+        accepted = []
+        rejected_by_unit: Dict[str, List[Dict[str, Any]]] = {}
+        payloads = []
+        for record in records:
+            region = record["region"]
+            filtered_candidates = []
+            blocked_labels = []
+            for candidate in record["candidates"]:
+                conflicts = self._psc_volumetric_repeat_conflicts(
+                    candidate["unit_key"],
+                    region,
+                    accepted,
+                    psc_model,
+                )
+                if conflicts:
+                    blocked_labels.extend(conflicts)
+                    continue
+                filtered_candidates.append(candidate)
+
+            if not filtered_candidates:
+                rejected_candidate = (
+                    record["candidates"][0] if record["candidates"] else None
+                )
+                payload = {
+                    "status": "UNASSIGNED",
+                    "unit_key": "",
+                    "source_unit_key": (
+                        rejected_candidate.get("unit_key", "")
+                        if rejected_candidate
+                        else ""
+                    ),
+                    "seed_point": list(record["seed_point"]),
+                    "boundaries": list(region.get("boundary_labels", []) or []),
+                    "candidate_names": [
+                        self._psc_text(candidate["unit_info"].get("name", ""))
+                        or self._psc_text(candidate["feature"])
+                        or candidate["unit_key"]
+                        for candidate in record["candidates"]
+                    ],
+                    "missing_labels": (
+                        list(rejected_candidate.get("missing_labels", []) or [])
+                        if rejected_candidate
+                        else []
+                    ),
+                    "extra_labels": (
+                        list(rejected_candidate.get("extra_labels", []) or [])
+                        if rejected_candidate
+                        else []
+                    ),
+                    "blocked_repeat_labels": sorted(
+                        set(blocked_labels), key=str.casefold
+                    ),
+                    "volumetric_region_id": record["region_id"],
+                    "tetra_count": int(region.get("tetra_count", 0)),
+                    "clearance": float(region.get("clearance", 0.0)),
+                    "signature": {
+                        "target": [],
+                        "closest": list(region.get("boundary_labels", []) or []),
+                        "exact": False,
+                        "volumetric_region": True,
+                    },
+                }
+                payloads.append(payload)
+                source_key = payload["source_unit_key"]
+                if source_key:
+                    rejected_by_unit.setdefault(source_key, []).append(payload)
+                continue
+
+            best_quality = filtered_candidates[0]["quality"]
+            best_candidates = [
+                candidate
+                for candidate in filtered_candidates
+                if candidate["quality"] == best_quality
+            ]
+            chosen = min(
+                best_candidates,
+                key=lambda candidate: (
+                    assigned_counts.get(candidate["unit_key"], 0),
+                    candidate["polarity"],
+                    candidate["feature"].casefold(),
+                    candidate["unit_key"].casefold(),
+                ),
+            )
+            assigned_before = assigned_counts.get(chosen["unit_key"], 0)
+            if record["pinned"] and assigned_before == 0:
+                status = "CERTAIN"
+            elif len(best_candidates) > 1 and assigned_before == 0:
+                status = "AMBIGUOUS"
+            elif assigned_before > 0:
+                status = "POSSIBLE_REPEAT"
+            elif chosen["exact"]:
+                status = "CERTAIN"
+            else:
+                status = "LIKELY"
+
+            candidate_names = []
+            for candidate in best_candidates:
+                name = (
+                    self._psc_text(candidate["unit_info"].get("name", ""))
+                    or candidate["feature"]
+                    or candidate["unit_key"]
+                )
+                if name not in candidate_names:
+                    candidate_names.append(name)
+            closest_surface_indices = {
+                key: int(indices[0])
+                for key, indices in (
+                    region.get("label_surface_indices", {}) or {}
+                ).items()
+                if indices
+            }
+            signature = {
+                "target": list(chosen.get("boundaries", []) or []),
+                "closest": list(region.get("boundary_labels", []) or []),
+                "exact": bool(chosen["exact"]),
+                "missing_count": int(chosen["missing_count"]),
+                "extra_count": int(chosen["extra_count"]),
+                "observed_count": int(chosen["observed_count"]),
+                "closest_surface_indices": dict(closest_surface_indices),
+                "volumetric_region": True,
+                "volumetric_region_id": record["region_id"],
+                "tetra_count": int(region.get("tetra_count", 0)),
+                "clearance": float(region.get("clearance", 0.0)),
+            }
+            payload = {
+                "status": status,
+                "unit_key": chosen["unit_key"],
+                "source_unit_key": chosen["unit_key"],
+                "seed_point": list(record["seed_point"]),
+                "boundaries": list(chosen.get("boundaries", []) or []),
+                "candidate_names": candidate_names,
+                "missing_labels": list(chosen.get("missing_labels", []) or []),
+                "extra_labels": list(chosen.get("extra_labels", []) or []),
+                "blocked_repeat_labels": sorted(
+                    set(blocked_labels), key=str.casefold
+                ),
+                "assigned_before": int(assigned_before),
+                "exact": bool(chosen["exact"]),
+                "local_signature": False,
+                "component_index": -1,
+                "closest_surface_indices": closest_surface_indices,
+                "volumetric_region_id": record["region_id"],
+                "tetra_count": int(region.get("tetra_count", 0)),
+                "clearance": float(region.get("clearance", 0.0)),
+                "signature": signature,
+            }
+            accepted.append(payload)
+            payloads.append(payload)
+            assigned_counts[chosen["unit_key"]] = assigned_before + 1
+
+        units_by_key = {
+            str(
+                unit_info.get("key")
+                or unit_info.get("feature")
+                or unit_info.get("name")
+                or ""
+            ): unit_info
+            for unit_info in mapped_units or []
+        }
+        for unit_key, unit_info in units_by_key.items():
+            unit_info["seed_points"] = []
+            unit_info["seed_point"] = None
+            unit_info["seed_topology_signature"] = {}
+            unit_info["seed_topology_signatures"] = []
+            unit_info["psc_assignments"] = []
+            unit_info["psc_rejected_assignments"] = list(
+                rejected_by_unit.get(unit_key, [])
+            )
+        for payload in accepted:
+            unit_info = units_by_key.get(payload["unit_key"])
+            if unit_info is None:
+                continue
+            point = list(payload["seed_point"])
+            unit_info["seed_points"].append(point)
+            unit_info["seed_point"] = unit_info["seed_points"][0]
+            unit_info["seed_topology_signatures"].append(
+                {
+                    "boundaries": list(payload.get("boundaries", []) or []),
+                    "signature": dict(payload.get("signature", {}) or {}),
+                    "component_index": -1,
+                    "assignment": dict(payload),
+                }
+            )
+            unit_info["seed_topology_signature"] = dict(
+                unit_info["seed_topology_signatures"][0]["signature"]
+            )
+            unit_info["psc_assignments"].append(dict(payload))
+
+        status_priority = {
+            "CERTAIN": 0,
+            "LIKELY": 1,
+            "POSSIBLE_REPEAT": 2,
+            "AMBIGUOUS": 3,
+            "UNASSIGNED": 4,
+        }
+        for unit_key, unit_info in units_by_key.items():
+            statuses = [
+                assignment.get("status", "UNASSIGNED")
+                for assignment in unit_info.get("psc_assignments", [])
+            ]
+            if not statuses:
+                statuses = ["UNASSIGNED"]
+            unit_info["psc_assignment_status"] = max(
+                statuses,
+                key=lambda value: status_priority.get(value, 4),
+            )
+        return sorted(
+            payloads,
+            key=lambda payload: int(payload.get("volumetric_region_id", -1)),
+        )
 
     def _psc_classify_seed_assignments(
         self,
@@ -3297,7 +4070,6 @@ class PiecewiseStructuralComplex:
         reference_seed: np.ndarray,
         require_side_match: bool = False,
         broad_sampling: Optional[bool] = None,
-        candidate_points_override: Optional[np.ndarray] = None,
     ) -> np.ndarray:
         """Choose a seed whose nearest-boundary signature matches the STM unit topology."""
         bounds = self._psc_domain_bounds()
@@ -3358,32 +4130,17 @@ class PiecewiseStructuralComplex:
             reference_seed,
             target_surface_map,
         )
-        if candidate_points_override is not None:
-            candidate_points = np.asarray(
-                candidate_points_override,
-                dtype=float,
+        if broad_sampling is None:
+            broad_sampling = (
+                int(unit_info.get("ambiguity_group_size", 1) or 1) > 1
             )
-            if candidate_points.ndim == 1:
-                candidate_points = candidate_points.reshape(1, -1)
-            if candidate_points.ndim != 2 or candidate_points.shape[1] < 3:
-                candidate_points = np.empty((0, 3), dtype=float)
-            else:
-                candidate_points = candidate_points[:, :3]
-                candidate_points = candidate_points[
-                    np.all(np.isfinite(candidate_points), axis=1)
-                ]
-        else:
-            if broad_sampling is None:
-                broad_sampling = (
-                    int(unit_info.get("ambiguity_group_size", 1) or 1) > 1
-                )
-            candidate_points = self._psc_seed_candidate_points(
-                reference_seed,
-                target_surface_indices,
-                bounds,
-                side_constraints,
-                broad_sampling=bool(broad_sampling),
-            )
+        candidate_points = self._psc_seed_candidate_points(
+            reference_seed,
+            target_surface_indices,
+            bounds,
+            side_constraints,
+            broad_sampling=bool(broad_sampling),
+        )
         if candidate_points.shape[0] == 0:
             return reference_seed
     
@@ -3773,175 +4530,6 @@ class PiecewiseStructuralComplex:
             return None
         return np.asarray(seed, dtype=float)
 
-    def _psc_section_normal_candidate_points(
-        self,
-        section_uid: str,
-        section_seed_point: List[float],
-        calculated_seed: List[float],
-    ) -> np.ndarray:
-        """Keep section U/V fixed and sample only the missing normal coordinate."""
-        project = self._pzero_project()
-        xsect_coll = getattr(project, "xsect_coll", None)
-        bounds = self._psc_domain_bounds()
-        if xsect_coll is None or bounds is None or not section_uid:
-            return np.empty((0, 3), dtype=float)
-        try:
-            origin = np.asarray(
-                xsect_coll.get_uid_origin(uid=section_uid),
-                dtype=float,
-            ).reshape(3)
-            strike = np.asarray(
-                xsect_coll.get_uid_strike_vect(section_uid=section_uid),
-                dtype=float,
-            ).reshape(3)
-            dip = np.asarray(
-                xsect_coll.get_uid_dip_vect(section_uid=section_uid),
-                dtype=float,
-            ).reshape(3)
-            normal = np.asarray(
-                xsect_coll.get_uid_normal_vect(section_uid=section_uid),
-                dtype=float,
-            ).reshape(3)
-            guide = np.asarray(section_seed_point, dtype=float).reshape(3)
-            calculated = np.asarray(calculated_seed, dtype=float).reshape(3)
-        except (AttributeError, TypeError, ValueError):
-            return np.empty((0, 3), dtype=float)
-        if not all(
-            np.all(np.isfinite(vector))
-            for vector in (origin, strike, dip, normal, guide, calculated)
-        ):
-            return np.empty((0, 3), dtype=float)
-        strike_norm = float(np.linalg.norm(strike))
-        dip_norm = float(np.linalg.norm(dip))
-        normal_norm = float(np.linalg.norm(normal))
-        if min(strike_norm, dip_norm, normal_norm) <= 1e-12:
-            return np.empty((0, 3), dtype=float)
-        strike = strike / strike_norm
-        dip = dip / dip_norm
-        normal = normal / normal_norm
-
-        guide_offset = guide - origin
-        section_u = float(np.dot(guide_offset, strike))
-        section_v = float(np.dot(guide_offset, dip))
-        plane_point = origin + section_u * strike + section_v * dip
-        calculated_w = float(np.dot(calculated - origin, normal))
-
-        bounds_min, bounds_max = bounds
-        w_min = -float("inf")
-        w_max = float("inf")
-        for axis_idx in range(3):
-            component = float(normal[axis_idx])
-            if abs(component) <= 1e-12:
-                if (
-                    plane_point[axis_idx] < bounds_min[axis_idx] - 1e-8
-                    or plane_point[axis_idx] > bounds_max[axis_idx] + 1e-8
-                ):
-                    return np.empty((0, 3), dtype=float)
-                continue
-            axis_values = sorted(
-                (
-                    float((bounds_min[axis_idx] - plane_point[axis_idx]) / component),
-                    float((bounds_max[axis_idx] - plane_point[axis_idx]) / component),
-                )
-            )
-            w_min = max(w_min, axis_values[0])
-            w_max = min(w_max, axis_values[1])
-        if not np.isfinite(w_min) or not np.isfinite(w_max) or w_min > w_max:
-            return np.empty((0, 3), dtype=float)
-
-        diagonal = max(float(np.linalg.norm(bounds_max - bounds_min)), 1e-9)
-        margin = min(diagonal * 1e-5, max((w_max - w_min) * 0.01, 0.0))
-        inner_min = w_min + margin
-        inner_max = w_max - margin
-        if inner_min > inner_max:
-            inner_min, inner_max = w_min, w_max
-        normal_values = list(np.linspace(inner_min, inner_max, 33))
-        normal_values.append(float(np.clip(calculated_w, inner_min, inner_max)))
-        if inner_min <= 0.0 <= inner_max:
-            normal_values.append(0.0)
-        span = max(inner_max - inner_min, 0.0)
-        for fraction in (-0.1, -0.05, -0.02, 0.02, 0.05, 0.1):
-            normal_values.append(
-                float(
-                    np.clip(
-                        calculated_w + span * fraction,
-                        inner_min,
-                        inner_max,
-                    )
-                )
-            )
-
-        points = np.asarray(
-            [plane_point + value * normal for value in normal_values],
-            dtype=float,
-        )
-        rounded = np.round(points, decimals=8)
-        _, unique_indices = np.unique(rounded, axis=0, return_index=True)
-        return points[np.sort(unique_indices)]
-
-    def _psc_section_guided_seed_point_for_unit(
-        self,
-        unit_info: Dict[str, Any],
-        psc_model: Dict[str, Any],
-        calculated_seed: Optional[List[float]],
-        require_side_match: bool = False,
-    ) -> Optional[List[float]]:
-        """Refine a calculated seed along a matched section point's normal line."""
-        if calculated_seed is None:
-            return None
-        guides = list(unit_info.get("section_seed_guides", []) or [])
-        if not guides:
-            return list(calculated_seed)
-
-        trials = []
-        for guide in guides:
-            candidate_points = self._psc_section_normal_candidate_points(
-                self._psc_text(guide.get("section_uid", "")),
-                guide.get("seed_point", []),
-                calculated_seed,
-            )
-            if candidate_points.shape[0] == 0:
-                continue
-            trial_info = dict(unit_info)
-            trial_info.pop("seed_topology_signature", None)
-            refined_seed = self._psc_refine_seed_by_topology_signature(
-                trial_info,
-                psc_model,
-                np.asarray(calculated_seed, dtype=float),
-                require_side_match=require_side_match,
-                candidate_points_override=candidate_points,
-            )
-            signature = dict(
-                trial_info.get("seed_topology_signature", {}) or {}
-            )
-            if not signature:
-                continue
-            refined_seed = np.asarray(refined_seed, dtype=float).reshape(3)
-            if not np.all(np.isfinite(refined_seed)):
-                continue
-            quality = (
-                0 if signature.get("exact") else 1,
-                int(signature.get("missing_count", 0)),
-                int(signature.get("extra_count", 0)),
-                int(signature.get("side_mismatches", 0)),
-                -int(signature.get("observed_count", 0)),
-                -float(signature.get("score", -float("inf"))),
-                str(guide.get("source_uid", "")).casefold(),
-            )
-            trials.append((quality, refined_seed, signature, dict(guide)))
-
-        if not trials:
-            return list(calculated_seed)
-        _, refined_seed, signature, guide = min(trials, key=lambda item: item[0])
-        signature["section_guided"] = True
-        signature["section_uid"] = self._psc_text(guide.get("section_uid", ""))
-        signature["section_seed_uid"] = str(guide.get("source_uid", ""))
-        signature["section_seed_point"] = list(guide.get("seed_point", []) or [])
-        unit_info["seed_topology_signature"] = signature
-        unit_info["section_seed_guided"] = True
-        unit_info["section_seed_guide"] = guide
-        return [float(value) for value in refined_seed]
-
     def _psc_seed_point_for_unit(
         self,
         unit_info: Dict[str, Any],
@@ -4080,11 +4668,6 @@ class PiecewiseStructuralComplex:
             )
 
         global_seed = self._psc_seed_point_for_unit(unit_info, psc_model)
-        global_seed = self._psc_section_guided_seed_point_for_unit(
-            unit_info,
-            psc_model,
-            global_seed,
-        )
         add_candidate(
             global_seed,
             unit_info.get("seed_topology_signature", {}) or {},
@@ -4103,12 +4686,6 @@ class PiecewiseStructuralComplex:
                 psc_model,
                 require_side_match=True,
             )
-            local_seed = self._psc_section_guided_seed_point_for_unit(
-                local_info,
-                psc_model,
-                local_seed,
-                require_side_match=True,
-            )
             add_candidate(
                 local_seed,
                 local_info.get("seed_topology_signature", {}) or {},
@@ -4119,17 +4696,6 @@ class PiecewiseStructuralComplex:
         # Prefer the best topology realization when global and local searches
         # converge to the same physical point.  Distinct valid local components
         # remain separate seeds and will pass through repeat-adjacency checks.
-        # When a section guide exists, its U/V location is authoritative: do
-        # not retain an unguided local fallback or create a second seed for the
-        # same mapped formation volume.
-        if unit_info.get("section_seed_guides"):
-            guided_candidates = [
-                candidate
-                for candidate in seed_candidates
-                if candidate["signature"].get("section_guided", False)
-            ]
-            if guided_candidates:
-                seed_candidates = guided_candidates
         seed_candidates.sort(
             key=lambda candidate: (
                 0 if candidate["signature"].get("exact") else 1,
@@ -4153,8 +4719,6 @@ class PiecewiseStructuralComplex:
             ):
                 continue
             selected_candidates.append(candidate)
-        if unit_info.get("section_seed_guides") and selected_candidates:
-            selected_candidates = selected_candidates[:1]
 
         seed_points = [
             list(candidate["seed_point"]) for candidate in selected_candidates
@@ -4191,27 +4755,31 @@ class PiecewiseStructuralComplex:
         assigned_materials = []
         skipped_count = 0
         mapped_units = list(psc_mapping.get("units", []))
-        self._psc_attach_section_seed_guides(mapped_units)
         self._psc_side_context = self._psc_prepare_topology_side_context(
             psc_model,
             mapped_units,
         )
 
-        for unit_info in mapped_units:
-            seed_points = self._psc_seed_points_for_unit(
-                unit_info,
-                psc_model,
-                mapped_units,
-                max_missing_boundaries=max_missing_boundaries,
-            )
-            unit_info["seed_points"] = seed_points
-            unit_info["seed_point"] = seed_points[0] if seed_points else None
-
-        assignment_payloads = self._psc_classify_seed_assignments(
+        assignment_payloads = self._psc_assign_volumetric_regions(
             mapped_units,
             psc_model,
             max_missing_boundaries=max_missing_boundaries,
         )
+        if assignment_payloads is None:
+            for unit_info in mapped_units:
+                seed_points = self._psc_seed_points_for_unit(
+                    unit_info,
+                    psc_model,
+                    mapped_units,
+                    max_missing_boundaries=max_missing_boundaries,
+                )
+                unit_info["seed_points"] = seed_points
+                unit_info["seed_point"] = seed_points[0] if seed_points else None
+            assignment_payloads = self._psc_classify_seed_assignments(
+                mapped_units,
+                psc_model,
+                max_missing_boundaries=max_missing_boundaries,
+            )
         assignment_counts = {}
         for payload in assignment_payloads:
             status = str(payload.get("status", "UNASSIGNED"))
@@ -4243,16 +4811,6 @@ class PiecewiseStructuralComplex:
                     "psc_virtual_unit": bool(unit_info.get("psc_virtual_unit", False)),
                     "psc_virtual_source": unit_info.get("psc_virtual_source", ""),
                     "psc_seed_count": len(seed_points),
-                    "psc_section_guided": any(
-                        bool(
-                            (entry.get("signature", {}) or {}).get(
-                                "section_guided", False
-                            )
-                        )
-                        for entry in unit_info.get(
-                            "seed_topology_signatures", []
-                        ) or []
-                    ),
                     "psc_assignment_status": unit_info.get(
                         "psc_assignment_status", "UNASSIGNED"
                     ),
