@@ -1964,6 +1964,10 @@ class MeshItWorkflowGUI(QWidget):
         self.border_extension_factor = 0.2  # Extension factor for boundary faces from PZero (20% default)
         self.vertical_exaggeration = 1.0
         self.show_surface_labels = False
+        self.load_points_point_size = 8.0
+        self.load_points_line_width = 3.0
+        self.intersection_export_line_width = 4.0
+        self.intersection_export_point_size = 8.0
         
         self.plotters = {}
         self._updating_coordinates = False  # Flag to prevent recursive updates during coordinate editing
@@ -4413,6 +4417,37 @@ class MeshItWorkflowGUI(QWidget):
         )
         file_layout.addWidget(self.show_surface_labels_checkbox)
 
+        load_style_group = QGroupBox("Load View Appearance")
+        load_style_form = QFormLayout(load_style_group)
+
+        self.load_points_point_size_input = QDoubleSpinBox()
+        self.load_points_point_size_input.setRange(0.0, 80.0)
+        self.load_points_point_size_input.setSingleStep(1.0)
+        self.load_points_point_size_input.setDecimals(1)
+        self.load_points_point_size_input.setValue(self.load_points_point_size)
+        self.load_points_point_size_input.setToolTip(
+            "Marker size for point datasets in the Load Data view. Set to 0 to hide points."
+        )
+        self.load_points_point_size_input.valueChanged.connect(
+            self._on_load_points_style_changed
+        )
+        load_style_form.addRow("Point size:", self.load_points_point_size_input)
+
+        self.load_points_line_width_input = QDoubleSpinBox()
+        self.load_points_line_width_input.setRange(0.0, 40.0)
+        self.load_points_line_width_input.setSingleStep(0.5)
+        self.load_points_line_width_input.setDecimals(1)
+        self.load_points_line_width_input.setValue(self.load_points_line_width)
+        self.load_points_line_width_input.setToolTip(
+            "Line width for line-like datasets such as PZero PolyLines in the Load Data view. Set to 0 to hide lines."
+        )
+        self.load_points_line_width_input.valueChanged.connect(
+            self._on_load_points_style_changed
+        )
+        load_style_form.addRow("Line width:", self.load_points_line_width_input)
+
+        file_layout.addWidget(load_style_group)
+
         control_layout.addWidget(file_group)
         
         # -- Unified Dataset Table (accepts drag-drop from PZero) --
@@ -4474,6 +4509,33 @@ class MeshItWorkflowGUI(QWidget):
         stats_layout.addWidget(self.bounds_label)
         
         control_layout.addWidget(stats_group)
+
+        self.points_export_figure_btn = QPushButton("Export Figure")
+        self.points_export_figure_btn.clicked.connect(
+            lambda: self._show_generic_figure_export_dialog('points')
+        )
+        self.points_export_figure_btn.setEnabled(False)
+        self.points_export_figure_btn.setToolTip(
+            "Export high-resolution figure of the loaded point and polyline visualization"
+        )
+        self.points_export_figure_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1565C0;
+                color: white;
+                font-weight: bold;
+                padding: 6px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        control_layout.addWidget(self.points_export_figure_btn)
         control_layout.addStretch()
         
         # --- Visualization Area (right side) ---
@@ -5319,6 +5381,28 @@ class MeshItWorkflowGUI(QWidget):
         self.show_conforming_meshes_checkbox.setChecked(True)
         self.show_conforming_meshes_checkbox.toggled.connect(self._update_refined_visualization)
         ag.addWidget(self.show_conforming_meshes_checkbox)
+
+        self.refine_export_figure_btn = QPushButton("Export Figure")
+        self.refine_export_figure_btn.clicked.connect(
+            lambda: self._show_generic_figure_export_dialog('refine_mesh')
+        )
+        self.refine_export_figure_btn.setToolTip(
+            "Export one figure containing the Intersections, Meshes, and Segments refine views."
+        )
+        self.refine_export_figure_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1565C0;
+                color: white;
+                font-weight: bold;
+                padding: 6px;
+                border: none;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+        """)
+        ag.addWidget(self.refine_export_figure_btn)
 
         # Mesh settings (compact form)
         mesh_settings_group = QGroupBox("Global Mesh Settings")
@@ -15760,6 +15844,8 @@ segmentation, triangulation, and visualization.
         if hasattr(self, 'points_plotter'):
             self._safe_close_plotter(self.points_plotter, 'points')
             self.points_plotter = None
+        if hasattr(self, 'points_export_figure_btn'):
+            self.points_export_figure_btn.setEnabled(False)
         
         # Clear points visualization
         while self.file_viz_layout.count():
@@ -15777,6 +15863,20 @@ segmentation, triangulation, and visualization.
         self.file_viz_placeholder = QLabel(placeholder_text)
         self.file_viz_placeholder.setAlignment(Qt.AlignCenter)
         self.file_viz_layout.addWidget(self.file_viz_placeholder)
+
+    def _on_load_points_style_changed(self, value=None):
+        """Update point/line sizes for the Load Data visualization."""
+        try:
+            self.load_points_point_size = float(self.load_points_point_size_input.value())
+        except Exception:
+            self.load_points_point_size = 8.0
+        try:
+            self.load_points_line_width = float(self.load_points_line_width_input.value())
+        except Exception:
+            self.load_points_line_width = 3.0
+
+        if getattr(self, "datasets", None):
+            self._visualize_all_points()
     
     def _should_skip_segmentation_visualization(self, current_tab):
         """
@@ -15934,6 +16034,8 @@ segmentation, triangulation, and visualization.
         self._create_multi_dataset_3d_visualization(
             self.file_viz_frame, visible_datasets, "Points Visualization", view_type="points"
         )
+        if hasattr(self, 'points_export_figure_btn'):
+            self.points_export_figure_btn.setEnabled(True)
     def _visualize_all_hulls(self):
         """Visualize all visible hulls"""
         # Get datasets with hulls
@@ -17467,6 +17569,47 @@ segmentation, triangulation, and visualization.
         except Exception as e:
             logger.warning(f"Plotter {view_type}: Unexpected error during close: {e}")
 
+    def _coerce_points_to_3d(self, points) -> Optional[np.ndarray]:
+        """Return an Nx3 float array for 2D/3D point input."""
+        if points is None:
+            return None
+        try:
+            pts = np.asarray(points, dtype=float)
+        except Exception:
+            return None
+        if pts.ndim != 2 or pts.shape[0] == 0:
+            return None
+        if pts.shape[1] >= 3:
+            return pts[:, :3].copy()
+        pts_3d = np.zeros((len(pts), 3), dtype=float)
+        pts_3d[:, : pts.shape[1]] = pts
+        return pts_3d
+
+    def _dataset_draws_as_load_line(self, dataset: dict) -> bool:
+        """Return True when a loaded dataset should be connected by a line path."""
+        dataset_type = str(dataset.get("type", "") or "").casefold()
+        source_topology = str(dataset.get("source_topology", "") or "").casefold()
+        collection_key = str(dataset.get("collection_key", "") or "").casefold()
+        collection = str(dataset.get("collection", "") or "").casefold()
+        return (
+            dataset_type == "well"
+            or source_topology in {"polyline", "xspolyline"}
+            or collection_key == "well_coll"
+            or collection == "wells"
+        )
+
+    def _make_load_polyline_mesh(self, points_3d: np.ndarray):
+        """Create a PyVista polyline mesh from ordered points."""
+        if points_3d is None or len(points_3d) < 2:
+            return None
+        import pyvista as pv
+
+        line_cells = np.array(
+            [[2, idx, idx + 1] for idx in range(len(points_3d) - 1)],
+            dtype=np.int32,
+        ).ravel()
+        return pv.PolyData(points_3d, lines=line_cells)
+
     def _create_multi_dataset_3d_visualization(self, parent_frame, datasets, title, view_type="points"):
         """Create a 3D visualization of multiple datasets with proper coordinate validation."""
 
@@ -17511,11 +17654,9 @@ segmentation, triangulation, and visualization.
             if points is None or len(points) == 0:
                 continue
 
-            if points.shape[1] >= 3:
-                points_3d = points[:, 0:3].copy()
-            else:
-                points_3d = np.zeros((len(points), 3))
-                points_3d[:, :points.shape[1]] = points
+            points_3d = self._coerce_points_to_3d(points)
+            if points_3d is None:
+                continue
 
             max_points_for_viz = 5000
             if len(points_3d) > max_points_for_viz:
@@ -17525,9 +17666,31 @@ segmentation, triangulation, and visualization.
                 points_3d_viz = points_3d
 
             if view_type == "points":
-                point_cloud = pv.PolyData(points_3d_viz)
-                plotter.add_mesh(point_cloud, color=color, render_points_as_spheres=True, point_size=8, label=name)
-                plotter_has_geometry = True
+                point_size = float(getattr(self, "load_points_point_size", 8.0))
+                line_width = float(getattr(self, "load_points_line_width", 3.0))
+
+                if point_size > 0.0:
+                    point_cloud = pv.PolyData(points_3d_viz)
+                    plotter.add_mesh(
+                        point_cloud,
+                        color=color,
+                        render_points_as_spheres=True,
+                        point_size=point_size,
+                        label=name,
+                    )
+                    plotter_has_geometry = True
+
+                if line_width > 0.0 and self._dataset_draws_as_load_line(dataset):
+                    line_mesh = self._make_load_polyline_mesh(points_3d)
+                    if line_mesh is not None:
+                        plotter.add_mesh(
+                            line_mesh,
+                            color=color,
+                            line_width=line_width,
+                            render_lines_as_tubes=True,
+                            label=f"{name} Line",
+                        )
+                        plotter_has_geometry = True
             
             elif view_type == "hulls":
                 hull_points = dataset.get('hull_points')
@@ -23136,7 +23299,7 @@ segmentation, triangulation, and visualization.
         """Show dialog for exporting high-quality figures from any tab.
         
         Args:
-            view_type: The type of view to export ('hulls', 'segments', 'triangulation', 'intersection')
+            view_type: The type of view to export ('points', 'hulls', 'segments', 'triangulation', 'intersection', 'refine_mesh')
         """
         # Get the appropriate plotter for this view type
         plotter = self._get_plotter_for_view(view_type)
@@ -23153,18 +23316,30 @@ segmentation, triangulation, and visualization.
             
             # Capture the current camera position before opening dialog
             self._generic_captured_camera = None
+            self._generic_captured_refine_cameras = {}
             try:
                 self._generic_captured_camera = plotter.camera_position
                 logger.info(f"Captured {view_type} plotter camera position for export")
             except Exception as e:
                 logger.warning(f"Could not capture camera position: {e}")
+            if view_type == "refine_mesh":
+                for attr_name in ("intersections_plotter", "meshes_plotter", "segments_plotter"):
+                    refine_plotter = getattr(self, attr_name, None)
+                    if refine_plotter is None:
+                        continue
+                    try:
+                        self._generic_captured_refine_cameras[attr_name] = refine_plotter.camera_position
+                    except Exception:
+                        pass
             
             dialog = QDialog(self)
             view_names = {
+                'points': 'Load Points',
                 'hulls': 'Convex Hull',
                 'segments': 'Segmentation', 
                 'triangulation': 'Triangulation',
-                'intersection': 'Intersection'
+                'intersection': 'Intersection',
+                'refine_mesh': 'Refine & Mesh'
             }
             dialog.setWindowTitle(f"Export {view_names.get(view_type, view_type)} Figure")
             dialog.setMinimumSize(500, 550)
@@ -23292,6 +23467,66 @@ segmentation, triangulation, and visualization.
                 hull_style_form.addRow("Source point size:", self.generic_hull_source_point_size)
 
                 main_layout.addWidget(hull_style_group)
+
+            if view_type == 'points':
+                points_style_group = QGroupBox("Load Points Appearance")
+                points_style_form = QFormLayout(points_style_group)
+
+                self.generic_points_point_size = QDoubleSpinBox()
+                self.generic_points_point_size.setRange(0.0, 80.0)
+                self.generic_points_point_size.setSingleStep(1.0)
+                self.generic_points_point_size.setDecimals(1)
+                self.generic_points_point_size.setValue(
+                    float(getattr(self, "load_points_point_size", 8.0))
+                )
+                self.generic_points_point_size.setToolTip(
+                    "Marker size for loaded point datasets in the exported figure. Set to 0 to hide points."
+                )
+                points_style_form.addRow("Point size:", self.generic_points_point_size)
+
+                self.generic_points_line_width = QDoubleSpinBox()
+                self.generic_points_line_width.setRange(0.0, 40.0)
+                self.generic_points_line_width.setSingleStep(0.5)
+                self.generic_points_line_width.setDecimals(1)
+                self.generic_points_line_width.setValue(
+                    float(getattr(self, "load_points_line_width", 3.0))
+                )
+                self.generic_points_line_width.setToolTip(
+                    "Line width for line-like datasets such as PZero PolyLines. Set to 0 to hide lines."
+                )
+                points_style_form.addRow("Line width:", self.generic_points_line_width)
+
+                main_layout.addWidget(points_style_group)
+
+            if view_type == 'intersection':
+                intersection_style_group = QGroupBox("Intersection Appearance")
+                intersection_style_form = QFormLayout(intersection_style_group)
+
+                self.generic_intersection_line_width = QDoubleSpinBox()
+                self.generic_intersection_line_width.setRange(0.5, 40.0)
+                self.generic_intersection_line_width.setSingleStep(0.5)
+                self.generic_intersection_line_width.setDecimals(1)
+                self.generic_intersection_line_width.setValue(
+                    float(getattr(self, "intersection_export_line_width", 4.0))
+                )
+                self.generic_intersection_line_width.setToolTip(
+                    "Line width for intersection lines in the exported figure."
+                )
+                intersection_style_form.addRow("Line width:", self.generic_intersection_line_width)
+
+                self.generic_intersection_point_size = QDoubleSpinBox()
+                self.generic_intersection_point_size.setRange(0.0, 80.0)
+                self.generic_intersection_point_size.setSingleStep(1.0)
+                self.generic_intersection_point_size.setDecimals(1)
+                self.generic_intersection_point_size.setValue(
+                    float(getattr(self, "intersection_export_point_size", 8.0))
+                )
+                self.generic_intersection_point_size.setToolTip(
+                    "Marker size for triple/intersection points. Set to 0 to hide points."
+                )
+                intersection_style_form.addRow("Point size:", self.generic_intersection_point_size)
+
+                main_layout.addWidget(intersection_style_group)
             
             # === Quality Settings ===
             quality_group = QGroupBox("Quality Settings")
@@ -23356,16 +23591,18 @@ segmentation, triangulation, and visualization.
         """Get the appropriate plotter for a given view type.
         
         Args:
-            view_type: The type of view ('hulls', 'segments', 'triangulation', 'intersection')
+            view_type: The type of view ('points', 'hulls', 'segments', 'triangulation', 'intersection', 'refine_mesh')
             
         Returns:
             The plotter object or None if not available.
         """
         plotter_map = {
+            'points': 'points_plotter',
             'hulls': 'hulls_plotter',
             'segments': 'segments_plotter',
             'triangulation': 'triangulation_plotter',
             'intersection': 'intersection_plotter',
+            'refine_mesh': 'intersections_plotter',
         }
         
         plotter_attr = plotter_map.get(view_type)
@@ -23394,7 +23631,10 @@ segmentation, triangulation, and visualization.
             import numpy as np
             
             # Create an offscreen plotter for preview
-            plotter = pv.Plotter(off_screen=True, window_size=[800, 600])
+            if view_type == "refine_mesh":
+                plotter = pv.Plotter(off_screen=True, window_size=[1200, 500], shape=(1, 3))
+            else:
+                plotter = pv.Plotter(off_screen=True, window_size=[800, 600])
             self._setup_generic_plotter(plotter, view_type)
             
             # Take screenshot and show in a popup
@@ -23448,10 +23688,12 @@ segmentation, triangulation, and visualization.
         ext, filter_str = format_map.get(format_text, ("png", "PNG files (*.png)"))
         
         view_names = {
+            'points': 'load_points',
             'hulls': 'convex_hull',
             'segments': 'segmentation', 
             'triangulation': 'triangulation',
-            'intersection': 'intersection'
+            'intersection': 'intersection',
+            'refine_mesh': 'refine_mesh'
         }
         default_name = f"{view_names.get(view_type, view_type)}_figure.{ext}"
         
@@ -23472,10 +23714,13 @@ segmentation, triangulation, and visualization.
             width = self.generic_fig_width.value()
             height = self.generic_fig_height.value()
             
-            plotter = pv.Plotter(
-                off_screen=True,
-                window_size=[width, height],
-            )
+            plotter_kwargs = {
+                "off_screen": True,
+                "window_size": [width, height],
+            }
+            if view_type == "refine_mesh":
+                plotter_kwargs["shape"] = (1, 3)
+            plotter = pv.Plotter(**plotter_kwargs)
             
             # Anti-aliasing
             if self.generic_fig_anti_alias.isChecked():
@@ -23549,8 +23794,16 @@ segmentation, triangulation, and visualization.
         text_color = 'white' if is_dark_bg else 'black'
         copied_source_actors = False
 
-        if view_type == "hulls":
+        if view_type == "refine_mesh":
+            self._setup_refine_mesh_export_plotter(plotter, text_color=text_color)
+            return
+
+        if view_type == "points":
+            copied_source_actors = self._add_points_export_geometry_to_plotter(plotter)
+        elif view_type == "hulls":
             copied_source_actors = self._add_hull_export_geometry_to_plotter(plotter)
+        elif view_type == "intersection":
+            copied_source_actors = self._add_intersection_export_geometry_to_plotter(plotter)
         
         # Copy actors from source plotter to export plotter
         try:
@@ -23590,6 +23843,8 @@ segmentation, triangulation, and visualization.
                         continue
         except Exception as e:
             logger.warning(f"Error copying actors from source plotter: {e}")
+
+        self._apply_vertical_exaggeration_to_plotter(plotter)
         
         # Camera view
         view_preset = self.generic_fig_view.currentText()
@@ -23630,6 +23885,663 @@ segmentation, triangulation, and visualization.
                 font_size=self.generic_fig_font_size.value() + 4,
                 color=text_color,
             )
+
+    def _add_points_export_geometry_to_plotter(self, plotter) -> bool:
+        """Add loaded point/polyline geometry using export-specific sizes."""
+        import pyvista as pv
+
+        try:
+            point_size = float(self.generic_points_point_size.value())
+        except Exception:
+            point_size = float(getattr(self, "load_points_point_size", 8.0))
+        try:
+            line_width = float(self.generic_points_line_width.value())
+        except Exception:
+            line_width = float(getattr(self, "load_points_line_width", 3.0))
+
+        visible_datasets = [
+            dataset
+            for dataset in getattr(self, "datasets", [])
+            if dataset.get("visible", True) and dataset.get("points") is not None
+        ]
+        if not visible_datasets:
+            return False
+
+        max_points_for_viz = 5000
+        plotter_has_geometry = False
+        for dataset in visible_datasets:
+            points_3d = self._coerce_points_to_3d(dataset.get("points"))
+            if points_3d is None:
+                continue
+
+            color = dataset.get("color", "#000000")
+            name = dataset.get("name", "Unnamed")
+
+            if point_size > 0.0:
+                points_3d_viz = points_3d
+                if len(points_3d_viz) > max_points_for_viz:
+                    step = max(1, len(points_3d_viz) // max_points_for_viz)
+                    points_3d_viz = points_3d_viz[::step]
+
+                point_cloud = pv.PolyData(points_3d_viz)
+                plotter.add_mesh(
+                    point_cloud,
+                    color=color,
+                    render_points_as_spheres=True,
+                    point_size=point_size,
+                    label=name,
+                )
+                plotter_has_geometry = True
+
+            if line_width > 0.0 and self._dataset_draws_as_load_line(dataset):
+                line_mesh = self._make_load_polyline_mesh(points_3d)
+                if line_mesh is not None:
+                    plotter.add_mesh(
+                        line_mesh,
+                        color=color,
+                        line_width=line_width,
+                        render_lines_as_tubes=True,
+                        label=f"{name} Line",
+                    )
+                    plotter_has_geometry = True
+
+        if plotter_has_geometry:
+            self._add_dataset_labels_to_plotter(
+                plotter,
+                visible_datasets,
+                view_type="points",
+                name="points_export_surface_labels",
+            )
+            try:
+                plotter.add_legend()
+            except Exception:
+                pass
+
+        return plotter_has_geometry
+
+    def _point_like_to_xyz(self, point) -> Optional[List[float]]:
+        """Convert a point-like object/list/row to [x, y, z]."""
+        try:
+            if hasattr(point, "x") and hasattr(point, "y") and hasattr(point, "z"):
+                xyz = [float(point.x), float(point.y), float(point.z)]
+            else:
+                if hasattr(point, "tolist"):
+                    point = point.tolist()
+                if isinstance(point, np.ndarray):
+                    point = point.flatten().tolist()
+                if not isinstance(point, (list, tuple)) or len(point) < 2:
+                    return None
+                xyz = [float(point[0]), float(point[1]), float(point[2]) if len(point) > 2 else 0.0]
+            return xyz if all(np.isfinite(value) for value in xyz) else None
+        except Exception:
+            return None
+
+    def _point_sequence_to_xyz_array(self, points) -> Optional[np.ndarray]:
+        """Convert a sequence of point-like values to an Nx3 float array."""
+        if points is None:
+            return None
+        xyz_points = []
+        try:
+            iterator = list(points)
+        except Exception:
+            iterator = [points]
+        for point in iterator:
+            xyz = self._point_like_to_xyz(point)
+            if xyz is not None:
+                xyz_points.append(xyz)
+        if len(xyz_points) == 0:
+            return None
+        return np.asarray(xyz_points, dtype=float)
+
+    def _make_polyline_mesh_from_xyz(self, points_3d: np.ndarray):
+        """Create a single polyline cell from an ordered Nx3 point array."""
+        if points_3d is None or len(points_3d) < 2:
+            return None
+        import pyvista as pv
+
+        poly = pv.PolyData(points_3d)
+        poly.lines = np.hstack([[len(points_3d)], np.arange(len(points_3d))]).astype(np.int64)
+        return poly
+
+    def _get_generic_intersection_style(self) -> Tuple[float, float]:
+        """Return intersection export line width and point size."""
+        try:
+            line_width = float(self.generic_intersection_line_width.value())
+        except Exception:
+            line_width = float(getattr(self, "intersection_export_line_width", 4.0))
+        try:
+            point_size = float(self.generic_intersection_point_size.value())
+        except Exception:
+            point_size = float(getattr(self, "intersection_export_point_size", 8.0))
+        self.intersection_export_line_width = line_width
+        self.intersection_export_point_size = point_size
+        return line_width, point_size
+
+    def _add_dataset_triangulation_meshes_to_plotter(
+        self,
+        plotter,
+        dataset_indices=None,
+        opacity: float = 0.7,
+        show_edges: bool = True,
+        edge_color="black",
+        line_width: float = 1.0,
+    ) -> Tuple[bool, List[dict]]:
+        """Add triangulated dataset surfaces and return (has_geometry, label_datasets)."""
+        import pyvista as pv
+
+        if dataset_indices is None:
+            dataset_indices = range(len(getattr(self, "datasets", [])))
+
+        label_datasets = []
+        plotter_has_geometry = False
+        for index in dataset_indices:
+            if not (0 <= int(index) < len(self.datasets)):
+                continue
+            dataset = self.datasets[int(index)]
+            tri_result = dataset.get("triangulation_result")
+            if not tri_result:
+                continue
+
+            vertices = tri_result.get("vertices")
+            triangles = tri_result.get("triangles")
+            if vertices is None or triangles is None or len(vertices) == 0 or len(triangles) == 0:
+                continue
+
+            try:
+                vertices_3d = self._coerce_points_to_3d(vertices)
+                triangles = np.asarray(triangles)
+                if vertices_3d is None or triangles.ndim != 2 or triangles.shape[1] < 3:
+                    continue
+                cells = np.hstack([
+                    np.full((len(triangles), 1), 3, dtype=triangles.dtype),
+                    triangles[:, :3],
+                ])
+                surface_mesh = pv.PolyData(vertices_3d, faces=cells)
+                plotter.add_mesh(
+                    surface_mesh,
+                    color=dataset.get("color", "#CCCCCC"),
+                    opacity=opacity,
+                    show_edges=show_edges,
+                    edge_color=edge_color,
+                    line_width=line_width,
+                    label=dataset.get("name", f"Dataset {index + 1}"),
+                )
+                label_datasets.append(dataset)
+                plotter_has_geometry = True
+            except Exception as exc:
+                logger.debug("Could not add triangulated surface %s to export: %s", index, exc)
+
+        return plotter_has_geometry, label_datasets
+
+    def _collect_intersection_export_data(self):
+        """Collect involved datasets, intersection line arrays, and triple-point arrays."""
+        involved_dataset_indices = set()
+        intersection_lines = []
+
+        for dataset_index, intersections in getattr(self, "datasets_intersections", {}).items():
+            involved_dataset_indices.add(dataset_index)
+            for intersection in intersections or []:
+                involved_dataset_indices.add(intersection.get("dataset_id1", -1))
+                involved_dataset_indices.add(intersection.get("dataset_id2", -1))
+                line_points = self._point_sequence_to_xyz_array(intersection.get("points"))
+                if line_points is not None and len(line_points) >= 2:
+                    intersection_lines.append(line_points)
+
+        triple_points = []
+        for triple_point in getattr(self, "triple_points", []) or []:
+            point = triple_point.get("point", triple_point.get("coord")) if isinstance(triple_point, dict) else triple_point
+            xyz = self._point_like_to_xyz(point)
+            if xyz is not None:
+                triple_points.append(xyz)
+
+        triple_points_array = np.asarray(triple_points, dtype=float) if triple_points else None
+        valid_indices = []
+        for idx in involved_dataset_indices:
+            try:
+                idx = int(idx)
+            except Exception:
+                continue
+            if idx >= 0:
+                valid_indices.append(idx)
+        valid_indices = sorted(set(valid_indices))
+        return valid_indices, intersection_lines, triple_points_array
+
+    def _add_intersection_export_geometry_to_plotter(self, plotter) -> bool:
+        """Add intersection geometry using export-specific line and point sizes."""
+        import pyvista as pv
+
+        line_width, point_size = self._get_generic_intersection_style()
+        involved_dataset_indices, intersection_lines, triple_points = self._collect_intersection_export_data()
+
+        plotter_has_geometry, label_datasets = self._add_dataset_triangulation_meshes_to_plotter(
+            plotter,
+            dataset_indices=involved_dataset_indices,
+            opacity=0.7,
+            show_edges=True,
+            edge_color="black",
+            line_width=1.0,
+        )
+
+        if line_width > 0.0 and intersection_lines:
+            all_points = []
+            all_lines = []
+            cursor = 0
+            for line_points in intersection_lines:
+                if len(line_points) < 2:
+                    continue
+                all_points.extend(line_points.tolist())
+                all_lines.extend([len(line_points), *range(cursor, cursor + len(line_points))])
+                cursor += len(line_points)
+
+            if all_points and all_lines:
+                lines_polydata = pv.PolyData(np.asarray(all_points, dtype=float))
+                lines_polydata.lines = np.asarray(all_lines, dtype=np.int64)
+                plotter.add_mesh(
+                    lines_polydata,
+                    color="red",
+                    line_width=line_width,
+                    render_lines_as_tubes=False,
+                    label="Intersection Lines",
+                )
+                plotter_has_geometry = True
+
+        if point_size > 0.0 and triple_points is not None and len(triple_points) > 0:
+            plotter.add_points(
+                pv.PolyData(triple_points),
+                color="black",
+                point_size=point_size,
+                render_points_as_spheres=True,
+                label="Triple Points",
+            )
+            plotter_has_geometry = True
+
+        self._add_wells_polyline_to_plotter(plotter)
+
+        if plotter_has_geometry:
+            self._add_dataset_labels_to_plotter(
+                plotter,
+                label_datasets,
+                view_type="triangulation",
+                name="intersection_export_surface_labels",
+            )
+            try:
+                plotter.add_legend(bcolor=None, face="circle", border=False, size=(0.15, 0.15))
+            except Exception:
+                pass
+
+        return plotter_has_geometry
+
+    def _apply_generic_camera_view(self, plotter, captured_camera=None) -> None:
+        """Apply the generic export camera preset to the current renderer."""
+        view_preset = self.generic_fig_view.currentText()
+        if view_preset == "Current View":
+            if captured_camera is not None:
+                try:
+                    plotter.camera_position = captured_camera
+                    return
+                except Exception as exc:
+                    logger.debug("Could not apply captured export camera: %s", exc)
+            plotter.view_isometric()
+        elif view_preset == "Isometric":
+            plotter.view_isometric()
+        elif view_preset == "Top (XY)":
+            plotter.view_xy()
+        elif view_preset == "Front (XZ)":
+            plotter.view_xz()
+        elif view_preset == "Side (YZ)":
+            plotter.view_yz()
+        elif view_preset == "Perspective 45Â°":
+            plotter.camera_position = "iso"
+            plotter.camera.elevation = 30
+            plotter.camera.azimuth = 45
+
+    def _set_generic_export_background(self, plotter) -> str:
+        """Set the generic export background for the current renderer and return text color."""
+        bg_choice = self.generic_fig_background.currentText()
+        is_dark_bg = bg_choice in ["Black", "Dark Gray"]
+        if bg_choice == "White":
+            plotter.set_background("white")
+        elif bg_choice == "Black":
+            plotter.set_background("black")
+        elif bg_choice == "Light Gray":
+            plotter.set_background([0.9, 0.9, 0.9])
+        elif bg_choice == "Dark Gray":
+            plotter.set_background([0.2, 0.2, 0.2])
+        elif bg_choice == "Gradient (White-Gray)":
+            plotter.set_background("white", top=[0.85, 0.85, 0.9])
+        else:
+            plotter.set_background("white")
+        return "white" if is_dark_bg else "black"
+
+    def _setup_refine_mesh_export_plotter(self, plotter, text_color: str = "black") -> None:
+        """Populate a 1x3 export plotter with all Refine & Mesh views."""
+        panel_defs = [
+            ("Intersections", self._add_refine_intersections_export_geometry_to_plotter, "intersections_plotter"),
+            ("Meshes", self._add_refine_meshes_export_geometry_to_plotter, "meshes_plotter"),
+            ("Segments", self._add_refine_segments_export_geometry_to_plotter, "segments_plotter"),
+        ]
+
+        captured_cameras = getattr(self, "_generic_captured_refine_cameras", {}) or {}
+
+        for column, (title, draw_func, source_attr) in enumerate(panel_defs):
+            plotter.subplot(0, column)
+            panel_text_color = self._set_generic_export_background(plotter)
+            has_geometry = draw_func(plotter)
+            if not has_geometry:
+                plotter.add_text(f"No {title.lower()} to display.", position="upper_edge", color=panel_text_color)
+
+            plotter.add_text(title, position="upper_left", font_size=12, color=panel_text_color)
+            self._apply_vertical_exaggeration_to_plotter(plotter)
+            self._apply_generic_camera_view(
+                plotter,
+                captured_camera=captured_cameras.get(source_attr),
+            )
+
+            if self.generic_fig_show_axes.isChecked():
+                plotter.add_axes(line_width=2, labels_off=False, color=panel_text_color)
+            if self.generic_fig_show_bounds.isChecked():
+                plotter.add_bounding_box(color=panel_text_color, line_width=1)
+
+        if self.generic_fig_title.text():
+            try:
+                plotter.subplot(0, 1)
+                plotter.add_title(
+                    self.generic_fig_title.text(),
+                    font_size=self.generic_fig_font_size.value() + 4,
+                    color=text_color,
+                )
+            except Exception:
+                pass
+
+    def _add_refine_intersections_export_geometry_to_plotter(self, plotter) -> bool:
+        """Add the refined-intersections panel geometry."""
+        import pyvista as pv
+
+        line_width, point_size = self._get_generic_intersection_style()
+        involved_dataset_indices = set()
+        refined_lines = []
+        original_lines = []
+        constraint_points = []
+
+        for dataset_idx_key, intersections_list in getattr(self, "datasets_intersections", {}).items():
+            involved_dataset_indices.add(dataset_idx_key)
+            for intersection_data in intersections_list or []:
+                involved_dataset_indices.add(intersection_data.get("dataset_id1", -1))
+                involved_dataset_indices.add(intersection_data.get("dataset_id2", -1))
+                line_points = self._point_sequence_to_xyz_array(intersection_data.get("points"))
+                if line_points is not None and len(line_points) >= 2:
+                    refined_lines.append((line_points, bool(intersection_data.get("is_polyline_mesh", False))))
+                    constraint_points.extend(line_points.tolist())
+
+        show_original = bool(
+            getattr(self, "show_original_lines_checkbox", None) is None
+            or self.show_original_lines_checkbox.isChecked()
+        )
+        if show_original:
+            for intersections_list in getattr(self, "original_intersections_backup", {}).values():
+                for intersection_data in intersections_list or []:
+                    line_points = self._point_sequence_to_xyz_array(intersection_data.get("points"))
+                    if line_points is not None and len(line_points) >= 2:
+                        original_lines.append(line_points)
+
+        valid_indices = []
+        for idx in involved_dataset_indices:
+            try:
+                idx = int(idx)
+            except Exception:
+                continue
+            if idx >= 0:
+                valid_indices.append(idx)
+
+        plotter_has_geometry, label_datasets = self._add_dataset_triangulation_meshes_to_plotter(
+            plotter,
+            dataset_indices=sorted(set(valid_indices)),
+            opacity=0.35,
+            show_edges=True,
+            edge_color="black",
+            line_width=0.5,
+        )
+
+        for line_points in original_lines:
+            line_mesh = self._make_polyline_mesh_from_xyz(line_points)
+            if line_mesh is not None:
+                plotter.add_mesh(
+                    line_mesh,
+                    color="gray",
+                    opacity=0.35,
+                    line_width=max(1.0, line_width * 0.5),
+                    render_lines_as_tubes=False,
+                )
+                plotter_has_geometry = True
+
+        for line_points, is_polyline in refined_lines:
+            line_mesh = self._make_polyline_mesh_from_xyz(line_points)
+            if line_mesh is not None:
+                plotter.add_mesh(
+                    line_mesh,
+                    color=[0.1, 0.8, 0.9] if is_polyline else [0.9, 0.5, 0.1],
+                    line_width=line_width,
+                    render_lines_as_tubes=True,
+                    smooth_shading=True,
+                )
+                plotter_has_geometry = True
+
+        if point_size > 0.0 and constraint_points:
+            plotter.add_points(
+                pv.PolyData(np.asarray(constraint_points, dtype=float)),
+                color="red",
+                point_size=point_size,
+                render_points_as_spheres=True,
+            )
+            plotter_has_geometry = True
+
+        well_cb = getattr(self, "show_well_constraints_checkbox", None)
+        if well_cb is None or well_cb.isChecked():
+            self._add_wells_polyline_to_plotter(
+                plotter,
+                well_filter_name=self._current_refine_filter_name(),
+                selected_well_data=self._get_selected_well_viz_data() or None,
+            )
+
+        if plotter_has_geometry:
+            self._add_dataset_labels_to_plotter(
+                plotter,
+                label_datasets,
+                view_type="triangulation",
+                name="refine_intersections_export_labels",
+            )
+        return plotter_has_geometry
+
+    def _add_refine_meshes_export_geometry_to_plotter(self, plotter) -> bool:
+        """Add the conforming meshes panel geometry."""
+        import pyvista as pv
+
+        filter_name = self._current_refine_filter_name()
+        plotter_has_geometry = False
+        label_datasets = []
+        for idx, dataset in enumerate(getattr(self, "datasets", [])):
+            if dataset.get("type") == "WELL":
+                continue
+            if filter_name != "All Surfaces" and dataset.get("name", f"Surface_{idx}") != filter_name:
+                continue
+            conforming_mesh = dataset.get("conforming_mesh")
+            if not conforming_mesh:
+                continue
+            vertices = conforming_mesh.get("vertices")
+            triangles = conforming_mesh.get("triangles")
+            if vertices is None or triangles is None or len(vertices) == 0 or len(triangles) == 0:
+                continue
+            try:
+                vertices_3d = self._coerce_points_to_3d(vertices)
+                triangles = np.asarray(triangles)
+                if vertices_3d is None or triangles.ndim != 2 or triangles.shape[1] < 3:
+                    continue
+                mesh = pv.PolyData(
+                    vertices_3d,
+                    np.hstack([np.full((len(triangles), 1), 3, dtype=np.int64), triangles[:, :3]]),
+                )
+                plotter.add_mesh(
+                    mesh,
+                    color=dataset.get("color", "#CCCCCC"),
+                    opacity=0.7,
+                    show_edges=True,
+                    edge_color="black",
+                )
+                plotter_has_geometry = True
+                label_datasets.append(dataset)
+            except Exception as exc:
+                logger.debug("Could not add conforming mesh to refine export: %s", exc)
+
+        well_cb = getattr(self, "show_well_constraints_checkbox", None)
+        if well_cb is None or well_cb.isChecked():
+            self._add_wells_polyline_to_plotter(
+                plotter,
+                show_intersection_points=True,
+                well_filter_name=filter_name,
+                selected_well_data=self._get_selected_well_viz_data() or None,
+            )
+
+        if plotter_has_geometry:
+            self._add_dataset_labels_to_plotter(
+                plotter,
+                label_datasets,
+                view_type="triangulation",
+                name="refine_meshes_export_labels",
+            )
+        return plotter_has_geometry
+
+    def _current_refine_filter_name(self) -> str:
+        """Return the current Refine & Mesh surface filter."""
+        if hasattr(self, "refine_surface_selector") and self.refine_surface_selector:
+            return self.refine_surface_selector.currentText()
+        return "All Surfaces"
+
+    def _add_refine_segments_export_geometry_to_plotter(self, plotter) -> bool:
+        """Add the selected/hole/unselected segment panel geometry without mutating live actors."""
+        import pyvista as pv
+
+        try:
+            self._refresh_segment_map_from_tree()
+        except Exception:
+            pass
+        if not getattr(self, "_refine_segment_map", None):
+            try:
+                self._populate_refine_constraint_tree()
+                self._refresh_segment_map_from_tree()
+            except Exception:
+                pass
+
+        filter_name = self._current_refine_filter_name()
+        show_hull = getattr(self, "show_hull_constraints_checkbox", None)
+        show_intersections = getattr(self, "show_intersection_constraints_checkbox", None)
+        show_wells = getattr(self, "show_well_constraints_checkbox", None)
+        show_selected_only = getattr(self, "show_selected_only_checkbox", None)
+
+        show_hull_constraints = show_hull.isChecked() if show_hull else True
+        show_intersection_constraints = show_intersections.isChecked() if show_intersections else True
+        show_well_constraints = show_wells.isChecked() if show_wells else True
+        selected_only_mode = show_selected_only.isChecked() if show_selected_only else False
+
+        def dataset_name(idx):
+            if 0 <= idx < len(self.datasets):
+                return self.datasets[idx].get("name", f"Surface_{idx}")
+            return f"Surface_{idx}"
+
+        def surface_is_visible(idx):
+            return filter_name == "All Surfaces" or dataset_name(idx) == filter_name
+
+        categories = {
+            "selected": {"points": [], "lines": [], "cursor": 0, "color": (0.0, 1.0, 0.0), "width": 4},
+            "hole": {"points": [], "lines": [], "cursor": 0, "color": (1.0, 0.0, 0.0), "width": 4},
+            "unselected": {"points": [], "lines": [], "cursor": 0, "color": (0.53, 0.53, 0.53), "width": 2},
+            "well": {"points": [], "lines": [], "cursor": 0, "color": (1.0, 0.0, 1.0), "width": 5},
+        }
+
+        def add_polyline(category_key, points):
+            xyz_points = []
+            for point in points or []:
+                xyz = self._point_like_to_xyz(point)
+                if xyz is not None:
+                    xyz_points.append(xyz)
+            if len(xyz_points) < 2:
+                return False
+            category = categories[category_key]
+            start = category["cursor"]
+            category["points"].extend(xyz_points)
+            for local_idx in range(len(xyz_points) - 1):
+                category["lines"].extend([2, start + local_idx, start + local_idx + 1])
+            category["cursor"] += len(xyz_points)
+            return True
+
+        saw_hull_for_surface = set()
+        built = 0
+        for (surface_idx, seg_uid), seg_info in (getattr(self, "_refine_segment_map", {}) or {}).items():
+            seg_type = str(seg_info.get("type", seg_info.get("ctype", ""))).lower()
+            if seg_type == "well":
+                if not show_well_constraints:
+                    continue
+                well_idx = seg_info.get("well_idx")
+                if well_idx is not None and not surface_is_visible(int(well_idx)):
+                    continue
+                selected = bool(seg_info.get("selected", True))
+                if selected_only_mode and not selected:
+                    continue
+                category_key = "well" if selected else "unselected"
+            else:
+                if not surface_is_visible(int(surface_idx)):
+                    continue
+                if seg_type == "hull":
+                    saw_hull_for_surface.add(int(surface_idx))
+                    if not show_hull_constraints:
+                        continue
+                elif seg_type in ("int", "intersection") and not show_intersection_constraints:
+                    continue
+                selected = bool(seg_info.get("selected", True))
+                if selected_only_mode and not selected:
+                    continue
+                category_key = "hole" if selected and bool(seg_info.get("is_hole", False)) else ("selected" if selected else "unselected")
+
+            if add_polyline(category_key, seg_info.get("points", [])):
+                built += 1
+
+        if show_hull_constraints:
+            for surface_idx, dataset in enumerate(getattr(self, "datasets", [])):
+                if surface_idx in saw_hull_for_surface or not surface_is_visible(surface_idx):
+                    continue
+                hull_points = dataset.get("hull_points")
+                if hull_points is not None and len(hull_points) >= 2:
+                    if add_polyline("selected", list(hull_points) + [hull_points[0]]):
+                        built += 1
+
+        for category in categories.values():
+            if not category["points"] or not category["lines"]:
+                continue
+            poly = pv.PolyData(np.asarray(category["points"], dtype=float))
+            poly.lines = np.asarray(category["lines"], dtype=np.int64)
+            plotter.add_mesh(
+                poly,
+                color=category["color"],
+                line_width=category["width"],
+                render_lines_as_tubes=False,
+                pickable=False,
+            )
+
+        if built > 0:
+            label_datasets = [
+                dataset
+                for idx, dataset in enumerate(getattr(self, "datasets", []))
+                if dataset.get("type") != "WELL"
+                and dataset.get("visible", True)
+                and surface_is_visible(idx)
+            ]
+            self._add_dataset_labels_to_plotter(
+                plotter,
+                label_datasets,
+                view_type="segments",
+                name="refine_segments_export_labels",
+            )
+
+        return built > 0
 
     def _add_hull_export_geometry_to_plotter(self, plotter) -> bool:
         """Add convex hull geometry using export-specific line and point sizes."""
@@ -24077,6 +24989,8 @@ segmentation, triangulation, and visualization.
                 'mesh_center': self.tetrahedral_mesh.center
             }
         self._add_fault_surfaces_to_plotter(plotter, render_style, cmap, clip_info)
+
+        self._apply_vertical_exaggeration_to_plotter(plotter)
         
         # Camera view
         view_preset = self.fig_view_preset.currentText()
