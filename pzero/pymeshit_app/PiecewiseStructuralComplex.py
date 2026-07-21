@@ -322,13 +322,13 @@ class PiecewiseStructuralComplex:
         table_combo = QComboBox(dialog)
         table_combo.addItems(stm_tables)
         selector_layout.addWidget(table_combo, 1)
-        selector_layout.addWidget(QLabel("Max differences"))
+        selector_layout.addWidget(QLabel("Max missing"))
         max_missing_spin = QSpinBox(dialog)
         max_missing_spin.setRange(0, 10)
         max_missing_spin.setValue(self.MAX_RELAXED_MISSING_BOUNDARIES)
         max_missing_spin.setToolTip(
-            "Maximum number of missing or extra boundaries accepted for a LIKELY "
-            "3D topology match."
+            "Maximum number of expected boundaries that may be absent in a LIKELY "
+            "3D topology match. Observed extra boundaries are never accepted."
         )
         selector_layout.addWidget(max_missing_spin)
         swap_seed_button = QPushButton("Swap selected seeds", dialog)
@@ -2055,9 +2055,9 @@ class PiecewiseStructuralComplex:
                 continue
             missing_keys = unit_keys - observed_keys
             extra_keys = observed_keys - unit_keys
-            mismatch_count = len(missing_keys) + len(extra_keys)
-            if mismatch_count > max_missing_boundaries:
+            if extra_keys or len(missing_keys) > max_missing_boundaries:
                 continue
+            mismatch_count = len(missing_keys)
             unit_key = str(
                 unit_info.get("key")
                 or unit_info.get("feature")
@@ -2650,7 +2650,11 @@ class PiecewiseStructuralComplex:
                                 "extra_labels": [],
                             }
                         )
-                    if int(scored.get("missing_count", 0)) > max_missing_boundaries:
+                    if (
+                        int(scored.get("extra_count", 0)) > 0
+                        or int(scored.get("missing_count", 0))
+                        > max_missing_boundaries
+                    ):
                         continue
                     scored_candidates.append(scored)
                 candidates = sorted(

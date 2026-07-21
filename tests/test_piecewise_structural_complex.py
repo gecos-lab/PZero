@@ -41,7 +41,7 @@ def _model(*units, representative_role="TMU"):
     }
 
 
-def test_partial_observation_stays_anchored_to_intended_3d_signature():
+def test_observation_with_extra_boundary_is_unassigned():
     controller = _controller()
     source = _unit(
         "unit:A",
@@ -65,10 +65,10 @@ def test_partial_observation_stays_anchored_to_intended_3d_signature():
         max_missing_boundaries=1,
     )[0]
 
-    assert payload["unit_key"] == "unit:A"
-    assert payload["status"] == "LIKELY"
-    assert payload["missing_labels"] == ["A"]
-    assert payload["extra_labels"] == ["Other"]
+    assert payload["unit_key"] == ""
+    assert payload["source_unit_key"] == "unit:A"
+    assert payload["status"] == "UNASSIGNED"
+    assert source["seed_points"] == []
 
 
 def test_mixed_surface_and_boundary_signature_keeps_boundary_as_missing_label():
@@ -331,7 +331,7 @@ def test_volumetric_assignment_allows_repeat_across_discontinuity():
     assert len(unit["seed_points"]) == 2
 
 
-def test_volumetric_assignment_accepts_one_extra_boundary_as_likely():
+def test_volumetric_assignment_rejects_one_extra_boundary():
     controller = _controller()
     unit = _unit("unit:A", "A", ["Boundary", "Rep"])
     partition = {
@@ -356,9 +356,10 @@ def test_volumetric_assignment_accepts_one_extra_boundary_as_likely():
         max_missing_boundaries=1,
     )[0]
 
-    assert payload["status"] == "LIKELY"
-    assert payload["extra_labels"] == ["Extra"]
-    assert unit["seed_points"] == [[0.0, 0.0, 0.0]]
+    assert payload["status"] == "UNASSIGNED"
+    assert payload["unit_key"] == ""
+    assert payload["extra_labels"] == []
+    assert unit["seed_points"] == []
 
 
 def test_volumetric_assignment_honours_swapped_seed_overrides():
