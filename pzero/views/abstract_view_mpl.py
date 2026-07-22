@@ -124,7 +124,9 @@ class ViewMPL(BaseView):
                 try:
                     actor.figure.canvas.draw()
                 except Exception as e:
-                    self.print_terminal(f"Could not redraw after line thick change: {e}")
+                    self.print_terminal(
+                        f"Could not redraw after line thick change: {e}"
+                    )
             else:
                 continue
 
@@ -145,7 +147,9 @@ class ViewMPL(BaseView):
                 try:
                     actor.figure.canvas.draw()
                 except Exception as e:
-                    self.print_terminal(f"Could not redraw after point size change: {e}")
+                    self.print_terminal(
+                        f"Could not redraw after point size change: {e}"
+                    )
             else:
                 continue
 
@@ -154,9 +158,18 @@ class ViewMPL(BaseView):
         actor hasn't been created yet (e.g. it was never shown since the view
         opened), it is drawn fresh instead of silently failing."""
         if uid not in self.mpl_actors:
-            collection_name = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"].values[0]
-            show_property = self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"].values[0]
-            self.show_actor_with_property(uid=uid, coll_name=collection_name, show_property=show_property, visible=visible)
+            collection_name = self.actors_df.loc[
+                self.actors_df["uid"] == uid, "collection"
+            ].values[0]
+            show_property = self.actors_df.loc[
+                self.actors_df["uid"] == uid, "show_property"
+            ].values[0]
+            self.show_actor_with_property(
+                uid=uid,
+                coll_name=collection_name,
+                show_property=show_property,
+                visible=visible,
+            )
             return
         try:
             self.mpl_actors[uid].set_visible(visible)
@@ -176,7 +189,7 @@ class ViewMPL(BaseView):
                 self.print_terminal(f"Could not remove actor '{uid}': {e}")
             if redraw:
                 self.figure.canvas.draw()
-                
+
     def remove_artist(self, actor):
         """Remove a single matplotlib artist from the canvas, defensively."""
         if actor is not None:
