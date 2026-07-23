@@ -228,15 +228,18 @@ class ViewVTK(BaseView):
         for uid in updated_uids:
             if uid in self.uids_in_view:
                 point_size = collection.get_uid_legend(uid=uid)["point_size"]
-                
+
                 # Check if this uid is showing Normals
                 show_property = self.actors_df.loc[
                     self.actors_df["uid"] == uid, "show_property"
                 ].values[0]
-                
+
                 if show_property is not None and (
                     show_property == "Normals"
-                    or (isinstance(show_property, str) and show_property.startswith("Normals["))
+                    or (
+                        isinstance(show_property, str)
+                        and show_property.startswith("Normals[")
+                    )
                 ):
                     coll_name = self.actors_df.loc[
                         self.actors_df["uid"] == uid, "collection"
