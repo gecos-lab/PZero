@@ -297,8 +297,6 @@ class ViewStereoplot(ViewMPL):
             color_G = this_coll.get_uid_legend(uid=uid)["color_G"]
             color_B = this_coll.get_uid_legend(uid=uid)["color_B"]
             color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            point_size = this_coll.get_uid_legend(uid=uid)["point_size"]
-            line_thick = this_coll.get_uid_legend(uid=uid)["line_thick"]
             opacity = this_coll.get_uid_legend(uid=uid)["opacity"] / 100
             plot_entity = this_coll.get_uid_vtk_obj(uid)
         else:
@@ -324,7 +322,6 @@ class ViewStereoplot(ViewMPL):
                                 strike,
                                 dip,
                                 color=color_RGB,
-                                linewidth=line_thick,
                                 alpha=opacity,
                                 zorder=self.Z_ENTITIES,
                             )[0]
@@ -350,8 +347,8 @@ class ViewStereoplot(ViewMPL):
                                 strike,
                                 dip,
                                 color=color_RGB,
-                                markersize=point_size,
                                 alpha=opacity,
+                                markersize=4,
                                 zorder=self.Z_ENTITIES,
                             )[0]
 
@@ -394,8 +391,8 @@ class ViewStereoplot(ViewMPL):
                                 lat,
                                 c=prop_values,
                                 cmap=show_property_cmap,
-                                s=point_size**2,
                                 alpha=opacity,
+                                s=4**2,
                                 zorder=self.Z_ENTITIES,
                             )
                     else:
@@ -410,6 +407,24 @@ class ViewStereoplot(ViewMPL):
             this_actor.figure.canvas.draw()
         self.mpl_actors[uid] = this_actor
         return this_actor
+
+    def change_actor_point_size(self, updated_uids: list=None, collection=None):
+        """
+        Override ViewMPL's change_actor_point_size to do nothing in the stereoplot.
+        Point size is fixed here regardless of the legend value, since the legend
+        point size is also tied to the 3D view and other views where scale is
+        physically meaningful — changes there would make the stereonet unreadable.
+        """
+        pass
+
+    def change_actor_line_thick(self, updated_uids: list = None, collection=None):
+        """
+        Override ViewMPL's change_actor_line_thick to do nothing in the stereoplot.
+        Line thickness is fixed here regardless of the legend value, since the legend
+        line thickness is also tied to the 3D view and other views where scale is
+        physically meaningful — changes there would make the stereonet unreadable.
+        """
+        pass
 
     # ================================  Methods specific to Stereoplot views ==========================================
 
