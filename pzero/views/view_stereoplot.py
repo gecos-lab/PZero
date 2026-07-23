@@ -28,7 +28,7 @@ from pzero.orientation_analysis import (
     resolve_lower_hemisphere,
     kmedoids_clusters,
 )  # kentparams,
-from pzero.helpers.helper_dialogs import multiple_input_dialog
+from pzero.helpers.helper_dialogs import multiple_input_dialog, save_file_dialog
 
 # mplstereonet import____
 import mplstereonet
@@ -98,7 +98,12 @@ class ViewStereoplot(ViewMPL):
         self.actionSetPolar = QAction("Toggle grid", self)
         self.actionSetPolar.triggered.connect(self.toggle_grid)
         self.menuView.addAction(self.actionSetPolar)
+        
+        self.actionSavePng = QAction("Export as PNG", self)
+        self.actionSavePng.triggered.connect(self.export_png)
+        self.menuView.addAction(self.actionSavePng)
 
+        # ---- Analysis Menu ----
         self.actionRecompute = QAction("Recompute statistics", self)
         self.actionRecompute.setEnabled(not self.auto_recompute)
         self.actionRecompute.triggered.connect(self.recompute_values)
@@ -547,6 +552,16 @@ class ViewStereoplot(ViewMPL):
         """Terminate running event loops. It looks like we do not use this method."""
         self.figure.canvas.stop_event_loop()
 
+    def export_png(self):
+        """
+        Save the stereonet as a picutre (.png)
+        """
+        out_file_name = save_file_dialog(
+            parent=self, caption="Export Stereoplot view as PNG.", filter="png (*.png)"
+        ).removesuffix(".png")
+        self.figure.savefig(out_file_name, dpi=300)
+        self.print_terminal(f"Stereoplot view saved as {out_file_name}.")
+    
     # --- Orientation analysis: data pipeline ---
     def get_normals_and_lineations_for_analysis(self):
         """
