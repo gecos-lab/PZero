@@ -23,11 +23,10 @@ class GeologicalCollection(GFBCollection):
             "lineation",
             "axial_surface",
             "fold_axis",
-            "TMU",
-            "TSU",
+            "TU",
             "SU",
             "IU",
-            "SZ",
+            "SD",
             "formation",
         ]
 

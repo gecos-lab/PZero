@@ -271,7 +271,7 @@ class PSCSectionSeedSelectionDialog(QDialog):
 class PiecewiseStructuralComplex:
     """Controller for PSC preview, seed placement, and material assignment."""
 
-    SECTION_SEED_ROLES = {"TMU", "TSU", "SU", "IU", "SZ"}
+    SECTION_SEED_ROLES = {"TU", "SU", "IU", "SD"}
     DISCONTINUITY_UNIT_ROLE = "Discontinuity"
     MAX_RELAXED_MISSING_BOUNDARIES = 1
 
@@ -338,7 +338,7 @@ class PiecewiseStructuralComplex:
         selector_layout.addWidget(swap_seed_button)
         from_sections_button = QPushButton("From sections", dialog)
         from_sections_button.setToolTip(
-            "Use XsVertex/XsVertexSet seeds from geol_coll with roles TMU, TSU, SU, IU, or SZ."
+            "Use XsVertex/XsVertexSet seeds from geol_coll with roles TU, SU, IU, or SD."
         )
         selector_layout.addWidget(from_sections_button)
         use_calculated_button = QPushButton("Use calculated", dialog)
@@ -2999,7 +2999,6 @@ class PiecewiseStructuralComplex:
                     }
                 )
 
-            role_map = {"TU": "TMU", "SD": "SZ", "SU": "SU", "IU": "IU"}
             for unit_idx, unit_info in enumerate(stm_tables.get("units", [])):
                 if not isinstance(unit_info, dict):
                     continue
@@ -3007,7 +3006,9 @@ class PiecewiseStructuralComplex:
                 if not feature:
                     continue
                 ui_role = self._psc_text(unit_info.get("Unit Role", "TU")).upper()
-                unit_role = role_map.get(ui_role, "TMU")
+                unit_role = (
+                    ui_role if ui_role in {"TU", "SU", "IU", "SD"} else "TU"
+                )
                 raw_boundaries = unit_info.get("Boundaries", [])
                 if isinstance(raw_boundaries, str):
                     boundaries = {
@@ -6189,7 +6190,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 role = boundary_roles_by_key.get(label_key, "")
                 # Repeated unit assignment across adjacent areas is allowed only
                 # across explicit Discontinuity boundaries. Volumetric
-                # representatives, including SZ, must separate distinct areas.
+                # representatives, including SD, must separate distinct areas.
                 if not self._psc_role_is_discontinuity(role):
                     conflict_labels.append(self._psc_text(label))
 

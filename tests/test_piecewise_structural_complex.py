@@ -14,7 +14,7 @@ def _unit(key, feature, boundaries, point=None, signature_entry=None, **extra):
         "key": key,
         "name": feature,
         "feature": feature,
-        "unit_role": "TMU",
+        "unit_role": "TU",
         "polarity": 1,
         "boundaries": list(boundaries),
         "seed_points": [list(point)] if point is not None else [],
@@ -27,7 +27,7 @@ def _unit(key, feature, boundaries, point=None, signature_entry=None, **extra):
     return unit
 
 
-def _model(*units, representative_role="TMU"):
+def _model(*units, representative_role="TU"):
     return {
         "units": {unit["key"]: unit for unit in units},
         "boundary_order": [
@@ -172,7 +172,7 @@ def test_local_signature_repeat_is_blocked_across_representative_surface():
 
     payloads = controller._psc_classify_seed_assignments(
         [repeated],
-        _model(repeated, representative, representative_role="TMU"),
+        _model(repeated, representative, representative_role="TU"),
         max_missing_boundaries=1,
     )
 
@@ -295,7 +295,7 @@ def test_volumetric_assignment_blocks_equal_adjacent_units_on_representative_fac
 
     payloads = controller._psc_assign_volumetric_regions(
         [unit],
-        _model(unit, representative, representative_role="TMU"),
+        _model(unit, representative, representative_role="TU"),
         max_missing_boundaries=1,
     )
 

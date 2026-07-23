@@ -2256,6 +2256,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 # explicit Boundaries and Units pair below.
                 table_options.pop("manual_units", None)
                 table_options.pop("manual_connections", None)
+                table_options.pop("representative_connections", None)
+                table_options.pop("stm_representative_links", None)
+                table_options.pop("stm_manual_links", None)
                 table_options.pop("unit_renames", None)
                 table_options.pop("stm_color_codes", None)
                 tables_payload["tables"].append(
