@@ -2973,6 +2973,93 @@ class PiecewiseStructuralComplex:
         units: Dict[str, Dict[str, Any]] = {}
         boundary_features = set()
         boundary_order = []
+
+        stm_tables = options.get("stm_tables", {})
+        if isinstance(stm_tables, dict) and (
+            "boundaries" in stm_tables or "units" in stm_tables
+        ):
+            for boundary_info in stm_tables.get("boundaries", []):
+                if not isinstance(boundary_info, dict):
+                    continue
+                feature = self._psc_text(boundary_info.get("Feature", ""))
+                if not feature:
+                    continue
+                if self._psc_key(feature) == self._psc_key("Model boundary"):
+                    feature = "Boundary"
+                boundary_features.add(feature)
+                boundary_order.append(
+                    {
+                        "feature": feature,
+                        "polarity": self._psc_sort_key(
+                            boundary_info.get("Polarity", "")
+                        ),
+                        "row_index": len(boundary_order),
+                        "unit_role": "Discontinuity",
+                        "domains": [],
+                    }
+                )
+
+            role_map = {"TU": "TMU", "SD": "SZ", "SU": "SU", "IU": "IU"}
+            for unit_idx, unit_info in enumerate(stm_tables.get("units", [])):
+                if not isinstance(unit_info, dict):
+                    continue
+                feature = self._psc_text(unit_info.get("Feature", ""))
+                if not feature:
+                    continue
+                ui_role = self._psc_text(unit_info.get("Unit Role", "TU")).upper()
+                unit_role = role_map.get(ui_role, "TMU")
+                raw_boundaries = unit_info.get("Boundaries", [])
+                if isinstance(raw_boundaries, str):
+                    boundaries = {
+                        (
+                            "Boundary"
+                            if self._psc_key(value)
+                            == self._psc_key("Model boundary")
+                            else self._psc_text(value)
+                        )
+                        for value in raw_boundaries.split(",")
+                        if self._psc_text(value)
+                    }
+                else:
+                    boundaries = {
+                        (
+                            "Boundary"
+                            if self._psc_key(value)
+                            == self._psc_key("Model boundary")
+                            else self._psc_text(value)
+                        )
+                        for value in (raw_boundaries or [])
+                        if self._psc_text(value)
+                    }
+                domains = [
+                    self._psc_text(value)
+                    for column_name, value in unit_info.items()
+                    if str(column_name).startswith("Domain")
+                    and self._psc_text(value)
+                ]
+                unit_key = f"unit:v2:{unit_idx}:{feature}"
+                units[unit_key] = {
+                    "key": unit_key,
+                    "name": feature,
+                    "feature": feature,
+                    "unit_role": unit_role,
+                    "polarity": self._psc_sort_key(
+                        unit_info.get(
+                            "Polarity",
+                            unit_info.get("Structural Polarity", ""),
+                        )
+                    ),
+                    "domains": domains,
+                    "boundaries": boundaries,
+                    "source": "stm_v2",
+                }
+                boundary_features.update(boundaries)
+            return {
+                "table_name": table_name,
+                "units": units,
+                "boundary_features": boundary_features,
+                "boundary_order": boundary_order,
+            }
     
         if table_df is not None:
             domain_columns = self._psc_domain_columns(table_df)

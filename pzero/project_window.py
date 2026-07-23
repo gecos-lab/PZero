@@ -2245,14 +2245,39 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         tables_payload = {"version": 1, "tables": []}
         for table_name, dataframe in self.custom_tables.items():
+            table_type = self.custom_table_types.get(table_name, "manual")
+            table_options = dict(self.custom_table_options.get(table_name, {}) or {})
+            if table_type == "stm" and isinstance(
+                table_options.get("stm_tables"), dict
+            ):
+                stm_tables = table_options.pop("stm_tables")
+                # These fields are a compatibility projection for existing PSC
+                # consumers. The persisted v2 STm source of truth is only the
+                # explicit Boundaries and Units pair below.
+                table_options.pop("manual_units", None)
+                table_options.pop("manual_connections", None)
+                table_options.pop("unit_renames", None)
+                table_options.pop("stm_color_codes", None)
+                tables_payload["tables"].append(
+                    {
+                        "name": table_name,
+                        "table_type": table_type,
+                        "options": table_options,
+                        "stm_tables": {
+                            "boundaries": list(stm_tables.get("boundaries", [])),
+                            "units": list(stm_tables.get("units", [])),
+                        },
+                    }
+                )
+                continue
             exported_df = dataframe.copy()
             exported_df = exported_df.where(exported_df.notna(), "")
             exported_df = exported_df.astype(str)
             tables_payload["tables"].append(
                 {
                     "name": table_name,
-                    "table_type": self.custom_table_types.get(table_name, "manual"),
-                    "options": self.custom_table_options.get(table_name, {}),
+                    "table_type": table_type,
+                    "options": table_options,
                     "dataframe": {
                         "columns": exported_df.columns.tolist(),
                         "data": exported_df.values.tolist(),
@@ -2283,17 +2308,49 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             if not table_name:
                 continue
 
-            dataframe_payload = table_payload.get("dataframe", {})
-            columns = [
-                str(column_name)
-                for column_name in dataframe_payload.get("columns", [])
-            ]
-            data = dataframe_payload.get("data", [])
-            self.custom_tables[table_name] = pd_DataFrame(data=data, columns=columns)
-            self.custom_table_types[table_name] = table_payload.get(
-                "table_type", "manual"
-            )
-            self.custom_table_options[table_name] = table_payload.get("options", {})
+            table_type = table_payload.get("table_type", "manual")
+            stm_tables = table_payload.get("stm_tables")
+            if table_type == "stm" and isinstance(stm_tables, dict):
+                boundaries = list(stm_tables.get("boundaries", []))
+                legacy_rows = [
+                    {
+                        "Feature": boundary.get("Feature", ""),
+                        "Unit Role": "Discontinuity",
+                        "Structural Polarity": boundary.get("Polarity", ""),
+                        "Domain_1": "",
+                    }
+                    for boundary in boundaries
+                    if isinstance(boundary, dict)
+                ]
+                self.custom_tables[table_name] = pd_DataFrame(
+                    legacy_rows,
+                    columns=[
+                        "Feature",
+                        "Unit Role",
+                        "Structural Polarity",
+                        "Domain_1",
+                    ],
+                )
+                table_options = dict(table_payload.get("options", {}) or {})
+                table_options["stm_tables"] = {
+                    "boundaries": boundaries,
+                    "units": list(stm_tables.get("units", [])),
+                }
+                self.custom_table_options[table_name] = table_options
+            else:
+                dataframe_payload = table_payload.get("dataframe", {})
+                columns = [
+                    str(column_name)
+                    for column_name in dataframe_payload.get("columns", [])
+                ]
+                data = dataframe_payload.get("data", [])
+                self.custom_tables[table_name] = pd_DataFrame(
+                    data=data, columns=columns
+                )
+                self.custom_table_options[table_name] = table_payload.get(
+                    "options", {}
+                )
+            self.custom_table_types[table_name] = table_type
 
         if self.custom_tables:
             self.print_terminal(
@@ -3959,6 +4016,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 stm_feature = str(table_df.at[row_label, "Feature"]).strip()
                 if stm_feature in polarity_map:
                     table_df.at[row_label, "Structural Polarity"] = polarity_map[stm_feature]
+            table_options = self.custom_table_options.get(table_name, {}) or {}
+            stm_tables = table_options.get("stm_tables", {})
+            if isinstance(stm_tables, dict):
+                for boundary in stm_tables.get("boundaries", []):
+                    if not isinstance(boundary, dict):
+                        continue
+                    feature = str(boundary.get("Feature", "")).strip()
+                    if feature in polarity_map:
+                        boundary["Polarity"] = polarity_map[feature]
             tables_updated = True
 
         if tables_updated:

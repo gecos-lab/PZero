@@ -6,6 +6,7 @@ from os import path as os_path
 from hashlib import md5
 
 from pandas import DataFrame as pd_DataFrame
+from pandas import concat as pd_concat
 from pandas import isna as pd_isna
 from pandas import to_numeric as pd_to_numeric
 
@@ -54,6 +55,25 @@ STRUCTURAL_TOPOLOGY_TABLE_TYPE = "stm"
 STRUCTURAL_TOPOLOGY_FEATURE_COLUMN = "Feature"
 STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN = "Unit Role"
 STRUCTURAL_TOPOLOGY_POLARITY_COLUMN = "Structural Polarity"
+STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN = "Role"
+STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN = "Polarity"
+STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN = "Units"
+STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN = "Boundaries"
+STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN = "Polarity"
+STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY = "Model boundary"
+STRUCTURAL_TOPOLOGY_BOUNDARY_COLUMNS = [
+    STRUCTURAL_TOPOLOGY_FEATURE_COLUMN,
+    STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN,
+    STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN,
+    STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN,
+]
+STRUCTURAL_TOPOLOGY_UNIT_COLUMNS = [
+    STRUCTURAL_TOPOLOGY_FEATURE_COLUMN,
+    STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN,
+    STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN,
+    STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN,
+    "Domain_1",
+]
 STRUCTURAL_TOPOLOGY_BASE_COLUMNS = [
     STRUCTURAL_TOPOLOGY_FEATURE_COLUMN,
     STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN,
@@ -69,13 +89,22 @@ STRUCTURAL_TOPOLOGY_EXPORT_MARKER_BEGIN = "# PZERO_STM_EXPORT BEGIN"
 STRUCTURAL_TOPOLOGY_EXPORT_MARKER_END = "# PZERO_STM_EXPORT END"
 STRUCTURAL_TOPOLOGY_EXPORT_SCHEMA = "pzero.stm.export"
 STRUCTURAL_TOPOLOGY_UNIT_VALUES = [
-    "TMU",
-    "TSU",
+    "TU",
     "SU",
     "IU",
-    "SZ",
-    "Discontinuity",
+    "SD",
 ]
+
+_STM_LEGACY_TO_UNIT_ROLE = {
+    "tmu": "TU",
+    "tsu": "TU",
+    "tu": "TU",
+    "su": "SU",
+    "iu": "IU",
+    "sz": "SD",
+    "sd": "SD",
+}
+_STM_UNIT_TO_LEGACY_ROLE = {"TU": "TMU", "SU": "SU", "IU": "IU", "SD": "SZ"}
 
 
 def structural_topology_domain_column_name(order_value) -> str:
@@ -99,11 +128,76 @@ def structural_topology_domain_order(column_name: str):
 def normalise_structural_topology_unit_role(raw_value):
     """Return a valid canonical Unit Role value."""
     value = str(raw_value or "").strip()
-    valid_by_casefold = {
-        str(valid_value).casefold(): str(valid_value)
-        for valid_value in STRUCTURAL_TOPOLOGY_UNIT_VALUES
-    }
-    return valid_by_casefold.get(value.casefold(), value or "Discontinuity")
+    return _STM_LEGACY_TO_UNIT_ROLE.get(value.casefold(), value or "TU")
+
+
+def structural_topology_legacy_unit_role(raw_value):
+    """Map a v2 table role to the role understood by the existing PSC code."""
+    value = normalise_structural_topology_unit_role(raw_value)
+    return _STM_UNIT_TO_LEGACY_ROLE.get(value, "TMU")
+
+
+def _stm_names(raw_value):
+    """Return a stable list of names from JSON, lists, or comma-separated cells."""
+    if raw_value is None or (not isinstance(raw_value, (list, tuple, set)) and pd_isna(raw_value)):
+        return []
+    if isinstance(raw_value, (list, tuple, set)):
+        values = raw_value
+    else:
+        text = str(raw_value).strip()
+        if not text:
+            return []
+        if text.startswith("["):
+            try:
+                decoded = json.loads(text)
+                values = decoded if isinstance(decoded, list) else [text]
+            except (TypeError, ValueError, json.JSONDecodeError):
+                values = text.split(",")
+        else:
+            values = text.split(",")
+    output = []
+    for value in values:
+        name = str(value or "").strip()
+        if name and name not in output:
+            output.append(name)
+    return output
+
+
+def _stm_names_cell(raw_value):
+    """Return the compact editable representation used by relation cells."""
+    return ", ".join(_stm_names(raw_value))
+
+
+def _stm_records(dataframe):
+    """Return JSON-safe records, preserving relationship fields as real lists."""
+    if dataframe is None:
+        return []
+    records = []
+    for record in dataframe.where(dataframe.notna(), "").to_dict(orient="records"):
+        out_record = {}
+        for key, value in record.items():
+            if key in (
+                STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN,
+                STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN,
+            ):
+                out_record[str(key)] = _stm_names(value)
+            else:
+                out_record[str(key)] = value
+        records.append(out_record)
+    return records
+
+
+def _stm_records_with_colors(dataframe, feature_colors=None):
+    """Return table records enriched with hidden RGB persistence fields."""
+    feature_colors = feature_colors or {}
+    records = _stm_records(dataframe)
+    for record in records:
+        feature_name = str(
+            record.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")
+        ).strip()
+        if feature_name in feature_colors:
+            record.update(_stm_color_to_dict(feature_colors[feature_name]))
+    return records
 
 def structural_topology_sort_key(raw_value):
     """Return a sortable numeric polarity value."""
@@ -263,12 +357,6 @@ class ManualSTmUnitDialog(QDialog):
             self.unit_role_combo.setCurrentIndex(role_idx)
         form_layout.addRow("Unit Role", self.unit_role_combo)
 
-        self.polarity_edit = QLineEdit()
-        self.polarity_edit.setPlaceholderText("0")
-        if "structural_polarity" in unit_info:
-            self.polarity_edit.setText(str(unit_info.get("structural_polarity", "")))
-        form_layout.addRow("Structural Polarity", self.polarity_edit)
-
         color_layout = QHBoxLayout()
         self.color_button = QPushButton("")
         self.color_button.setFixedSize(54, 24)
@@ -323,21 +411,11 @@ class ManualSTmUnitDialog(QDialog):
         if not self.feature_edit.text().strip():
             QMessageBox.warning(self, "Missing feature", "Insert a feature name.")
             return
-        if self.structural_polarity is None:
-            QMessageBox.warning(
-                self,
-                "Invalid polarity",
-                "Insert a numeric structural polarity value.",
-            )
-            return
         self.accept()
 
     @property
     def structural_polarity(self):
-        try:
-            return float(str(self.polarity_edit.text()).strip())
-        except (TypeError, ValueError):
-            return None
+        return ""
 
     @property
     def unit_info(self):
@@ -377,6 +455,7 @@ class STmBuildDialog(QDialog):
         metadata_provider=None,
         options_provider=None,
         options_updater=None,
+        polarity_calculator=None,
     ):
         super().__init__(parent)
         self.table_name = str(table_name or "").strip() or "STm"
@@ -384,6 +463,7 @@ class STmBuildDialog(QDialog):
         self.metadata_provider = metadata_provider
         self.options_provider = options_provider
         self.options_updater = options_updater
+        self.polarity_calculator = polarity_calculator
         self.selected_node_key = None
         self.selected_domain_key = None
         self.manual_connections = self._load_manual_connections()
@@ -430,6 +510,9 @@ class STmBuildDialog(QDialog):
         self.clear_manual_button = QPushButton("Clear manual links")
         self.clear_manual_button.clicked.connect(self.clear_manual_connections)
         buttons_layout.addWidget(self.clear_manual_button)
+        self.calculate_polarity_button = QPushButton("Calculate unit polarity")
+        self.calculate_polarity_button.clicked.connect(self.calculate_unit_polarity)
+        buttons_layout.addWidget(self.calculate_polarity_button)
         self.add_manual_unit_button = QPushButton("Add extra unit")
         self.add_manual_unit_button.clicked.connect(self.add_manual_unit)
         buttons_layout.addWidget(self.add_manual_unit_button)
@@ -439,6 +522,10 @@ class STmBuildDialog(QDialog):
         self.remove_manual_unit_button = QPushButton("Remove extra unit")
         self.remove_manual_unit_button.clicked.connect(self.remove_selected_manual_unit)
         buttons_layout.addWidget(self.remove_manual_unit_button)
+        self.rename_unit_button.setVisible(False)
+        self.add_manual_unit_button.setVisible(False)
+        self.edit_manual_unit_button.setVisible(False)
+        self.remove_manual_unit_button.setVisible(False)
         zoom_out_button = QPushButton("-")
         zoom_out_button.setToolTip("Zoom out")
         zoom_out_button.clicked.connect(self.graphics_view.zoom_out)
@@ -465,6 +552,14 @@ class STmBuildDialog(QDialog):
 
         self.rebuild_scene()
         self.update_editing_ui()
+
+    def calculate_unit_polarity(self):
+        """Delegate table-backed polarity calculation and refresh the graph."""
+        if callable(self.polarity_calculator):
+            self.polarity_calculator()
+            self.manual_connections = self._load_manual_connections()
+            self.manual_units = self._load_manual_units()
+            self.rebuild_scene()
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -632,7 +727,9 @@ class STmBuildDialog(QDialog):
                     f'{row_info[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN]}_'
                     f'{row_info[STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN]}'
                 )
-                unit_label = default_unit_label
+                unit_label = str(
+                    row_info.get("Unit Label", default_unit_label)
+                ).strip() or default_unit_label
                 if not row_info.get("Manual"):
                     unit_label = self.unit_renames.get(unit_key, default_unit_label)
                 unit_nodes.append(
@@ -818,11 +915,16 @@ class STmBuildDialog(QDialog):
                     STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: feature_name,
                     STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: unit_role,
                     STRUCTURAL_TOPOLOGY_POLARITY_COLUMN: structural_topology_sort_key(
-                        unit_info.get("structural_polarity", "")
+                        unit_info.get("structural_polarity")
+                        if str(unit_info.get("structural_polarity", "")).strip()
+                        else unit_info.get("plot_polarity", "")
                     ),
                     "Domains": domains,
                     "Manual": True,
                     "Manual Unit ID": unit_id,
+                    "Unit Label": str(
+                        unit_info.get("display_name", feature_name)
+                    ).strip() or feature_name,
                     "color_R": unit_info.get("color_R", 255),
                     "color_G": unit_info.get("color_G", 255),
                     "color_B": unit_info.get("color_B", 255),
@@ -912,6 +1014,10 @@ class STmBuildDialog(QDialog):
                     "feature": feature_name,
                     "unit_role": unit_role,
                     "structural_polarity": unit_info.get("structural_polarity", 0.0),
+                    "plot_polarity": unit_info.get("plot_polarity", ""),
+                    "display_name": str(
+                        unit_info.get("display_name", feature_name)
+                    ).strip() or feature_name,
                     "domains": domains,
                     "color_R": unit_info.get("color_R", 255),
                     "color_G": unit_info.get("color_G", 255),
@@ -1136,7 +1242,9 @@ class STmBuildDialog(QDialog):
             if source_item is None or target_item is None:
                 continue
             valid_connections.add((unit_key, surface_key))
-            line_pen = QPen(QColor(15, 15, 15))
+            line_pen = QPen(
+                QColor(source_item.get("base_pen_color", QColor(15, 15, 15)))
+            )
             line_pen.setWidth(5)
             self.scene.addLine(
                 source_item["right_anchor"][0],
@@ -1366,7 +1474,10 @@ class STmBuildDialog(QDialog):
                 continue
             node_keys = group_info.get("nodes", set())
             available_nodes = [
-                node_items[node_key] for node_key in node_keys if node_key in node_items
+                node_items[node_key]
+                for node_key in node_keys
+                if node_key in node_items
+                and node_items[node_key].get("side") == "unit"
             ]
             if len(available_nodes) < 2:
                 continue
@@ -1460,11 +1571,12 @@ class ComboBoxItemDelegate(QStyledItemDelegate):
 class EditableDataFrameModel(QAbstractTableModel):
     """Expose a pandas dataframe as a simple editable Qt table model."""
 
-    def __init__(self, dataframe=None, parent=None):
+    def __init__(self, dataframe=None, parent=None, model_kind="main"):
         super().__init__(parent)
         self._dataframe = dataframe if dataframe is not None else pd_DataFrame()
         self._editable = False
         self._show_colormap_preview = False
+        self.model_kind = str(model_kind or "main")
 
     @property
     def dataframe(self):
@@ -1558,8 +1670,8 @@ class EditableDataFrameModel(QAbstractTableModel):
             or self.is_preview_column(index.column())
         ):
             return False
-        if self.parent() and hasattr(self.parent(), "is_table_column_editable"):
-            if not self.parent().is_table_column_editable(index.column()):
+        if self.parent() and hasattr(self.parent(), "is_table_model_column_editable"):
+            if not self.parent().is_table_model_column_editable(self, index.column()):
                 return False
         self._dataframe.iloc[index.row(), index.column()] = (
             "" if value is None else str(value)
@@ -1572,6 +1684,7 @@ class EditableDataFrameModel(QAbstractTableModel):
             self.parent().on_table_model_edited(
                 row_index=index.row(),
                 column_index=index.column(),
+                table_model=self,
             )
         return True
 
@@ -1580,8 +1693,10 @@ class EditableDataFrameModel(QAbstractTableModel):
             return Qt.ItemIsEnabled
         flags = Qt.ItemIsEnabled | Qt.ItemIsSelectable
         is_column_editable = True
-        if self.parent() and hasattr(self.parent(), "is_table_column_editable"):
-            is_column_editable = self.parent().is_table_column_editable(index.column())
+        if self.parent() and hasattr(self.parent(), "is_table_model_column_editable"):
+            is_column_editable = self.parent().is_table_model_column_editable(
+                self, index.column()
+            )
         if (
             self._editable
             and not self.is_preview_column(index.column())
@@ -1626,7 +1741,7 @@ class EditableDataFrameModel(QAbstractTableModel):
             [Qt.DisplayRole, Qt.EditRole, Qt.BackgroundRole],
         )
         if self.parent() and hasattr(self.parent(), "on_table_model_edited"):
-            self.parent().on_table_model_edited()
+            self.parent().on_table_model_edited(table_model=self)
 
     def add_empty_row(self):
         row_data = {column: "" for column in self._dataframe.columns.tolist()}
@@ -1929,10 +2044,101 @@ class ImportStructuralTopologyUnitsDialog(QDialog):
         self.accept()
 
 
+class ExtraSTmBoundaryDialog(QDialog):
+    """Collect the values needed for a boundary absent from the project."""
+
+    def __init__(self, parent=None, boundary_info=None):
+        super().__init__(parent)
+        boundary_info = boundary_info or {}
+        self.selected_color = structural_topology_color(
+            boundary_info.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "extra_boundary")
+        )
+        try:
+            self.selected_color = QColor(
+                int(float(boundary_info.get("color_R", self.selected_color.red()))),
+                int(float(boundary_info.get("color_G", self.selected_color.green()))),
+                int(float(boundary_info.get("color_B", self.selected_color.blue()))),
+            )
+        except (TypeError, ValueError):
+            pass
+        self.setWindowTitle("Add extra boundary")
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.feature_edit = QLineEdit(
+            str(boundary_info.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, ""))
+        )
+        self.role_edit = QLineEdit(
+            str(boundary_info.get(STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN, ""))
+        )
+        self.polarity_edit = QLineEdit(
+            str(boundary_info.get(STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN, ""))
+        )
+        form.addRow("Feature", self.feature_edit)
+        form.addRow("Role", self.role_edit)
+        form.addRow("Polarity", self.polarity_edit)
+        color_layout = QHBoxLayout()
+        self.color_button = QPushButton("")
+        self.color_button.setFixedSize(54, 24)
+        self.color_button.setToolTip("Choose boundary color")
+        self.color_button.clicked.connect(self.choose_color)
+        color_layout.addWidget(self.color_button)
+        color_layout.addStretch(1)
+        form.addRow("Color", color_layout)
+        layout.addLayout(form)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.validate_and_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        self._update_color_button()
+
+    def choose_color(self):
+        color_out = QColorDialog.getColor(self.selected_color, self)
+        if not color_out.isValid():
+            return
+        self.selected_color = color_out
+        self._update_color_button()
+
+    def _update_color_button(self):
+        self.color_button.setStyleSheet(
+            "QPushButton { "
+            f"background-color: rgb({self.selected_color.red()}, "
+            f"{self.selected_color.green()}, {self.selected_color.blue()}); "
+            "}"
+        )
+
+    @property
+    def boundary_info(self):
+        return {
+            STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: self.feature_edit.text().strip(),
+            STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN: self.role_edit.text().strip(),
+            STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN: self.polarity_edit.text().strip(),
+            STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN: "",
+            "color_R": self.selected_color.red(),
+            "color_G": self.selected_color.green(),
+            "color_B": self.selected_color.blue(),
+        }
+
+    def validate_and_accept(self):
+        if not self.feature_edit.text().strip():
+            QMessageBox.warning(self, "Missing feature", "Insert a boundary feature.")
+            return
+        polarity = self.polarity_edit.text().strip()
+        if polarity:
+            try:
+                float(polarity)
+            except ValueError:
+                QMessageBox.warning(
+                    self, "Invalid polarity", "Polarity must be numeric or empty."
+                )
+                return
+        self.accept()
+
+
 class ViewTable(QWidget):
     """Dockable view that lists and edits user-defined project tables."""
 
     EXPORT_FILTER = (
+        "STm JSON files (*.json);;"
         "CSV files (*.csv);;"
         "Tab-separated text (*.tsv);;"
         "Text files (*.txt);;"
@@ -1999,14 +2205,44 @@ class ViewTable(QWidget):
         self.rename_field_button.clicked.connect(self.rename_field)
         self.delete_field_button = QPushButton("Delete field")
         self.delete_field_button.clicked.connect(self.delete_field)
+        self.generate_units_button = QPushButton("Generate units")
+        self.generate_units_button.clicked.connect(self.generate_units_from_boundaries)
+        self.add_extra_boundary_button = QPushButton("Add extra boundary")
+        self.add_extra_boundary_button.clicked.connect(self.add_extra_boundary)
+        self.add_extra_unit_button = QPushButton("Add extra unit")
+        self.add_extra_unit_button.clicked.connect(self.add_extra_unit)
+        self.calculate_unit_polarity_button = QPushButton("Calculate unit polarity")
+        self.calculate_unit_polarity_button.clicked.connect(self.calculate_unit_polarities)
         toolbar_layout.addWidget(self.editing_toggle_button)
         toolbar_layout.addWidget(self.add_row_button)
         toolbar_layout.addWidget(self.delete_row_button)
         toolbar_layout.addWidget(self.add_field_button)
         toolbar_layout.addWidget(self.rename_field_button)
         toolbar_layout.addWidget(self.delete_field_button)
+        toolbar_layout.addWidget(self.generate_units_button)
+        toolbar_layout.addWidget(self.add_extra_boundary_button)
+        toolbar_layout.addWidget(self.add_extra_unit_button)
+        toolbar_layout.addWidget(self.calculate_unit_polarity_button)
         right_layout.addLayout(toolbar_layout)
 
+        self.boundaries_label = QLabel("Boundaries")
+        right_layout.addWidget(self.boundaries_label)
+        self.boundaries_table_view = QTableView()
+        self.boundaries_table_view.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.boundaries_table_view.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.boundaries_table_view.setAlternatingRowColors(True)
+        self.boundaries_table_view.horizontalHeader().setStretchLastSection(True)
+        self.boundaries_table_view.horizontalHeader().setSectionResizeMode(
+            QHeaderView.Interactive
+        )
+        self.boundaries_table_model = EditableDataFrameModel(
+            parent=self, model_kind="boundaries"
+        )
+        self.boundaries_table_view.setModel(self.boundaries_table_model)
+        right_layout.addWidget(self.boundaries_table_view, 1)
+
+        self.units_label = QLabel("Units")
+        right_layout.addWidget(self.units_label)
         self.table_view = QTableView()
         self.table_view.setSelectionBehavior(QAbstractItemView.SelectItems)
         self.table_view.setSelectionMode(QAbstractItemView.ExtendedSelection)
@@ -2015,10 +2251,10 @@ class ViewTable(QWidget):
         self.table_view.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
         self.table_view.verticalHeader().setSectionResizeMode(QHeaderView.Fixed)
         self.table_view.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table_model = EditableDataFrameModel(parent=self)
+        self.table_model = EditableDataFrameModel(parent=self, model_kind="units")
         self.table_view.setModel(self.table_model)
         self.table_view.clicked.connect(self.on_table_view_clicked)
-        right_layout.addWidget(self.table_view)
+        right_layout.addWidget(self.table_view, 1)
 
         left_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         right_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -2054,6 +2290,519 @@ class ViewTable(QWidget):
     def current_table_options(self):
         return self.parent.custom_table_options.get(self.current_table_name, {})
 
+    def _normalise_stm_boundaries(self, dataframe=None):
+        out_df = (
+            dataframe.copy()
+            if dataframe is not None
+            else pd_DataFrame(columns=STRUCTURAL_TOPOLOGY_BOUNDARY_COLUMNS)
+        )
+        for column_name in STRUCTURAL_TOPOLOGY_BOUNDARY_COLUMNS:
+            if column_name not in out_df.columns:
+                out_df[column_name] = ""
+        out_df = out_df[STRUCTURAL_TOPOLOGY_BOUNDARY_COLUMNS].copy()
+        for row_label in out_df.index.tolist():
+            out_df.at[row_label, STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN] = (
+                _stm_names_cell(
+                    out_df.at[row_label, STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN]
+                )
+            )
+        model_mask = (
+            out_df[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN]
+            .astype(str)
+            .str.strip()
+            .str.casefold()
+            == STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY.casefold()
+        )
+        if model_mask.any():
+            first_model_row = out_df.loc[model_mask].iloc[0].to_dict()
+            out_df = out_df.loc[~model_mask].copy()
+        else:
+            first_model_row = {
+                STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: (
+                    STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY
+                ),
+                STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN: "model_boundary",
+                STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN: "",
+                STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN: "",
+            }
+        first_model_row[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN] = (
+            STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY
+        )
+        out_df = pd_concat(
+            [pd_DataFrame([first_model_row], columns=out_df.columns), out_df],
+            ignore_index=True,
+        )
+        return out_df.reset_index(drop=True)
+
+    def _set_stm_feature_color(self, feature_name, color_info):
+        """Persist one boundary/unit colour without exposing RGB table columns."""
+        table_name = self.current_table_name
+        feature_name = str(feature_name or "").strip()
+        if not table_name or not feature_name:
+            return
+        options = dict(self.parent.custom_table_options.get(table_name, {}) or {})
+        color_codes = dict(options.get("stm_color_codes", {}) or {})
+        feature_colors = dict(color_codes.get("features", {}) or {})
+        feature_colors[feature_name] = _stm_color_to_dict(color_info)
+        color_codes["features"] = feature_colors
+        options["stm_color_codes"] = color_codes
+        self.parent.custom_table_options[table_name] = options
+
+    def _stm_feature_colors(self):
+        options = dict(self.current_table_options or {})
+        color_codes = options.get("stm_color_codes", {})
+        if not isinstance(color_codes, dict):
+            return {}
+        return {
+            str(feature_name).strip(): _stm_color_to_dict(color_info)
+            for feature_name, color_info in color_codes.get("features", {}).items()
+            if str(feature_name).strip()
+        }
+
+    def _normalise_stm_units(self, dataframe=None):
+        out_df = (
+            dataframe.copy()
+            if dataframe is not None
+            else pd_DataFrame(columns=STRUCTURAL_TOPOLOGY_UNIT_COLUMNS)
+        )
+        if "Domain" in out_df.columns and "Domain_1" not in out_df.columns:
+            out_df.rename(columns={"Domain": "Domain_1"}, inplace=True)
+        if (
+            STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN not in out_df.columns
+            and STRUCTURAL_TOPOLOGY_POLARITY_COLUMN in out_df.columns
+        ):
+            out_df[STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN] = out_df[
+                STRUCTURAL_TOPOLOGY_POLARITY_COLUMN
+            ]
+            out_df.drop(
+                columns=[STRUCTURAL_TOPOLOGY_POLARITY_COLUMN], inplace=True
+            )
+        out_df.drop(
+            columns=[
+                column_name
+                for column_name in ("color_R", "color_G", "color_B")
+                if column_name in out_df.columns
+            ],
+            inplace=True,
+        )
+        for column_name in STRUCTURAL_TOPOLOGY_UNIT_COLUMNS:
+            if column_name not in out_df.columns:
+                out_df[column_name] = ""
+        for row_label in out_df.index.tolist():
+            out_df.at[row_label, STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN] = (
+                normalise_structural_topology_unit_role(
+                    out_df.at[row_label, STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN]
+                )
+            )
+            out_df.at[row_label, STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN] = (
+                _stm_names_cell(
+                    out_df.at[row_label, STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN]
+                )
+            )
+        domain_columns = sorted(
+            [
+                column_name
+                for column_name in out_df.columns
+                if structural_topology_domain_order(column_name) is not None
+            ],
+            key=structural_topology_domain_order,
+        )
+        if not domain_columns:
+            out_df["Domain_1"] = ""
+            domain_columns = ["Domain_1"]
+        extra_columns = [
+            column_name
+            for column_name in out_df.columns
+            if column_name
+            not in (
+                [
+                    STRUCTURAL_TOPOLOGY_FEATURE_COLUMN,
+                    STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN,
+                    STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN,
+                    STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN,
+                ]
+                + domain_columns
+            )
+        ]
+        ordered_columns = [
+            STRUCTURAL_TOPOLOGY_FEATURE_COLUMN,
+            STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN,
+            STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN,
+            STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN,
+        ] + domain_columns + extra_columns
+        return out_df[ordered_columns].reset_index(drop=True)
+
+    def _stm_composite_from_legacy(self, dataframe=None, options=None):
+        """Migrate the original one-row-per-boundary model to the v2 tables."""
+        dataframe = dataframe if dataframe is not None else pd_DataFrame()
+        options = options or {}
+        metadata = {
+            str(info.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")).strip(): info
+            for info in self._available_stm_units()
+        }
+        boundary_rows = []
+        unit_rows = []
+        unit_names = set()
+        unit_renames = options.get("unit_renames", {})
+        for _, row in dataframe.iterrows():
+            feature = str(row.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")).strip()
+            if not feature:
+                continue
+            role = str(metadata.get(feature, {}).get("role", "")).strip()
+            polarity = row.get(STRUCTURAL_TOPOLOGY_POLARITY_COLUMN, "")
+            legacy_role = str(
+                row.get(STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN, "Discontinuity")
+            ).strip()
+            linked_units = []
+            if legacy_role.casefold() != "discontinuity":
+                unit_name = str(
+                    unit_renames.get(f"unit:{feature}", feature)
+                ).strip() or feature
+                linked_units.append(unit_name)
+                if unit_name not in unit_names:
+                    unit_row = {
+                        STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: unit_name,
+                        STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: (
+                            normalise_structural_topology_unit_role(legacy_role)
+                        ),
+                        STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN: polarity,
+                        STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN: feature,
+                    }
+                    for column_name in dataframe.columns:
+                        if structural_topology_domain_order(column_name) is not None:
+                            unit_row[column_name] = row.get(column_name, "")
+                    unit_rows.append(unit_row)
+                    unit_names.add(unit_name)
+            boundary_rows.append(
+                {
+                    STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: feature,
+                    STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN: role,
+                    STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN: polarity,
+                    STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN: _stm_names_cell(
+                        linked_units
+                    ),
+                }
+            )
+
+        manual_by_key = {}
+        for unit_info in options.get("manual_units", []):
+            if not isinstance(unit_info, dict):
+                continue
+            unit_id = str(unit_info.get("id", "")).strip()
+            feature = str(unit_info.get("feature", "")).strip()
+            if not unit_id or not feature:
+                continue
+            manual_by_key[f"unit:manual:{unit_id}"] = feature
+            if feature in unit_names:
+                continue
+            unit_row = {
+                STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: feature,
+                STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: (
+                    normalise_structural_topology_unit_role(
+                        unit_info.get("unit_role", "TU")
+                    )
+                ),
+                STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN: unit_info.get(
+                    "structural_polarity", ""
+                ),
+                STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN: "",
+            }
+            for domain_info in unit_info.get("domains", []):
+                if isinstance(domain_info, dict):
+                    unit_row[str(domain_info.get("column", "Domain_1"))] = (
+                        domain_info.get("value", "")
+                    )
+            unit_rows.append(unit_row)
+            unit_names.add(feature)
+
+        boundary_names = {
+            str(row[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN]).strip()
+            for row in boundary_rows
+        }
+        for connection in options.get("manual_connections", []):
+            if not isinstance(connection, dict):
+                continue
+            unit_name = manual_by_key.get(str(connection.get("unit", "")).strip())
+            surface_key = str(connection.get("surface", "")).strip()
+            boundary_name = (
+                surface_key[len("surface:") :]
+                if surface_key.startswith("surface:")
+                else ""
+            )
+            if not unit_name or boundary_name not in boundary_names:
+                continue
+            for unit_row in unit_rows:
+                if unit_row[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN] == unit_name:
+                    names = _stm_names(
+                        unit_row.get(STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN, "")
+                    )
+                    unit_row[STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN] = (
+                        _stm_names_cell(names + [boundary_name])
+                    )
+            for boundary_row in boundary_rows:
+                if boundary_row[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN] == boundary_name:
+                    names = _stm_names(
+                        boundary_row.get(STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN, "")
+                    )
+                    boundary_row[STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN] = (
+                        _stm_names_cell(names + [unit_name])
+                    )
+        return (
+            self._normalise_stm_boundaries(pd_DataFrame(boundary_rows)),
+            self._normalise_stm_units(pd_DataFrame(unit_rows)),
+        )
+
+    def _load_stm_composite(self, table_name, legacy_dataframe=None):
+        options = dict(self.parent.custom_table_options.get(table_name, {}) or {})
+        tables = options.get("stm_tables", {})
+        if isinstance(tables, dict) and (
+            "boundaries" in tables or "units" in tables
+        ):
+            boundary_records = list(tables.get("boundaries", []))
+            unit_records = list(tables.get("units", []))
+            recovered_colors = self._stm_feature_colors()
+            for record in boundary_records + unit_records:
+                if not isinstance(record, dict):
+                    continue
+                feature_name = str(
+                    record.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")
+                ).strip()
+                if feature_name and all(
+                    channel in record
+                    for channel in ("color_R", "color_G", "color_B")
+                ):
+                    recovered_colors[feature_name] = _stm_color_to_dict(record)
+            if recovered_colors:
+                color_codes = dict(options.get("stm_color_codes", {}) or {})
+                color_codes["features"] = recovered_colors
+                options["stm_color_codes"] = color_codes
+                self.parent.custom_table_options[table_name] = options
+            boundaries = pd_DataFrame(boundary_records)
+            units = pd_DataFrame(unit_records)
+            return (
+                self._normalise_stm_boundaries(boundaries),
+                self._normalise_stm_units(units),
+            )
+        return self._stm_composite_from_legacy(legacy_dataframe, options)
+
+    def _reconcile_stm_relationships(self, edited_side=None):
+        """Keep the two editable relationship columns reciprocal."""
+        boundaries = self._normalise_stm_boundaries(
+            self.boundaries_table_model.dataframe
+        )
+        units = self._normalise_stm_units(self.table_model.dataframe)
+        boundary_names = {
+            str(value).strip()
+            for value in boundaries[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN]
+            if str(value).strip()
+        }
+        unit_names = {
+            str(value).strip()
+            for value in units[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN]
+            if str(value).strip()
+        }
+        links = set()
+        if edited_side != "units":
+            for _, row in boundaries.iterrows():
+                boundary_name = str(
+                    row.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")
+                ).strip()
+                for unit_name in _stm_names(
+                    row.get(STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN, "")
+                ):
+                    if boundary_name in boundary_names and unit_name in unit_names:
+                        links.add((unit_name, boundary_name))
+        if edited_side != "boundaries":
+            for _, row in units.iterrows():
+                unit_name = str(
+                    row.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")
+                ).strip()
+                for boundary_name in _stm_names(
+                    row.get(STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN, "")
+                ):
+                    if unit_name in unit_names and boundary_name in boundary_names:
+                        links.add((unit_name, boundary_name))
+        for row_label in boundaries.index:
+            boundary_name = str(
+                boundaries.at[row_label, STRUCTURAL_TOPOLOGY_FEATURE_COLUMN]
+            ).strip()
+            boundaries.at[
+                row_label, STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN
+            ] = _stm_names_cell(
+                [
+                unit_name
+                for unit_name, linked_boundary in sorted(links)
+                if linked_boundary == boundary_name
+                ]
+            )
+        for row_label in units.index:
+            unit_name = str(
+                units.at[row_label, STRUCTURAL_TOPOLOGY_FEATURE_COLUMN]
+            ).strip()
+            units.at[
+                row_label, STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN
+            ] = _stm_names_cell(
+                [
+                boundary_name
+                for linked_unit, boundary_name in sorted(links)
+                if linked_unit == unit_name
+                ]
+            )
+        return boundaries, units, links
+
+    def _persist_stm_composite(self, edited_side=None, reset_models=False):
+        table_name = self.current_table_name
+        if not table_name:
+            return
+        boundaries, units, links = self._reconcile_stm_relationships(edited_side)
+        options = dict(self.parent.custom_table_options.get(table_name, {}) or {})
+        color_codes = dict(options.get("stm_color_codes", {}) or {})
+        feature_colors = {
+            str(feature_name).strip(): _stm_color_to_dict(color_info)
+            for feature_name, color_info in dict(
+                color_codes.get("features", {}) or {}
+            ).items()
+            if str(feature_name).strip()
+        }
+        feature_colors.setdefault(
+            STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY,
+            {"color_R": 255, "color_G": 255, "color_B": 255},
+        )
+        color_codes["features"] = feature_colors
+        options["stm_color_codes"] = color_codes
+        options["stm_schema_version"] = 2
+        options["stm_tables"] = {
+            "boundaries": _stm_records(boundaries),
+            "units": _stm_records(units),
+        }
+
+        manual_units = []
+        unit_key_by_name = {}
+        boundary_polarities = {}
+        for _, boundary_row in boundaries.iterrows():
+            boundary_name = str(
+                boundary_row.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")
+            ).strip()
+            try:
+                boundary_polarities[boundary_name] = float(
+                    boundary_row.get(
+                        STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN, ""
+                    )
+                )
+            except (TypeError, ValueError):
+                continue
+        for _, row in units.iterrows():
+            unit_name = str(row.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")).strip()
+            if not unit_name:
+                continue
+            unit_id = md5(unit_name.encode("utf-8")).hexdigest()[:10]
+            unit_key_by_name[unit_name] = f"unit:manual:{unit_id}"
+            linked_polarities = [
+                boundary_polarities[boundary_name]
+                for linked_unit, boundary_name in links
+                if linked_unit == unit_name and boundary_name in boundary_polarities
+            ]
+            plot_polarity = (
+                sum(linked_polarities) / len(linked_polarities)
+                if linked_polarities
+                else ""
+            )
+            linked_boundary_names = sorted(
+                boundary_name
+                for linked_unit, boundary_name in links
+                if linked_unit == unit_name
+            )
+            unit_color = feature_colors.get(unit_name)
+            if unit_color is None:
+                for boundary_name in linked_boundary_names:
+                    if boundary_name in feature_colors:
+                        unit_color = feature_colors[boundary_name]
+                        break
+            if unit_color is None:
+                unit_color = _stm_color_to_dict(
+                    structural_topology_color(unit_name)
+                )
+            # A generated unit has the same Feature as its source boundary.
+            # Store that shared colour explicitly so its node and every link
+            # remain visually identical to the boundary.
+            if unit_name in boundary_polarities or any(
+                boundary_name == unit_name
+                for boundary_name in linked_boundary_names
+            ):
+                unit_color = feature_colors.get(unit_name, unit_color)
+            feature_colors[unit_name] = _stm_color_to_dict(unit_color)
+            domains = [
+                {"column": column_name, "value": str(row.get(column_name, "")).strip()}
+                for column_name in units.columns
+                if structural_topology_domain_order(column_name) is not None
+                and str(row.get(column_name, "")).strip()
+            ]
+            manual_units.append(
+                {
+                    "id": unit_id,
+                    "feature": unit_name,
+                    "display_name": unit_name,
+                    "unit_role": structural_topology_legacy_unit_role(
+                        row.get(STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN, "TU")
+                    ),
+                    "structural_polarity": row.get(
+                        STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN, ""
+                    ),
+                    "plot_polarity": plot_polarity,
+                    "domains": domains,
+                    "color_R": unit_color.get("color_R", 255),
+                    "color_G": unit_color.get("color_G", 255),
+                    "color_B": unit_color.get("color_B", 255),
+                }
+            )
+        options["manual_units"] = manual_units
+        options["manual_connections"] = [
+            {
+                "unit": unit_key_by_name[unit_name],
+                "surface": (
+                    "surface:boundary"
+                    if boundary_name == STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY
+                    else f"surface:{boundary_name}"
+                ),
+            }
+            for unit_name, boundary_name in sorted(links)
+            if unit_name in unit_key_by_name
+        ]
+        options["stm_tables"] = {
+            "boundaries": _stm_records_with_colors(boundaries, feature_colors),
+            "units": _stm_records_with_colors(units, feature_colors),
+        }
+        options.pop("unit_renames", None)
+        self.parent.custom_table_options[table_name] = options
+
+        legacy_rows = []
+        for _, row in boundaries.iterrows():
+            if (
+                str(
+                    row.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")
+                ).strip()
+                == STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY
+            ):
+                continue
+            legacy_rows.append(
+                {
+                    STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: row.get(
+                        STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, ""
+                    ),
+                    STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: "Discontinuity",
+                    STRUCTURAL_TOPOLOGY_POLARITY_COLUMN: row.get(
+                        STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN, ""
+                    ),
+                    "Domain_1": "",
+                }
+            )
+        self.parent.custom_tables[table_name] = pd_DataFrame(
+            legacy_rows, columns=STRUCTURAL_TOPOLOGY_BASE_COLUMNS
+        )
+        if reset_models:
+            self.boundaries_table_model.set_dataframe(boundaries)
+            self.table_model.set_dataframe(units)
+
     def current_dataframe_column_name(self, column_index: int):
         if (
             column_index < 0
@@ -2073,13 +2822,21 @@ class ViewTable(QWidget):
             key=lambda column_name: structural_topology_domain_order(column_name),
         )
 
-    def is_table_column_editable(self, column_index: int) -> bool:
-        column_name = self.current_dataframe_column_name(column_index)
+    def is_table_model_column_editable(self, table_model, column_index: int) -> bool:
+        if column_index < 0 or column_index >= table_model.dataframe.shape[1]:
+            return False
+        column_name = str(table_model.dataframe.columns[column_index])
         if column_name is None:
             return False
         if self.current_table_type != STRUCTURAL_TOPOLOGY_TABLE_TYPE:
             return True
-        return column_name != STRUCTURAL_TOPOLOGY_FEATURE_COLUMN
+        if table_model is self.boundaries_table_model:
+            return column_name != STRUCTURAL_TOPOLOGY_FEATURE_COLUMN
+        return column_name != STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN
+
+    def is_table_column_editable(self, column_index: int) -> bool:
+        """Backward-compatible wrapper for code using the primary model."""
+        return self.is_table_model_column_editable(self.table_model, column_index)
 
     def _current_domain_column_name(self):
         current_index = self.table_view.currentIndex()
@@ -2154,13 +2911,13 @@ class ViewTable(QWidget):
         return out_df[ordered_columns]
 
     def _apply_stm_dataframe(self, dataframe):
-        """Assign a normalised STm dataframe to the current table/model."""
+        """Assign a normalised Units dataframe and refresh the legacy view."""
         table_name = self.current_table_name
         if not table_name:
             return
-        normalised_df = self._normalise_stm_dataframe_columns(dataframe)
-        self.parent.custom_tables[table_name] = normalised_df
+        normalised_df = self._normalise_stm_units(dataframe)
         self.table_model.set_dataframe(normalised_df)
+        self._persist_stm_composite(edited_side="units", reset_models=True)
 
     def _reset_table_delegates(self):
         """Reset per-column delegates to the default delegate."""
@@ -2225,8 +2982,10 @@ class ViewTable(QWidget):
                     "color_G": color_override.get("color_G", row.get("color_G", 255)),
                     "color_B": color_override.get("color_B", row.get("color_B", 255)),
                 }
-        elif feature_color_map:
+        if feature_color_map:
             for feature_name, color_info in feature_color_map.items():
+                if feature_name in units_map:
+                    continue
                 units_map[feature_name] = {
                     STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: feature_name,
                     STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: "Discontinuity",
@@ -2281,8 +3040,12 @@ class ViewTable(QWidget):
         current_type = self.parent.custom_table_types.get(table_name, "manual")
         current_options = self.parent.custom_table_options.get(table_name, {})
         if current_type == STRUCTURAL_TOPOLOGY_TABLE_TYPE:
-            self._apply_stm_dataframe(dataframe)
+            boundaries, units = self._load_stm_composite(table_name, dataframe)
+            self.boundaries_table_model.set_dataframe(boundaries)
+            self.table_model.set_dataframe(units)
+            self._persist_stm_composite(reset_models=True)
         else:
+            self.boundaries_table_model.set_dataframe(pd_DataFrame())
             self.table_model.set_dataframe(dataframe)
         if current_type == PropertiesCMaps.custom_colormap_table_type:
             mode_label = (
@@ -2305,17 +3068,19 @@ class ViewTable(QWidget):
         self.editing_enabled = bool(checked)
         self.update_editing_ui()
 
-    def on_table_model_edited(self, row_index=None, column_index=None):
+    def on_table_model_edited(
+        self, row_index=None, column_index=None, table_model=None
+    ):
         """React to cell edits coming from the table model."""
         if self.current_table_type == STRUCTURAL_TOPOLOGY_TABLE_TYPE:
-            edited_column_name = (
-                self.current_dataframe_column_name(column_index)
-                if column_index is not None
-                else None
+            edited_side = (
+                "boundaries"
+                if table_model is self.boundaries_table_model
+                else "units"
             )
-            self._enforce_current_stm_constraints(
-                edited_row_index=row_index,
-                edited_column_name=edited_column_name,
+            self._persist_stm_composite(
+                edited_side=edited_side,
+                reset_models=True,
             )
         if (
             self.current_table_type == STRUCTURAL_TOPOLOGY_TABLE_TYPE
@@ -2394,6 +3159,9 @@ class ViewTable(QWidget):
             self._install_stm_delegates()
         self.table_model.set_show_colormap_preview(is_colormap_table)
         self.table_model.set_editable(self.editing_enabled)
+        self.boundaries_table_model.set_editable(
+            self.editing_enabled and is_stm_table
+        )
         edit_triggers = (
             QAbstractItemView.DoubleClicked
             | QAbstractItemView.EditKeyPressed
@@ -2402,10 +3170,19 @@ class ViewTable(QWidget):
         self.table_view.setEditTriggers(
             edit_triggers if self.editing_enabled else QAbstractItemView.NoEditTriggers
         )
+        self.boundaries_table_view.setEditTriggers(
+            edit_triggers
+            if self.editing_enabled and is_stm_table
+            else QAbstractItemView.NoEditTriggers
+        )
+        self.boundaries_label.setVisible(is_stm_table)
+        self.boundaries_table_view.setVisible(is_stm_table)
+        self.units_label.setVisible(is_stm_table)
 
         has_table = bool(self.current_table_name)
         has_columns = self.table_model.columnCount() > 0
         has_rows = self.table_model.rowCount() > 0
+        has_boundaries = self.boundaries_table_model.rowCount() > 0
         allow_structure_edit = self.editing_enabled and has_table
         allow_row_edit = allow_structure_edit and has_columns
         allow_column_edit = allow_structure_edit and has_columns and not is_colormap_table
@@ -2416,7 +3193,7 @@ class ViewTable(QWidget):
         )
         if is_stm_table:
             self.add_row_button.setText("Import boundaries")
-            self.delete_row_button.setText("Remove boundaries")
+            self.delete_row_button.setText("Remove selected")
             self.add_field_button.setText("Add domain")
             self.rename_field_button.setText("Rename domain")
             self.delete_field_button.setText("Delete domain")
@@ -2430,10 +3207,26 @@ class ViewTable(QWidget):
         self.delete_table_button.setEnabled(has_table)
         self.export_table_button.setEnabled(has_table)
         self.build_stm_button.setVisible(is_stm_table)
-        self.build_stm_button.setEnabled(is_stm_table and has_rows)
+        self.build_stm_button.setEnabled(
+            is_stm_table and (has_boundaries or has_rows)
+        )
+        self.generate_units_button.setVisible(is_stm_table)
+        self.add_extra_boundary_button.setVisible(is_stm_table)
+        self.add_extra_unit_button.setVisible(is_stm_table)
+        self.calculate_unit_polarity_button.setVisible(is_stm_table)
         if is_stm_table:
             self.add_row_button.setEnabled(allow_structure_edit)
-            self.delete_row_button.setEnabled(allow_structure_edit and has_rows)
+            self.delete_row_button.setEnabled(
+                allow_structure_edit and (has_boundaries or has_rows)
+            )
+            self.generate_units_button.setEnabled(
+                allow_structure_edit and has_boundaries
+            )
+            self.add_extra_boundary_button.setEnabled(allow_structure_edit)
+            self.add_extra_unit_button.setEnabled(allow_structure_edit)
+            self.calculate_unit_polarity_button.setEnabled(
+                allow_structure_edit and has_rows
+            )
             self.add_field_button.setEnabled(allow_structure_edit)
             self.rename_field_button.setEnabled(
                 allow_structure_edit and bool(selected_domain_column)
@@ -2442,6 +3235,10 @@ class ViewTable(QWidget):
                 allow_structure_edit and bool(selected_domain_column)
             )
         else:
+            self.generate_units_button.setVisible(False)
+            self.add_extra_boundary_button.setVisible(False)
+            self.add_extra_unit_button.setVisible(False)
+            self.calculate_unit_polarity_button.setVisible(False)
             self.add_row_button.setEnabled(allow_row_edit)
             self.delete_row_button.setEnabled(allow_row_edit and has_rows)
             self.add_field_button.setEnabled(allow_structure_edit)
@@ -2494,6 +3291,7 @@ class ViewTable(QWidget):
     def _normalise_export_path(self, file_path: str, selected_filter: str) -> tuple[str, str]:
         """Return a normalized output path and delimiter for textual table export."""
         delimiter_map = {
+            "STm JSON files (*.json)": (".json", ","),
             "CSV files (*.csv)": (".csv", ","),
             "Tab-separated text (*.tsv)": (".tsv", "\t"),
             "Text files (*.txt)": (".txt", "\t"),
@@ -2615,12 +3413,21 @@ class ViewTable(QWidget):
             )
             return
 
+        export_filter = (
+            self.EXPORT_FILTER
+            if self.current_table_type == STRUCTURAL_TOPOLOGY_TABLE_TYPE
+            else self.EXPORT_FILTER.split(";;", 1)[1]
+        )
         output_path, selected_filter = QFileDialog.getSaveFileName(
             self,
             f"Export table {table_name}",
             table_name,
-            self.EXPORT_FILTER,
-            "CSV files (*.csv)",
+            export_filter,
+            (
+                "STm JSON files (*.json)"
+                if self.current_table_type == STRUCTURAL_TOPOLOGY_TABLE_TYPE
+                else "CSV files (*.csv)"
+            ),
         )
         if not output_path:
             return
@@ -2634,6 +3441,30 @@ class ViewTable(QWidget):
             dataframe = self.parent.custom_tables[table_name]
             if self.current_table_type == STRUCTURAL_TOPOLOGY_TABLE_TYPE:
                 export_options = dict(self.parent.custom_table_options.get(table_name, {}))
+                if output_path.lower().endswith(".json"):
+                    boundaries, units, _ = self._reconcile_stm_relationships()
+                    feature_colors = self._stm_feature_colors()
+                    with open(output_path, "w", encoding="utf-8") as output_stream:
+                        json.dump(
+                            {
+                                "schema": "pzero.stm.v2",
+                                "version": 2,
+                                "name": table_name,
+                                "boundaries": _stm_records_with_colors(
+                                    boundaries, feature_colors
+                                ),
+                                "units": _stm_records_with_colors(
+                                    units, feature_colors
+                                ),
+                            },
+                            output_stream,
+                            ensure_ascii=False,
+                            indent=2,
+                        )
+                    self.parent.print_terminal(
+                        f'Exported table "{table_name}" to {output_path}'
+                    )
+                    return
                 feature_colors = {}
                 stored_color_codes = export_options.get("stm_color_codes", {})
                 if isinstance(stored_color_codes, dict):
@@ -2713,8 +3544,15 @@ class ViewTable(QWidget):
                 table_name=tn,
                 updates=updates,
             ),
+            polarity_calculator=self.calculate_unit_polarities,
         )
         dialog.exec()
+        boundaries, units = self._load_stm_composite(
+            table_name, self.parent.custom_tables.get(table_name)
+        )
+        self.boundaries_table_model.set_dataframe(boundaries)
+        self.table_model.set_dataframe(units)
+        self.update_editing_ui()
 
     def _update_stm_build_options(self, table_name=None, updates=None):
         """Persist STm builder options without discarding existing table options."""
@@ -2723,6 +3561,46 @@ class ViewTable(QWidget):
         merged_options = dict(self.parent.custom_table_options.get(table_name, {}))
         merged_options.update(dict(updates or {}))
         self.parent.custom_table_options[table_name] = merged_options
+        if "manual_connections" in (updates or {}):
+            unit_names_by_key = {}
+            for unit_info in merged_options.get("manual_units", []):
+                if not isinstance(unit_info, dict):
+                    continue
+                unit_id = str(unit_info.get("id", "")).strip()
+                unit_name = str(unit_info.get("feature", "")).strip()
+                if unit_id and unit_name:
+                    unit_names_by_key[f"unit:manual:{unit_id}"] = unit_name
+            links_by_unit = {}
+            for connection in merged_options.get("manual_connections", []):
+                if not isinstance(connection, dict):
+                    continue
+                unit_name = unit_names_by_key.get(
+                    str(connection.get("unit", "")).strip()
+                )
+                surface_key = str(connection.get("surface", "")).strip()
+                if (
+                    unit_name
+                    and surface_key.startswith("surface:")
+                ):
+                    links_by_unit.setdefault(unit_name, []).append(
+                        (
+                            STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY
+                            if surface_key == "surface:boundary"
+                            else surface_key[len("surface:") :]
+                        )
+                    )
+            for row_label in self.table_model.dataframe.index:
+                unit_name = str(
+                    self.table_model.dataframe.at[
+                        row_label, STRUCTURAL_TOPOLOGY_FEATURE_COLUMN
+                    ]
+                ).strip()
+                self.table_model.dataframe.at[
+                    row_label, STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN
+                ] = _stm_names_cell(links_by_unit.get(unit_name, []))
+            self._persist_stm_composite(
+                edited_side="units", reset_models=True
+            )
 
     def add_row(self):
         table_name = self.current_table_name
@@ -2764,7 +3642,17 @@ class ViewTable(QWidget):
         if not table_name:
             return
 
-        selection_model = self.table_view.selectionModel()
+        target_view = self.table_view
+        target_model = self.table_model
+        edited_side = "units"
+        if self.current_table_type == STRUCTURAL_TOPOLOGY_TABLE_TYPE:
+            boundary_rows = self.boundaries_table_view.selectionModel().selectedRows()
+            unit_rows = self.table_view.selectionModel().selectedRows()
+            if boundary_rows and not unit_rows:
+                target_view = self.boundaries_table_view
+                target_model = self.boundaries_table_model
+                edited_side = "boundaries"
+        selection_model = target_view.selectionModel()
         if selection_model is None:
             return
 
@@ -2772,11 +3660,33 @@ class ViewTable(QWidget):
             {index.row() for index in selection_model.selectedRows()},
             reverse=True,
         )
-        if not selected_rows and self.table_view.currentIndex().isValid():
-            selected_rows = [self.table_view.currentIndex().row()]
+        if not selected_rows and target_view.currentIndex().isValid():
+            selected_rows = [target_view.currentIndex().row()]
         if not selected_rows:
             return
-        self.table_model.remove_rows(selected_rows)
+        if target_model is self.boundaries_table_model:
+            selected_rows = [
+                row_index
+                for row_index in selected_rows
+                if str(
+                    target_model.dataframe.iloc[row_index].get(
+                        STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, ""
+                    )
+                ).strip()
+                != STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY
+            ]
+            if not selected_rows:
+                QMessageBox.information(
+                    self,
+                    "Protected boundary",
+                    '"Model boundary" is always part of an STm.',
+                )
+                return
+        target_model.remove_rows(selected_rows)
+        if self.current_table_type == STRUCTURAL_TOPOLOGY_TABLE_TYPE:
+            self._persist_stm_composite(
+                edited_side=edited_side, reset_models=True
+            )
         self.update_editing_ui()
         if (
             self.current_table_type == STRUCTURAL_TOPOLOGY_TABLE_TYPE
@@ -2786,16 +3696,19 @@ class ViewTable(QWidget):
         self._notify_custom_table_metadata_changed()
 
     def import_structural_topology_units(self):
-        """Append selected geology legend units to the current STm table."""
+        """Append selected geology legend boundaries to the Boundaries table."""
         table_name = self.current_table_name
         if not table_name:
             return
 
         existing_names = set()
-        if STRUCTURAL_TOPOLOGY_FEATURE_COLUMN in self.table_model.dataframe.columns:
+        if (
+            STRUCTURAL_TOPOLOGY_FEATURE_COLUMN
+            in self.boundaries_table_model.dataframe.columns
+        ):
             existing_names = {
                 str(value).strip()
-                for value in self.table_model.dataframe[
+                for value in self.boundaries_table_model.dataframe[
                     STRUCTURAL_TOPOLOGY_FEATURE_COLUMN
                 ].tolist()
                 if str(value).strip()
@@ -2817,14 +3730,220 @@ class ViewTable(QWidget):
             unit_info = units_by_name.get(selected_name)
             if not unit_info:
                 continue
-            row_data = {}
-            for column_name in self.table_model.dataframe.columns.tolist():
-                row_data[column_name] = unit_info.get(column_name, "")
-            self.table_model.add_row_data(row_data)
+            self._set_stm_feature_color(selected_name, unit_info)
+            self.boundaries_table_model.add_row_data(
+                {
+                    STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: selected_name,
+                    STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN: unit_info.get(
+                        "role", ""
+                    ),
+                    STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN: unit_info.get(
+                        STRUCTURAL_TOPOLOGY_POLARITY_COLUMN, ""
+                    ),
+                    STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN: "",
+                }
+            )
 
-        if hasattr(self.parent, "sync_structural_topology_table_to_legend"):
-            self.parent.sync_structural_topology_table_to_legend(table_name)
+        self._persist_stm_composite(
+            edited_side="boundaries", reset_models=True
+        )
         self.update_editing_ui()
+        self._notify_custom_table_metadata_changed()
+
+    def _selected_boundary_rows(self):
+        selection_model = self.boundaries_table_view.selectionModel()
+        if selection_model is None:
+            return []
+        selected = sorted({index.row() for index in selection_model.selectedRows()})
+        if not selected:
+            selected = sorted({index.row() for index in selection_model.selectedIndexes()})
+        return selected
+
+    def generate_units_from_boundaries(self):
+        """Generate TU units from selected boundaries and create reciprocal links."""
+        if self.current_table_type != STRUCTURAL_TOPOLOGY_TABLE_TYPE:
+            return
+        selected_rows = self._selected_boundary_rows()
+        if not selected_rows:
+            QMessageBox.information(
+                self,
+                "Generate units",
+                "Select one or more boundary rows first.",
+            )
+            return
+        boundaries = self.boundaries_table_model.dataframe
+        existing_units = {
+            str(value).strip()
+            for value in self.table_model.dataframe.get(
+                STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, []
+            )
+            if str(value).strip()
+        }
+        for row_index in selected_rows:
+            if row_index < 0 or row_index >= len(boundaries.index):
+                continue
+            boundary_name = str(
+                boundaries.iloc[row_index].get(
+                    STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, ""
+                )
+            ).strip()
+            if not boundary_name:
+                continue
+            if boundary_name not in existing_units:
+                row_data = {
+                    column_name: ""
+                    for column_name in self.table_model.dataframe.columns
+                }
+                row_data.update(
+                    {
+                        STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: boundary_name,
+                        STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: "TU",
+                        STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN: "",
+                        STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN: boundary_name,
+                    }
+                )
+                self.table_model.add_row_data(row_data)
+                existing_units.add(boundary_name)
+            linked_units = _stm_names(
+                boundaries.iloc[row_index].get(
+                    STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN, ""
+                )
+            )
+            boundaries.at[
+                boundaries.index[row_index],
+                STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN,
+            ] = _stm_names_cell(linked_units + [boundary_name])
+        self._persist_stm_composite(reset_models=True)
+        self.update_editing_ui()
+        self._notify_custom_table_metadata_changed()
+
+    def add_extra_boundary(self):
+        """Add a boundary that does not yet exist in the PZero project."""
+        if self.current_table_type != STRUCTURAL_TOPOLOGY_TABLE_TYPE:
+            return
+        dialog = ExtraSTmBoundaryDialog(parent=self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        feature = dialog.boundary_info[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN]
+        existing = {
+            str(value).strip()
+            for value in self.boundaries_table_model.dataframe.get(
+                STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, []
+            )
+        }
+        if feature in existing:
+            QMessageBox.warning(
+                self, "Duplicate boundary", f'Boundary "{feature}" already exists.'
+            )
+            return
+        self.boundaries_table_model.add_row_data(dialog.boundary_info)
+        self._set_stm_feature_color(feature, dialog.boundary_info)
+        self._persist_stm_composite(
+            edited_side="boundaries", reset_models=True
+        )
+        self.update_editing_ui()
+        self._notify_custom_table_metadata_changed()
+
+    def add_extra_unit(self):
+        """Add an editable unit directly to the Units table."""
+        if self.current_table_type != STRUCTURAL_TOPOLOGY_TABLE_TYPE:
+            return
+        dialog = ManualSTmUnitDialog(
+            parent=self, domain_columns=self.current_domain_columns
+        )
+        if dialog.exec() != QDialog.Accepted:
+            return
+        unit_info = dialog.unit_info
+        feature = str(unit_info.get("feature", "")).strip()
+        existing = {
+            str(value).strip()
+            for value in self.table_model.dataframe.get(
+                STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, []
+            )
+        }
+        if feature in existing:
+            QMessageBox.warning(
+                self, "Duplicate unit", f'Unit "{feature}" already exists.'
+            )
+            return
+        boundary_features = {
+            str(value).strip()
+            for value in self.boundaries_table_model.dataframe.get(
+                STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, []
+            )
+            if str(value).strip()
+        }
+        if feature not in boundary_features:
+            self._set_stm_feature_color(feature, unit_info)
+        row_data = {
+            column_name: ""
+            for column_name in self.table_model.dataframe.columns
+        }
+        row_data.update(
+            {
+                STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: feature,
+                STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: unit_info.get(
+                    "unit_role", "TU"
+                ),
+                STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN: "",
+                STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN: "",
+            }
+        )
+        for domain_info in unit_info.get("domains", []):
+            row_data[str(domain_info.get("column", "Domain_1"))] = (
+                domain_info.get("value", "")
+            )
+        self.table_model.add_row_data(row_data)
+        self._persist_stm_composite(edited_side="units", reset_models=True)
+        self.update_editing_ui()
+        self._notify_custom_table_metadata_changed()
+
+    def calculate_unit_polarities(self):
+        """Calculate unambiguous midpoints from exactly two linked polarities."""
+        if self.current_table_type != STRUCTURAL_TOPOLOGY_TABLE_TYPE:
+            return
+        boundary_polarities = {}
+        for _, row in self.boundaries_table_model.dataframe.iterrows():
+            name = str(row.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")).strip()
+            try:
+                boundary_polarities[name] = float(
+                    row.get(STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN, "")
+                )
+            except (TypeError, ValueError):
+                continue
+        calculated = 0
+        ambiguous = 0
+        units = self.table_model.dataframe
+        for row_label in units.index:
+            linked_values = sorted(
+                {
+                    boundary_polarities[name]
+                    for name in _stm_names(
+                        units.at[
+                            row_label,
+                            STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN,
+                        ]
+                    )
+                    if name in boundary_polarities
+                }
+            )
+            if len(linked_values) == 2:
+                units.at[
+                    row_label, STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN
+                ] = (linked_values[0] + linked_values[1]) / 2.0
+                calculated += 1
+            elif len(linked_values) != 2:
+                ambiguous += 1
+        self._persist_stm_composite(reset_models=True)
+        QMessageBox.information(
+            self,
+            "Unit polarity",
+            (
+                f"Calculated {calculated} unit polarities.\n"
+                f"Left {ambiguous} units unchanged because they do not have "
+                "exactly two distinct linked boundary polarities."
+            ),
+        )
         self._notify_custom_table_metadata_changed()
 
     def add_field(self):
