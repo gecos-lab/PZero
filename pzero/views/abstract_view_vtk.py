@@ -227,12 +227,31 @@ class ViewVTK(BaseView):
         """Change point size for actor uid"""
         for uid in updated_uids:
             if uid in self.uids_in_view:
-                # Get color from legend
                 point_size = collection.get_uid_legend(uid=uid)["point_size"]
-                # Now update color for actor uid
-                self.get_actor_by_uid(uid).GetProperty().SetPointSize(point_size)
-            else:
-                continue
+                
+                # Check if this uid is showing Normals
+                show_property = self.actors_df.loc[
+                    self.actors_df["uid"] == uid, "show_property"
+                ].values[0]
+                
+                if show_property is not None and (
+                    show_property == "Normals"
+                    or (isinstance(show_property, str) and show_property.startswith("Normals["))
+                ):
+                    coll_name = self.actors_df.loc[
+                        self.actors_df["uid"] == uid, "collection"
+                    ].values[0]
+                    show = self.actors_df.loc[
+                        self.actors_df["uid"] == uid, "show"
+                    ].values[0]
+                    self.show_actor_with_property(
+                        uid=uid,
+                        coll_name=coll_name,
+                        show_property=show_property,
+                        visible=show,
+                    )
+                else:
+                    self.get_actor_by_uid(uid).GetProperty().SetPointSize(point_size)
 
     def set_actor_visible(self, uid=None, visible=None, name=None):
         """Set actor uid visible or invisible (visible = True or False)"""
