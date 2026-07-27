@@ -40,7 +40,6 @@ from matplotlib.widgets import RectangleSelector
 import matplotlib.cm as cm
 
 
-
 class ViewStereoplot(ViewMPL):
 
     Z_CONTOURS = 1
@@ -76,7 +75,7 @@ class ViewStereoplot(ViewMPL):
         self.seed_pick_lineations = []
         self.seed_pick_actors = []
         self.seed_pick_cid = None
-        self.rectangle_selector = None        # holds the active RectangleSelector widget
+        self.rectangle_selector = None  # holds the active RectangleSelector widget
         self.selection_tool_active = False
         self.selection_highlight_actor = None
 
@@ -107,7 +106,7 @@ class ViewStereoplot(ViewMPL):
         self.actionSavePng = QAction("Export as PNG", self)
         self.actionSavePng.triggered.connect(self.export_png)
         self.menuView.addAction(self.actionSavePng)
-        
+
         # ---- Select Menu ----
         self.actionSelectionTool = QAction("Polygon selection", self)
         self.actionSelectionTool.setCheckable(True)
@@ -140,7 +139,7 @@ class ViewStereoplot(ViewMPL):
         self.kmedoids_k_widget_action = QWidgetAction(self)
         self.kmedoids_k_widget_action.setDefaultWidget(self.kmedoids_k_spinbox)
         self.menuAnalysis.addAction(self.kmedoids_k_widget_action)
-        
+
         self.actionExportStats = QAction("Export statistics summary", self)
         self.actionExportStats.triggered.connect(self.export_statistics_summary)
         self.menuAnalysis.addAction(self.actionExportStats)
@@ -486,7 +485,7 @@ class ViewStereoplot(ViewMPL):
                     "show_property": show_property,
                 }
             )
-            
+
         self._deactivate_rectangle()
 
         self.actors_df = pd_DataFrame(new_rows)
@@ -1399,7 +1398,9 @@ class ViewStereoplot(ViewMPL):
                 minspany=5,
                 spancoords="pixels",
                 interactive=False,
-                props=dict(facecolor="none", edgecolor="blue", linewidth=1, linestyle="--"),
+                props=dict(
+                    facecolor="none", edgecolor="blue", linewidth=1, linestyle="--"
+                ),
             )
             self.print_terminal(
                 "Selection tool active — draw a polygon around poles to select entities."
@@ -1408,7 +1409,7 @@ class ViewStereoplot(ViewMPL):
             # Deactivate: disconnect and destroy the rectangle
             self._deactivate_rectangle()
             self.print_terminal("Selection tool deactivated.")
-            
+
     def _deactivate_rectangle(self):
         """Disconnect and destroy the RectangleSelector if one is active."""
         if self.lasso_selector is not None:
@@ -1424,7 +1425,7 @@ class ViewStereoplot(ViewMPL):
                 self.figure.canvas.draw()
         self.selection_tool_active = False
         self.actionSelectionTool.setChecked(False)
-        
+
     def _on_rectangle_select(self, eclick, erelease):
         """
         Called by RectangleSelector when the user releases the mouse after
@@ -1474,8 +1475,7 @@ class ViewStereoplot(ViewMPL):
             lons = uid_lons[uid]
             lats = uid_lats[uid]
             inside = (
-                (lons >= x_min) & (lons <= x_max) &
-                (lats >= y_min) & (lats <= y_max)
+                (lons >= x_min) & (lons <= x_max) & (lats >= y_min) & (lats <= y_max)
             )
             if inside.any():
                 selected_uids.append(uid)
@@ -1488,7 +1488,7 @@ class ViewStereoplot(ViewMPL):
         self.print_terminal(
             f"Selected {len(selected_uids)} entity/entities via rectangle selection."
         )
-        
+
         # Clear any previous highlight
         if self.selection_highlight_actor is not None:
             try:
@@ -1501,7 +1501,7 @@ class ViewStereoplot(ViewMPL):
         if selected_uids:
             all_selected_lons = np_concatenate([uid_lons[uid] for uid in selected_uids])
             all_selected_lats = np_concatenate([uid_lats[uid] for uid in selected_uids])
-            
+
             self.selection_highlight_actor = self.ax.plot(
                 all_selected_lons,
                 all_selected_lats,
@@ -1548,7 +1548,10 @@ class ViewStereoplot(ViewMPL):
         # Number of data points used
         if hasattr(self, "last_normals_array") and self.last_normals_array is not None:
             lines.append(f"Normals:    {self.last_normals_array.shape[0]} points")
-        if hasattr(self, "last_lineations_array") and self.last_lineations_array is not None:
+        if (
+            hasattr(self, "last_lineations_array")
+            and self.last_lineations_array is not None
+        ):
             lines.append(f"Lineations: {self.last_lineations_array.shape[0]} points")
         lines.append("")
 
@@ -1578,7 +1581,9 @@ class ViewStereoplot(ViewMPL):
                 )
                 plunge = float(np_atleast_1d(plunge)[0])
                 bearing = float(np_atleast_1d(bearing)[0]) % 360
-                lines.append(f"  Mean direction: bearing {bearing:.1f}°, plunge {plunge:.1f}°")
+                lines.append(
+                    f"  Mean direction: bearing {bearing:.1f}°, plunge {plunge:.1f}°"
+                )
                 lines.append(f"  Concentration (kappa): {kappa:.4f}")
 
             # ---- Bingham ----
@@ -1589,7 +1594,11 @@ class ViewStereoplot(ViewMPL):
                 eigenvalues = bingham_result["eigenvalues"]
                 axes = bingham_result["axes"]
 
-                axis_labels = ["Major axis (e1)", "Intermediate axis (e2)", "Minor axis (e3)"]
+                axis_labels = [
+                    "Major axis (e1)",
+                    "Intermediate axis (e2)",
+                    "Minor axis (e3)",
+                ]
                 for i, (label, axis, eigval) in enumerate(
                     zip(axis_labels, axes, eigenvalues)
                 ):
@@ -1606,13 +1615,19 @@ class ViewStereoplot(ViewMPL):
                 # Fabric interpretation from eigenvalue ratios
                 e1, e2, e3 = eigenvalues
                 if e1 > 0 and e3 > 0:
-                    lines.append(f"  Eigenvalue ratios — e1/e3: {e1/e3:.2f},  e2/e3: {e2/e3:.2f}")
+                    lines.append(
+                        f"  Eigenvalue ratios — e1/e3: {e1/e3:.2f},  e2/e3: {e2/e3:.2f}"
+                    )
                     if e1 / e3 > 5 and (e1 - e2) < (e2 - e3):
                         lines.append("  Fabric interpretation: cluster (point maximum)")
                     elif e1 / e3 > 5 and (e1 - e2) > (e2 - e3):
-                        lines.append("  Fabric interpretation: girdle (great circle distribution)")
+                        lines.append(
+                            "  Fabric interpretation: girdle (great circle distribution)"
+                        )
                     else:
-                        lines.append("  Fabric interpretation: intermediate / scattered")
+                        lines.append(
+                            "  Fabric interpretation: intermediate / scattered"
+                        )
 
             # ---- K-medoids ----
             kmeans = kind_results.get("kmeans")
@@ -1639,7 +1654,9 @@ class ViewStereoplot(ViewMPL):
                             f"medoid bearing {bearing:.1f}°, plunge {plunge:.1f}°"
                         )
                     else:
-                        lines.append(f"  Cluster {cluster_id}: {count} points — degenerate medoid")
+                        lines.append(
+                            f"  Cluster {cluster_id}: {count} points — degenerate medoid"
+                        )
 
             lines.append("")
 
@@ -1664,9 +1681,7 @@ class ViewStereoplot(ViewMPL):
         self.print_terminal(summary)
 
         # Ask user if they also want to save to file
-        input_dict = {
-            "save_to_file": ["Save to file? (leave empty to skip): ", ""]
-        }
+        input_dict = {"save_to_file": ["Save to file? (leave empty to skip): ", ""]}
         result = multiple_input_dialog(
             title="Export statistics summary", input_dict=input_dict
         )
