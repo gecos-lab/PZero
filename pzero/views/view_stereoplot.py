@@ -103,7 +103,7 @@ class ViewStereoplot(ViewMPL):
         self.actionSetPolar = QAction("Toggle grid", self)
         self.actionSetPolar.triggered.connect(self.toggle_grid)
         self.menuView.addAction(self.actionSetPolar)
-        
+
         self.actionSavePng = QAction("Export as PNG", self)
         self.actionSavePng.triggered.connect(self.export_png)
         self.menuView.addAction(self.actionSavePng)
@@ -578,7 +578,7 @@ class ViewStereoplot(ViewMPL):
         ).removesuffix(".png")
         self.figure.savefig(out_file_name, dpi=300)
         self.print_terminal(f"Stereoplot view saved as {out_file_name}.")
-    
+
     # --- Orientation analysis: data pipeline ---
     def get_normals_and_lineations_for_analysis(self):
         """
