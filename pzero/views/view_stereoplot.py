@@ -1376,153 +1376,154 @@ class ViewStereoplot(ViewMPL):
             return
         self.save_clusters_as_property(property_name=property_name)
 
-    # --- Rectangle selection tool ---
-    def toggle_selection_tool(self):
-        """
-        Toggle the polygon (rectangle) selection tool on or off.
-        When active, the user can draw a freehand polygon on the stereonet
-        to select entities whose poles fall inside it.
-        """
-        self.selection_tool_active = self.actionSelectionTool.isChecked()
+    # # --- Rectangle selection tool ---
+    # def toggle_selection_tool(self):
+    #     """
+    #     Toggle the polygon (rectangle) selection tool on or off.
+    #     When active, the user can draw a freehand polygon on the stereonet
+    #     to select entities whose poles fall inside it.
+    #     """
+    #     self.selection_tool_active = self.actionSelectionTool.isChecked()
 
-        if self.selection_tool_active:
-            # Activate: connect the RectangleSelector to self.ax
-            self.ax.set_clip_on(False)
+    #     if self.selection_tool_active:
+    #         # Activate: connect the RectangleSelector to self.ax
+    #         self.ax.set_clip_on(False)
 
-            self.lasso_selector = RectangleSelector(
-                self.ax,
-                onselect=self._on_rectangle_select,
-                useblit=True,
-                button=[1],
-                minspanx=5,
-                minspany=5,
-                spancoords="pixels",
-                interactive=False,
-                props=dict(
-                    facecolor="none", edgecolor="blue", linewidth=1, linestyle="--"
-                ),
-            )
-            self.print_terminal(
-                "Selection tool active — draw a polygon around poles to select entities."
-            )
-        else:
-            # Deactivate: disconnect and destroy the rectangle
-            self._deactivate_rectangle()
-            self.print_terminal("Selection tool deactivated.")
+    #         self.lasso_selector = RectangleSelector(
+    #             self.ax,
+    #             onselect=self._on_rectangle_select,
+    #             useblit=True,
+    #             button=[1],
+    #             minspanx=5,
+    #             minspany=5,
+    #             spancoords="pixels",
+    #             interactive=False,
+    #             props=dict(
+    #                 facecolor="none", edgecolor="blue", linewidth=1, linestyle="--"
+    #             ),
+    #             use_data_coordinates=True
+    #         )
+    #         self.print_terminal(
+    #             "Selection tool active — draw a polygon around poles to select entities."
+    #         )
+    #     else:
+    #         # Deactivate: disconnect and destroy the rectangle
+    #         self._deactivate_rectangle()
+    #         self.print_terminal("Selection tool deactivated.")
 
-    def _deactivate_rectangle(self):
-        """Disconnect and destroy the RectangleSelector if one is active."""
-        if self.lasso_selector is not None:
-            self.lasso_selector.disconnect_events()
-            self.lasso_selector = None
-        if self.selection_highlight_actor is not None:
-            try:
-                self.selection_highlight_actor.remove()
-            except Exception:
-                pass
-            self.selection_highlight_actor = None
-            if hasattr(self, "figure"):
-                self.figure.canvas.draw()
-        self.selection_tool_active = False
-        self.actionSelectionTool.setChecked(False)
+    # def _deactivate_rectangle(self):
+    #     """Disconnect and destroy the RectangleSelector if one is active."""
+    #     if self.lasso_selector is not None:
+    #         self.lasso_selector.disconnect_events()
+    #         self.lasso_selector = None
+    #     if self.selection_highlight_actor is not None:
+    #         try:
+    #             self.selection_highlight_actor.remove()
+    #         except Exception:
+    #             pass
+    #         self.selection_highlight_actor = None
+    #         if hasattr(self, "figure"):
+    #             self.figure.canvas.draw()
+    #     self.selection_tool_active = False
+    #     self.actionSelectionTool.setChecked(False)
 
-    def _on_rectangle_select(self, eclick, erelease):
-        """
-        Called by RectangleSelector when the user releases the mouse after
-        drawing a rectangle. Determines which uids have at least one pole
-        inside the rectangle (any-point rule), then pushes that selection
-        into the geol_coll tree and emits selection_changed.
+    # def _on_rectangle_select(self, eclick, erelease):
+    #     """
+    #     Called by RectangleSelector when the user releases the mouse after
+    #     drawing a rectangle. Determines which uids have at least one pole
+    #     inside the rectangle (any-point rule), then pushes that selection
+    #     into the geol_coll tree and emits selection_changed.
 
-        Parameters
-        ----------
-        eclick : matplotlib MouseEvent
-            Mouse-button-press event (rectangle start corner).
-        erelease : matplotlib MouseEvent
-            Mouse-button-release event (rectangle end corner).
-        """
-        # Get the rectangle bounds in axes data coordinates
-        x_min = min(eclick.xdata, erelease.xdata)
-        x_max = max(eclick.xdata, erelease.xdata)
-        y_min = min(eclick.ydata, erelease.ydata)
-        y_max = max(eclick.ydata, erelease.ydata)
+    #     Parameters
+    #     ----------
+    #     eclick : matplotlib MouseEvent
+    #         Mouse-button-press event (rectangle start corner).
+    #     erelease : matplotlib MouseEvent
+    #         Mouse-button-release event (rectangle end corner).
+    #     """
+    #     # Get the rectangle bounds in axes data coordinates
+    #     x_min = min(eclick.xdata, erelease.xdata)
+    #     x_max = max(eclick.xdata, erelease.xdata)
+    #     y_min = min(eclick.ydata, erelease.ydata)
+    #     y_max = max(eclick.ydata, erelease.ydata)
 
-        # Collect projected points from all visible entities
-        uid_lons = {}
-        uid_lats = {}
+    #     # Collect projected points from all visible entities
+    #     uid_lons = {}
+    #     uid_lats = {}
 
-        for _, row in self.actors_df.iterrows():
-            uid = row["uid"]
-            if not row["show"]:
-                continue
-            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
-            if vtk_obj is None:
-                continue
-            if vtk_obj.points_number == 0:
-                continue
-            strike = (vtk_obj.points_map_dip_direction - 90) % 360
-            dip = vtk_obj.points_map_dip
-            lon, lat = mplstereonet.pole(strike, dip)
-            uid_lons[uid] = np_atleast_1d(lon)
-            uid_lats[uid] = np_atleast_1d(lat)
+    #     for _, row in self.actors_df.iterrows():
+    #         uid = row["uid"]
+    #         if not row["show"]:
+    #             continue
+    #         vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+    #         if vtk_obj is None:
+    #             continue
+    #         if vtk_obj.points_number == 0:
+    #             continue
+    #         strike = (vtk_obj.points_map_dip_direction - 90) % 360
+    #         dip = vtk_obj.points_map_dip
+    #         lon, lat = mplstereonet.pole(strike, dip)
+    #         uid_lons[uid] = np_atleast_1d(lon)
+    #         uid_lats[uid] = np_atleast_1d(lat)
 
-        if not uid_lons:
-            self.print_terminal("No visible entities to select from.")
-            return
+    #     if not uid_lons:
+    #         self.print_terminal("No visible entities to select from.")
+    #         return
 
-        # Any-point rule: select uid if at least one pole is inside the rectangle
-        selected_uids = []
-        for uid in uid_lons:
-            lons = uid_lons[uid]
-            lats = uid_lats[uid]
-            inside = (
-                (lons >= x_min) & (lons <= x_max) & (lats >= y_min) & (lats <= y_max)
-            )
-            if inside.any():
-                selected_uids.append(uid)
+    #     # Any-point rule: select uid if at least one pole is inside the rectangle
+    #     selected_uids = []
+    #     for uid in uid_lons:
+    #         lons = uid_lons[uid]
+    #         lats = uid_lats[uid]
+    #         inside = (
+    #             (lons >= x_min) & (lons <= x_max) & (lats >= y_min) & (lats <= y_max)
+    #         )
+    #         if inside.any():
+    #             selected_uids.append(uid)
 
-        if not selected_uids:
-            self.print_terminal("No entities found inside the selection rectangle.")
-            self._deactivate_rectangle()
-            return
+    #     if not selected_uids:
+    #         self.print_terminal("No entities found inside the selection rectangle.")
+    #         self._deactivate_rectangle()
+    #         return
 
-        self.print_terminal(
-            f"Selected {len(selected_uids)} entity/entities via rectangle selection."
-        )
+    #     self.print_terminal(
+    #         f"Selected {len(selected_uids)} entity/entities via rectangle selection."
+    #     )
 
-        # Clear any previous highlight
-        if self.selection_highlight_actor is not None:
-            try:
-                self.selection_highlight_actor.remove()
-            except Exception:
-                pass
-            self.selection_highlight_actor = None
+    #     # Clear any previous highlight
+    #     if self.selection_highlight_actor is not None:
+    #         try:
+    #             self.selection_highlight_actor.remove()
+    #         except Exception:
+    #             pass
+    #         self.selection_highlight_actor = None
 
-        # Draw highlights for all selected poles
-        if selected_uids:
-            all_selected_lons = np_concatenate([uid_lons[uid] for uid in selected_uids])
-            all_selected_lats = np_concatenate([uid_lats[uid] for uid in selected_uids])
+    #     # Draw highlights for all selected poles
+    #     if selected_uids:
+    #         all_selected_lons = np_concatenate([uid_lons[uid] for uid in selected_uids])
+    #         all_selected_lats = np_concatenate([uid_lats[uid] for uid in selected_uids])
 
-            self.selection_highlight_actor = self.ax.plot(
-                all_selected_lons,
-                all_selected_lats,
-                linestyle="none",
-                marker="o",
-                markersize=8,
-                markerfacecolor="none",
-                markeredgecolor="yellow",
-                markeredgewidth=1.5,
-                zorder=self.Z_STATS + 1,  # above everything else
-            )[0]
-            self.figure.canvas.draw()
+    #         self.selection_highlight_actor = self.ax.plot(
+    #             all_selected_lons,
+    #             all_selected_lats,
+    #             linestyle="none",
+    #             marker="o",
+    #             markersize=8,
+    #             markerfacecolor="none",
+    #             markeredgecolor="yellow",
+    #             markeredgewidth=1.5,
+    #             zorder=self.Z_STATS + 1,  # above everything else
+    #         )[0]
+    #         self.figure.canvas.draw()
 
-        # Push selection into the tree
-        self.GeologyTreeWidget.restore_selection(selected_uids)
+    #     # Push selection into the tree
+    #     self.GeologyTreeWidget.restore_selection(selected_uids)
 
-        # Emit selection_changed manually since restore_selection blocks signals
-        self.parent.signals.selection_changed.emit(self.parent.geol_coll)
+    #     # Emit selection_changed manually since restore_selection blocks signals
+    #     self.parent.signals.selection_changed.emit(self.parent.geol_coll)
 
-        # Deactivate after one selection
-        self._deactivate_rectangle()
+    #     # Deactivate after one selection
+    #     self._deactivate_rectangle()
 
     # --- Statistics summary functions ---
     def build_statistics_summary(self):
