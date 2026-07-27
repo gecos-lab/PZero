@@ -36,7 +36,9 @@ import mplstereonet
 # Matplotlib imports____
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.pyplot import close as plt_close
+from matplotlib.widgets import RectangleSelector
 import matplotlib.cm as cm
+
 
 
 class ViewStereoplot(ViewMPL):
@@ -74,6 +76,9 @@ class ViewStereoplot(ViewMPL):
         self.seed_pick_lineations = []
         self.seed_pick_actors = []
         self.seed_pick_cid = None
+        self.rectangle_selector = None        # holds the active RectangleSelector widget
+        self.selection_tool_active = False
+        self.selection_highlight_actor = None
 
         super(ViewStereoplot, self).__init__(*args, **kwargs)
         self.setWindowTitle("Stereoplot View")
@@ -102,6 +107,12 @@ class ViewStereoplot(ViewMPL):
         self.actionSavePng = QAction("Export as PNG", self)
         self.actionSavePng.triggered.connect(self.export_png)
         self.menuView.addAction(self.actionSavePng)
+        
+        # ---- Select Menu ----
+        self.actionSelectionTool = QAction("Polygon selection", self)
+        self.actionSelectionTool.setCheckable(True)
+        self.actionSelectionTool.triggered.connect(self.toggle_selection_tool)
+        self.menuSelect.addAction(self.actionSelectionTool)
 
         # ---- Analysis Menu ----
         self.actionRecompute = QAction("Recompute statistics", self)
@@ -129,6 +140,10 @@ class ViewStereoplot(ViewMPL):
         self.kmedoids_k_widget_action = QWidgetAction(self)
         self.kmedoids_k_widget_action.setDefaultWidget(self.kmedoids_k_spinbox)
         self.menuAnalysis.addAction(self.kmedoids_k_widget_action)
+        
+        self.actionExportStats = QAction("Export statistics summary", self)
+        self.actionExportStats.triggered.connect(self.export_statistics_summary)
+        self.menuAnalysis.addAction(self.actionExportStats)
 
         # ---- Analysis actors ----
         self.menuAnalysis.addSection("Fisher")
@@ -471,6 +486,8 @@ class ViewStereoplot(ViewMPL):
                     "show_property": show_property,
                 }
             )
+            
+        self._deactivate_rectangle()
 
         self.actors_df = pd_DataFrame(new_rows)
         self.figure.canvas.draw()
@@ -1359,3 +1376,315 @@ class ViewStereoplot(ViewMPL):
             self.print_terminal("No property name entered - clusters not saved.")
             return
         self.save_clusters_as_property(property_name=property_name)
+
+    # --- Rectangle selection tool ---
+    def toggle_selection_tool(self):
+        """
+        Toggle the polygon (rectangle) selection tool on or off.
+        When active, the user can draw a freehand polygon on the stereonet
+        to select entities whose poles fall inside it.
+        """
+        self.selection_tool_active = self.actionSelectionTool.isChecked()
+
+        if self.selection_tool_active:
+            # Activate: connect the RectangleSelector to self.ax
+            self.ax.set_clip_on(False)
+
+            self.lasso_selector = RectangleSelector(
+                self.ax,
+                onselect=self._on_rectangle_select,
+                useblit=True,
+                button=[1],
+                minspanx=5,
+                minspany=5,
+                spancoords="pixels",
+                interactive=False,
+                props=dict(facecolor="none", edgecolor="blue", linewidth=1, linestyle="--"),
+            )
+            self.print_terminal(
+                "Selection tool active — draw a polygon around poles to select entities."
+            )
+        else:
+            # Deactivate: disconnect and destroy the rectangle
+            self._deactivate_rectangle()
+            self.print_terminal("Selection tool deactivated.")
+            
+    def _deactivate_rectangle(self):
+        """Disconnect and destroy the RectangleSelector if one is active."""
+        if self.lasso_selector is not None:
+            self.lasso_selector.disconnect_events()
+            self.lasso_selector = None
+        if self.selection_highlight_actor is not None:
+            try:
+                self.selection_highlight_actor.remove()
+            except Exception:
+                pass
+            self.selection_highlight_actor = None
+            if hasattr(self, "figure"):
+                self.figure.canvas.draw()
+        self.selection_tool_active = False
+        self.actionSelectionTool.setChecked(False)
+        
+    def _on_rectangle_select(self, eclick, erelease):
+        """
+        Called by RectangleSelector when the user releases the mouse after
+        drawing a rectangle. Determines which uids have at least one pole
+        inside the rectangle (any-point rule), then pushes that selection
+        into the geol_coll tree and emits selection_changed.
+
+        Parameters
+        ----------
+        eclick : matplotlib MouseEvent
+            Mouse-button-press event (rectangle start corner).
+        erelease : matplotlib MouseEvent
+            Mouse-button-release event (rectangle end corner).
+        """
+        # Get the rectangle bounds in axes data coordinates
+        x_min = min(eclick.xdata, erelease.xdata)
+        x_max = max(eclick.xdata, erelease.xdata)
+        y_min = min(eclick.ydata, erelease.ydata)
+        y_max = max(eclick.ydata, erelease.ydata)
+
+        # Collect projected points from all visible entities
+        uid_lons = {}
+        uid_lats = {}
+
+        for _, row in self.actors_df.iterrows():
+            uid = row["uid"]
+            if not row["show"]:
+                continue
+            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            if vtk_obj is None:
+                continue
+            if vtk_obj.points_number == 0:
+                continue
+            strike = (vtk_obj.points_map_dip_direction - 90) % 360
+            dip = vtk_obj.points_map_dip
+            lon, lat = mplstereonet.pole(strike, dip)
+            uid_lons[uid] = np_atleast_1d(lon)
+            uid_lats[uid] = np_atleast_1d(lat)
+
+        if not uid_lons:
+            self.print_terminal("No visible entities to select from.")
+            return
+
+        # Any-point rule: select uid if at least one pole is inside the rectangle
+        selected_uids = []
+        for uid in uid_lons:
+            lons = uid_lons[uid]
+            lats = uid_lats[uid]
+            inside = (
+                (lons >= x_min) & (lons <= x_max) &
+                (lats >= y_min) & (lats <= y_max)
+            )
+            if inside.any():
+                selected_uids.append(uid)
+
+        if not selected_uids:
+            self.print_terminal("No entities found inside the selection rectangle.")
+            self._deactivate_rectangle()
+            return
+
+        self.print_terminal(
+            f"Selected {len(selected_uids)} entity/entities via rectangle selection."
+        )
+        
+        # Clear any previous highlight
+        if self.selection_highlight_actor is not None:
+            try:
+                self.selection_highlight_actor.remove()
+            except Exception:
+                pass
+            self.selection_highlight_actor = None
+
+        # Draw highlights for all selected poles
+        if selected_uids:
+            all_selected_lons = np_concatenate([uid_lons[uid] for uid in selected_uids])
+            all_selected_lats = np_concatenate([uid_lats[uid] for uid in selected_uids])
+            
+            self.selection_highlight_actor = self.ax.plot(
+                all_selected_lons,
+                all_selected_lats,
+                linestyle="none",
+                marker="o",
+                markersize=8,
+                markerfacecolor="none",
+                markeredgecolor="yellow",
+                markeredgewidth=1.5,
+                zorder=self.Z_STATS + 1,  # above everything else
+            )[0]
+            self.figure.canvas.draw()
+
+        # Push selection into the tree
+        self.GeologyTreeWidget.restore_selection(selected_uids)
+
+        # Emit selection_changed manually since restore_selection blocks signals
+        self.parent.signals.selection_changed.emit(self.parent.geol_coll)
+
+        # Deactivate after one selection
+        self._deactivate_rectangle()
+
+    # --- Statistics summary functions ---
+    def build_statistics_summary(self):
+        """
+        Build a human-readable statistics summary string from the most recently
+        computed self.analysis_results. Covers Fisher, Bingham, and K-medoids
+        for both Normals and Lineations. Returns an empty string if no results
+        are available.
+
+        Returns
+        -------
+        str
+            Formatted multi-line summary ready for printing or file export.
+        """
+        if not self.analysis_results:
+            return ""
+
+        lines = []
+        lines.append("=" * 60)
+        lines.append("PZero Stereoplot — Orientation Statistics Summary")
+        lines.append("=" * 60)
+
+        # Number of data points used
+        if hasattr(self, "last_normals_array") and self.last_normals_array is not None:
+            lines.append(f"Normals:    {self.last_normals_array.shape[0]} points")
+        if hasattr(self, "last_lineations_array") and self.last_lineations_array is not None:
+            lines.append(f"Lineations: {self.last_lineations_array.shape[0]} points")
+        lines.append("")
+
+        for kind in ["normals", "lineations"]:
+            kind_results = self.analysis_results.get(kind, {})
+            if not kind_results:
+                continue
+
+            # Check if there is actually any non-None result to report
+            if all(v is None for v in kind_results.values()):
+                continue
+
+            lines.append("-" * 60)
+            lines.append(f"{kind.capitalize()} statistics")
+            lines.append("-" * 60)
+
+            # ---- Fisher ----
+            fisher = kind_results.get("fisher")
+            if fisher is not None:
+                lines.append("")
+                lines.append("Fisher distribution")
+                mean = fisher["mean_direction"][0]
+                kappa = fisher["kappa"]
+                # Convert mean direction vector to plunge/bearing for readability
+                plunge, bearing = mplstereonet.vector2plunge_bearing(
+                    mean[0], mean[1], mean[2]
+                )
+                plunge = float(np_atleast_1d(plunge)[0])
+                bearing = float(np_atleast_1d(bearing)[0]) % 360
+                lines.append(f"  Mean direction: bearing {bearing:.1f}°, plunge {plunge:.1f}°")
+                lines.append(f"  Concentration (kappa): {kappa:.4f}")
+
+            # ---- Bingham ----
+            bingham_result = kind_results.get("bingham")
+            if bingham_result is not None:
+                lines.append("")
+                lines.append("Bingham distribution")
+                eigenvalues = bingham_result["eigenvalues"]
+                axes = bingham_result["axes"]
+
+                axis_labels = ["Major axis (e1)", "Intermediate axis (e2)", "Minor axis (e3)"]
+                for i, (label, axis, eigval) in enumerate(
+                    zip(axis_labels, axes, eigenvalues)
+                ):
+                    plunge, bearing = mplstereonet.vector2plunge_bearing(
+                        axis[0], axis[1], axis[2]
+                    )
+                    plunge = float(np_atleast_1d(plunge)[0])
+                    bearing = float(np_atleast_1d(bearing)[0]) % 360
+                    lines.append(
+                        f"  {label}: bearing {bearing:.1f}°, plunge {plunge:.1f}°"
+                        f"  (eigenvalue: {eigval:.4f})"
+                    )
+
+                # Fabric interpretation from eigenvalue ratios
+                e1, e2, e3 = eigenvalues
+                if e1 > 0 and e3 > 0:
+                    lines.append(f"  Eigenvalue ratios — e1/e3: {e1/e3:.2f},  e2/e3: {e2/e3:.2f}")
+                    if e1 / e3 > 5 and (e1 - e2) < (e2 - e3):
+                        lines.append("  Fabric interpretation: cluster (point maximum)")
+                    elif e1 / e3 > 5 and (e1 - e2) > (e2 - e3):
+                        lines.append("  Fabric interpretation: girdle (great circle distribution)")
+                    else:
+                        lines.append("  Fabric interpretation: intermediate / scattered")
+
+            # ---- K-medoids ----
+            kmeans = kind_results.get("kmeans")
+            if kmeans is not None:
+                labels = kmeans["labels"]
+                centroids = kmeans["centroids"]
+                k = centroids.shape[0]
+                unique_labels = sorted(set(int(l) for l in labels))
+                lines.append("")
+                lines.append(f"K-medoids clustering  (k = {k})")
+                for cluster_id in unique_labels:
+                    count = int((labels == cluster_id).sum())
+                    centroid = centroids[cluster_id]
+                    norm = float(np_linalg_norm(centroid))
+                    if norm > 0:
+                        unit_centroid = centroid / norm
+                        plunge, bearing = mplstereonet.vector2plunge_bearing(
+                            unit_centroid[0], unit_centroid[1], unit_centroid[2]
+                        )
+                        plunge = float(np_atleast_1d(plunge)[0])
+                        bearing = float(np_atleast_1d(bearing)[0]) % 360
+                        lines.append(
+                            f"  Cluster {cluster_id}: {count} points — "
+                            f"medoid bearing {bearing:.1f}°, plunge {plunge:.1f}°"
+                        )
+                    else:
+                        lines.append(f"  Cluster {cluster_id}: {count} points — degenerate medoid")
+
+            lines.append("")
+
+        lines.append("=" * 60)
+        return "\n".join(lines)
+
+    def export_statistics_summary(self):
+        """
+        Build the statistics summary and offer the user a choice:
+        print to the PZero terminal, save to a text file, or both.
+        Uses multiple_input_dialog for the file path, consistent with the
+        rest of the codebase. If no results exist yet, prints a message
+        and returns.
+        """
+        summary = self.build_statistics_summary()
+
+        if not summary:
+            self.print_terminal("No statistics available — run Recompute first.")
+            return
+
+        # Print to terminal always
+        self.print_terminal(summary)
+
+        # Ask user if they also want to save to file
+        input_dict = {
+            "save_to_file": ["Save to file? (leave empty to skip): ", ""]
+        }
+        result = multiple_input_dialog(
+            title="Export statistics summary", input_dict=input_dict
+        )
+        if result is None:
+            return  # user cancelled
+
+        filepath = result["save_to_file"].strip()
+        if not filepath:
+            return  # user left it blank — terminal-only was enough
+
+        # Add .txt extension if the user didn't
+        if not filepath.endswith(".txt"):
+            filepath += ".txt"
+
+        try:
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write(summary)
+                f.write("\n")
+            self.print_terminal(f"Statistics saved to: {filepath}")
+        except OSError as e:
+            self.print_terminal(f"Could not save statistics file: {e}")
