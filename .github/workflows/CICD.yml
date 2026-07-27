@@ -47,10 +47,15 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.TOKEN }}
       - name: Python Semantic Release
-        uses: python-semantic-release/python-semantic-release@master
+        uses: python-semantic-release/python-semantic-release@master@v10
         id: semantic
         with:
           github_token: ${{ secrets.TOKEN }}
+
+      - name: Debug semantic-release outputs
+        run: |
+          echo "version=${{ steps.semantic.outputs.version }}"
+          echo "released=${{ steps.semantic.outputs.released }}"
 
   deploy:
     if: needs.release.outputs.released == 'true'
