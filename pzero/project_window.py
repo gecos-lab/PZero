@@ -74,6 +74,11 @@ from pzero.helpers.helper_dialogs import (
     PreviewWidget,
     input_text_dialog,
 )
+from pzero.helpers.structural_topology import (
+    STM_JSON_SCHEMA,
+    build_stm_json,
+    read_stm_json,
+)
 from pzero.imports.cesium2vtk import vtk2cesium
 from pzero.imports.dem2vtk import dem2vtk
 from pzero.imports.dxf2vtk import vtk2dxf
@@ -2251,9 +2256,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 table_options.get("stm_tables"), dict
             ):
                 stm_tables = table_options.pop("stm_tables")
-                # These fields are a compatibility projection for existing PSC
-                # consumers. The persisted v2 STm source of truth is only the
-                # explicit Boundaries and Units pair below.
                 table_options.pop("manual_units", None)
                 table_options.pop("manual_connections", None)
                 table_options.pop("representative_connections", None)
@@ -2266,10 +2268,21 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         "name": table_name,
                         "table_type": table_type,
                         "options": table_options,
-                        "stm_tables": {
-                            "boundaries": list(stm_tables.get("boundaries", [])),
-                            "units": list(stm_tables.get("units", [])),
-                        },
+                        "stm": build_stm_json(
+                            name=table_name,
+                            boundaries=stm_tables.get("boundaries", []),
+                            units=stm_tables.get("units", []),
+                            boundary_columns=[
+                                "Feature", "Role", "Polarity", "Units"
+                            ],
+                            unit_columns=[
+                                "Feature",
+                                "Unit Role",
+                                "Polarity",
+                                "Boundaries",
+                                "Domain_1",
+                            ],
+                        ),
                     }
                 )
                 continue
@@ -2312,9 +2325,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 continue
 
             table_type = table_payload.get("table_type", "manual")
-            stm_tables = table_payload.get("stm_tables")
-            if table_type == "stm" and isinstance(stm_tables, dict):
-                boundaries = list(stm_tables.get("boundaries", []))
+            stm_payload = table_payload.get("stm")
+            if (
+                table_type == "stm"
+                and isinstance(stm_payload, dict)
+                and stm_payload.get("schema") == STM_JSON_SCHEMA
+            ):
+                decoded = read_stm_json(stm_payload)
+                boundaries = decoded["boundaries"]
                 legacy_rows = [
                     {
                         "Feature": boundary.get("Feature", ""),
@@ -2337,8 +2355,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 table_options = dict(table_payload.get("options", {}) or {})
                 table_options["stm_tables"] = {
                     "boundaries": boundaries,
-                    "units": list(stm_tables.get("units", [])),
+                    "units": decoded["units"],
                 }
+                table_options["stm_schema_version"] = 3
                 self.custom_table_options[table_name] = table_options
             else:
                 dataframe_payload = table_payload.get("dataframe", {})
@@ -3920,13 +3939,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if legend_df is None or legend_df.empty:
             return []
 
-        units_map = {}
+        units = []
         for _, row in legend_df.iterrows():
             feature_name = str(row.get("feature", "")).strip()
             role_name = str(row.get("role", "")).strip()
-            if not feature_name or feature_name in units_map:
+            if not feature_name:
                 continue
-            units_map[feature_name] = {
+            units.append({
                 "Feature": feature_name,
                 "Unit Role": "Discontinuity",
                 "Structural Polarity": row.get("time", 0.0),
@@ -3936,11 +3955,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 "color_R": row.get("color_R", 255),
                 "color_G": row.get("color_G", 255),
                 "color_B": row.get("color_B", 255),
-            }
+            })
 
         return sorted(
-            units_map.values(),
-            key=lambda unit_info: str(unit_info.get("Feature", "")).casefold(),
+            units,
+            key=lambda unit_info: (
+                str(unit_info.get("Feature", "")).casefold(),
+                str(unit_info.get("role", "")).casefold(),
+            ),
         )
 
     def sync_structural_topology_table_to_legend(self, table_name=None):
@@ -3963,21 +3985,44 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
 
         legend_features = legend_df["feature"].astype(str).str.strip()
+        legend_roles = legend_df["role"].astype(str).str.strip().str.casefold()
         legend_updated = False
-        for _, row in table_df.iterrows():
-            stm_feature = str(row.get("Feature", "")).strip()
-            if not stm_feature:
-                continue
-            try:
-                polarity_value = float(row.get("Structural Polarity", ""))
-            except (TypeError, ValueError):
-                continue
-
-            mask = legend_features == stm_feature
-            if not mask.any():
-                continue
-            self.geol_coll.legend_df.loc[mask, "time"] = polarity_value
-            legend_updated = True
+        stm_tables = (
+            self.custom_table_options.get(table_name, {})
+            .get("stm_tables", {})
+        )
+        boundaries = (
+            stm_tables.get("boundaries", [])
+            if isinstance(stm_tables, dict)
+            else []
+        )
+        if boundaries:
+            for boundary in boundaries:
+                if not isinstance(boundary, dict):
+                    continue
+                stm_feature = str(boundary.get("Feature", "")).strip()
+                stm_role = str(boundary.get("Role", "")).strip().casefold()
+                try:
+                    polarity_value = float(boundary.get("Polarity", ""))
+                except (TypeError, ValueError):
+                    continue
+                mask = (legend_features == stm_feature) & (
+                    legend_roles == stm_role
+                )
+                if mask.any():
+                    self.geol_coll.legend_df.loc[mask, "time"] = polarity_value
+                    legend_updated = True
+        else:
+            for _, row in table_df.iterrows():
+                stm_feature = str(row.get("Feature", "")).strip()
+                try:
+                    polarity_value = float(row.get("Structural Polarity", ""))
+                except (TypeError, ValueError):
+                    continue
+                mask = legend_features == stm_feature
+                if mask.sum() == 1:
+                    self.geol_coll.legend_df.loc[mask, "time"] = polarity_value
+                    legend_updated = True
 
         if legend_updated:
             self.geol_coll.legend_df.sort_values(
@@ -3992,9 +4037,20 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if not legend_units:
             return
 
-        polarity_map = {
-            unit_info["Feature"]: unit_info.get("Structural Polarity", "")
+        polarity_by_key = {
+            (
+                unit_info["Feature"],
+                str(unit_info.get("role", "")).strip().casefold(),
+            ): unit_info.get("Structural Polarity", "")
             for unit_info in legend_units
+        }
+        feature_counts = {}
+        for feature, _ in polarity_by_key:
+            feature_counts[feature] = feature_counts.get(feature, 0) + 1
+        unique_feature_polarities = {
+            feature: polarity
+            for (feature, _), polarity in polarity_by_key.items()
+            if feature_counts[feature] == 1
         }
         tables_updated = False
 
@@ -4015,19 +4071,27 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             if not any(str(column).startswith("Domain") for column in table_df.columns):
                 table_df["Domain_1"] = ""
 
-            for row_label in table_df.index.tolist():
-                stm_feature = str(table_df.at[row_label, "Feature"]).strip()
-                if stm_feature in polarity_map:
-                    table_df.at[row_label, "Structural Polarity"] = polarity_map[stm_feature]
             table_options = self.custom_table_options.get(table_name, {}) or {}
             stm_tables = table_options.get("stm_tables", {})
+            table_polarities = {}
             if isinstance(stm_tables, dict):
                 for boundary in stm_tables.get("boundaries", []):
                     if not isinstance(boundary, dict):
                         continue
                     feature = str(boundary.get("Feature", "")).strip()
-                    if feature in polarity_map:
-                        boundary["Polarity"] = polarity_map[feature]
+                    role = str(boundary.get("Role", "")).strip().casefold()
+                    polarity = polarity_by_key.get((feature, role))
+                    if polarity is not None:
+                        boundary["Polarity"] = polarity
+                        table_polarities[feature] = polarity
+            for row_label in table_df.index.tolist():
+                stm_feature = str(table_df.at[row_label, "Feature"]).strip()
+                polarity = table_polarities.get(
+                    stm_feature,
+                    unique_feature_polarities.get(stm_feature),
+                )
+                if polarity is not None:
+                    table_df.at[row_label, "Structural Polarity"] = polarity
             tables_updated = True
 
         if tables_updated:

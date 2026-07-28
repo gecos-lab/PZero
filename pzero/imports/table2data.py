@@ -23,6 +23,10 @@ from PySide6.QtWidgets import (
 
 from pzero.helpers.helper_dialogs import PCDataModel, open_files_dialog
 from pzero.helpers.helper_functions import auto_sep
+from pzero.helpers.structural_topology import (
+    STM_JSON_SCHEMA,
+    read_stm_json,
+)
 from pzero.properties_manager import PropertiesCMaps
 from pzero.ui.import_window_ui import Ui_ImportOptionsWindow
 
@@ -46,7 +50,6 @@ STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS = [
 ]
 STRUCTURAL_TOPOLOGY_EXPORT_MARKER_BEGIN = "# PZERO_STM_EXPORT BEGIN"
 STRUCTURAL_TOPOLOGY_EXPORT_MARKER_END = "# PZERO_STM_EXPORT END"
-STRUCTURAL_TOPOLOGY_EXPORT_SCHEMA = "pzero.stm.export"
 STRUCTURAL_TOPOLOGY_UNIT_VALUES = [
     "TU",
     "SU",
@@ -104,29 +107,34 @@ def _unique_table_name(existing_names, base_name):
         suffix += 1
 
 
+def _stm_import_payload(payload):
+    if not isinstance(payload, dict) or payload.get("schema") != STM_JSON_SCHEMA:
+        return None
+    decoded = read_stm_json(payload)
+    return {
+        "schema": STM_JSON_SCHEMA,
+        "version": 3,
+        "table_type": STRUCTURAL_TOPOLOGY_TABLE_TYPE,
+        "table_name": decoded["name"],
+        "options": {
+            "stm_schema_version": 3,
+            "stm_tables": {
+                "boundaries": decoded["boundaries"],
+                "units": decoded["units"],
+            },
+        },
+    }
+
+
 def _read_stm_export_payload(file_path):
-    """Read the structured STm footer embedded in an exported CSV file."""
+    """Read an STm v3 JSON file or a v3 footer embedded in a CSV file."""
     if str(file_path).lower().endswith(".json"):
         try:
             with open(file_path, "r", encoding="utf-8-sig") as input_stream:
                 payload = json.load(input_stream)
         except (OSError, TypeError, ValueError, json.JSONDecodeError):
             return None
-        if payload.get("schema") == "pzero.stm.v2":
-            return {
-                "schema": "pzero.stm.v2",
-                "version": 2,
-                "table_type": STRUCTURAL_TOPOLOGY_TABLE_TYPE,
-                "table_name": payload.get("name", ""),
-                "options": {
-                    "stm_schema_version": 2,
-                    "stm_tables": {
-                        "boundaries": list(payload.get("boundaries", [])),
-                        "units": list(payload.get("units", [])),
-                    },
-                },
-            }
-        return None
+        return _stm_import_payload(payload)
     try:
         with open(file_path, "r", encoding="utf-8") as input_stream:
             file_lines = input_stream.readlines()
@@ -165,12 +173,10 @@ def _read_stm_export_payload(file_path):
     except (TypeError, ValueError, json.JSONDecodeError):
         return None
 
-    if payload.get("schema") != STRUCTURAL_TOPOLOGY_EXPORT_SCHEMA:
-        return None
-    return payload
+    return _stm_import_payload(payload)
 
 
-def _stm_v2_legacy_dataframe(payload):
+def _stm_boundary_dataframe(payload):
     """Return the compatibility boundary projection used by existing import UI."""
     rows = []
     stm_tables = (payload or {}).get("options", {}).get("stm_tables", {})
@@ -392,9 +398,9 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         """Read a preview dataframe from the current file/options."""
         if (
             self.preview_stm_payload is not None
-            and self.preview_stm_payload.get("schema") == "pzero.stm.v2"
+            and self.preview_stm_payload.get("schema") == STM_JSON_SCHEMA
         ):
-            return _stm_v2_legacy_dataframe(self.preview_stm_payload)
+            return _stm_boundary_dataframe(self.preview_stm_payload)
         delimiter = self._current_separator()
         pandas_sep, engine = _resolve_pandas_separator(delimiter)
         has_header = self.HasHeaderCheckBox.isChecked()
@@ -773,8 +779,8 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
 def _read_table_dataframe(file_path, import_config):
     """Read a mapped text table according to the dialog configuration."""
     stm_payload = _read_stm_export_payload(file_path)
-    if stm_payload is not None and stm_payload.get("schema") == "pzero.stm.v2":
-        return _stm_v2_legacy_dataframe(stm_payload)
+    if stm_payload is not None and stm_payload.get("schema") == STM_JSON_SCHEMA:
+        return _stm_boundary_dataframe(stm_payload)
     column_specs = import_config["column_specs"]
     usecols = [spec["source_index"] for spec in column_specs]
     source_names = [spec["source_name"] for spec in column_specs]

@@ -271,8 +271,8 @@ class PSCSectionSeedSelectionDialog(QDialog):
 class PiecewiseStructuralComplex:
     """Controller for PSC preview, seed placement, and material assignment."""
 
-    SECTION_SEED_ROLES = {"TU", "SU", "IU", "SD"}
-    DISCONTINUITY_UNIT_ROLE = "Discontinuity"
+    UNIT_ROLES = ("TU", "SU", "IU", "SD")
+    SECTION_SEED_ROLES = frozenset(UNIT_ROLES)
     MAX_RELAXED_MISSING_BOUNDARIES = 1
 
     def __init__(self, host):
@@ -501,7 +501,7 @@ class PiecewiseStructuralComplex:
                 metadata = dict(seed_override_metadata.get(unit_key, {}))
                 feature = self._psc_text(metadata.get("feature", "")) or str(unit_key)
                 name = self._psc_text(metadata.get("name", "")) or feature
-                role = self._psc_text(metadata.get("unit_role", ""))
+                role = self._psc_unit_role(metadata.get("unit_role", "TU"))
                 clean_points = [list(seed) for seed in seed_points]
                 mapping.setdefault("units", []).append(
                     {
@@ -1525,23 +1525,6 @@ class PiecewiseStructuralComplex:
             for item in sorted(best_by_unit.values(), key=lambda item: item[0])
         ]
 
-    def _psc_boundary_roles_by_key(
-        self,
-        psc_model: Dict[str, Any],
-    ) -> Dict[str, str]:
-        """Return normalized STM boundary roles keyed by feature."""
-        roles_by_key = {}
-        for boundary_info in psc_model.get("boundary_order", []) or []:
-            if not isinstance(boundary_info, dict):
-                continue
-            feature_key = self._psc_key(boundary_info.get("feature", ""))
-            if feature_key and feature_key not in roles_by_key:
-                roles_by_key[feature_key] = (
-                    self._psc_text(boundary_info.get("unit_role", "Discontinuity"))
-                    or "Discontinuity"
-                )
-        return roles_by_key
-
     def _psc_repeat_conflict_labels(
         self,
         unit_key: str,
@@ -1560,8 +1543,7 @@ class PiecewiseStructuralComplex:
             return []
 
         boundary_key = self._psc_key("Boundary")
-        representative_keys = self._psc_volumetric_feature_keys(psc_model)
-        roles_by_key = self._psc_boundary_roles_by_key(psc_model)
+        representative_keys = self._psc_representative_boundary_keys(psc_model)
         bounds = self._psc_domain_bounds()
         tolerance = 1.0e-8
         if bounds is not None:
@@ -1575,8 +1557,6 @@ class PiecewiseStructuralComplex:
             shared_keys = set(closest_surface_indices).intersection(other_indices)
             for feature_key in sorted(shared_keys):
                 if feature_key == boundary_key or feature_key not in representative_keys:
-                    continue
-                if self._psc_role_is_discontinuity(roles_by_key.get(feature_key, "")):
                     continue
                 try:
                     surface_idx = int(closest_surface_indices[feature_key])
@@ -2143,9 +2123,8 @@ class PiecewiseStructuralComplex:
         assignments: List[Dict[str, Any]],
         psc_model: Dict[str, Any],
     ) -> List[str]:
-        """Block equal adjacent units across representative, non-discontinuity faces."""
-        roles_by_key = self._psc_boundary_roles_by_key(psc_model)
-        representative_keys = self._psc_volumetric_feature_keys(psc_model)
+        """Block equal adjacent units across explicit representative faces."""
+        representative_keys = self._psc_representative_boundary_keys(psc_model)
         boundary_key = self._psc_key("Boundary")
         adjacency = region.get("adjacent_regions", {}) or {}
         conflicts = []
@@ -2163,9 +2142,6 @@ class PiecewiseStructuralComplex:
                     not feature_key
                     or feature_key == boundary_key
                     or feature_key not in representative_keys
-                    or self._psc_role_is_discontinuity(
-                        roles_by_key.get(feature_key, "")
-                    )
                 ):
                     continue
                 conflicts.append(label or feature_key)
@@ -2909,14 +2885,10 @@ class PiecewiseStructuralComplex:
         """Return True when a feature name uses the PSC eroded suffix."""
         return self._psc_key(value).endswith("_eroded")
 
-    def _psc_role_is_discontinuity(self, role: Any) -> bool:
-        """Return True when the given unit/role represents an explicit discontinuity."""
-        try:
-            return str(role or "").strip().casefold() == str(
-                self.DISCONTINUITY_UNIT_ROLE
-            ).casefold()
-        except Exception:
-            return False
+    def _psc_unit_role(self, value: Any, default: str = "TU") -> str:
+        """Return a canonical STm unit role for PSC outputs."""
+        role = self._psc_text(value).upper()
+        return role if role in self.SECTION_SEED_ROLES else default
 
     @staticmethod
     def _psc_sort_key(value: Any) -> float:
@@ -2926,244 +2898,148 @@ class PiecewiseStructuralComplex:
         except (TypeError, ValueError):
             return float("inf")
     
-    @staticmethod
-    def _psc_domain_columns(dataframe) -> List[str]:
-        """Return STm domain columns ordered by their numeric suffix."""
-        if dataframe is None:
-            return []
-    
-        def domain_order(column_name: str) -> Optional[int]:
-            text = str(column_name or "").strip()
-            if text == "Domain":
-                return 1
-            if not text.startswith("Domain_"):
-                return None
-            try:
-                return int(text.split("_", 1)[1])
-            except (IndexError, ValueError):
-                return None
-    
-        return sorted(
-            [
-                str(column_name)
-                for column_name in dataframe.columns.tolist()
-                if domain_order(column_name) is not None
-            ],
-            key=lambda column_name: domain_order(column_name) or 1,
-        )
-    
     def _build_psc_model_from_stm(self, table_name: str) -> Dict[str, Any]:
-        """Read units, boundaries, and generated connections from an STm table."""
+        """Read the canonical Boundaries and Units tables from an STm v3 model."""
         project = self._pzero_project()
         if project is None:
             return {"units": {}, "boundary_features": set(), "boundary_order": []}
-    
-        table_df = getattr(project, "custom_tables", {}).get(table_name)
         options = getattr(project, "custom_table_options", {}).get(table_name, {}) or {}
-        unit_renames = {}
-        raw_unit_renames = options.get("unit_renames", {})
-        if isinstance(raw_unit_renames, dict):
-            unit_renames = {
-                str(unit_key).strip(): self._psc_text(unit_name)
-                for unit_key, unit_name in raw_unit_renames.items()
-                if str(unit_key or "").strip().startswith("unit:")
-                and not str(unit_key or "").strip().startswith("unit:manual:")
-                and self._psc_text(unit_name)
-            }
+        stm_tables = options.get("stm_tables", {})
+        if not isinstance(stm_tables, dict):
+            return {"units": {}, "boundary_features": set(), "boundary_order": []}
+
+        boundary_records = list(stm_tables.get("boundaries", []) or [])
+        unit_records = list(stm_tables.get("units", []) or [])
+
+        def boundary_name(value: Any) -> str:
+            name = self._psc_text(value)
+            if self._psc_key(name) == self._psc_key("Model boundary"):
+                return "Boundary"
+            return name
+
+        representative_by_unit = {}
+        for link in options.get("stm_representative_links", []) or []:
+            if not isinstance(link, dict):
+                continue
+            unit_name = self._psc_text(link.get("unit", ""))
+            representative = boundary_name(link.get("boundary", ""))
+            if unit_name and representative:
+                representative_by_unit[unit_name] = representative
+        for unit_info in unit_records:
+            if not isinstance(unit_info, dict):
+                continue
+            unit_name = self._psc_text(unit_info.get("Feature", ""))
+            representative = boundary_name(
+                unit_info.get("Representative Boundary", "")
+            )
+            if unit_name and representative:
+                representative_by_unit[unit_name] = representative
+
+        representative_boundary_keys = {
+            self._psc_key(representative)
+            for representative in representative_by_unit.values()
+            if self._psc_key(representative)
+            != self._psc_key("Boundary")
+        }
         units: Dict[str, Dict[str, Any]] = {}
         boundary_features = set()
         boundary_order = []
+        boundary_roles = {}
 
-        stm_tables = options.get("stm_tables", {})
-        if isinstance(stm_tables, dict) and (
-            "boundaries" in stm_tables or "units" in stm_tables
-        ):
-            for boundary_info in stm_tables.get("boundaries", []):
-                if not isinstance(boundary_info, dict):
-                    continue
-                feature = self._psc_text(boundary_info.get("Feature", ""))
-                if not feature:
-                    continue
-                if self._psc_key(feature) == self._psc_key("Model boundary"):
-                    feature = "Boundary"
-                boundary_features.add(feature)
-                boundary_order.append(
-                    {
-                        "feature": feature,
-                        "polarity": self._psc_sort_key(
-                            boundary_info.get("Polarity", "")
-                        ),
-                        "row_index": len(boundary_order),
-                        "unit_role": "Discontinuity",
-                        "domains": [],
-                    }
-                )
-
-            for unit_idx, unit_info in enumerate(stm_tables.get("units", [])):
-                if not isinstance(unit_info, dict):
-                    continue
-                feature = self._psc_text(unit_info.get("Feature", ""))
-                if not feature:
-                    continue
-                ui_role = self._psc_text(unit_info.get("Unit Role", "TU")).upper()
-                unit_role = (
-                    ui_role if ui_role in {"TU", "SU", "IU", "SD"} else "TU"
-                )
-                raw_boundaries = unit_info.get("Boundaries", [])
-                if isinstance(raw_boundaries, str):
-                    boundaries = {
-                        (
-                            "Boundary"
-                            if self._psc_key(value)
-                            == self._psc_key("Model boundary")
-                            else self._psc_text(value)
-                        )
-                        for value in raw_boundaries.split(",")
-                        if self._psc_text(value)
-                    }
-                else:
-                    boundaries = {
-                        (
-                            "Boundary"
-                            if self._psc_key(value)
-                            == self._psc_key("Model boundary")
-                            else self._psc_text(value)
-                        )
-                        for value in (raw_boundaries or [])
-                        if self._psc_text(value)
-                    }
-                domains = [
-                    self._psc_text(value)
-                    for column_name, value in unit_info.items()
-                    if str(column_name).startswith("Domain")
-                    and self._psc_text(value)
-                ]
-                unit_key = f"unit:v2:{unit_idx}:{feature}"
-                units[unit_key] = {
-                    "key": unit_key,
-                    "name": feature,
+        for boundary_info in boundary_records:
+            if not isinstance(boundary_info, dict):
+                continue
+            feature = boundary_name(boundary_info.get("Feature", ""))
+            if not feature:
+                continue
+            feature_key = self._psc_key(feature)
+            boundary_features.add(feature)
+            boundary_roles.setdefault(
+                feature_key,
+                self._psc_text(boundary_info.get("Role", "")),
+            )
+            boundary_order.append(
+                {
                     "feature": feature,
-                    "unit_role": unit_role,
+                    "role": self._psc_text(boundary_info.get("Role", "")),
                     "polarity": self._psc_sort_key(
-                        unit_info.get(
-                            "Polarity",
-                            unit_info.get("Structural Polarity", ""),
-                        )
+                        boundary_info.get("Polarity", "")
                     ),
-                    "domains": domains,
-                    "boundaries": boundaries,
-                    "source": "stm_v2",
+                    "row_index": len(boundary_order),
+                    "is_representative": feature_key
+                    in representative_boundary_keys,
                 }
-                boundary_features.update(boundaries)
-            return {
-                "table_name": table_name,
-                "units": units,
-                "boundary_features": boundary_features,
-                "boundary_order": boundary_order,
-            }
-    
-        if table_df is not None:
-            domain_columns = self._psc_domain_columns(table_df)
-            for row_idx, row in table_df.iterrows():
-                feature = self._psc_text(row.get("Feature", ""))
-                unit_role = self._psc_text(row.get("Unit Role", "Discontinuity")) or "Discontinuity"
-                polarity = self._psc_sort_key(row.get("Structural Polarity", ""))
-                domains = [
-                    self._psc_text(row.get(column_name, ""))
-                    for column_name in domain_columns
-                    if self._psc_text(row.get(column_name, ""))
-                ]
-                if not feature:
-                    continue
-                boundary_features.add(feature)
-                boundary_order.append(
-                    {
-                        "feature": feature,
-                        "polarity": polarity,
-                        "row_index": len(boundary_order),
-                        "unit_role": unit_role,
-                        "domains": domains,
-                    }
-                )
-                if unit_role == "Discontinuity":
-                    continue
-                unit_key = f"unit:{feature}"
-                unit_name = unit_renames.get(unit_key, f"{feature}_{unit_role}")
-                units[unit_key] = {
-                    "key": unit_key,
-                    "name": unit_name,
-                    "feature": feature,
-                    "unit_role": unit_role,
-                    "polarity": polarity,
-                    "domains": domains,
-                    "boundaries": {feature},
-                    "source": "table",
-                }
-    
-        for unit_info in options.get("manual_units", []):
+            )
+
+        for unit_idx, unit_info in enumerate(unit_records):
             if not isinstance(unit_info, dict):
                 continue
-            unit_id = str(unit_info.get("id", "")).strip()
-            feature = self._psc_text(unit_info.get("feature", ""))
-            unit_role = self._psc_text(unit_info.get("unit_role", "SU")) or "SU"
-            if not unit_id or not feature:
+            feature = self._psc_text(unit_info.get("Feature", ""))
+            if not feature:
                 continue
-            domains = [
-                self._psc_text(domain_info.get("value", ""))
-                for domain_info in unit_info.get("domains", [])
-                if isinstance(domain_info, dict) and self._psc_text(domain_info.get("value", ""))
+            raw_boundaries = unit_info.get("Boundaries", [])
+            if isinstance(raw_boundaries, str):
+                raw_boundaries = raw_boundaries.split(",")
+            boundaries = {
+                boundary_name(value)
+                for value in (raw_boundaries or [])
+                if boundary_name(value)
+            }
+            representative = representative_by_unit.get(feature, "")
+            if representative:
+                boundaries.add(representative)
+            domain_items = [
+                (column_name, value)
+                for column_name, value in unit_info.items()
+                if re.fullmatch(r"Domain(?:_\d+)?", str(column_name))
             ]
-            unit_key = f"unit:manual:{unit_id}"
+            domains = [
+                self._psc_text(value)
+                for column_name, value in sorted(
+                    domain_items,
+                    key=lambda item: int(
+                        str(item[0]).split("_", 1)[1]
+                        if "_" in str(item[0])
+                        else 1
+                    ),
+                )
+                if self._psc_text(value)
+            ]
+            unit_key = f"unit:v3:{unit_idx}:{feature}"
             units[unit_key] = {
                 "key": unit_key,
-                "name": f"{feature}_{unit_role}",
+                "name": feature,
                 "feature": feature,
-                "unit_role": unit_role,
-                "polarity": self._psc_sort_key(unit_info.get("structural_polarity", "")),
+                "unit_role": self._psc_unit_role(
+                    unit_info.get("Unit Role", "TU")
+                ),
+                "polarity": self._psc_sort_key(unit_info.get("Polarity", "")),
                 "domains": domains,
-                "boundaries": set(),
-                "color_R": unit_info.get("color_R", 255),
-                "color_G": unit_info.get("color_G", 255),
-                "color_B": unit_info.get("color_B", 255),
-                "source": "extra",
+                "boundaries": boundaries,
+                "representative_boundary": representative,
+                "source": "stm_v3",
             }
-    
-        for connection in options.get("manual_connections", []):
-            if not isinstance(connection, dict):
-                continue
-            unit_key = str(connection.get("unit", "")).strip()
-            surface_key = str(connection.get("surface", "")).strip()
-            if unit_key not in units:
-                continue
-            boundary_feature = self._boundary_feature_from_psc_surface_key(surface_key)
-            if not boundary_feature:
-                continue
-            units[unit_key]["boundaries"].add(boundary_feature)
-            boundary_features.add(boundary_feature)
-    
-        model = {
+            for color_name in ("color_R", "color_G", "color_B"):
+                if color_name in unit_info:
+                    units[unit_key][color_name] = unit_info[color_name]
+            boundary_features.update(boundaries)
+
+        self._psc_active_boundary_roles = boundary_roles
+        return {
             "table_name": table_name,
             "units": units,
             "boundary_features": boundary_features,
-            "boundary_order": list(boundary_order),
+            "boundary_order": boundary_order,
+            "boundary_roles": boundary_roles,
+            "representative_boundary_keys": representative_boundary_keys,
         }
-        return model
-    
-    @staticmethod
-    def _boundary_feature_from_psc_surface_key(surface_key: str) -> str:
-        """Convert an STm builder surface key into a boundary feature name."""
-        surface_key = str(surface_key or "").strip()
-        if surface_key == "surface:boundary":
-            return "Boundary"
-        prefix = "surface:"
-        if surface_key.startswith(prefix):
-            return surface_key[len(prefix):].strip()
-        return ""
     
     def _map_psc_boundaries_to_tetra_surfaces(self, psc_model: Dict[str, Any]) -> Dict[str, Any]:
         """Map PSC boundary features to loaded tetra-surface metadata."""
         feature_to_surfaces: Dict[str, List[Dict[str, Any]]] = {}
         boundary_surface_entries = []
+        boundary_roles = dict(psc_model.get("boundary_roles", {}) or {})
+        self._psc_active_boundary_roles = boundary_roles
         try:
             border_indices = set(self._get_border_surface_indices())
         except Exception:
@@ -3180,6 +3056,7 @@ class PiecewiseStructuralComplex:
                 "label": label,
                 "feature": str(surface_info.get("feature", "")).strip(),
                 "name": str(surface_info.get("name", "")).strip(),
+                "role": str(surface_info.get("role", "")).strip(),
             }
             feature = str(surface_info.get("feature", "")).strip()
             if feature:
@@ -3209,6 +3086,22 @@ class PiecewiseStructuralComplex:
                     matches = list(boundary_surface_entries)
                 else:
                     matches = feature_to_surfaces.get(self._psc_key(boundary), [])
+                    expected_role = self._psc_key(
+                        boundary_roles.get(self._psc_key(boundary), "")
+                    )
+                    role_matches = [
+                        entry
+                        for entry in matches
+                        if expected_role
+                        and self._psc_key(entry.get("role", ""))
+                        == expected_role
+                    ]
+                    if expected_role:
+                        matches = role_matches or [
+                            entry
+                            for entry in matches
+                            if not self._psc_key(entry.get("role", ""))
+                        ]
                 if matches:
                     boundary_surface_indices[boundary] = [
                         entry["index"] for entry in matches if entry.get("index") is not None
@@ -3225,10 +3118,15 @@ class PiecewiseStructuralComplex:
                     "key": unit.get("key", ""),
                     "name": unit.get("name", ""),
                     "feature": unit.get("feature", ""),
-                    "unit_role": unit.get("unit_role", ""),
+                    "unit_role": self._psc_unit_role(
+                        unit.get("unit_role", "TU")
+                    ),
                     "polarity": unit.get("polarity", float("inf")),
                     "domains": list(unit.get("domains", [])),
                     "boundaries": boundaries,
+                    "representative_boundary": unit.get(
+                        "representative_boundary", ""
+                    ),
                     "matched_surfaces": sorted(set(matched_surfaces), key=str.casefold),
                     "matched_surface_indices": sorted(set(matched_surface_indices), key=lambda value: str(value)),
                     "model_boundary_indices": sorted(set(model_boundary_indices), key=lambda value: str(value)),
@@ -3237,6 +3135,9 @@ class PiecewiseStructuralComplex:
                     "source": unit.get("source", ""),
                 }
             )
+            for color_name in ("color_R", "color_G", "color_B"):
+                if color_name in unit:
+                    mapped_units[-1][color_name] = unit[color_name]
     
         mapped_units = sorted(
             mapped_units,
@@ -3261,14 +3162,21 @@ class PiecewiseStructuralComplex:
         }
     
     def _psc_surface_indices_for_boundary(self, boundary_feature: str) -> List[int]:
-        """Return loaded tetra surface indices that match one STm boundary feature."""
+        """Return surfaces matching an STm Feature and, when available, Role."""
         key = self._psc_key(boundary_feature)
+        expected_role = self._psc_key(
+            (getattr(self, "_psc_active_boundary_roles", {}) or {}).get(
+                key, ""
+            )
+        )
         try:
             border_indices = set(self._get_border_surface_indices())
         except Exception:
             border_indices = set()
     
         matches = []
+        role_matches = []
+        roleless_matches = []
         for surface_idx, surface_info in getattr(self, "tetra_surface_data", {}).items():
             try:
                 surface_idx_value = int(surface_idx)
@@ -3290,8 +3198,21 @@ class PiecewiseStructuralComplex:
             name = surface_info.get("name", "")
             if key in {self._psc_key(feature), self._psc_key(name)}:
                 matches.append(surface_idx_value)
+                if (
+                    expected_role
+                    and self._psc_key(surface_info.get("role", ""))
+                    == expected_role
+                ):
+                    role_matches.append(surface_idx_value)
+                elif expected_role and not self._psc_key(
+                    surface_info.get("role", "")
+                ):
+                    roleless_matches.append(surface_idx_value)
     
-        return sorted(set(matches))
+        selected = matches
+        if expected_role:
+            selected = role_matches or roleless_matches
+        return sorted(set(selected))
     
     def _psc_adjacent_boundary_surface_indices(
         self,
@@ -4005,17 +3926,23 @@ class PiecewiseStructuralComplex:
             return -1
         return 0
     
-    def _psc_volumetric_feature_keys(self, psc_model: Dict[str, Any]) -> set:
-        """Return feature keys that own a volumetric STm unit."""
-        units = psc_model.get("units", {}) or {}
-        unit_values = units.values() if isinstance(units, dict) else units
-        boundary_key = self._psc_key("Boundary")
+    def _psc_representative_boundary_keys(
+        self, psc_model: Dict[str, Any]
+    ) -> set:
+        """Return boundary keys explicitly linked as unit representatives."""
+        keys = {
+            self._psc_key(value)
+            for value in psc_model.get("representative_boundary_keys", set())
+            if self._psc_key(value)
+        }
+        if keys:
+            return keys
         return {
-            self._psc_key(unit_info.get("feature", ""))
-            for unit_info in unit_values
-            if isinstance(unit_info, dict)
-            and self._psc_key(unit_info.get("feature", ""))
-            and self._psc_key(unit_info.get("feature", "")) != boundary_key
+            self._psc_key(boundary_info.get("feature", ""))
+            for boundary_info in psc_model.get("boundary_order", []) or []
+            if isinstance(boundary_info, dict)
+            and boundary_info.get("is_representative")
+            and self._psc_key(boundary_info.get("feature", ""))
         }
     
     def _psc_prepare_topology_side_context(
@@ -4031,7 +3958,9 @@ class PiecewiseStructuralComplex:
             diagonal = max(float(np.linalg.norm(bounds[1] - bounds[0])), 1e-9)
         tolerance = max(diagonal * 0.002, 1e-8)
     
-        volumetric_feature_keys = self._psc_volumetric_feature_keys(psc_model)
+        representative_boundary_keys = self._psc_representative_boundary_keys(
+            psc_model
+        )
         representative_surfaces: Dict[Tuple[str, int], Dict[str, Any]] = {}
         for unit_info in mapped_units:
             boundary_indices = unit_info.get("boundary_surface_indices", {}) or {}
@@ -4039,7 +3968,7 @@ class PiecewiseStructuralComplex:
                 boundary_key = self._psc_key(boundary)
                 if not boundary_key or boundary_key == self._psc_key("Boundary"):
                     continue
-                if boundary_key not in volumetric_feature_keys:
+                if boundary_key not in representative_boundary_keys:
                     continue
                 for surface_idx in surface_indices or []:
                     try:
@@ -4066,7 +3995,12 @@ class PiecewiseStructuralComplex:
                 sign_value = self._psc_sign(signed_distance, tolerance)
                 if sign_value == 0:
                     continue
-                if self._psc_key(unit_info.get("feature", "")) == boundary_key:
+                if (
+                    self._psc_key(
+                        unit_info.get("representative_boundary", "")
+                    )
+                    == boundary_key
+                ):
                     matching_signs.append(sign_value)
                 else:
                     non_matching_signs.append(sign_value)
@@ -4095,15 +4029,19 @@ class PiecewiseStructuralComplex:
     ) -> List[Dict[str, Any]]:
         """Return signed side constraints implied by STm representative surfaces."""
         constraints = []
-        unit_feature_key = self._psc_key(unit_info.get("feature", ""))
+        unit_representative_key = self._psc_key(
+            unit_info.get("representative_boundary", "")
+        )
         side_context = getattr(self, "_psc_side_context", {}) or {}
         representative_signs = side_context.get("representative_unit_signs", {}) or {}
-        volumetric_feature_keys = self._psc_volumetric_feature_keys(psc_model)
+        representative_boundary_keys = self._psc_representative_boundary_keys(
+            psc_model
+        )
     
         for boundary_key, boundary_info in target_surface_map.items():
             if boundary_key == self._psc_key("Boundary"):
                 continue
-            if boundary_key not in volumetric_feature_keys:
+            if boundary_key not in representative_boundary_keys:
                 continue
             for surface_idx in boundary_info.get("indices", []):
                 try:
@@ -4120,14 +4058,15 @@ class PiecewiseStructuralComplex:
                     )
                 if owner_sign == 0:
                     continue
-                desired_sign = owner_sign if unit_feature_key == boundary_key else -owner_sign
+                owns_boundary = unit_representative_key == boundary_key
+                desired_sign = owner_sign if owns_boundary else -owner_sign
                 constraints.append(
                     {
                         "surface_idx": surface_idx,
                         "sign": desired_sign,
                         "label": boundary_info.get("label", boundary_key),
                         "reason": "representative-own-side"
-                        if unit_feature_key == boundary_key
+                        if owns_boundary
                         else "representative-opposite-side",
                     }
                 )
@@ -4922,8 +4861,19 @@ class PiecewiseStructuralComplex:
                     "psc_table": psc_model.get("table_name", ""),
                     "psc_max_missing_boundaries": max_missing_boundaries,
                     "feature": unit_info.get("feature", ""),
-                    "unit_role": unit_info.get("unit_role", ""),
+                    "unit_role": self._psc_unit_role(
+                        unit_info.get("unit_role", "TU")
+                    ),
+                    "domains": list(unit_info.get("domains", [])),
                     "boundaries": list(unit_info.get("boundaries", [])),
+                    "representative_boundary": unit_info.get(
+                        "representative_boundary", ""
+                    ),
+                    **{
+                        color_name: unit_info[color_name]
+                        for color_name in ("color_R", "color_G", "color_B")
+                        if color_name in unit_info
+                    },
                     "matched_surface_indices": list(unit_info.get("matched_surface_indices", [])),
                     "missing_boundaries": list(unit_info.get("missing_boundaries", [])),
                     "seed_override": bool(unit_info.get("seed_override", False)),
@@ -5245,7 +5195,9 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             return
 
         psc_model = self._build_psc_model_from_stm(table_name)
-        boundary_roles_by_key = self._psc_boundary_roles_by_key(psc_model)
+        representative_boundary_keys = self._psc_representative_boundary_keys(
+            psc_model
+        )
         created_seed_count = 0
         created_area_count = 0
         status_counts = {
@@ -5333,7 +5285,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 area_infos=assignment_area_infos,
                 assignments=assignment_results,
                 line_entries=line_entries,
-                boundary_roles_by_key=boundary_roles_by_key,
+                representative_boundary_keys=representative_boundary_keys,
                 tolerance=tolerance,
             ):
                 continue
@@ -5361,7 +5313,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 area_infos=assignment_area_infos,
                 assignments=assignment_results,
                 line_entries=line_entries,
-                boundary_roles_by_key=boundary_roles_by_key,
+                representative_boundary_keys=representative_boundary_keys,
                 tolerance=tolerance,
             )
             assignment_results[info_idx] = assignment
@@ -5411,7 +5363,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 feature = "PSC_unassigned"
                 unit_name = f"Area_{area_idx}"
             else:
-                role = self._psc_text(unit_info.get("unit_role", "")) or "undef"
+                role = self._psc_unit_role(unit_info.get("unit_role", "TU"))
                 feature = self._psc_text(unit_info.get("feature", "")) or "PSC_unit"
                 unit_name = self._psc_text(unit_info.get("name", "")) or feature
 
@@ -6056,7 +6008,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         area_infos: List[Dict[str, Any]],
         assignments: List[Optional[Dict[str, Any]]],
         line_entries: List[Dict[str, Any]],
-        boundary_roles_by_key: Dict[str, str],
+        representative_boundary_keys: set,
         tolerance: float,
     ) -> Dict[str, Any]:
         "Returns the best assignment for the given area_info based on candidates and conflict checks."
@@ -6073,7 +6025,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 area_infos=area_infos,
                 assignments=assignments,
                 line_entries=line_entries,
-                boundary_roles_by_key=boundary_roles_by_key,
+                representative_boundary_keys=representative_boundary_keys,
                 tolerance=tolerance,
             )
             if conflict_labels:
@@ -6165,7 +6117,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         area_infos: List[Dict[str, Any]],
         assignments: List[Optional[Dict[str, Any]]],
         line_entries: List[Dict[str, Any]],
-        boundary_roles_by_key: Dict[str, str],
+        representative_boundary_keys: set,
         tolerance: float,
     ) -> List[str]:
         "Returns a list of boundary labels that conflict with the candidate's unit assignment across adjacent areas."
@@ -6187,11 +6139,9 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 label_key = self._psc_key(label)
                 if not label_key:
                     continue
-                role = boundary_roles_by_key.get(label_key, "")
-                # Repeated unit assignment across adjacent areas is allowed only
-                # across explicit Discontinuity boundaries. Volumetric
-                # representatives, including SD, must separate distinct areas.
-                if not self._psc_role_is_discontinuity(role):
+                # Only the immutable, colored representative links separate
+                # repeated unit assignments. Manually linked boundaries do not.
+                if label_key in representative_boundary_keys:
                     conflict_labels.append(self._psc_text(label))
 
         return sorted(set(conflict_labels), key=str.casefold)
@@ -6294,7 +6244,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         feature: str,
     ) -> Optional[List[float]]:
         "Returns the RGB color for the given PSC unit info, or falls back to the legend color for the feature."
-        if unit_info is not None and unit_info.get("source") == "extra":
+        if unit_info is not None:
             try:
                 return [
                     max(0.0, min(255.0, float(unit_info.get("color_R")))),
@@ -6358,7 +6308,9 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         seed_dict["name"] = name
         seed_dict["parent_uid"] = parent_uid or section_uid
         seed_dict["topology"] = "XsVertexSet"
-        seed_dict["role"] = role
+        seed_dict["role"] = (
+            "undef" if self._psc_key(role) == "undef" else self._psc_unit_role(role)
+        )
         seed_dict["feature"] = feature
         seed_dict["vtk_obj"] = XsVertexSet(x_section_uid=section_uid, parent=project)
         seed_dict["vtk_obj"].points = np.asarray([xyz], dtype=float)
@@ -6380,7 +6332,9 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         area_dict["name"] = name
         area_dict["parent_uid"] = section_uid
         area_dict["topology"] = "TriSurf"
-        area_dict["role"] = role
+        area_dict["role"] = (
+            "undef" if self._psc_key(role) == "undef" else self._psc_unit_role(role)
+        )
         area_dict["feature"] = feature
         area_dict["vtk_obj"] = vtk_obj
         area_dict["properties_names"] = list(getattr(vtk_obj, "point_data_keys", []) or [])

@@ -50,6 +50,7 @@ from PySide6.QtWidgets import (
 )
 
 from pzero.helpers.helper_dialogs import input_text_dialog
+from pzero.helpers.structural_topology import build_stm_json
 from pzero.properties_manager import PropertiesCMaps
 
 STRUCTURAL_TOPOLOGY_TABLE_TYPE = "stm"
@@ -89,7 +90,6 @@ STRUCTURAL_TOPOLOGY_PROTECTED_COLUMNS = {
 }
 STRUCTURAL_TOPOLOGY_EXPORT_MARKER_BEGIN = "# PZERO_STM_EXPORT BEGIN"
 STRUCTURAL_TOPOLOGY_EXPORT_MARKER_END = "# PZERO_STM_EXPORT END"
-STRUCTURAL_TOPOLOGY_EXPORT_SCHEMA = "pzero.stm.export"
 STRUCTURAL_TOPOLOGY_UNIT_VALUES = [
     "TU",
     "SU",
@@ -97,6 +97,13 @@ STRUCTURAL_TOPOLOGY_UNIT_VALUES = [
     "SD",
 ]
 STRUCTURAL_TOPOLOGY_NON_BOUNDARY_ROLES = {"TU", "SU", "IU", "SD"}
+STRUCTURAL_TOPOLOGY_GENERATED_UNIT_ROLES = {
+    "top": "SU",
+    "bottom": "SU",
+    "intrusive": "IU",
+    "tectonic": "TU",
+    "fault": "TU",
+}
 
 _STM_UNIT_ROLES_BY_CASE = {
     role.casefold(): role for role in STRUCTURAL_TOPOLOGY_UNIT_VALUES
@@ -801,17 +808,18 @@ class STmBuildDialog(QDialog):
             {
                 "key": "surface:boundary",
                 "label": "Model Boundary",
-                "polarity": float("inf"),
+                "polarity": float("-inf"),
                 "brush": QColor(255, 255, 255),
                 "pen": QColor(30, 30, 30),
-                "row_idx": None,
+                "row_idx": -1,
             }
         )
 
         for node_info in unit_nodes:
             item_info = self._add_node(
                 center_x=self.LEFT_X,
-                center_y=self.TOP_Y + node_info["row_idx"] * self.Y_STEP,
+                center_y=self.TOP_Y
+                + (node_info["row_idx"] + 1) * self.Y_STEP,
                 label=node_info["label"],
                 fill_color=node_info["brush"],
                 outline_color=node_info["pen"],
@@ -825,9 +833,9 @@ class STmBuildDialog(QDialog):
         for node_info in surface_nodes:
             row_idx = node_info["row_idx"]
             node_y = (
-                self.TOP_Y + len(rows) * self.Y_STEP
-                if row_idx is None
-                else self.TOP_Y + row_idx * self.Y_STEP
+                self.TOP_Y
+                if row_idx < 0
+                else self.TOP_Y + (row_idx + 1) * self.Y_STEP
             )
             self.node_items[node_info["key"]] = self._add_node(
                 center_x=self.RIGHT_X,
@@ -2005,12 +2013,14 @@ class NewStructuralTopologyTableDialog(QDialog):
 class ImportStructuralTopologyUnitsDialog(QDialog):
     """Dialog used to import legend boundaries into an STm table."""
 
-    def __init__(self, parent=None, units_provider=None, existing_names=None):
+    def __init__(
+        self, parent=None, units_provider=None, existing_boundaries=None
+    ):
         super().__init__(parent)
         self.setWindowTitle("Import boundaries")
         self.resize(460, 420)
         self.units_provider = units_provider
-        self.existing_names = set(existing_names or [])
+        self.existing_boundaries = dict(existing_boundaries or {})
 
         layout = QVBoxLayout(self)
         info_label = QLabel(
@@ -2036,16 +2046,16 @@ class ImportStructuralTopologyUnitsDialog(QDialog):
         self.populate_units()
 
     @property
-    def selected_unit_names(self):
-        selected_names = []
+    def selected_units(self):
+        selected_units = []
         for row_idx in range(self.units_list.count()):
             item = self.units_list.item(row_idx)
             if (
                 item.flags() & Qt.ItemIsEnabled
                 and item.checkState() == Qt.Checked
             ):
-                selected_names.append(item.data(Qt.UserRole))
-        return selected_names
+                selected_units.append(item.data(Qt.UserRole))
+        return selected_units
 
     def populate_units(self):
         self.units_list.clear()
@@ -2070,15 +2080,22 @@ class ImportStructuralTopologyUnitsDialog(QDialog):
             polarity_value = str(
                 unit_info.get(STRUCTURAL_TOPOLOGY_POLARITY_COLUMN, "")
             ).strip()
-            item = QListWidgetItem(unit_name)
-            item.setData(Qt.UserRole, unit_name)
+            item = QListWidgetItem(
+                f"{unit_name} — {role_name}" if role_name else unit_name
+            )
+            item.setData(Qt.UserRole, dict(unit_info))
             tooltip_txt = f"Structural polarity: {polarity_value}"
             if role_name:
                 tooltip_txt += f"\nRole: {role_name}"
             item.setToolTip(tooltip_txt)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            if unit_name in self.existing_names:
-                item.setCheckState(Qt.Checked)
+            if unit_name in self.existing_boundaries:
+                item.setCheckState(
+                    Qt.Checked
+                    if self.existing_boundaries[unit_name].casefold()
+                    == role_name.casefold()
+                    else Qt.Unchecked
+                )
                 item.setFlags(item.flags() & ~Qt.ItemIsEnabled)
             else:
                 item.setCheckState(Qt.Unchecked)
@@ -2092,7 +2109,7 @@ class ImportStructuralTopologyUnitsDialog(QDialog):
             self.units_list.addItem(item)
 
     def validate_and_accept(self):
-        if not self.selected_unit_names:
+        if not self.selected_units:
             QMessageBox.warning(
                 self,
                 "No boundaries selected",
@@ -2831,7 +2848,7 @@ class ViewTable(QWidget):
         )
         color_codes["features"] = feature_colors
         options["stm_color_codes"] = color_codes
-        options["stm_schema_version"] = 2
+        options["stm_schema_version"] = 3
         options["stm_tables"] = {
             "boundaries": _stm_records(boundaries),
             "units": _stm_records(units),
@@ -3138,6 +3155,24 @@ class ViewTable(QWidget):
             units = []
 
         legend_df = getattr(getattr(self.parent, "geol_coll", None), "legend_df", None)
+        if not units and legend_df is not None and not legend_df.empty:
+            units = [
+                {
+                    STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: str(
+                        row.get("feature", "")
+                    ).strip(),
+                    STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: "Discontinuity",
+                    STRUCTURAL_TOPOLOGY_POLARITY_COLUMN: row.get("time", 0.0),
+                    "Domain_1": "",
+                    "feature": str(row.get("feature", "")).strip(),
+                    "role": str(row.get("role", "")).strip(),
+                    "color_R": row.get("color_R", 255),
+                    "color_G": row.get("color_G", 255),
+                    "color_B": row.get("color_B", 255),
+                }
+                for _, row in legend_df.iterrows()
+                if str(row.get("feature", "")).strip()
+            ]
         current_options = dict(self.current_table_options or {})
         stored_color_codes = current_options.get("stm_color_codes", {})
         feature_color_map = {}
@@ -3148,38 +3183,25 @@ class ViewTable(QWidget):
                 if str(feature_name).strip()
             }
 
-        units_map = {}
+        available_units = []
+        available_keys = set()
         for unit_info in units:
             feature_name = str(unit_info.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")).strip()
             if not feature_name:
                 continue
+            role_name = str(unit_info.get("role", "")).strip()
+            unit_key = (feature_name, role_name)
+            if unit_key in available_keys:
+                continue
             unit_payload = dict(unit_info)
             unit_payload.update(feature_color_map.get(feature_name, {}))
-            units_map[feature_name] = unit_payload
-
-        if legend_df is not None and not legend_df.empty:
-            for _, row in legend_df.iterrows():
-                feature_name = str(row.get("feature", "")).strip()
-                role_name = str(row.get("role", "")).strip()
-                if not feature_name or feature_name in units_map:
-                    continue
-                color_override = feature_color_map.get(feature_name, {})
-                units_map[feature_name] = {
-                    STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: feature_name,
-                    STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: "Discontinuity",
-                    STRUCTURAL_TOPOLOGY_POLARITY_COLUMN: row.get("time", 0.0),
-                    "Domain_1": "",
-                    "feature": feature_name,
-                    "role": role_name,
-                    "color_R": color_override.get("color_R", row.get("color_R", 255)),
-                    "color_G": color_override.get("color_G", row.get("color_G", 255)),
-                    "color_B": color_override.get("color_B", row.get("color_B", 255)),
-                }
+            available_units.append(unit_payload)
+            available_keys.add(unit_key)
         if feature_color_map:
             for feature_name, color_info in feature_color_map.items():
-                if feature_name in units_map:
+                if any(key[0] == feature_name for key in available_keys):
                     continue
-                units_map[feature_name] = {
+                available_units.append({
                     STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: feature_name,
                     STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: "Discontinuity",
                     STRUCTURAL_TOPOLOGY_POLARITY_COLUMN: 0.0,
@@ -3189,13 +3211,16 @@ class ViewTable(QWidget):
                     "color_R": color_info.get("color_R", 255),
                     "color_G": color_info.get("color_G", 255),
                     "color_B": color_info.get("color_B", 255),
-                }
+                })
 
         return sorted(
-            units_map.values(),
-            key=lambda unit_info: str(
-                unit_info.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")
-            ).casefold(),
+            available_units,
+            key=lambda unit_info: (
+                str(
+                    unit_info.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")
+                ).casefold(),
+                str(unit_info.get("role", "")).casefold(),
+            ),
         )
 
     def refresh_table_list(self, select_name: str = None):
@@ -3645,19 +3670,15 @@ class ViewTable(QWidget):
                     }
                     with open(output_path, "w", encoding="utf-8") as output_stream:
                         json.dump(
-                            {
-                                "schema": "pzero.stm.v2",
-                                "version": 2,
-                                "name": table_name,
-                                "boundaries": _stm_records_with_colors(
-                                    boundaries, feature_colors
-                                ),
-                                "units": _stm_records_with_colors(
-                                    units,
-                                    feature_colors,
-                                    representative_by_unit,
-                                ),
-                            },
+                            build_stm_json(
+                                name=table_name,
+                                boundaries=_stm_records(boundaries),
+                                units=_stm_records(units),
+                                colors=feature_colors,
+                                representative_boundaries=representative_by_unit,
+                                boundary_columns=boundaries.columns,
+                                unit_columns=units.columns,
+                            ),
                             output_stream,
                             ensure_ascii=False,
                             indent=2,
@@ -3698,15 +3719,24 @@ class ViewTable(QWidget):
                         sep=delimiter,
                         index=False,
                     )
+                    boundaries, units, representative_links, _ = (
+                        self._reconcile_stm_relationships()
+                    )
                     _stm_write_export_footer(
                         output_stream,
-                        {
-                            "schema": STRUCTURAL_TOPOLOGY_EXPORT_SCHEMA,
-                            "version": 1,
-                            "table_name": table_name,
-                            "table_type": STRUCTURAL_TOPOLOGY_TABLE_TYPE,
-                            "options": export_options,
-                        },
+                        build_stm_json(
+                            name=table_name,
+                            boundaries=_stm_records(boundaries),
+                            units=_stm_records(units),
+                            colors=feature_colors,
+                            representative_boundaries={
+                                unit_name: boundary_name
+                                for unit_name, boundary_name
+                                in representative_links
+                            },
+                            boundary_columns=boundaries.columns,
+                            unit_columns=units.columns,
+                        ),
                     )
             else:
                 dataframe.to_csv(
@@ -3902,34 +3932,28 @@ class ViewTable(QWidget):
         if not table_name:
             return
 
-        existing_names = set()
-        if (
-            STRUCTURAL_TOPOLOGY_FEATURE_COLUMN
-            in self.boundaries_table_model.dataframe.columns
-        ):
-            existing_names = {
-                str(value).strip()
-                for value in self.boundaries_table_model.dataframe[
-                    STRUCTURAL_TOPOLOGY_FEATURE_COLUMN
-                ].tolist()
-                if str(value).strip()
-            }
+        existing_boundaries = {
+            str(row.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")).strip():
+            str(row.get(STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN, "")).strip()
+            for _, row in self.boundaries_table_model.dataframe.iterrows()
+            if str(
+                row.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")
+            ).strip()
+        }
 
         dialog = ImportStructuralTopologyUnitsDialog(
             parent=self,
             units_provider=self._available_stm_units,
-            existing_names=existing_names,
+            existing_boundaries=existing_boundaries,
         )
         if dialog.exec() != QDialog.Accepted:
             return
 
-        units_by_name = {
-            unit_info[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN]: unit_info
-            for unit_info in self._available_stm_units()
-        }
-        for selected_name in dialog.selected_unit_names:
-            unit_info = units_by_name.get(selected_name)
-            if not unit_info:
+        for unit_info in dialog.selected_units:
+            selected_name = str(
+                unit_info.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")
+            ).strip()
+            if not selected_name or selected_name in existing_boundaries:
                 continue
             self._set_stm_feature_color(selected_name, unit_info)
             self.boundaries_table_model.add_row_data(
@@ -3994,6 +4018,11 @@ class ViewTable(QWidget):
             if not boundary_name:
                 continue
             if boundary_name not in existing_units:
+                boundary_role = str(
+                    boundaries.iloc[row_index].get(
+                        STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN, ""
+                    )
+                ).strip().casefold()
                 row_data = {
                     column_name: ""
                     for column_name in self.table_model.dataframe.columns
@@ -4001,7 +4030,11 @@ class ViewTable(QWidget):
                 row_data.update(
                     {
                         STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: boundary_name,
-                        STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: "TU",
+                        STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: (
+                            STRUCTURAL_TOPOLOGY_GENERATED_UNIT_ROLES.get(
+                                boundary_role, "TU"
+                            )
+                        ),
                         STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN: "",
                         STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN: boundary_name,
                     }
@@ -4115,8 +4148,11 @@ class ViewTable(QWidget):
         self._notify_custom_table_metadata_changed()
 
     @staticmethod
-    def _best_polarity_assignments(unit_names, candidates, slots):
+    def _best_polarity_assignments(
+        unit_names, candidates, slots, candidate_scores=None
+    ):
         """Return at most two oldest injective assignments."""
+        candidate_scores = candidate_scores or {}
         unit_names = tuple(
             sorted(unit_names, key=lambda name: (len(candidates[name]), name))
         )
@@ -4124,18 +4160,22 @@ class ViewTable(QWidget):
         @lru_cache(None)
         def solve(index, used):
             if index == len(unit_names):
-                return 0.0, ((),)
+                return (0, 0.0), ((),)
             best_score, best = None, []
             unit_name = unit_names[index]
             for slot_key in candidates[unit_name] - used:
                 tail_score, tails = solve(index + 1, used | {slot_key})
                 if tail_score is None:
                     continue
-                score = slots[slot_key]["value"] + tail_score
+                score = (
+                    candidate_scores.get((unit_name, slot_key), 0)
+                    + tail_score[0],
+                    slots[slot_key]["value"] + tail_score[1],
+                )
                 assignments = ((slot_key,) + tail for tail in tails)
-                if best_score is None or score > best_score + 1e-9:
+                if best_score is None or score > best_score:
                     best_score, best = score, list(assignments)
-                elif abs(score - best_score) <= 1e-9:
+                elif score == best_score:
                     best.extend(assignments)
                 best = best[:2]
             return best_score, tuple(best)
@@ -4243,9 +4283,6 @@ class ViewTable(QWidget):
             str(row.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")).strip(): index
             for index, row in units.iterrows()
         }
-
-        calculated = unresolved = 0
-        assigned = {}
         representatives = dict(
             self._stm_option_links("stm_representative_links")
         )
@@ -4258,10 +4295,8 @@ class ViewTable(QWidget):
                 )
             except (TypeError, ValueError):
                 pass
-        youngest = min(boundary_polarities.values(), default=None)
-        oldest = max(boundary_polarities.values(), default=None)
-        linked_by_unit = {
-            unit_name: set(
+        signatures = {
+            unit_name: frozenset(
                 _stm_names(
                     units.at[
                         row_index,
@@ -4271,162 +4306,86 @@ class ViewTable(QWidget):
             )
             for unit_name, row_index in row_by_name.items()
         }
-
-        def write_assignment(assignment):
-            nonlocal calculated
-            for unit_name, slot_key in assignment.items():
-                assigned[unit_name] = slot_key
-                units.at[
-                    row_by_name[unit_name],
-                    STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN,
-                ] = slots[slot_key]["value"]
-                #debug
-                print(
-                    f"[STm polarity] assigned {unit_name} -> "
-                    f"{slots[slot_key]['value']:g} "
-                    f"({slots[slot_key]['label']})"
-                )
-                calculated += 1
-
-        for unit_name, representative in sorted(representatives.items()):
-            if unit_name not in candidates or not candidates[unit_name]:
-                unresolved += 1
+        repeated_signatures = {
+            signature
+            for signature in signatures.values()
+            if sum(value == signature for value in signatures.values()) > 1
+        }
+        candidate_scores = {}
+        for unit_name, representative in representatives.items():
+            if signatures.get(unit_name) in repeated_signatures:
                 continue
             representative_value = boundary_polarities.get(representative)
             linked_values = {
                 boundary_polarities[name]
-                for name in linked_by_unit[unit_name]
+                for name in signatures.get(unit_name, ())
                 if name in boundary_polarities
             }
-            scores = {
-                slot_key: int(
-                    representative_value
-                    + (
-                        -1.0
-                        if slots[slot_key]["value"] < representative_value
-                        else 1.0
-                    )
-                    in linked_values
+            for slot_key in candidates.get(unit_name, ()):
+                opposite_surface = (
+                    2 * slots[slot_key]["value"] - representative_value
                 )
-                for slot_key in candidates[unit_name]
-            }
-            if (
-                not any(scores.values())
-                and STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY
-                in linked_by_unit[unit_name]
-            ):
-                if representative_value in (youngest, oldest):
-                    for slot_key in scores:
-                        scores[slot_key] = int(
-                            slots[slot_key]["value"]
-                            < representative_value
-                            if representative_value == youngest
-                            else slots[slot_key]["value"]
-                            > representative_value
-                        )
-            best_score = max(scores.values())
-            solutions = [
-                {unit_name: slot_key}
-                for slot_key in sorted(
-                    (
-                        slot_key
-                        for slot_key, score in scores.items()
-                        if score == best_score
-                    ),
-                    key=lambda key: slots[key]["value"],
-                    reverse=True,
+                candidate_scores[(unit_name, slot_key)] = int(
+                    opposite_surface in linked_values
                 )
-            ]
-            #debug
-            print(
-                f"[STm polarity] representative solutions for "
-                f"{unit_name}:",
-                [
-                    {
-                        unit_name: slots[solution[unit_name]]["value"],
-                        "score": best_score,
-                    }
-                    for solution in solutions
-                ],
-            )
-            if len(solutions) > 1:
-                dialog = UnitPolarityAmbiguityDialog(self, solutions, slots)
-                if dialog.exec() != QDialog.Accepted:
-                    #debug
-                    print(
-                        f"[STm polarity] unresolved {unit_name}: "
-                        "ambiguity dialog cancelled"
+        #debug
+        print(
+            "[STm polarity] topology scores:",
+            {
+                unit_name: {
+                    slots[slot_key]["value"]: candidate_scores.get(
+                        (unit_name, slot_key), 0
                     )
-                    unresolved += 1
-                    continue
-                write_assignment(dialog.assignments)
-            else:
-                write_assignment(solutions[0])
+                    for slot_key in candidates[unit_name]
+                }
+                for unit_name in candidates
+            },
+        )
 
-        occupied = set(assigned.values())
-        collisions = {}
-        for unit_name, slot_key in assigned.items():
-            collisions.setdefault(slot_key, []).append(unit_name)
-        collisions = {
-            slots[slot_key]["value"]: unit_names
-            for slot_key, unit_names in collisions.items()
-            if len(unit_names) > 1
-        }
-        if collisions:
-            #debug
-            print(
-                "[STm polarity] representative polarity collisions:",
-                collisions,
-            )
-
-        extra_candidates = {
-            unit_name: slot_keys - occupied
-            for unit_name, slot_keys in candidates.items()
-            if unit_name not in representatives
-        }
-        remaining = set(extra_candidates)
+        remaining = set(candidates)
         groups = []
         while remaining:
             group = {remaining.pop()}
             group_slots = set().union(
-                *(extra_candidates[name] for name in group)
+                *(candidates[name] for name in group)
             )
             changed = True
             while changed:
                 linked = {
                     name
                     for name in remaining
-                    if extra_candidates[name] & group_slots
+                    if candidates[name] & group_slots
                 }
                 changed = bool(linked)
                 group.update(linked)
                 remaining.difference_update(linked)
                 group_slots.update(
-                    *(extra_candidates[name] for name in linked)
+                    *(candidates[name] for name in linked)
                 )
             groups.append(sorted(group))
 
         #debug
         print(
-            "[STm polarity] extra-unit groups:",
+            "[STm polarity] competing groups:",
             [
                 {
                     unit_name: sorted(
                         slots[key]["value"]
-                        for key in extra_candidates[unit_name]
+                        for key in candidates[unit_name]
                     )
                     for unit_name in group
                 }
                 for group in groups
             ],
         )
+        calculated = unresolved = 0
         for group in groups:
             solutions = self._best_polarity_assignments(
-                group, extra_candidates, slots
+                group, candidates, slots, candidate_scores
             )
             #debug
             print(
-                f"[STm polarity] extra solutions for {group}:",
+                f"[STm polarity] solutions for {group}:",
                 [
                     {
                         unit_name: slots[slot_key]["value"]
@@ -4439,21 +4398,11 @@ class ViewTable(QWidget):
                 #debug
                 print(
                     f"[STm polarity] unresolved {group}: no one-to-one "
-                    "free side is available"
+                    "assignment is available"
                 )
                 unresolved += len(group)
                 continue
             assignment = solutions[0]
-            if len(group) == 1 and len(extra_candidates[group[0]]) > 1:
-                unit_name = group[0]
-                solutions = [
-                    {unit_name: slot_key}
-                    for slot_key in sorted(
-                        extra_candidates[unit_name],
-                        key=lambda key: slots[key]["value"],
-                        reverse=True,
-                    )
-                ]
             if len(solutions) > 1:
                 dialog = UnitPolarityAmbiguityDialog(
                     self, solutions, slots
@@ -4467,7 +4416,18 @@ class ViewTable(QWidget):
                     unresolved += len(group)
                     continue
                 assignment = dialog.assignments
-            write_assignment(assignment)
+            for unit_name, slot_key in assignment.items():
+                units.at[
+                    row_by_name[unit_name],
+                    STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN,
+                ] = slots[slot_key]["value"]
+                #debug
+                print(
+                    f"[STm polarity] assigned {unit_name} -> "
+                    f"{slots[slot_key]['value']:g} "
+                    f"({slots[slot_key]['label']})"
+                )
+                calculated += 1
 
         #debug
         print(
