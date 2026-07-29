@@ -55,7 +55,7 @@ class ViewMPL(BaseView):
 
     def actor_shown(self, uid: str = None):
         """Method to check if an actor is shown in a Matplotlib plotter. Returns a boolean."""
-        return self.mpl_actors[uid].visible()
+        return self.mpl_actors[uid].get_visible()
 
     def show_actors(self, uids: list = None):
         """Method to show actors in uids list in a Matplotlib plotter."""
@@ -76,13 +76,19 @@ class ViewMPL(BaseView):
         for uid in updated_uids:
             if uid in self.uids_in_view:
                 # Get color from legend
+                actor = self.mpl_actors[uid]
+                if actor is None:
+                    continue
                 color_R = collection.get_uid_legend(uid=uid)["color_R"]
                 color_G = collection.get_uid_legend(uid=uid)["color_G"]
                 color_B = collection.get_uid_legend(uid=uid)["color_B"]
                 color_RGB = [color_R / 255, color_G / 255, color_B / 255]
                 # Now update color for actor uid
-                self.mpl_actors[uid].set_color(color_RGB)
-                self.mpl_actors[uid].figure.canvas.draw()
+                actor.set_color(color_RGB)
+                try:
+                    actor.figure.canvas.draw()
+                except Exception as e:
+                    self.print_terminal(f"Could not redraw after color change: {e}")
             else:
                 continue
 
@@ -90,11 +96,17 @@ class ViewMPL(BaseView):
         """Change opacity for actor uid"""
         for uid in updated_uids:
             if uid in self.uids_in_view:
+                actor = self.mpl_actors[uid]
+                if actor is None:
+                    continue
                 # Get color from legend
                 opacity = collection.get_uid_legend(uid=uid)["opacity"] / 100
                 # Now update color for actor uid
-                self.mpl_actors[uid].set_alpha(opacity)
-                self.mpl_actors[uid].figure.canvas.draw()
+                actor.set_alpha(opacity)
+                try:
+                    actor.figure.canvas.draw()
+                except Exception as e:
+                    self.print_terminal(f"Could not redraw after opacity change: {e}")
             else:
                 continue
 
@@ -102,11 +114,19 @@ class ViewMPL(BaseView):
         """Change line thickness for actor uid"""
         for uid in updated_uids:
             if uid in self.uids_in_view:
+                actor = self.mpl_actors[uid]
+                if actor is None:
+                    continue
                 # Get color from legend
                 line_thick = collection.get_uid_legend(uid=uid)["line_thick"]
                 # Now update color for actor uid
-                self.mpl_actors[uid].set_linewidth(line_thick)
-                self.mpl_actors[uid].figure.canvas.draw()
+                actor.set_linewidth(line_thick)
+                try:
+                    actor.figure.canvas.draw()
+                except Exception as e:
+                    self.print_terminal(
+                        f"Could not redraw after line thick change: {e}"
+                    )
             else:
                 continue
 
@@ -117,28 +137,63 @@ class ViewMPL(BaseView):
                 # Get color from legend
                 point_size = collection.get_uid_legend(uid=uid)["point_size"]
                 # Now update color for actor uid
-                self.mpl_actors[uid].set_markersize(point_size)
-                self.mpl_actors[uid].figure.canvas.draw()
+                actor = self.mpl_actors[uid]
+                if actor is None:
+                    continue
+                if hasattr(actor, "set_markersize"):
+                    actor.set_markersize(point_size)
+                elif hasattr(actor, "set_sizes"):
+                    actor.set_sizes([point_size**2])
+                try:
+                    actor.figure.canvas.draw()
+                except Exception as e:
+                    self.print_terminal(
+                        f"Could not redraw after point size change: {e}"
+                    )
             else:
                 continue
 
     def set_actor_visible(self, uid=None, visible=None):
-        """Set actor uid visible or invisible (visible = True or False)"""
-        # The options below seem too much, and for instance contours are not toggled.
-        # We keep them for future reference, but we use a simplera approach and see if it works.
+        """Set actor uid visible or invisible (visible = True or False). If the
+        actor hasn't been created yet (e.g. it was never shown since the view
+        opened), it is drawn fresh instead of silently failing."""
+        if uid not in self.mpl_actors:
+            collection_name = self.actors_df.loc[
+                self.actors_df["uid"] == uid, "collection"
+            ].values[0]
+            show_property = self.actors_df.loc[
+                self.actors_df["uid"] == uid, "show_property"
+            ].values[0]
+            self.show_actor_with_property(
+                uid=uid,
+                coll_name=collection_name,
+                show_property=show_property,
+                visible=visible,
+            )
+            return
         try:
             self.mpl_actors[uid].set_visible(visible)
             self.mpl_actors[uid].figure.canvas.draw()
-        except:
-            self.print_terminal(f"ERROR with set_actor_visible: {uid}")
+        except Exception as e:
+            self.print_terminal(f"ERROR with set_actor_visible: {uid}: {e}")
 
     def remove_actor_in_view(self, uid=None, redraw=False):
         """ "Remove actor from plotter. Can remove a single entity or a list of
         entities as actors - here we remove a single entity"""
 
-        if not self.mpl_actors[uid].empty:
-            if self.mpl_actors[uid]:
-                self.mpl_actors[uid].remove()
+        actor = self.mpl_actors.get(uid)
+        if actor is not None:
+            try:
+                actor.remove()
+            except Exception as e:
+                self.print_terminal(f"Could not remove actor '{uid}': {e}")
             if redraw:
-                # IN THE FUTURE check if there is a way to redraw just the actor that has just been removed.
                 self.figure.canvas.draw()
+
+    def remove_artist(self, actor):
+        """Remove a single matplotlib artist from the canvas, defensively."""
+        if actor is not None:
+            try:
+                actor.remove()
+            except Exception as e:
+                self.print_terminal(f"Could not remove actor: {e}")

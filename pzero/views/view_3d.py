@@ -189,34 +189,34 @@ class View3D(ViewVTK):
     #     self.actionExportVtkJSON.triggered.connect(self.export_vtkJS)
     #     self.menuView.addAction(self.actionExportVtkJSON)
 
-        # self.menuOrbit = QMenu("Orbit around", self)
-        # self.actionOrbitEntity = QAction("Entity", self)
-        # self.actionOrbitEntity.triggered.connect(lambda: self.orbit_entity())
-        # self.menuOrbit.addAction(self.actionOrbitEntity)
-        # self.menuWindow.addMenu(self.menuOrbit)
-        #
-        # self.actionThresholdf.triggered.connect(lambda: thresh_filt(self))
-        # self.actionSurface_densityf.triggered.connect(lambda: self.surf_den_filt())
-        # self.actionRoughnessf.triggered.connect(lambda: self.rough_filt())
-        # self.actionCurvaturef.triggered.connect(lambda: self.curv_filt())
-        # self.actionNormalsf.triggered.connect(lambda: self.norm_filt())
-        # self.actionManualBoth.triggered.connect(lambda: cut_pc(self))
-        # self.actionManualInner.triggered.connect(lambda: cut_pc(self, "inner"))
-        # self.actionManualOuter.triggered.connect(lambda: cut_pc(self, "outer"))
-        #
-        # self.actionCalibration.triggered.connect(lambda: calibration_pc(self))
-        # self.actionManual_picking.triggered.connect(lambda: self.act_att())
-        # self.actionSegment.triggered.connect(lambda: segment_pc(self))
-        # self.actionPick.triggered.connect(lambda: auto_pick(self))
-        # self.actionFacets.triggered.connect(lambda: facets_pc(self))
-        #
-        # # self.actionCalculate_normals.triggered.connect(lambda: self.normalGeometry())
-        # self.actionNormals_to_DDR.triggered.connect(lambda: normals2dd(self))
-        #
-        # self.showOct = QAction("Show octree structure", self)
-        # self.showOct.triggered.connect(self.show_octree)
-        # self.menuBaseView.addAction(self.showOct)
-        # self.toolBarBase.addAction(self.showOct)
+    # self.menuOrbit = QMenu("Orbit around", self)
+    # self.actionOrbitEntity = QAction("Entity", self)
+    # self.actionOrbitEntity.triggered.connect(lambda: self.orbit_entity())
+    # self.menuOrbit.addAction(self.actionOrbitEntity)
+    # self.menuWindow.addMenu(self.menuOrbit)
+    #
+    # self.actionThresholdf.triggered.connect(lambda: thresh_filt(self))
+    # self.actionSurface_densityf.triggered.connect(lambda: self.surf_den_filt())
+    # self.actionRoughnessf.triggered.connect(lambda: self.rough_filt())
+    # self.actionCurvaturef.triggered.connect(lambda: self.curv_filt())
+    # self.actionNormalsf.triggered.connect(lambda: self.norm_filt())
+    # self.actionManualBoth.triggered.connect(lambda: cut_pc(self))
+    # self.actionManualInner.triggered.connect(lambda: cut_pc(self, "inner"))
+    # self.actionManualOuter.triggered.connect(lambda: cut_pc(self, "outer"))
+    #
+    # self.actionCalibration.triggered.connect(lambda: calibration_pc(self))
+    # self.actionManual_picking.triggered.connect(lambda: self.act_att())
+    # self.actionSegment.triggered.connect(lambda: segment_pc(self))
+    # self.actionPick.triggered.connect(lambda: auto_pick(self))
+    # self.actionFacets.triggered.connect(lambda: facets_pc(self))
+    #
+    # # self.actionCalculate_normals.triggered.connect(lambda: self.normalGeometry())
+    # self.actionNormals_to_DDR.triggered.connect(lambda: normals2dd(self))
+    #
+    # self.showOct = QAction("Show octree structure", self)
+    # self.showOct.triggered.connect(self.show_octree)
+    # self.menuBaseView.addAction(self.showOct)
+    # self.toolBarBase.addAction(self.showOct)
 
     # Called by BaseView.toggle_property after main actor's property changes via tree combo
     def on_property_toggled(self, collection_name=None, uid=None, prop_text=None):
@@ -578,6 +578,7 @@ class View3D(ViewVTK):
 
     def act_att(self):
         """Used to activate pkd_point, which returns data from picking on point clouds."""
+        print("start picking")
         if self.tog_att == -1:
             input_dict = {
                 "name": ["Set name: ", "Set_0"],
@@ -2965,6 +2966,10 @@ class View3D(ViewVTK):
         self.actionCalibrate_Pc = QAction("Calculate distance with the best plane", self)
         self.actionCalibrate_Pc.triggered.connect(lambda: calibration_pc)
         self.menuAnalysis.addAction(self.actionCalibrate_Pc)
+
+        self.actionManual_picking = QAction("Pick", self)
+        self.actionManual_picking.triggered.connect(lambda: self.act_att())
+        self.menuCreate.addAction(self.actionManual_picking)
 
         # Create Mesh Tools menu if it doesn't exist
         if not hasattr(self, "menuMeshTools"):

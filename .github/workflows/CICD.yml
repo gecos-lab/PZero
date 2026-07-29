@@ -6,8 +6,10 @@ name: CICD
 # Runs on push on the main branch, that actually occurs only after a pull request is accepted or a push to the main branch is made directly.
 on:
   push:
-#    tags-ignore:
-#      - '**'
+    branches:
+      - main
+    tags-ignore:
+      - '**'
 
 jobs:
   test:
@@ -49,6 +51,11 @@ jobs:
         id: semantic
         with:
           github_token: ${{ secrets.TOKEN }}
+
+      - name: Debug semantic-release outputs
+        run: |
+          echo "version=${{ steps.semantic.outputs.version }}"
+          echo "released=${{ steps.semantic.outputs.released }}"
 
   deploy:
     if: needs.release.outputs.released == 'true'

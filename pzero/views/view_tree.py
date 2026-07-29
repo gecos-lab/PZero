@@ -265,6 +265,7 @@ class CustomTreeWidget(QTreeWidget):
                 else None
             )
         )
+        self.itemSelectionChanged.connect(self.emit_selection_changed)
 
         # Import initial selection state if parent and collection exist
         if hasattr(self.collection, "selected_uids"):
@@ -411,7 +412,9 @@ class CustomTreeWidget(QTreeWidget):
         if index < 0 and shown_property == "RGB":
             index = property_combo.findText("RGB total")
         if index >= 0:
+            property_combo.blockSignals(True)
             property_combo.setCurrentIndex(index)
+            property_combo.blockSignals(False)
 
         # connect signal used to change the property to be shown
         property_combo.currentTextChanged.connect(
@@ -932,48 +935,6 @@ class CustomTreeWidget(QTreeWidget):
         for i in range(self.columnCount()):
             self.resizeColumnToContents(i)
 
-    # def update_properties_for_uids(self, uids):
-    #     """
-    #     Updates properties for the provided UIDs by manipulating combo boxes and updating corresponding
-    #     dataframes. This method temporarily blocks signals to avoid unnecessary updates during the operation.
-    #     """
-    #
-    #     # Block signals temporarily to prevent unnecessary updates
-    #     self.blockSignals(True)
-    #
-    #     for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
-    #         uid = self.get_item_uid(item)
-    #         # "if uid" is needed since higher levels do not have an uid
-    #         if uid and uid in uids:
-    #             combo = self.itemWidget(item, self.columnCount() - 1)
-    #             if combo:
-    #                 # Store current selection if it exists
-    #                 current_text = combo.currentText()
-    #
-    #                 # Clear the combo box
-    #                 combo.clear()
-    #
-    #                 # Add default labels first
-    #                 for label in self.default_labels:
-    #                     combo.addItem(label)
-    #
-    #                 # Add the new properties
-    #                 properties_list = self.collection.df.loc[
-    #                     self.collection.df[self.uid_label] == uid, self.prop_label
-    #                 ].values[0]
-    #                 combo.addItems(properties_list)
-    #
-    #                 # Try to restore previous selection if it's still available
-    #                 index = combo.findText(current_text)
-    #                 if index >= 0:
-    #                     combo.setCurrentIndex(index)
-    #                 else:
-    #                     # If previous selection is no longer available, set to first default label
-    #                     combo.setCurrentIndex(0)
-    #
-    #     # Unblock signals
-    #     self.blockSignals(False)
-
     @preserve_selection
     def update_properties_for_uids(self, uids):
         """
@@ -1081,6 +1042,7 @@ class CustomTreeWidget(QTreeWidget):
         # Remove and delete the widget
         widget = self.itemWidget(item, self.columnCount() - 1)
         if widget:
+            widget.blockSignals(True)
             widget.deleteLater()
             self.removeItemWidget(item, self.columnCount() - 1)
 
