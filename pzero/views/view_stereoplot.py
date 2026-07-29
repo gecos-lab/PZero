@@ -37,6 +37,8 @@ import mplstereonet
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.pyplot import close as plt_close
 from matplotlib.widgets import RectangleSelector
+from matplotlib.widgets import LassoSelector
+from matplotlib.path import Path as mpl_Path
 import matplotlib.cm as cm
 
 
@@ -78,6 +80,14 @@ class ViewStereoplot(ViewMPL):
         self.rectangle_selector = None  # holds the active RectangleSelector widget
         self.selection_tool_active = False
         self.selection_highlight_actor = None
+        
+        
+        # In __init__:
+        self.selection_press_cid = None
+        self.selection_motion_cid = None
+        self.selection_release_cid = None
+        self.selection_start = None      # (lon, lat) in data coords
+        self.selection_patch = None      # the drawn region patch
 
         super(ViewStereoplot, self).__init__(*args, **kwargs)
         self.setWindowTitle("Stereoplot View")
@@ -1386,26 +1396,34 @@ class ViewStereoplot(ViewMPL):
     #     self.selection_tool_active = self.actionSelectionTool.isChecked()
 
     #     if self.selection_tool_active:
-    #         # Activate: connect the RectangleSelector to self.ax
     #         self.ax.set_clip_on(False)
-
+    #         # self.lasso_selector = LassoSelector(
+    #         #     self.ax,
+    #         #     onselect=self._on_lasso_select,
+    #         #     useblit=True,
+    #         #     button=[1],
+    #         #     props=dict(color="blue", linewidth=1, linestyle="--"),)
     #         self.lasso_selector = RectangleSelector(
-    #             self.ax,
-    #             onselect=self._on_rectangle_select,
-    #             useblit=True,
-    #             button=[1],
-    #             minspanx=5,
-    #             minspany=5,
-    #             spancoords="pixels",
-    #             interactive=False,
-    #             props=dict(
-    #                 facecolor="none", edgecolor="blue", linewidth=1, linestyle="--"
-    #             ),
-    #             use_data_coordinates=True
-    #         )
-    #         self.print_terminal(
-    #             "Selection tool active — draw a polygon around poles to select entities."
-    #         )
+    #                                                 self.ax,
+    #                                                 onselect=self._on_rectangle_select,
+    #                                                 useblit=False,          # blit causes artifacts with curved projections
+    #                                                 button=[1],
+    #                                                 minspanx=5,
+    #                                                 minspany=5,
+    #                                                 spancoords="pixels",
+    #                                                 interactive=False,
+    #                                                 props=dict(
+    #                                                     facecolor="lightblue",
+    #                                                     edgecolor="blue",
+    #                                                     linewidth=1.5,
+    #                                                     linestyle="--",
+    #                                                     alpha=0.3,
+    #                                                 ),
+    #                                                 use_data_coordinates=True
+    #                                                 )
+            
+    #         self.print_terminal("Selection tool active — draw a polygon around poles to select entities.")
+            
     #     else:
     #         # Deactivate: disconnect and destroy the rectangle
     #         self._deactivate_rectangle()
@@ -1524,6 +1542,272 @@ class ViewStereoplot(ViewMPL):
 
     #     # Deactivate after one selection
     #     self._deactivate_rectangle()
+
+    # def _on_lasso_select(self, vertices):
+    #     """
+    #     Called by LassoSelector when the user completes a polygon.
+    #     vertices is a list of (x, y) tuples in axes data coordinates.
+    #     """
+    #     if not vertices or len(vertices) < 3:
+    #         return
+
+    #     polygon = mpl_Path(vertices)
+
+    #     # Same uid projection loop as before — unchanged
+    #     uid_lons = {}
+    #     uid_lats = {}
+
+    #     for _, row in self.actors_df.iterrows():
+    #         uid = row["uid"]
+    #         if not row["show"]:
+    #             continue
+    #         vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+    #         if vtk_obj is None:
+    #             continue
+    #         if vtk_obj.points_number == 0:
+    #             continue
+    #         strike = (vtk_obj.points_map_dip_direction - 90) % 360
+    #         dip = vtk_obj.points_map_dip
+    #         lon, lat = mplstereonet.pole(strike, dip)
+    #         uid_lons[uid] = np_atleast_1d(lon)
+    #         uid_lats[uid] = np_atleast_1d(lat)
+
+    #     if not uid_lons:
+    #         self.print_terminal("No visible entities to select from.")
+    #         return
+
+    #     # Any-point rule with path containment instead of rectangle bounds
+    #     selected_uids = []
+    #     for uid in uid_lons:
+    #         points_xy = np_asarray(
+    #             list(zip(uid_lons[uid], uid_lats[uid]))
+    #         )
+    #         if polygon.contains_points(points_xy).any():
+    #             selected_uids.append(uid)
+
+    #     if not selected_uids:
+    #         self.print_terminal("No entities found inside the selection polygon.")
+    #         self._deactivate_rectangle()
+    #         return
+
+    #     self.print_terminal(
+    #         f"Selected {len(selected_uids)} entity/entities via polygon selection."
+    #     )
+
+    #     # Highlight, tree update, signal — identical to the rectangle version
+    #     if self.selection_highlight_actor is not None:
+    #         try:
+    #             self.selection_highlight_actor.remove()
+    #         except Exception:
+    #             pass
+    #         self.selection_highlight_actor = None
+
+    #     all_selected_lons = np_concatenate([uid_lons[uid] for uid in selected_uids])
+    #     all_selected_lats = np_concatenate([uid_lats[uid] for uid in selected_uids])
+
+    #     self.selection_highlight_actor = self.ax.plot(
+    #         all_selected_lons,
+    #         all_selected_lats,
+    #         linestyle="none",
+    #         marker="o",
+    #         markersize=8,
+    #         markerfacecolor="none",
+    #         markeredgecolor="yellow",
+    #         markeredgewidth=1.5,
+    #         zorder=self.Z_STATS + 1,
+    #     )[0]
+    #     self.figure.canvas.draw()
+
+    #     self.GeologyTreeWidget.restore_selection(selected_uids)
+    #     self.parent.signals.selection_changed.emit(self.parent.geol_coll)
+    #     self._deactivate_rectangle()
+
+    def toggle_selection_tool(self):
+        self.selection_tool_active = self.actionSelectionTool.isChecked()
+
+        if self.selection_tool_active:
+            self.selection_press_cid = self.canvas.mpl_connect(
+                "button_press_event", self._on_selection_press
+            )
+            self.selection_motion_cid = self.canvas.mpl_connect(
+                "motion_notify_event", self._on_selection_motion
+            )
+            self.selection_release_cid = self.canvas.mpl_connect(
+                "button_release_event", self._on_selection_release
+            )
+            self.print_terminal(
+                "Selection tool active — click and drag to select poles."
+            )
+        else:
+            self._deactivate_selection()
+            self.print_terminal("Selection tool deactivated.")
+
+    def _deactivate_selection(self):
+        """Disconnect selection events and clean up visual state."""
+        for cid in [self.selection_press_cid, self.selection_motion_cid,
+                    self.selection_release_cid]:
+            if cid is not None:
+                self.canvas.mpl_disconnect(cid)
+        self.selection_press_cid = None
+        self.selection_motion_cid = None
+        self.selection_release_cid = None
+        self.selection_start = None
+        self._remove_selection_patch()
+        if self.selection_highlight_actor is not None:
+            try:
+                self.selection_highlight_actor.remove()
+            except Exception:
+                pass
+            self.selection_highlight_actor = None
+        self.selection_tool_active = False
+        self.actionSelectionTool.setChecked(False)
+        if hasattr(self, "figure"):
+            self.figure.canvas.draw()
+
+    def _remove_selection_patch(self):
+        """Remove the drawn selection region from the axes."""
+        if self.selection_patch is not None:
+            try:
+                self.selection_patch.remove()
+            except Exception:
+                pass
+            self.selection_patch = None
+
+    def _build_selection_path(self, lon0, lat0, lon1, lat1, n=50):
+        """
+        Build the boundary path of a stereonet region between two corners
+        (lon0, lat0) and (lon1, lat1) in data coordinates. The boundary
+        consists of:
+        - top arc:   lat = lat0, lon from lon0 to lon1
+        - right edge: lon = lon1, lat from lat0 to lat1
+        - bottom arc: lat = lat1, lon from lon1 to lon0
+        - left edge:  lon = lon0, lat from lat1 to lat0
+        Returns an (M, 2) array of (x, y) vertices for use with Polygon.
+        """
+        from numpy import linspace as np_linspace
+
+        top    = np_asarray([[l, lat0] for l in np_linspace(lon0, lon1, n)])
+        right  = np_asarray([[lon1, l] for l in np_linspace(lat0, lat1, n)])
+        bottom = np_asarray([[l, lat1] for l in np_linspace(lon1, lon0, n)])
+        left   = np_asarray([[lon0, l] for l in np_linspace(lat1, lat0, n)])
+
+        return np_vstack([top, right, bottom, left])
+
+    def _on_selection_press(self, event):
+        if event.button != 1:
+            return
+        if event.xdata is None or event.ydata is None:
+            return
+        self.selection_start = (event.xdata, event.ydata)
+        self._remove_selection_patch()
+
+    def _on_selection_motion(self, event):
+        if self.selection_start is None:
+            return
+        if event.xdata is None or event.ydata is None:
+            return
+
+        lon0, lat0 = self.selection_start
+        lon1, lat1 = event.xdata, event.ydata
+
+        self._remove_selection_patch()
+
+        # Build in data coords
+        verts_data = self._build_selection_path(lon0, lat0, lon1, lat1)
+
+        # Convert to display (pixel) coords — avoids the double-transform problem
+        verts_display = self.ax.transData.transform(verts_data)
+
+        from matplotlib.patches import Polygon as mpl_Polygon
+        from matplotlib.transforms import IdentityTransform
+
+        self.selection_patch = mpl_Polygon(
+            verts_display,
+            closed=True,
+            facecolor="lightblue",
+            edgecolor="blue",
+            linewidth=1.5,
+            linestyle="--",
+            alpha=0.3,
+            transform=IdentityTransform(),
+            zorder=self.Z_STATS + 2,
+        )
+        self.ax.add_patch(self.selection_patch)
+        self.figure.canvas.draw()
+
+    def _on_selection_release(self, event):
+        if self.selection_start is None:
+            return
+        if event.xdata is None or event.ydata is None:
+            self._remove_selection_patch()
+            self.selection_start = None
+            self.figure.canvas.draw()
+            return
+
+        lon0, lat0 = self.selection_start
+        lon1, lat1 = event.xdata, event.ydata
+        self.selection_start = None
+
+        # Build the path for containment testing
+        from matplotlib.path import Path as mpl_Path
+        verts = self._build_selection_path(lon0, lat0, lon1, lat1)
+        polygon = mpl_Path(verts)
+
+        # Project all visible entity poles and test containment
+        uid_lons = {}
+        uid_lats = {}
+
+        for _, row in self.actors_df.iterrows():
+            uid = row["uid"]
+            if not row["show"]:
+                continue
+            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            if vtk_obj is None or vtk_obj.points_number == 0:
+                continue
+            strike = (vtk_obj.points_map_dip_direction - 90) % 360
+            dip = vtk_obj.points_map_dip
+            lon, lat = mplstereonet.pole(strike, dip)
+            uid_lons[uid] = np_atleast_1d(lon)
+            uid_lats[uid] = np_atleast_1d(lat)
+
+        selected_uids = []
+        for uid in uid_lons:
+            points_xy = np_asarray(list(zip(uid_lons[uid], uid_lats[uid])))
+            if polygon.contains_points(points_xy).any():
+                selected_uids.append(uid)
+
+        self._remove_selection_patch()
+
+        if not selected_uids:
+            self.print_terminal("No entities found inside the selection region.")
+            self._deactivate_selection()
+            return
+
+        self.print_terminal(
+            f"Selected {len(selected_uids)} entity/entities via region selection."
+        )
+
+        # Highlight selected poles
+        if self.selection_highlight_actor is not None:
+            try:
+                self.selection_highlight_actor.remove()
+            except Exception:
+                pass
+            self.selection_highlight_actor = None
+
+        all_lons = np_concatenate([uid_lons[uid] for uid in selected_uids])
+        all_lats = np_concatenate([uid_lats[uid] for uid in selected_uids])
+        self.selection_highlight_actor = self.ax.plot(
+            all_lons, all_lats,
+            linestyle="none", marker="o", markersize=8,
+            markerfacecolor="none", markeredgecolor="yellow",
+            markeredgewidth=1.5, zorder=self.Z_STATS + 1,
+        )[0]
+        self.figure.canvas.draw()
+
+        self.GeologyTreeWidget.restore_selection(selected_uids)
+        self.parent.signals.selection_changed.emit(self.parent.geol_coll)
+        self._deactivate_selection()
 
     # --- Statistics summary functions ---
     def build_statistics_summary(self):
