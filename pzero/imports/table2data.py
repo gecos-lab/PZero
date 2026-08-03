@@ -42,7 +42,7 @@ COLORMAP_ASSIGNMENTS = ["value", "color_R", "color_G", "color_B"]
 STRUCTURAL_TOPOLOGY_TABLE_TYPE = "stm"
 STRUCTURAL_TOPOLOGY_FEATURE_COLUMN = "Feature"
 STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN = "Unit Role"
-STRUCTURAL_TOPOLOGY_POLARITY_COLUMN = "Structural Polarity"
+STRUCTURAL_TOPOLOGY_POLARITY_COLUMN = "Level"
 STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS = [
     STRUCTURAL_TOPOLOGY_FEATURE_COLUMN,
     STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN,
@@ -184,7 +184,7 @@ def _stm_boundary_dataframe(payload):
             {
                 STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: boundary.get("Feature", ""),
                 STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: "Discontinuity",
-                STRUCTURAL_TOPOLOGY_POLARITY_COLUMN: boundary.get("Polarity", ""),
+                STRUCTURAL_TOPOLOGY_POLARITY_COLUMN: boundary.get("Level", ""),
                 "Domain_1": "",
             }
         )
@@ -722,7 +722,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
                     self,
                     "Invalid STm mapping",
                     "An STm import requires at least these fields: "
-                    "Feature, Unit Role, Structural Polarity.",
+                    "Feature, Unit Role, Level.",
                 )
                 return
 

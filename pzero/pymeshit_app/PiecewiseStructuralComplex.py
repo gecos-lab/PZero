@@ -2939,7 +2939,7 @@ class PiecewiseStructuralComplex:
 
     @staticmethod
     def _psc_sort_key(value: Any) -> float:
-        """Return a numeric STm polarity key."""
+        """Return a numeric STm level key."""
         try:
             return float(value)
         except (TypeError, ValueError):
@@ -3032,7 +3032,7 @@ class PiecewiseStructuralComplex:
                     "feature": feature,
                     "role": self._psc_text(boundary_info.get("Role", "")),
                     "polarity": self._psc_sort_key(
-                        boundary_info.get("Polarity", "")
+                        boundary_info.get("Level", "")
                     ),
                     "row_index": len(boundary_order),
                     "is_representative": feature_key
@@ -3082,7 +3082,7 @@ class PiecewiseStructuralComplex:
                 "unit_role": self._psc_unit_role(
                     unit_info.get("Unit Role", "TU")
                 ),
-                "polarity": self._psc_sort_key(unit_info.get("Polarity", "")),
+                "polarity": self._psc_sort_key(unit_info.get("Level", "")),
                 "domains": domains,
                 "boundaries": boundaries,
                 "representative_boundary": representative,
@@ -3437,7 +3437,7 @@ class PiecewiseStructuralComplex:
         return np.mean(vertices, axis=0)
     
     def _psc_stacking_axis(self, psc_model: Dict[str, Any]) -> np.ndarray:
-        """Estimate a geometric search axis without using STm structural polarity."""
+        """Estimate a geometric search axis without using STm levels."""
         centroids = []
         normals = []
         for feature in psc_model.get("boundary_features", set()) or []:

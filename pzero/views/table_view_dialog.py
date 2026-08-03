@@ -57,12 +57,12 @@ from pzero.properties_manager import PropertiesCMaps
 STRUCTURAL_TOPOLOGY_TABLE_TYPE = "stm"
 STRUCTURAL_TOPOLOGY_FEATURE_COLUMN = "Feature"
 STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN = "Unit Role"
-STRUCTURAL_TOPOLOGY_POLARITY_COLUMN = "Structural Polarity"
+STRUCTURAL_TOPOLOGY_POLARITY_COLUMN = "Level"
 STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN = "Role"
-STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN = "Polarity"
+STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN = "Level"
 STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN = "Units"
 STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN = "Boundaries"
-STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN = "Polarity"
+STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN = "Level"
 STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY = "Model Boundary"
 STRUCTURAL_TOPOLOGY_REPRESENTATIVE_BOUNDARY_FIELD = "Representative Boundary"
 STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_VALUES = [
@@ -907,8 +907,10 @@ class STmBuildDialog(QDialog):
         if dataframe is None or dataframe.empty:
             return rows
         ordered_df = dataframe.copy()
-        if "Structural Polarity" in ordered_df.columns:
-            ordered_df["_sort_polarity"] = ordered_df["Structural Polarity"].apply(
+        if STRUCTURAL_TOPOLOGY_POLARITY_COLUMN in ordered_df.columns:
+            ordered_df["_sort_polarity"] = ordered_df[
+                STRUCTURAL_TOPOLOGY_POLARITY_COLUMN
+            ].apply(
                 structural_topology_sort_key
             )
             sort_columns = ["_sort_polarity"]
@@ -1749,6 +1751,16 @@ class EditableDataFrameModel(QAbstractTableModel):
             return None
         if role not in (Qt.DisplayRole, Qt.EditRole):
             return None
+        if (
+            role == Qt.DisplayRole
+            and self.model_kind == "boundaries"
+            and str(self._dataframe.columns[index.column()])
+            == STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN
+            and is_structural_topology_model_boundary(
+                self._dataframe.iloc[index.row()]
+            )
+        ):
+            return ""
         value = self._dataframe.iloc[index.row(), index.column()]
         if pd_isna(value):
             return ""
@@ -2023,7 +2035,7 @@ class NewStructuralTopologyTableDialog(QDialog):
         layout.addLayout(form_layout)
 
         info_label = QLabel(
-            "The Structural Topology model starts from geology legend units and keeps structural polarity linked to the legend."
+            "The Structural Topology model starts from geology legend units and keeps their level linked to the legend."
         )
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
@@ -2125,7 +2137,7 @@ class ImportStructuralTopologyUnitsDialog(QDialog):
                 f"{unit_name} — {role_name}" if role_name else unit_name
             )
             item.setData(Qt.UserRole, dict(unit_info))
-            tooltip_txt = f"Structural polarity: {polarity_value}"
+            tooltip_txt = f"Level: {polarity_value}"
             if role_name:
                 tooltip_txt += f"\nRole: {role_name}"
             item.setToolTip(tooltip_txt)
@@ -2270,7 +2282,7 @@ class ExtraSTmBoundaryDialog(QDialog):
         self.role_edit.currentTextChanged.connect(self._update_role_controls)
         form.addRow("Feature", self.feature_edit)
         form.addRow("Role", self.role_edit)
-        form.addRow("Polarity", self.polarity_edit)
+        form.addRow("Level", self.polarity_edit)
         color_layout = QHBoxLayout()
         self.color_button = QPushButton("")
         self.color_button.setFixedSize(54, 24)
@@ -2341,14 +2353,14 @@ class ExtraSTmBoundaryDialog(QDialog):
                 float(polarity)
             except ValueError:
                 QMessageBox.warning(
-                    self, "Invalid polarity", "Polarity must be numeric or empty."
+                    self, "Invalid level", "Level must be numeric or empty."
                 )
                 return
         self.accept()
 
 
 class UnitPolarityAmbiguityDialog(QDialog):
-    """Resolve a permutation between existing discrete polarity gaps."""
+    """Resolve a permutation between existing discrete level gaps."""
 
     def __init__(self, parent, solutions, slots):
         super().__init__(parent)
@@ -2660,16 +2672,6 @@ class ViewTable(QWidget):
         )
         if "Domain" in out_df.columns and "Domain_1" not in out_df.columns:
             out_df.rename(columns={"Domain": "Domain_1"}, inplace=True)
-        if (
-            STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN not in out_df.columns
-            and STRUCTURAL_TOPOLOGY_POLARITY_COLUMN in out_df.columns
-        ):
-            out_df[STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN] = out_df[
-                STRUCTURAL_TOPOLOGY_POLARITY_COLUMN
-            ]
-            out_df.drop(
-                columns=[STRUCTURAL_TOPOLOGY_POLARITY_COLUMN], inplace=True
-            )
         out_df.drop(
             columns=[
                 column_name
@@ -4529,7 +4531,7 @@ class ViewTable(QWidget):
         return candidates, slots
 
     def calculate_unit_polarities(self):
-        """Place units in discrete polarity gaps allowed by their topology."""
+        """Place units in discrete level gaps allowed by their topology."""
         if self.current_table_type != STRUCTURAL_TOPOLOGY_TABLE_TYPE:
             return
         candidates, slots = self._unit_polarity_candidates()
@@ -4695,7 +4697,7 @@ class ViewTable(QWidget):
         if unresolved:
             message += (
                 f"\nLeft {unresolved} unresolved: the topology is ambiguous "
-                "or there are fewer polarity gaps than units."
+                "or there are fewer level gaps than units."
             )
         QMessageBox.information(self, "Unit level", message)
         self._notify_custom_table_metadata_changed()

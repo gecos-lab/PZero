@@ -2273,12 +2273,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             boundaries=stm_tables.get("boundaries", []),
                             units=stm_tables.get("units", []),
                             boundary_columns=[
-                                "Feature", "Role", "Polarity", "Units"
+                                "Feature", "Role", "Level", "Units"
                             ],
                             unit_columns=[
                                 "Feature",
                                 "Unit Role",
-                                "Polarity",
+                                "Level",
                                 "Boundaries",
                                 "Representative Boundary",
                                 "Domain_1",
@@ -2337,7 +2337,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     {
                         "Feature": boundary.get("Feature", ""),
                         "Unit Role": "Discontinuity",
-                        "Structural Polarity": boundary.get("Polarity", ""),
+                        "Level": boundary.get("Level", ""),
                         "Domain_1": "",
                     }
                     for boundary in boundaries
@@ -2348,7 +2348,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     columns=[
                         "Feature",
                         "Unit Role",
-                        "Structural Polarity",
+                        "Level",
                         "Domain_1",
                     ],
                 )
@@ -3947,7 +3947,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             units.append({
                 "Feature": feature_name,
                 "Unit Role": "Discontinuity",
-                "Structural Polarity": row.get("time", 0.0),
+                "Level": row.get("time", 0.0),
                 "Domain_1": "",
                 "feature": feature_name,
                 "role": role_name,
@@ -3965,7 +3965,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
 
     def sync_structural_topology_table_to_legend(self, table_name=None):
-        """Push structural polarity values from one STm table into the geology legend."""
+        """Push STm level values from one table into the geology legend."""
         if not table_name:
             return
         if self.custom_table_types.get(table_name) != "stm":
@@ -3979,7 +3979,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             or table_df is None
             or table_df.empty
             or "Feature" not in table_df.columns
-            or "Structural Polarity" not in table_df.columns
+            or "Level" not in table_df.columns
         ):
             return
 
@@ -4002,7 +4002,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 stm_feature = str(boundary.get("Feature", "")).strip()
                 stm_role = str(boundary.get("Role", "")).strip().casefold()
                 try:
-                    polarity_value = float(boundary.get("Polarity", ""))
+                    polarity_value = float(boundary.get("Level", ""))
                 except (TypeError, ValueError):
                     continue
                 mask = (legend_features == stm_feature) & (
@@ -4015,7 +4015,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             for _, row in table_df.iterrows():
                 stm_feature = str(row.get("Feature", "")).strip()
                 try:
-                    polarity_value = float(row.get("Structural Polarity", ""))
+                    polarity_value = float(row.get("Level", ""))
                 except (TypeError, ValueError):
                     continue
                 mask = legend_features == stm_feature
@@ -4031,7 +4031,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.legend.update_widget(parent=self)
 
     def sync_structural_topology_tables_from_legend(self):
-        """Refresh all STm table polarities from the geology legend."""
+        """Refresh all STm table levels from the geology legend."""
         legend_units = self.get_structural_topology_legend_units()
         if not legend_units:
             return
@@ -4040,7 +4040,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             (
                 unit_info["Feature"],
                 str(unit_info.get("role", "")).strip().casefold(),
-            ): unit_info.get("Structural Polarity", "")
+            ): unit_info.get("Level", "")
             for unit_info in legend_units
         }
         feature_counts = {}
@@ -4065,8 +4065,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 table_df["Feature"] = ""
             if "Unit Role" not in table_df.columns:
                 table_df["Unit Role"] = "Discontinuity"
-            if "Structural Polarity" not in table_df.columns:
-                table_df["Structural Polarity"] = ""
+            if "Level" not in table_df.columns:
+                table_df["Level"] = ""
             if not any(str(column).startswith("Domain") for column in table_df.columns):
                 table_df["Domain_1"] = ""
 
@@ -4081,7 +4081,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     role = str(boundary.get("Role", "")).strip().casefold()
                     polarity = polarity_by_key.get((feature, role))
                     if polarity is not None:
-                        boundary["Polarity"] = polarity
+                        boundary["Level"] = polarity
                         table_polarities[feature] = polarity
             for row_label in table_df.index.tolist():
                 stm_feature = str(table_df.at[row_label, "Feature"]).strip()
@@ -4090,7 +4090,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     unique_feature_polarities.get(stm_feature),
                 )
                 if polarity is not None:
-                    table_df.at[row_label, "Structural Polarity"] = polarity
+                    table_df.at[row_label, "Level"] = polarity
             tables_updated = True
 
         if tables_updated:

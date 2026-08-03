@@ -11,13 +11,18 @@ STM_REPRESENTATIVE_COLUMN = "Representative Boundary"
 
 def _as_dataframe(data, columns=None):
     dataframe = data.copy() if isinstance(data, DataFrame) else DataFrame(data or [])
-    for column in columns or []:
+    ordered_columns = list(columns) if columns is not None else []
+    for column in ordered_columns:
         if column not in dataframe.columns:
             dataframe[column] = ""
-    if columns:
+    if ordered_columns:
         dataframe = dataframe[
-            list(columns)
-            + [column for column in dataframe.columns if column not in columns]
+            ordered_columns
+            + [
+                column
+                for column in dataframe.columns
+                if column not in ordered_columns
+            ]
         ]
     return dataframe.astype(object).where(dataframe.notna(), "")
 
