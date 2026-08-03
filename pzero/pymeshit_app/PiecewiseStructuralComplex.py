@@ -1205,6 +1205,73 @@ class PiecewiseStructuralComplex:
             for group in groups.values()
             if len(group) > 1
         ]
+
+    def _psc_annotate_ambiguity_groups(
+        self,
+        units: List[Dict[str, Any]],
+    ) -> None:
+        """Annotate every member of each topologically ambiguous unit group."""
+        units = list(units or [])
+        for unit_info in units:
+            for field_name in (
+                "ambiguity_group",
+                "ambiguity_group_index",
+                "ambiguity_group_size",
+                "ambiguity_candidate_names",
+            ):
+                unit_info.pop(field_name, None)
+
+        for group_idx, group in enumerate(self._psc_ambiguity_groups(units)):
+            ordered_group = sorted(
+                group,
+                key=lambda item: (
+                    str(item.get("name", "")).casefold(),
+                    str(item.get("key", "")).casefold(),
+                ),
+            )
+            candidate_names = []
+            for unit_info in ordered_group:
+                display_name = (
+                    self._psc_text(unit_info.get("name", ""))
+                    or self._psc_text(unit_info.get("feature", ""))
+                    or str(unit_info.get("key", ""))
+                )
+                if display_name and display_name not in candidate_names:
+                    candidate_names.append(display_name)
+            for unit_idx, unit_info in enumerate(ordered_group):
+                unit_info["ambiguity_group"] = group_idx
+                unit_info["ambiguity_group_index"] = unit_idx
+                unit_info["ambiguity_group_size"] = len(ordered_group)
+                unit_info["ambiguity_candidate_names"] = list(candidate_names)
+
+    @staticmethod
+    def _psc_unit_assignment_status(
+        unit_info: Dict[str, Any],
+        include_rejected: bool = False,
+    ) -> str:
+        """Return unit status, preserving ambiguity across the whole group."""
+        if int(unit_info.get("ambiguity_group_size", 1) or 1) > 1:
+            return "AMBIGUOUS"
+        status_priority = {
+            "CERTAIN": 0,
+            "LIKELY": 1,
+            "POSSIBLE_REPEAT": 2,
+            "AMBIGUOUS": 3,
+            "UNASSIGNED": 4,
+        }
+        assignments = list(unit_info.get("psc_assignments", []) or [])
+        if include_rejected:
+            assignments.extend(
+                unit_info.get("psc_rejected_assignments", []) or []
+            )
+        statuses = [
+            assignment.get("status", "UNASSIGNED")
+            for assignment in assignments
+        ] or ["UNASSIGNED"]
+        return max(
+            statuses,
+            key=lambda status: status_priority.get(status, 4),
+        )
     
     def _psc_structural_boundary_keys_for_unit(
         self,
@@ -2476,23 +2543,9 @@ class PiecewiseStructuralComplex:
             )
             unit_info["psc_assignments"].append(dict(payload))
 
-        status_priority = {
-            "CERTAIN": 0,
-            "LIKELY": 1,
-            "POSSIBLE_REPEAT": 2,
-            "AMBIGUOUS": 3,
-            "UNASSIGNED": 4,
-        }
         for unit_key, unit_info in units_by_key.items():
-            statuses = [
-                assignment.get("status", "UNASSIGNED")
-                for assignment in unit_info.get("psc_assignments", [])
-            ]
-            if not statuses:
-                statuses = ["UNASSIGNED"]
-            unit_info["psc_assignment_status"] = max(
-                statuses,
-                key=lambda value: status_priority.get(value, 4),
+            unit_info["psc_assignment_status"] = self._psc_unit_assignment_status(
+                unit_info
             )
         return sorted(
             payloads,
@@ -2745,7 +2798,12 @@ class PiecewiseStructuralComplex:
                 ),
             )
             assigned_before = assigned_counts.get(chosen["unit_key"], 0)
-            if record.get("seed_override") and assigned_before == 0:
+            topology_is_ambiguous = int(
+                chosen["unit_info"].get("ambiguity_group_size", 1) or 1
+            ) > 1
+            if topology_is_ambiguous:
+                status = "AMBIGUOUS"
+            elif record.get("seed_override") and assigned_before == 0:
                 status = "CERTAIN"
             elif len(best_candidates) > 1 and assigned_before == 0:
                 status = "AMBIGUOUS"
@@ -2767,6 +2825,12 @@ class PiecewiseStructuralComplex:
                     name = f"{name} (local signature)"
                 if name not in candidate_names:
                     candidate_names.append(name)
+            if topology_is_ambiguous:
+                candidate_names = list(
+                    chosen["unit_info"].get(
+                        "ambiguity_candidate_names", candidate_names
+                    )
+                )
 
             payload = {
                 "status": status,
@@ -2829,27 +2893,10 @@ class PiecewiseStructuralComplex:
             )
             unit_info["psc_assignments"].append(dict(payload))
 
-        status_priority = {
-            "CERTAIN": 0,
-            "LIKELY": 1,
-            "POSSIBLE_REPEAT": 2,
-            "AMBIGUOUS": 3,
-            "UNASSIGNED": 4,
-        }
         for unit_key, unit_info in units_by_key.items():
-            statuses = [
-                assignment.get("status", "UNASSIGNED")
-                for assignment in unit_info.get("psc_assignments", [])
-            ]
-            statuses.extend(
-                assignment.get("status", "UNASSIGNED")
-                for assignment in unit_info.get("psc_rejected_assignments", [])
-            )
-            if not statuses:
-                statuses = ["UNASSIGNED"]
-            unit_info["psc_assignment_status"] = max(
-                statuses,
-                key=lambda status: status_priority.get(status, 4),
+            unit_info["psc_assignment_status"] = self._psc_unit_assignment_status(
+                unit_info,
+                include_rejected=True,
             )
         return payloads
     
@@ -3046,6 +3093,7 @@ class PiecewiseStructuralComplex:
                     units[unit_key][color_name] = unit_info[color_name]
             boundary_features.update(boundaries)
 
+        self._psc_annotate_ambiguity_groups(list(units.values()))
         self._psc_active_boundary_roles = boundary_roles
         return {
             "table_name": table_name,
@@ -3196,18 +3244,7 @@ class PiecewiseStructuralComplex:
             mapped_units,
             key=lambda item: str(item.get("feature", "")).casefold(),
         )
-        for group_idx, group in enumerate(self._psc_ambiguity_groups(mapped_units)):
-            ordered_group = sorted(
-                group,
-                key=lambda item: (
-                    str(item.get("name", "")).casefold(),
-                    str(item.get("key", "")).casefold(),
-                ),
-            )
-            for unit_idx, unit_info in enumerate(ordered_group):
-                unit_info["ambiguity_group"] = group_idx
-                unit_info["ambiguity_group_index"] = unit_idx
-                unit_info["ambiguity_group_size"] = len(ordered_group)
+        self._psc_annotate_ambiguity_groups(mapped_units)
     
         return {
             "table_name": psc_model.get("table_name", ""),
@@ -6169,15 +6206,26 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
     ) -> Dict[str, Any]:
         "Returns a dictionary containing the assignment payload for the given candidate, status, and candidate pool."
         candidate_pool = list(candidate_pool or [candidate])
+        unit_info = candidate.get("unit_info") or {}
+        topology_is_ambiguous = int(
+            unit_info.get("ambiguity_group_size", 1) or 1
+        ) > 1
+        if topology_is_ambiguous:
+            status = "AMBIGUOUS"
+            candidate_names = list(
+                unit_info.get("ambiguity_candidate_names", []) or []
+            )
+        else:
+            candidate_names = [
+                self._section_unit_display_name(item.get("unit_info", {}))
+                for item in candidate_pool
+            ]
         return {
             "status": status,
             "unit_info": candidate.get("unit_info"),
             "unit_key": candidate.get("unit_key", ""),
             "missing_labels": list(candidate.get("missing_labels", []) or []),
-            "candidate_names": [
-                self._section_unit_display_name(item.get("unit_info", {}))
-                for item in candidate_pool
-            ],
+            "candidate_names": candidate_names,
             "assigned_before": int(
                 assigned_counts.get(candidate.get("unit_key", ""), 0)
             ),
