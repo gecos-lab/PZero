@@ -85,14 +85,13 @@ class ViewStereoplot(ViewMPL):
         self.selection_tool_active = False
         self.selection_highlight_actor = None
         self.selection_highlight_uids = set()
-        
-        
+
         # In __init__:
         self.selection_press_cid = None
         self.selection_motion_cid = None
         self.selection_release_cid = None
-        self.selection_start = None      # (lon, lat) in data coords
-        self.selection_patch = None      # the drawn region patch
+        self.selection_start = None  # (lon, lat) in data coords
+        self.selection_patch = None  # the drawn region patch
 
         super(ViewStereoplot, self).__init__(*args, **kwargs)
         self.setWindowTitle("Stereoplot View")
@@ -1078,7 +1077,8 @@ class ViewStereoplot(ViewMPL):
             return
         if (
             self.selection_highlight_actor is not None
-            and set(self.parent.geol_coll.selected_uids) != self.selection_highlight_uids
+            and set(self.parent.geol_coll.selected_uids)
+            != self.selection_highlight_uids
         ):
             self._clear_selection_highlight()
         has_selection = bool(self.parent.geol_coll.selected_uids)
@@ -1422,8 +1422,11 @@ class ViewStereoplot(ViewMPL):
 
     def _deactivate_selection(self, clear_highlight=True):
         """Disconnect selection events and clean up visual state."""
-        for cid in [self.selection_press_cid, self.selection_motion_cid,
-                    self.selection_release_cid]:
+        for cid in [
+            self.selection_press_cid,
+            self.selection_motion_cid,
+            self.selection_release_cid,
+        ]:
             if cid is not None:
                 self.canvas.mpl_disconnect(cid)
         self.selection_press_cid = None
@@ -1483,10 +1486,10 @@ class ViewStereoplot(ViewMPL):
             else:
                 lon1 += 2 * np_pi
 
-        top    = np_asarray([[l, lat0] for l in np_linspace(lon0, lon1, n)])
-        right  = np_asarray([[lon1, l] for l in np_linspace(lat0, lat1, n)])
+        top = np_asarray([[l, lat0] for l in np_linspace(lon0, lon1, n)])
+        right = np_asarray([[lon1, l] for l in np_linspace(lat0, lat1, n)])
         bottom = np_asarray([[l, lat1] for l in np_linspace(lon1, lon0, n)])
-        left   = np_asarray([[lon0, l] for l in np_linspace(lat1, lat0, n)])
+        left = np_asarray([[lon0, l] for l in np_linspace(lat1, lat0, n)])
 
         return np_vstack([top, right, bottom, left])
 
@@ -1525,27 +1528,33 @@ class ViewStereoplot(ViewMPL):
         right_r = np_linspace(r_min, r_max, 50)
         bottom_theta = np_linspace(theta_max, theta_min, 50)
         left_r = np_linspace(r_max, r_min, 50)
-        theta = np_concatenate([
-            top_theta,
-            theta_max * np_asarray([1.0] * 50),
-            bottom_theta,
-            theta_min * np_asarray([1.0] * 50),
-        ])
-        radius = np_concatenate([
-            r_min * np_asarray([1.0] * 50),
-            right_r,
-            r_max * np_asarray([1.0] * 50),
-            left_r,
-        ])
+        theta = np_concatenate(
+            [
+                top_theta,
+                theta_max * np_asarray([1.0] * 50),
+                bottom_theta,
+                theta_min * np_asarray([1.0] * 50),
+            ]
+        )
+        radius = np_concatenate(
+            [
+                r_min * np_asarray([1.0] * 50),
+                right_r,
+                r_max * np_asarray([1.0] * 50),
+                left_r,
+            ]
+        )
 
         cx, cy = self.ax.transAxes.transform((0.5, 0.5))
         x0, y0 = self.ax.transAxes.transform((0.0, 0.0))
         x1, y1 = self.ax.transAxes.transform((1.0, 1.0))
         radius_px = min(abs(x1 - x0), abs(y1 - y0)) / 2.0
-        display_xy = np_asarray([
-            cx + radius * radius_px * np_sin(theta),
-            cy + radius * radius_px * np_cos(theta),
-        ]).T
+        display_xy = np_asarray(
+            [
+                cx + radius * radius_px * np_sin(theta),
+                cy + radius * radius_px * np_cos(theta),
+            ]
+        ).T
         verts_data = self.ax.transData.inverted().transform(display_xy)
 
         self.selection_patch = self.ax.fill(
@@ -1661,10 +1670,15 @@ class ViewStereoplot(ViewMPL):
         all_lons = np_concatenate([uid_lons[uid] for uid in selected_uids])
         all_lats = np_concatenate([uid_lats[uid] for uid in selected_uids])
         self.selection_highlight_actor = self.ax.plot(
-            all_lons, all_lats,
-            linestyle="none", marker="o", markersize=8,
-            markerfacecolor="none", markeredgecolor="yellow",
-            markeredgewidth=1.5, zorder=self.Z_STATS + 1,
+            all_lons,
+            all_lats,
+            linestyle="none",
+            marker="o",
+            markersize=8,
+            markerfacecolor="none",
+            markeredgecolor="yellow",
+            markeredgewidth=1.5,
+            zorder=self.Z_STATS + 1,
         )[0]
         self.selection_highlight_uids = set(selected_uids)
         self.figure.canvas.draw()
@@ -1686,7 +1700,7 @@ class ViewStereoplot(ViewMPL):
         from numpy import arctan2 as np_arctan2
         from numpy import hypot as np_hypot
 
-        theta = np_arctan2(dx, dy)   # 0 at north, clockwise-ish
+        theta = np_arctan2(dx, dy)  # 0 at north, clockwise-ish
         r = np_hypot(dx, dy) / radius_px
 
         return theta, r
