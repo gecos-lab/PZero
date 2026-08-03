@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 from pzero.helpers.helper_dialogs import PCDataModel, open_files_dialog
 from pzero.helpers.helper_functions import auto_sep
 from pzero.helpers.structural_topology import (
-    STM_JSON_SCHEMA,
+    is_stm_json,
     read_stm_json,
 )
 from pzero.properties_manager import PropertiesCMaps
@@ -108,16 +108,13 @@ def _unique_table_name(existing_names, base_name):
 
 
 def _stm_import_payload(payload):
-    if not isinstance(payload, dict) or payload.get("schema") != STM_JSON_SCHEMA:
+    if not is_stm_json(payload):
         return None
     decoded = read_stm_json(payload)
     return {
-        "schema": STM_JSON_SCHEMA,
-        "version": 4,
         "table_type": STRUCTURAL_TOPOLOGY_TABLE_TYPE,
         "table_name": decoded["name"],
         "options": {
-            "stm_schema_version": 4,
             "stm_tables": {
                 "boundaries": decoded["boundaries"],
                 "units": decoded["units"],
@@ -127,7 +124,7 @@ def _stm_import_payload(payload):
 
 
 def _read_stm_export_payload(file_path):
-    """Read an STm v4 JSON file or a v4 footer embedded in a CSV file."""
+    """Read an STm JSON file or an STm footer embedded in a CSV file."""
     if str(file_path).lower().endswith(".json"):
         try:
             with open(file_path, "r", encoding="utf-8-sig") as input_stream:
@@ -177,7 +174,7 @@ def _read_stm_export_payload(file_path):
 
 
 def _stm_boundary_dataframe(payload):
-    """Return the compatibility boundary projection used by existing import UI."""
+    """Return the boundary projection displayed by the generic import UI."""
     rows = []
     stm_tables = (payload or {}).get("options", {}).get("stm_tables", {})
     for boundary in stm_tables.get("boundaries", []):
@@ -398,7 +395,8 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         """Read a preview dataframe from the current file/options."""
         if (
             self.preview_stm_payload is not None
-            and self.preview_stm_payload.get("schema") == STM_JSON_SCHEMA
+            and self.preview_stm_payload.get("table_type")
+            == STRUCTURAL_TOPOLOGY_TABLE_TYPE
         ):
             return _stm_boundary_dataframe(self.preview_stm_payload)
         delimiter = self._current_separator()
@@ -779,7 +777,10 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
 def _read_table_dataframe(file_path, import_config):
     """Read a mapped text table according to the dialog configuration."""
     stm_payload = _read_stm_export_payload(file_path)
-    if stm_payload is not None and stm_payload.get("schema") == STM_JSON_SCHEMA:
+    if (
+        stm_payload is not None
+        and stm_payload.get("table_type") == STRUCTURAL_TOPOLOGY_TABLE_TYPE
+    ):
         return _stm_boundary_dataframe(stm_payload)
     column_specs = import_config["column_specs"]
     usecols = [spec["source_index"] for spec in column_specs]
@@ -924,7 +925,11 @@ def import_tables(self=None, in_file_names=None):
                 file_path=in_file_name,
                 import_config=import_config,
             )
-            base_name = os_path.splitext(os_path.basename(in_file_name))[0]
+            base_name = (
+                str(stm_payload.get("table_name", "")).strip()
+                if stm_payload is not None
+                else ""
+            ) or os_path.splitext(os_path.basename(in_file_name))[0]
             table_name = _unique_table_name(
                 existing_names=set(self.custom_tables.keys()),
                 base_name=base_name,

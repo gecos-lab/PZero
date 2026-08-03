@@ -5,7 +5,6 @@ import json
 from pandas import DataFrame
 
 
-STM_JSON_SCHEMA = "pzero.stm.v4"
 STM_COLOR_COLUMNS = ("color_R", "color_G", "color_B")
 STM_REPRESENTATIVE_COLUMN = "Representative Boundary"
 
@@ -24,7 +23,13 @@ def _as_dataframe(data, columns=None):
 
 
 def _split_payload(dataframe):
-    return json.loads(dataframe.to_json(orient="split", force_ascii=False))
+    split_payload = json.loads(
+        dataframe.to_json(orient="split", force_ascii=False)
+    )
+    return {
+        "columns": split_payload.get("columns", []),
+        "data": split_payload.get("data", []),
+    }
 
 
 def _rgb(color):
@@ -48,7 +53,7 @@ def build_stm_json(
     boundary_columns=None,
     unit_columns=None,
 ):
-    """Return the canonical STm v4 payload."""
+    """Return an STm payload containing two dataframe-style tables."""
     boundaries_df = _as_dataframe(boundaries, boundary_columns)
     units_df = _as_dataframe(units, unit_columns)
     color_map = {
@@ -91,37 +96,37 @@ def build_stm_json(
         inplace=True,
     )
     return {
-        "schema": STM_JSON_SCHEMA,
-        "version": 4,
         "name": str(name or ""),
-        "tables": {
-            "Boundaries": _split_payload(boundaries_df),
-            "Units": _split_payload(units_df),
-        },
-        "metadata": {
-            "colors": color_map,
-        },
+        "boundaries": _split_payload(boundaries_df),
+        "units": _split_payload(units_df),
+        "colors": color_map,
     }
 
 
+def is_stm_json(payload):
+    """Return whether a payload contains the two required STm tables."""
+    return (
+        isinstance(payload, dict)
+        and isinstance(payload.get("boundaries"), dict)
+        and isinstance(payload.get("units"), dict)
+    )
+
+
 def read_stm_json(payload):
-    """Return enriched boundary/unit records from an STm v4 payload."""
-    if not isinstance(payload, dict) or payload.get("schema") != STM_JSON_SCHEMA:
-        raise ValueError("Not a PZero STm v4 payload")
-    tables = payload.get("tables", {})
+    """Return enriched boundary/unit records from an STm payload."""
+    if not is_stm_json(payload):
+        raise ValueError("Not a PZero STm payload")
 
     def dataframe(table_name):
-        table = tables.get(table_name, {})
+        table = payload.get(table_name, {})
         return DataFrame(
             data=table.get("data", []),
             columns=table.get("columns", []),
-            index=table.get("index"),
         )
 
-    boundaries_df = dataframe("Boundaries")
-    units_df = dataframe("Units")
-    metadata = payload.get("metadata", {}) or {}
-    colors = metadata.get("colors", {}) or {}
+    boundaries_df = dataframe("boundaries")
+    units_df = dataframe("units")
+    colors = payload.get("colors", {}) or {}
     for current_df in (boundaries_df, units_df):
         if "Feature" not in current_df.columns:
             continue
@@ -137,5 +142,5 @@ def read_stm_json(payload):
             orient="records"
         ),
         "units": units_df.where(units_df.notna(), "").to_dict(orient="records"),
-        "metadata": metadata,
+        "colors": colors,
     }

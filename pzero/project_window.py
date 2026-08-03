@@ -75,8 +75,8 @@ from pzero.helpers.helper_dialogs import (
     input_text_dialog,
 )
 from pzero.helpers.structural_topology import (
-    STM_JSON_SCHEMA,
     build_stm_json,
+    is_stm_json,
     read_stm_json,
 )
 from pzero.imports.cesium2vtk import vtk2cesium
@@ -2248,7 +2248,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if not out_dir_name:
             return
 
-        tables_payload = {"version": 1, "tables": []}
+        tables_payload = {"tables": []}
         for table_name, dataframe in self.custom_tables.items():
             table_type = self.custom_table_types.get(table_name, "manual")
             table_options = dict(self.custom_table_options.get(table_name, {}) or {})
@@ -2329,12 +2329,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             stm_payload = table_payload.get("stm")
             if (
                 table_type == "stm"
-                and isinstance(stm_payload, dict)
-                and stm_payload.get("schema") == STM_JSON_SCHEMA
+                and is_stm_json(stm_payload)
             ):
                 decoded = read_stm_json(stm_payload)
                 boundaries = decoded["boundaries"]
-                legacy_rows = [
+                table_rows = [
                     {
                         "Feature": boundary.get("Feature", ""),
                         "Unit Role": "Discontinuity",
@@ -2345,7 +2344,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     if isinstance(boundary, dict)
                 ]
                 self.custom_tables[table_name] = pd_DataFrame(
-                    legacy_rows,
+                    table_rows,
                     columns=[
                         "Feature",
                         "Unit Role",
@@ -2358,7 +2357,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     "boundaries": boundaries,
                     "units": decoded["units"],
                 }
-                table_options["stm_schema_version"] = 4
                 self.custom_table_options[table_name] = table_options
             else:
                 dataframe_payload = table_payload.get("dataframe", {})

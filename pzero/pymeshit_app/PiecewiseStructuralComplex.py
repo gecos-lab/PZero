@@ -2899,7 +2899,7 @@ class PiecewiseStructuralComplex:
             return float("inf")
     
     def _build_psc_model_from_stm(self, table_name: str) -> Dict[str, Any]:
-        """Read the canonical Boundaries and Units tables from an STm v3 model."""
+        """Read the canonical Boundaries and Units tables from an STm model."""
         project = self._pzero_project()
         if project is None:
             return {"units": {}, "boundary_features": set(), "boundary_order": []}
@@ -2910,10 +2910,32 @@ class PiecewiseStructuralComplex:
 
         boundary_records = list(stm_tables.get("boundaries", []) or [])
         unit_records = list(stm_tables.get("units", []) or [])
+        model_boundary_records = [
+            boundary_info
+            for boundary_info in boundary_records
+            if isinstance(boundary_info, dict)
+            and self._psc_key(boundary_info.get("Role", ""))
+            == self._psc_key("model_boundary")
+        ]
+        model_boundary_feature = self._psc_text(
+            model_boundary_records[0].get("Feature", "")
+            if model_boundary_records
+            else ""
+        )
+        model_boundary_keys = {
+            self._psc_key(boundary_info.get("Feature", ""))
+            for boundary_info in model_boundary_records
+            if self._psc_key(boundary_info.get("Feature", ""))
+        }
+        model_boundary_source = options.get("stm_model_boundary_source", {}) or {}
+        model_boundary_uid = self._psc_text(model_boundary_source.get("uid", ""))
 
         def boundary_name(value: Any) -> str:
             name = self._psc_text(value)
-            if self._psc_key(name) == self._psc_key("Model boundary"):
+            if (
+                self._psc_key(name) in model_boundary_keys
+                or self._psc_key(name) == self._psc_key("Model Boundary")
+            ):
                 return "Boundary"
             return name
 
@@ -3005,7 +3027,7 @@ class PiecewiseStructuralComplex:
                 )
                 if self._psc_text(value)
             ]
-            unit_key = f"unit:v3:{unit_idx}:{feature}"
+            unit_key = f"unit:stm:{unit_idx}:{feature}"
             units[unit_key] = {
                 "key": unit_key,
                 "name": feature,
@@ -3017,7 +3039,7 @@ class PiecewiseStructuralComplex:
                 "domains": domains,
                 "boundaries": boundaries,
                 "representative_boundary": representative,
-                "source": "stm_v3",
+                "source": "stm",
             }
             for color_name in ("color_R", "color_G", "color_B"):
                 if color_name in unit_info:
@@ -3032,6 +3054,8 @@ class PiecewiseStructuralComplex:
             "boundary_order": boundary_order,
             "boundary_roles": boundary_roles,
             "representative_boundary_keys": representative_boundary_keys,
+            "model_boundary_feature": model_boundary_feature,
+            "model_boundary_uid": model_boundary_uid,
         }
     
     def _map_psc_boundaries_to_tetra_surfaces(self, psc_model: Dict[str, Any]) -> Dict[str, Any]:
@@ -3040,6 +3064,12 @@ class PiecewiseStructuralComplex:
         boundary_surface_entries = []
         boundary_roles = dict(psc_model.get("boundary_roles", {}) or {})
         self._psc_active_boundary_roles = boundary_roles
+        self._psc_active_model_boundary_feature = self._psc_text(
+            psc_model.get("model_boundary_feature", "")
+        )
+        self._psc_active_model_boundary_uid = self._psc_text(
+            psc_model.get("model_boundary_uid", "")
+        )
         try:
             border_indices = set(self._get_border_surface_indices())
         except Exception:
@@ -3057,6 +3087,7 @@ class PiecewiseStructuralComplex:
                 "feature": str(surface_info.get("feature", "")).strip(),
                 "name": str(surface_info.get("name", "")).strip(),
                 "role": str(surface_info.get("role", "")).strip(),
+                "uid": str(surface_info.get("uid", "")).strip(),
             }
             feature = str(surface_info.get("feature", "")).strip()
             if feature:
@@ -3072,6 +3103,28 @@ class PiecewiseStructuralComplex:
                 token in identity_text for token in ("border", "boundary", "outer")
             ):
                 boundary_surface_entries.append(entry)
+
+        preferred_model_entries = []
+        if self._psc_active_model_boundary_uid:
+            preferred_model_entries = [
+                entry
+                for entries in feature_to_surfaces.values()
+                for entry in entries
+                if self._psc_key(entry.get("uid", ""))
+                == self._psc_key(self._psc_active_model_boundary_uid)
+            ]
+        if not preferred_model_entries and self._psc_active_model_boundary_feature:
+            preferred_model_entries = feature_to_surfaces.get(
+                self._psc_key(self._psc_active_model_boundary_feature), []
+            )
+        if preferred_model_entries:
+            boundary_surface_entries = list(
+                {
+                    entry.get("index"): entry
+                    for entry in preferred_model_entries
+                    if entry.get("index") is not None
+                }.values()
+            )
     
         mapped_units = []
         for unit in psc_model.get("units", {}).values():
@@ -3177,6 +3230,14 @@ class PiecewiseStructuralComplex:
         matches = []
         role_matches = []
         roleless_matches = []
+        model_uid = self._psc_key(
+            getattr(self, "_psc_active_model_boundary_uid", "")
+        )
+        model_feature = self._psc_key(
+            getattr(self, "_psc_active_model_boundary_feature", "")
+        )
+        model_uid_matches = []
+        model_feature_matches = []
         for surface_idx, surface_info in getattr(self, "tetra_surface_data", {}).items():
             try:
                 surface_idx_value = int(surface_idx)
@@ -3184,6 +3245,15 @@ class PiecewiseStructuralComplex:
                 continue
     
             if key == self._psc_key("Boundary"):
+                surface_uid = self._psc_key(surface_info.get("uid", ""))
+                surface_keys = {
+                    self._psc_key(surface_info.get("name", "")),
+                    self._psc_key(surface_info.get("feature", "")),
+                }
+                if model_uid and surface_uid == model_uid:
+                    model_uid_matches.append(surface_idx_value)
+                if model_feature and model_feature in surface_keys:
+                    model_feature_matches.append(surface_idx_value)
                 identity_text = " ".join(
                     str(surface_info.get(field, "") or "").casefold()
                     for field in ("name", "feature")
@@ -3209,6 +3279,10 @@ class PiecewiseStructuralComplex:
                 ):
                     roleless_matches.append(surface_idx_value)
     
+        if key == self._psc_key("Boundary"):
+            preferred_matches = model_uid_matches or model_feature_matches
+            if preferred_matches:
+                return sorted(set(preferred_matches))
         selected = matches
         if expected_role:
             selected = role_matches or roleless_matches
