@@ -113,11 +113,11 @@ def _stm_import_payload(payload):
     decoded = read_stm_json(payload)
     return {
         "schema": STM_JSON_SCHEMA,
-        "version": 3,
+        "version": 4,
         "table_type": STRUCTURAL_TOPOLOGY_TABLE_TYPE,
         "table_name": decoded["name"],
         "options": {
-            "stm_schema_version": 3,
+            "stm_schema_version": 4,
             "stm_tables": {
                 "boundaries": decoded["boundaries"],
                 "units": decoded["units"],
@@ -127,7 +127,7 @@ def _stm_import_payload(payload):
 
 
 def _read_stm_export_payload(file_path):
-    """Read an STm v3 JSON file or a v3 footer embedded in a CSV file."""
+    """Read an STm v4 JSON file or a v4 footer embedded in a CSV file."""
     if str(file_path).lower().endswith(".json"):
         try:
             with open(file_path, "r", encoding="utf-8-sig") as input_stream:

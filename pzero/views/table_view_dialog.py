@@ -64,6 +64,15 @@ STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN = "Boundaries"
 STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN = "Polarity"
 STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY = "Model boundary"
 STRUCTURAL_TOPOLOGY_REPRESENTATIVE_BOUNDARY_FIELD = "Representative Boundary"
+STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_VALUES = [
+    "top",
+    "base",
+    "fault",
+    "intrusive",
+    "tectonic",
+    "unconformity",
+    "model_boundary",
+]
 STRUCTURAL_TOPOLOGY_BOUNDARY_COLUMNS = [
     STRUCTURAL_TOPOLOGY_FEATURE_COLUMN,
     STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN,
@@ -75,6 +84,7 @@ STRUCTURAL_TOPOLOGY_UNIT_COLUMNS = [
     STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN,
     STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN,
     STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN,
+    STRUCTURAL_TOPOLOGY_REPRESENTATIVE_BOUNDARY_FIELD,
     "Domain_1",
 ]
 STRUCTURAL_TOPOLOGY_BASE_COLUMNS = [
@@ -99,6 +109,7 @@ STRUCTURAL_TOPOLOGY_UNIT_VALUES = [
 STRUCTURAL_TOPOLOGY_NON_BOUNDARY_ROLES = {"TU", "SU", "IU", "SD"}
 STRUCTURAL_TOPOLOGY_GENERATED_UNIT_ROLES = {
     "top": "SU",
+    "base": "SU",
     "bottom": "SU",
     "intrusive": "IU",
     "tectonic": "TU",
@@ -107,6 +118,9 @@ STRUCTURAL_TOPOLOGY_GENERATED_UNIT_ROLES = {
 
 _STM_UNIT_ROLES_BY_CASE = {
     role.casefold(): role for role in STRUCTURAL_TOPOLOGY_UNIT_VALUES
+}
+_STM_BOUNDARY_ROLES_BY_CASE = {
+    role.casefold(): role for role in STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_VALUES
 }
 
 
@@ -132,6 +146,13 @@ def normalise_structural_topology_unit_role(raw_value):
     """Return a valid canonical Unit Role value."""
     value = str(raw_value or "").strip()
     return _STM_UNIT_ROLES_BY_CASE.get(value.casefold(), value or "TU")
+
+
+def normalise_structural_topology_boundary_role(raw_value):
+    """Return a valid canonical boundary Role value."""
+    value = str(raw_value or "").strip()
+    value_key = value.casefold().replace(" ", "_")
+    return _STM_BOUNDARY_ROLES_BY_CASE.get(value_key, value or "model_boundary")
 
 
 def structural_topology_legacy_unit_role(raw_value):
@@ -528,7 +549,7 @@ class STmBuildDialog(QDialog):
         self.clear_manual_button = QPushButton("Clear manual links")
         self.clear_manual_button.clicked.connect(self.clear_manual_connections)
         buttons_layout.addWidget(self.clear_manual_button)
-        self.calculate_polarity_button = QPushButton("Calculate unit polarity")
+        self.calculate_polarity_button = QPushButton("Calculate unit level")
         self.calculate_polarity_button.clicked.connect(self.calculate_unit_polarity)
         buttons_layout.addWidget(self.calculate_polarity_button)
         self.add_manual_unit_button = QPushButton("Add extra unit")
@@ -2024,12 +2045,12 @@ class ImportStructuralTopologyUnitsDialog(QDialog):
 
         layout = QVBoxLayout(self)
         info_label = QLabel(
-            "Select the geological legend boundaries to add to the Structural Topology model."
+            "Select legend or boundary-collection boundaries to add to the Structural Topology model."
         )
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
 
-        refresh_button = QPushButton("Refresh boundaries from legend")
+        refresh_button = QPushButton("Refresh boundaries")
         refresh_button.clicked.connect(self.populate_units)
         layout.addWidget(refresh_button)
 
@@ -2076,6 +2097,9 @@ class ImportStructuralTopologyUnitsDialog(QDialog):
             ).strip()
             role_name = str(unit_info.get("role", "")).strip()
             if role_name.upper() in STRUCTURAL_TOPOLOGY_NON_BOUNDARY_ROLES:
+                continue
+            role_name = normalise_structural_topology_boundary_role(role_name)
+            if role_name not in STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_VALUES:
                 continue
             polarity_value = str(
                 unit_info.get(STRUCTURAL_TOPOLOGY_POLARITY_COLUMN, "")
@@ -2142,12 +2166,17 @@ class ExtraSTmBoundaryDialog(QDialog):
         self.feature_edit = QLineEdit(
             str(boundary_info.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, ""))
         )
-        self.role_edit = QLineEdit(
-            str(boundary_info.get(STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN, ""))
+        self.role_edit = QComboBox()
+        self.role_edit.addItems(STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_VALUES)
+        self.role_edit.setCurrentText(
+            normalise_structural_topology_boundary_role(
+                boundary_info.get(STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN, "")
+            )
         )
         self.polarity_edit = QLineEdit(
             str(boundary_info.get(STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN, ""))
         )
+        self.role_edit.currentTextChanged.connect(self._update_role_controls)
         form.addRow("Feature", self.feature_edit)
         form.addRow("Role", self.role_edit)
         form.addRow("Polarity", self.polarity_edit)
@@ -2164,6 +2193,7 @@ class ExtraSTmBoundaryDialog(QDialog):
         buttons.accepted.connect(self.validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        self._update_role_controls(self.role_edit.currentText())
         self._update_color_button()
 
     def choose_color(self):
@@ -2181,11 +2211,20 @@ class ExtraSTmBoundaryDialog(QDialog):
             "}"
         )
 
+    def _update_role_controls(self, role_name):
+        role_text = normalise_structural_topology_boundary_role(role_name)
+        is_model_boundary = role_text == "model_boundary"
+        self.polarity_edit.setEnabled(not is_model_boundary)
+        if is_model_boundary:
+            self.polarity_edit.setPlaceholderText("Managed by the model boundary")
+        else:
+            self.polarity_edit.setPlaceholderText("")
+
     @property
     def boundary_info(self):
         return {
             STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: self.feature_edit.text().strip(),
-            STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN: self.role_edit.text().strip(),
+            STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN: self.role_edit.currentText().strip(),
             STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN: self.polarity_edit.text().strip(),
             STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN: "",
             "color_R": self.selected_color.red(),
@@ -2196,6 +2235,14 @@ class ExtraSTmBoundaryDialog(QDialog):
     def validate_and_accept(self):
         if not self.feature_edit.text().strip():
             QMessageBox.warning(self, "Missing feature", "Insert a boundary feature.")
+            return
+        role = self.role_edit.currentText().strip()
+        if role not in STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_VALUES:
+            QMessageBox.warning(
+                self,
+                "Invalid role",
+                "Select a valid boundary role from the list.",
+            )
             return
         polarity = self.polarity_edit.text().strip()
         if polarity:
@@ -2214,14 +2261,14 @@ class UnitPolarityAmbiguityDialog(QDialog):
 
     def __init__(self, parent, solutions, slots):
         super().__init__(parent)
-        self.setWindowTitle("Resolve unit polarity")
+        self.setWindowTitle("Resolve unit level")
         self.solutions = solutions
         self.solution_index = 0
         layout = QVBoxLayout(self)
         layout.addWidget(
             QLabel(
                 "These units have equivalent topological solutions.\n"
-                "Use Switch to exchange their polarity."
+                "Use Switch to exchange their level."
             )
         )
         self.assignment_label = QLabel()
@@ -2340,7 +2387,7 @@ class ViewTable(QWidget):
         self.add_extra_boundary_button.clicked.connect(self.add_extra_boundary)
         self.add_extra_unit_button = QPushButton("Add extra unit")
         self.add_extra_unit_button.clicked.connect(self.add_extra_unit)
-        self.calculate_unit_polarity_button = QPushButton("Calculate unit polarity")
+        self.calculate_unit_polarity_button = QPushButton("Calculate unit level")
         self.calculate_unit_polarity_button.clicked.connect(self.calculate_unit_polarities)
         toolbar_layout.addWidget(self.editing_toggle_button)
         toolbar_layout.addWidget(self.add_row_button)
@@ -2445,22 +2492,13 @@ class ViewTable(QWidget):
         if model_mask.any():
             first_model_row = out_df.loc[model_mask].iloc[0].to_dict()
             out_df = out_df.loc[~model_mask].copy()
-        else:
-            first_model_row = {
-                STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: (
-                    STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY
-                ),
-                STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN: "model_boundary",
-                STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN: "",
-                STRUCTURAL_TOPOLOGY_BOUNDARY_UNITS_COLUMN: "",
-            }
-        first_model_row[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN] = (
-            STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY
-        )
-        out_df = pd_concat(
-            [pd_DataFrame([first_model_row], columns=out_df.columns), out_df],
-            ignore_index=True,
-        )
+            first_model_row[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN] = (
+                STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY
+            )
+            out_df = pd_concat(
+                [pd_DataFrame([first_model_row], columns=out_df.columns), out_df],
+                ignore_index=True,
+            )
         return out_df.reset_index(drop=True)
 
     def _set_stm_feature_color(self, feature_name, color_info):
@@ -2513,7 +2551,6 @@ class ViewTable(QWidget):
                     "color_R",
                     "color_G",
                     "color_B",
-                    STRUCTURAL_TOPOLOGY_REPRESENTATIVE_BOUNDARY_FIELD,
                 )
                 if column_name in out_df.columns
             ],
@@ -2532,6 +2569,15 @@ class ViewTable(QWidget):
                 _stm_names_cell(
                     out_df.at[row_label, STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN]
                 )
+            )
+            out_df.at[row_label, STRUCTURAL_TOPOLOGY_REPRESENTATIVE_BOUNDARY_FIELD] = (
+                str(
+                    out_df.at[
+                        row_label,
+                        STRUCTURAL_TOPOLOGY_REPRESENTATIVE_BOUNDARY_FIELD,
+                    ]
+                    or ""
+                ).strip()
             )
         domain_columns = sorted(
             [
@@ -2554,6 +2600,7 @@ class ViewTable(QWidget):
                     STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN,
                     STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN,
                     STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN,
+                    STRUCTURAL_TOPOLOGY_REPRESENTATIVE_BOUNDARY_FIELD,
                 ]
                 + domain_columns
             )
@@ -2563,6 +2610,7 @@ class ViewTable(QWidget):
             STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN,
             STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN,
             STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN,
+            STRUCTURAL_TOPOLOGY_REPRESENTATIVE_BOUNDARY_FIELD,
         ] + domain_columns + extra_columns
         return out_df[ordered_columns].reset_index(drop=True)
 
@@ -2770,6 +2818,8 @@ class ViewTable(QWidget):
             self.boundaries_table_model.dataframe
         )
         units = self._normalise_stm_units(self.table_model.dataframe)
+        if STRUCTURAL_TOPOLOGY_REPRESENTATIVE_BOUNDARY_FIELD not in units.columns:
+            units[STRUCTURAL_TOPOLOGY_REPRESENTATIVE_BOUNDARY_FIELD] = ""
         boundary_names = {
             str(value).strip()
             for value in boundaries[STRUCTURAL_TOPOLOGY_FEATURE_COLUMN]
@@ -2823,6 +2873,18 @@ class ViewTable(QWidget):
                 if linked_unit == unit_name
                 ]
             )
+            representative_name = next(
+                (
+                    boundary_name
+                    for linked_unit, boundary_name in sorted(representative_links)
+                    if linked_unit == unit_name
+                ),
+                "",
+            )
+            units.at[
+                row_label,
+                STRUCTURAL_TOPOLOGY_REPRESENTATIVE_BOUNDARY_FIELD,
+            ] = representative_name
         return boundaries, units, representative_links, manual_links
 
     def _persist_stm_composite(self, edited_side=None, reset_models=False):
@@ -2848,7 +2910,7 @@ class ViewTable(QWidget):
         )
         color_codes["features"] = feature_colors
         options["stm_color_codes"] = color_codes
-        options["stm_schema_version"] = 3
+        options["stm_schema_version"] = 4
         options["stm_tables"] = {
             "boundaries": _stm_records(boundaries),
             "units": _stm_records(units),
@@ -3042,6 +3104,7 @@ class ViewTable(QWidget):
         return column_name not in {
             STRUCTURAL_TOPOLOGY_UNIT_POLARITY_COLUMN,
             STRUCTURAL_TOPOLOGY_UNIT_BOUNDARIES_COLUMN,
+            STRUCTURAL_TOPOLOGY_REPRESENTATIVE_BOUNDARY_FIELD,
         }
 
     def is_table_column_editable(self, column_index: int) -> bool:
@@ -3154,6 +3217,26 @@ class ViewTable(QWidget):
         else:
             units = []
 
+        boundary_coll = getattr(self.parent, "boundary_coll", None)
+        if boundary_coll is not None:
+            for boundary_name in getattr(boundary_coll, "get_names", []) or []:
+                boundary_text = str(boundary_name or "").strip()
+                if not boundary_text or boundary_text == STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY:
+                    continue
+                units.append(
+                    {
+                        STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: boundary_text,
+                        STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: "Discontinuity",
+                        STRUCTURAL_TOPOLOGY_POLARITY_COLUMN: "",
+                        "Domain_1": "",
+                        "feature": boundary_text,
+                        "role": "model_boundary",
+                        "color_R": 255,
+                        "color_G": 255,
+                        "color_B": 255,
+                    }
+                )
+
         legend_df = getattr(getattr(self.parent, "geol_coll", None), "legend_df", None)
         if not units and legend_df is not None and not legend_df.empty:
             units = [
@@ -3165,13 +3248,16 @@ class ViewTable(QWidget):
                     STRUCTURAL_TOPOLOGY_POLARITY_COLUMN: row.get("time", 0.0),
                     "Domain_1": "",
                     "feature": str(row.get("feature", "")).strip(),
-                    "role": str(row.get("role", "")).strip(),
+                    "role": normalise_structural_topology_boundary_role(
+                        row.get("role", "")
+                    ),
                     "color_R": row.get("color_R", 255),
                     "color_G": row.get("color_G", 255),
                     "color_B": row.get("color_B", 255),
                 }
                 for _, row in legend_df.iterrows()
                 if str(row.get("feature", "")).strip()
+                and str(row.get("feature", "")).strip() != STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY
             ]
         current_options = dict(self.current_table_options or {})
         stored_color_codes = current_options.get("stm_color_codes", {})
@@ -3201,13 +3287,15 @@ class ViewTable(QWidget):
             for feature_name, color_info in feature_color_map.items():
                 if any(key[0] == feature_name for key in available_keys):
                     continue
+                if feature_name == STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY:
+                    continue
                 available_units.append({
                     STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: feature_name,
                     STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: "Discontinuity",
                     STRUCTURAL_TOPOLOGY_POLARITY_COLUMN: 0.0,
                     "Domain_1": "",
                     "feature": feature_name,
-                    "role": "",
+                    "role": "model_boundary",
                     "color_R": color_info.get("color_R", 255),
                     "color_G": color_info.get("color_G", 255),
                     "color_B": color_info.get("color_B", 255),
@@ -3927,7 +4015,7 @@ class ViewTable(QWidget):
         self._notify_custom_table_metadata_changed()
 
     def import_structural_topology_units(self):
-        """Append selected geology legend boundaries to the Boundaries table."""
+        """Append selected legend and boundary-collection boundaries to the Boundaries table."""
         table_name = self.current_table_name
         if not table_name:
             return
@@ -4188,10 +4276,14 @@ class ViewTable(QWidget):
     def _unit_polarity_candidates(self):
         boundaries = self.boundaries_table_model.dataframe
         polarities = {}
+        boundary_roles = {}
         for _, row in boundaries.iterrows():
             name = str(row.get(STRUCTURAL_TOPOLOGY_FEATURE_COLUMN, "")).strip()
             if not name or name == STRUCTURAL_TOPOLOGY_MODEL_BOUNDARY:
                 continue
+            boundary_roles[name] = str(
+                row.get(STRUCTURAL_TOPOLOGY_BOUNDARY_ROLE_COLUMN, "")
+            ).strip().casefold()
             try:
                 polarities[name] = float(
                     row.get(STRUCTURAL_TOPOLOGY_BOUNDARY_POLARITY_COLUMN, "")
@@ -4225,6 +4317,9 @@ class ViewTable(QWidget):
             ).strip()
             if not unit_name:
                 continue
+            unit_role = str(
+                row.get(STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN, "")
+            ).strip().casefold()
             candidates[unit_name] = set()
             linked = set(
                 _stm_names(
@@ -4254,8 +4349,24 @@ class ViewTable(QWidget):
                     }
                 )
             )
+            preferred_side = None
+            if unit_role == "su" and representative:
+                representative_role = boundary_roles.get(representative, "")
+                if representative_role == "top":
+                    preferred_side = "above"
+                elif representative_role == "base":
+                    preferred_side = "below"
             for anchor in anchors:
-                for value in (anchor - 0.5, anchor + 0.5):
+                candidate_values = (
+                    (anchor + 0.5,)
+                    if preferred_side == "above"
+                    else (
+                        (anchor - 0.5,)
+                        if preferred_side == "below"
+                        else (anchor - 0.5, anchor + 0.5)
+                    )
+                )
+                for value in candidate_values:
                     side = "below" if value < anchor else "above"
                     add_slot(
                         unit_name,
@@ -4435,13 +4546,13 @@ class ViewTable(QWidget):
             f"unresolved={unresolved}"
         )
         self._persist_stm_composite(reset_models=True)
-        message = f"Calculated {calculated} unit polarities."
+        message = f"Calculated {calculated} unit levels."
         if unresolved:
             message += (
                 f"\nLeft {unresolved} unresolved: the topology is ambiguous "
                 "or there are fewer polarity gaps than units."
             )
-        QMessageBox.information(self, "Unit polarity", message)
+        QMessageBox.information(self, "Unit level", message)
         self._notify_custom_table_metadata_changed()
 
     def add_field(self):

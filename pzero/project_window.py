@@ -2280,6 +2280,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                                 "Unit Role",
                                 "Polarity",
                                 "Boundaries",
+                                "Representative Boundary",
                                 "Domain_1",
                             ],
                         ),
@@ -2357,7 +2358,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     "boundaries": boundaries,
                     "units": decoded["units"],
                 }
-                table_options["stm_schema_version"] = 3
+                table_options["stm_schema_version"] = 4
                 self.custom_table_options[table_name] = table_options
             else:
                 dataframe_payload = table_payload.get("dataframe", {})

@@ -5,7 +5,7 @@ import json
 from pandas import DataFrame
 
 
-STM_JSON_SCHEMA = "pzero.stm.v3"
+STM_JSON_SCHEMA = "pzero.stm.v4"
 STM_COLOR_COLUMNS = ("color_R", "color_G", "color_B")
 STM_REPRESENTATIVE_COLUMN = "Representative Boundary"
 
@@ -48,7 +48,7 @@ def build_stm_json(
     boundary_columns=None,
     unit_columns=None,
 ):
-    """Return the canonical STm v3 payload."""
+    """Return the canonical STm v4 payload."""
     boundaries_df = _as_dataframe(boundaries, boundary_columns)
     units_df = _as_dataframe(units, unit_columns)
     color_map = {
@@ -67,12 +67,16 @@ def build_stm_json(
                 rgb = _rgb(row)
                 if rgb is not None:
                     color_map.setdefault(feature, rgb)
-    if STM_REPRESENTATIVE_COLUMN in units_df.columns:
-        for _, row in units_df.iterrows():
-            unit = str(row.get("Feature", "")).strip()
-            boundary = str(row.get(STM_REPRESENTATIVE_COLUMN, "")).strip()
-            if unit and boundary:
-                representatives.setdefault(unit, boundary)
+    if STM_REPRESENTATIVE_COLUMN not in units_df.columns:
+        units_df[STM_REPRESENTATIVE_COLUMN] = ""
+    for row_label in units_df.index:
+        unit = str(units_df.at[row_label, "Feature"] if "Feature" in units_df.columns else "").strip()
+        existing_boundary = str(units_df.at[row_label, STM_REPRESENTATIVE_COLUMN] or "").strip()
+        if existing_boundary:
+            continue
+        fallback_boundary = str(representatives.get(unit, "")).strip()
+        if unit and fallback_boundary:
+            units_df.at[row_label, STM_REPRESENTATIVE_COLUMN] = fallback_boundary
 
     boundaries_df.drop(
         columns=[column for column in STM_COLOR_COLUMNS if column in boundaries_df],
@@ -81,14 +85,14 @@ def build_stm_json(
     units_df.drop(
         columns=[
             column
-            for column in (*STM_COLOR_COLUMNS, STM_REPRESENTATIVE_COLUMN)
+            for column in STM_COLOR_COLUMNS
             if column in units_df
         ],
         inplace=True,
     )
     return {
         "schema": STM_JSON_SCHEMA,
-        "version": 3,
+        "version": 4,
         "name": str(name or ""),
         "tables": {
             "Boundaries": _split_payload(boundaries_df),
@@ -96,15 +100,14 @@ def build_stm_json(
         },
         "metadata": {
             "colors": color_map,
-            "representative_boundaries": representatives,
         },
     }
 
 
 def read_stm_json(payload):
-    """Return enriched boundary/unit records from an STm v3 payload."""
+    """Return enriched boundary/unit records from an STm v4 payload."""
     if not isinstance(payload, dict) or payload.get("schema") != STM_JSON_SCHEMA:
-        raise ValueError("Not a PZero STm v3 payload")
+        raise ValueError("Not a PZero STm v4 payload")
     tables = payload.get("tables", {})
 
     def dataframe(table_name):
@@ -128,14 +131,6 @@ def read_stm_json(payload):
                 continue
             for column, value in zip(STM_COLOR_COLUMNS, color[:3]):
                 current_df.at[row_label, column] = value
-    representatives = metadata.get("representative_boundaries", {}) or {}
-    if "Feature" in units_df.columns:
-        for row_label in units_df.index:
-            unit = str(units_df.at[row_label, "Feature"]).strip()
-            if unit in representatives:
-                units_df.at[row_label, STM_REPRESENTATIVE_COLUMN] = (
-                    representatives[unit]
-                )
     return {
         "name": str(payload.get("name", "")),
         "boundaries": boundaries_df.where(boundaries_df.notna(), "").to_dict(
