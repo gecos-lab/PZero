@@ -8,11 +8,15 @@ from PySide6.QtWidgets import QSpinBox, QWidgetAction
 # numpy import____
 from numpy import all as np_all
 from numpy import ndarray as np_ndarray
+from numpy import pi as np_pi
+from numpy import sin as np_sin
+from numpy import cos as np_cos
 from numpy.linalg import norm as np_linalg_norm
 from numpy import asarray as np_asarray
 from numpy import atleast_1d as np_atleast_1d
 from numpy import concatenate as np_concatenate
 from numpy import vstack as np_vstack
+from numpy import where as np_where
 
 # Pandas imports____
 from pandas import DataFrame as pd_DataFrame
@@ -80,6 +84,7 @@ class ViewStereoplot(ViewMPL):
         self.rectangle_selector = None  # holds the active RectangleSelector widget
         self.selection_tool_active = False
         self.selection_highlight_actor = None
+        self.selection_highlight_uids = set()
         
         
         # In __init__:
@@ -248,6 +253,10 @@ class ViewStereoplot(ViewMPL):
             lambda: self.seed_picking("lineations")
         )
         self.menuAnalysis.addAction(self.actionSeedPickingLineations)
+
+        for action in self.findChildren(QAction):
+            if action is not self.actionSelectionTool:
+                action.triggered.connect(self._clear_selection_highlight)
 
     def connect_all_signals(self):
         super().connect_all_signals()
@@ -1067,6 +1076,11 @@ class ViewStereoplot(ViewMPL):
 
         if collection is not self.parent.geol_coll:
             return
+        if (
+            self.selection_highlight_actor is not None
+            and set(self.parent.geol_coll.selected_uids) != self.selection_highlight_uids
+        ):
+            self._clear_selection_highlight()
         has_selection = bool(self.parent.geol_coll.selected_uids)
         self.actionRecompute.setEnabled(has_selection and not self.auto_recompute)
         if not self.auto_recompute:
@@ -1406,7 +1420,7 @@ class ViewStereoplot(ViewMPL):
             self._deactivate_selection()
             self.print_terminal("Selection tool deactivated.")
 
-    def _deactivate_selection(self):
+    def _deactivate_selection(self, clear_highlight=True):
         """Disconnect selection events and clean up visual state."""
         for cid in [self.selection_press_cid, self.selection_motion_cid,
                     self.selection_release_cid]:
@@ -1417,12 +1431,13 @@ class ViewStereoplot(ViewMPL):
         self.selection_release_cid = None
         self.selection_start = None
         self._remove_selection_patch()
-        if self.selection_highlight_actor is not None:
+        if clear_highlight and self.selection_highlight_actor is not None:
             try:
                 self.selection_highlight_actor.remove()
             except Exception:
                 pass
             self.selection_highlight_actor = None
+            self.selection_highlight_uids = set()
         self.selection_tool_active = False
         self.actionSelectionTool.setChecked(False)
         if hasattr(self, "figure"):
@@ -1437,6 +1452,18 @@ class ViewStereoplot(ViewMPL):
                 pass
             self.selection_patch = None
 
+    def _clear_selection_highlight(self, *args):
+        """Remove the yellow markers drawn after a stereonet region selection."""
+        if self.selection_highlight_actor is not None:
+            try:
+                self.selection_highlight_actor.remove()
+            except Exception:
+                pass
+            self.selection_highlight_actor = None
+            self.selection_highlight_uids = set()
+            if hasattr(self, "figure"):
+                self.figure.canvas.draw()
+
     def _build_selection_path(self, lon0, lat0, lon1, lat1, n=50):
         """
         Build the boundary path of a stereonet region between two corners
@@ -1450,6 +1477,12 @@ class ViewStereoplot(ViewMPL):
         """
         from numpy import linspace as np_linspace
 
+        if abs(lon1 - lon0) > np_pi:
+            if lon0 < lon1:
+                lon0 += 2 * np_pi
+            else:
+                lon1 += 2 * np_pi
+
         top    = np_asarray([[l, lat0] for l in np_linspace(lon0, lon1, n)])
         right  = np_asarray([[lon1, l] for l in np_linspace(lat0, lat1, n)])
         bottom = np_asarray([[l, lat1] for l in np_linspace(lon1, lon0, n)])
@@ -1462,7 +1495,7 @@ class ViewStereoplot(ViewMPL):
             return
         if event.xdata is None or event.ydata is None:
             return
-        self.selection_start = (-event.xdata, -event.ydata)
+        self.selection_start = self._event_to_screen_polar(event)
         self._remove_selection_patch()
 
     def _on_selection_motion(self, event):
@@ -1471,16 +1504,51 @@ class ViewStereoplot(ViewMPL):
         if event.xdata is None or event.ydata is None:
             return
 
-        lon0, lat0 = self.selection_start
-        lon1, lat1 = -event.xdata, -event.ydata
+        theta0, r0 = self.selection_start
+        theta1, r1 = self._event_to_screen_polar(event)
+
+        theta0 = theta0 % (2 * np_pi)
+        theta1 = theta1 % (2 * np_pi)
+        if abs(theta1 - theta0) > np_pi:
+            if theta0 < theta1:
+                theta0 += 2 * np_pi
+            else:
+                theta1 += 2 * np_pi
+        theta_min, theta_max = min(theta0, theta1), max(theta0, theta1)
+        r_min, r_max = min(r0, r1), max(r0, r1)
 
         self._remove_selection_patch()
 
-        verts_data = self._build_selection_path(lon0, lat0, lon1, lat1)
+        from numpy import linspace as np_linspace
 
-        # Use ax.fill instead of add_patch — it handles the transform correctly
-        # for mplstereonet's non-linear projection axes
-        fill_result = self.ax.fill(
+        top_theta = np_linspace(theta_min, theta_max, 50)
+        right_r = np_linspace(r_min, r_max, 50)
+        bottom_theta = np_linspace(theta_max, theta_min, 50)
+        left_r = np_linspace(r_max, r_min, 50)
+        theta = np_concatenate([
+            top_theta,
+            theta_max * np_asarray([1.0] * 50),
+            bottom_theta,
+            theta_min * np_asarray([1.0] * 50),
+        ])
+        radius = np_concatenate([
+            r_min * np_asarray([1.0] * 50),
+            right_r,
+            r_max * np_asarray([1.0] * 50),
+            left_r,
+        ])
+
+        cx, cy = self.ax.transAxes.transform((0.5, 0.5))
+        x0, y0 = self.ax.transAxes.transform((0.0, 0.0))
+        x1, y1 = self.ax.transAxes.transform((1.0, 1.0))
+        radius_px = min(abs(x1 - x0), abs(y1 - y0)) / 2.0
+        display_xy = np_asarray([
+            cx + radius * radius_px * np_sin(theta),
+            cy + radius * radius_px * np_cos(theta),
+        ]).T
+        verts_data = self.ax.transData.inverted().transform(display_xy)
+
+        self.selection_patch = self.ax.fill(
             verts_data[:, 0],
             verts_data[:, 1],
             facecolor="lightblue",
@@ -1488,9 +1556,9 @@ class ViewStereoplot(ViewMPL):
             linewidth=1.5,
             linestyle="--",
             alpha=0.3,
-            zorder=self.Z_STATS + 2,)
-        # ax.fill returns a list of Polygon artists
-        self.selection_patch = fill_result[0]
+            zorder=self.Z_STATS + 2,
+        )[0]
+
         self.figure.canvas.draw()
 
     def _on_selection_release(self, event):
@@ -1502,14 +1570,14 @@ class ViewStereoplot(ViewMPL):
             self.figure.canvas.draw()
             return
 
-        lon0, lat0 = self.selection_start
-        lon1, lat1 = -event.xdata, -event.ydata
+        theta0, radius0 = self.selection_start
+        theta1, radius1 = self._event_to_screen_polar(event)
         self.selection_start = None
 
         # Build the path for containment testing
-        from matplotlib.path import Path as mpl_Path
-        verts = self._build_selection_path(lon0, lat0, lon1, lat1)
-        polygon = mpl_Path(verts)
+        # from matplotlib.path import Path as mpl_Path
+        # verts = self._build_selection_path(theta0, radius0, theta1, radius1)
+        # polygon = mpl_Path(verts)
 
         # Project all visible entity poles and test containment
         uid_lons = {}
@@ -1530,8 +1598,45 @@ class ViewStereoplot(ViewMPL):
 
         selected_uids = []
         for uid in uid_lons:
-            points_xy = np_asarray(list(zip(uid_lons[uid], uid_lats[uid])))
-            if polygon.contains_points(points_xy).any():
+            points_lonlat = np_asarray(list(zip(uid_lons[uid], uid_lats[uid])))
+
+            points_px = self.ax.transData.transform(points_lonlat)
+            cx, cy = self.ax.transAxes.transform((0.5, 0.5))
+            x0, y0 = self.ax.transAxes.transform((0.0, 0.0))
+            x1, y1 = self.ax.transAxes.transform((1.0, 1.0))
+            radius_px = min(abs(x1 - x0), abs(y1 - y0)) / 2.0
+
+            dx = points_px[:, 0] - cx
+            dy = points_px[:, 1] - cy
+            from numpy import arctan2 as np_arctan2
+            from numpy import hypot as np_hypot
+
+            theta = np_arctan2(dx, dy) % (2 * np_pi)
+            radius = np_hypot(dx, dy) / radius_px
+
+            theta0 = theta0 % (2 * np_pi)
+            theta1 = theta1 % (2 * np_pi)
+            if abs(theta1 - theta0) > np_pi:
+                if theta0 < theta1:
+                    theta0 += 2 * np_pi
+                else:
+                    theta1 += 2 * np_pi
+
+            theta_min = min(theta0, theta1)
+            theta_max = max(theta0, theta1)
+            if theta_max > 2 * np_pi:
+                theta = np_where(theta < theta_min, theta + 2 * np_pi, theta)
+            radius_min = min(radius0, radius1)
+            radius_max = max(radius0, radius1)
+
+            inside = (
+                (theta >= theta_min)
+                & (theta <= theta_max)
+                & (radius >= radius_min)
+                & (radius <= radius_max)
+            )
+
+            if inside.any():
                 selected_uids.append(uid)
 
         self._remove_selection_patch()
@@ -1561,11 +1666,30 @@ class ViewStereoplot(ViewMPL):
             markerfacecolor="none", markeredgecolor="yellow",
             markeredgewidth=1.5, zorder=self.Z_STATS + 1,
         )[0]
+        self.selection_highlight_uids = set(selected_uids)
         self.figure.canvas.draw()
 
         self.GeologyTreeWidget.restore_selection(selected_uids)
         self.parent.signals.selection_changed.emit(self.parent.geol_coll)
-        self._deactivate_selection()
+        self._deactivate_selection(clear_highlight=False)
+
+    def _event_to_screen_polar(self, event):
+        cx, cy = self.ax.transAxes.transform((0.5, 0.5))
+        x0, y0 = self.ax.transAxes.transform((0.0, 0.0))
+        x1, y1 = self.ax.transAxes.transform((1.0, 1.0))
+
+        radius_px = min(abs(x1 - x0), abs(y1 - y0)) / 2.0
+
+        dx = event.x - cx
+        dy = event.y - cy
+
+        from numpy import arctan2 as np_arctan2
+        from numpy import hypot as np_hypot
+
+        theta = np_arctan2(dx, dy)   # 0 at north, clockwise-ish
+        r = np_hypot(dx, dy) / radius_px
+
+        return theta, r
 
     # --- Statistics summary functions ---
     def build_statistics_summary(self):
