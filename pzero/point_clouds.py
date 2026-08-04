@@ -70,14 +70,20 @@ def normals2dd(self):
             dip = vtk_obj.points_map_dip
             dip_dir = vtk_obj.points_map_dip_direction
 
-            vtk_obj.init_point_data("dip", 1)
-            vtk_obj.init_point_data("dip direction", 1)
+        # vtk_obj.init_point_data("dip", 1)
+        # vtk_obj.init_point_data("dip direction", 1)
 
-            vtk_obj.set_point_data("dip", dip)
-            vtk_obj.set_point_data("dip direction", dip_dir)
+        # vtk_obj.set_point_data("dip", dip)
+        # vtk_obj.set_point_data("dip direction", dip_dir)
 
-            self.parent.dom_coll.replace_vtk(uid, vtk_obj)
-            self.clear_selection()
+        # self.parent.dom_coll.replace_vtk(uid, vtk_obj)
+        # self.clear_selection()
+            
+            self.parent.geol_coll.append_uid_property(uid=uid, property_name="dip", property_components=1)
+            self.parent.geol_coll.append_uid_property(uid=uid, property_name="dip direction", property_components=1)
+            vtk_obj.set_point_data(data_key="dip", attribute_matrix=dip)
+            vtk_obj.set_point_data(data_key="dip", attribute_matrix=dip_dir)
+            self.parent.prop_legend.update_widget(self.parent)
 
 
 def extract_id(vtk_obj, ids):

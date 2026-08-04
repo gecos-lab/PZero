@@ -483,7 +483,6 @@ class View3D(ViewVTK):
         self.plotter.enable_trackball_style()
         # Closing settings
         self.plotter.reset_key_events()
-        self.selected_uids = self.parent.selected_uids
         # self.enable_actions()
         freeze_gui_off(self)
 
@@ -2920,7 +2919,9 @@ class View3D(ViewVTK):
         super().initialize_menu_tools()
 
         self.actionAuto_picking = QAction("Auto-Pick", self)
-        self.actionAuto_picking.triggered.connect(lambda: auto_pick)
+        self.actionAuto_picking.triggered.connect(
+            lambda: self.run_point_cloud_tool(auto_pick)
+        )
         self.menuSelect.addAction(self.actionAuto_picking)
 
         # Remove 2D line drawing from 3D view (use "Draw line (3D mode)" instead)
@@ -2940,31 +2941,41 @@ class View3D(ViewVTK):
         self.menuCreate.addAction(self.drawLine3DButton)
         
         self.actionCalculate_dip_dir = QAction("Calculate dips and directions (PC)", self)
-        self.actionCalculate_dip_dir.triggered.connect(lambda: normals2dd)
+        self.actionCalculate_dip_dir.triggered.connect(
+            lambda: self.run_point_cloud_tool(normals2dd)
+        )
         self.menuCreate.addAction(self.actionCalculate_dip_dir)
         
         self.actionCreate_facet = QAction("Create mesh (PC)", self)
-        self.actionCreate_facet.triggered.connect(lambda: facets_pc)
+        self.actionCreate_facet.triggered.connect(
+            lambda: self.run_point_cloud_tool(facets_pc)
+        )
         self.menuCreate.addAction(self.actionCreate_facet)
         
         self.actionCut_Pc = QAction("Cut Point Cloud", self)
-        self.actionCut_Pc.triggered.connect(lambda: cut_pc)
+        self.actionCut_Pc.triggered.connect(lambda: self.run_point_cloud_tool(cut_pc))
         self.menuModify.addAction(self.actionCut_Pc)
         
         self.actionDecimate_Pc = QAction("Decimate Point Cloud", self)
-        self.actionDecimate_Pc.triggered.connect(lambda: decimate_pc)
+        self.actionDecimate_Pc.triggered.connect(self.decimate_selected_pc)
         self.menuModify.addAction(self.actionDecimate_Pc)
         
         self.actionSegment_Pc = QAction("Segment Point Cloud", self)
-        self.actionSegment_Pc.triggered.connect(lambda: segment_pc)
+        self.actionSegment_Pc.triggered.connect(
+            lambda: self.run_point_cloud_tool(segment_pc)
+        )
         self.menuModify.addAction(self.actionSegment_Pc)
         
         self.actionProperty_filter = QAction("Filter Point Cloud with a property", self)
-        self.actionProperty_filter.triggered.connect(lambda: thresh_filt)
+        self.actionProperty_filter.triggered.connect(
+            lambda: self.run_point_cloud_tool(thresh_filt)
+        )
         self.menuModify.addAction(self.actionProperty_filter)
         
         self.actionCalibrate_Pc = QAction("Calculate distance with the best plane", self)
-        self.actionCalibrate_Pc.triggered.connect(lambda: calibration_pc)
+        self.actionCalibrate_Pc.triggered.connect(
+            lambda: self.run_point_cloud_tool(calibration_pc)
+        )
         self.menuAnalysis.addAction(self.actionCalibrate_Pc)
 
         self.actionManual_picking = QAction("Pick", self)
@@ -2982,6 +2993,69 @@ class View3D(ViewVTK):
 
         # Add to menu
         self.menuMeshTools.addAction(self.actionMeshSlicer)
+
+    def sync_point_cloud_selection(self):
+        """Sync old point-cloud tools with current DOM tree/table selection."""
+        if self.selected_uids:
+            return
+
+        dom_selected_uids = getattr(self.parent.dom_coll, "selected_uids", [])
+        if dom_selected_uids:
+            self.selected_uids = dom_selected_uids.copy()
+            return
+
+        if getattr(self.parent, "shown_table", None) == "tabDOMs":
+            self.selected_uids = self.parent.selected_uids
+
+    def run_point_cloud_tool(self, tool):
+        """Run a point-cloud tool after syncing DOM selection into the view."""
+        self.sync_point_cloud_selection()
+        tool(self)
+
+    def decimate_selected_pc(self):
+        """Decimate the selected point cloud and add the result as a DOM entity."""
+        self.sync_point_cloud_selection()
+        if len(self.selected_uids) == 0:
+            print("No entities selected, make sure to have the right tab open")
+            return
+
+        uid = self.selected_uids[0]
+        vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+        if not hasattr(vtk_obj, "GetNumberOfPoints"):
+            print("Entity not point cloud or multiple entities visible")
+            return
+
+        fac, ok = QInputDialog.getDouble(
+            self,
+            "Decimate point cloud",
+            "Fraction of points to keep (0-1):",
+            0.5,
+            0.0,
+            1.0,
+            3,
+        )
+        if not ok:
+            return
+
+        decimated = decimate_pc(vtk_obj, fac)
+        if decimated is None:
+            return
+
+        entity_dict = deepcopy(self.parent.dom_coll.entity_dict)
+        entity_dict["uid"] = str(uuid4())
+        entity_dict["name"] = (
+            self.parent.dom_coll.get_uid_name(uid) + f"_decimated_{fac:g}"
+        )
+        entity_dict["topology"] = "PCDom"
+        entity_dict["properties_names"] = self.parent.dom_coll.get_uid_properties_names(
+            uid
+        )
+        entity_dict["properties_components"] = (
+            self.parent.dom_coll.get_uid_properties_components(uid)
+        )
+        entity_dict["vtk_obj"] = decimated
+        self.parent.dom_coll.add_entity_from_dict(entity_dict=entity_dict)
+        self.clear_selection()
 
     def toggle_mesh_manipulation(
         self,
