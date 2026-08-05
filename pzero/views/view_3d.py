@@ -2939,40 +2939,44 @@ class View3D(ViewVTK):
         self.drawLine3DButton = QAction("Draw line (3D mode)", self)
         self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
         self.menuCreate.addAction(self.drawLine3DButton)
-        
-        self.actionCalculate_dip_dir = QAction("Calculate dips and directions (PC)", self)
+
+        self.actionCalculate_dip_dir = QAction(
+            "Calculate dips and directions (PC)", self
+        )
         self.actionCalculate_dip_dir.triggered.connect(
             lambda: self.run_point_cloud_tool(normals2dd)
         )
         self.menuCreate.addAction(self.actionCalculate_dip_dir)
-        
+
         self.actionCreate_facet = QAction("Create mesh (PC)", self)
         self.actionCreate_facet.triggered.connect(
             lambda: self.run_point_cloud_tool(facets_pc)
         )
         self.menuCreate.addAction(self.actionCreate_facet)
-        
+
         self.actionCut_Pc = QAction("Cut Point Cloud", self)
         self.actionCut_Pc.triggered.connect(lambda: self.run_point_cloud_tool(cut_pc))
         self.menuModify.addAction(self.actionCut_Pc)
-        
+
         self.actionDecimate_Pc = QAction("Decimate Point Cloud", self)
         self.actionDecimate_Pc.triggered.connect(self.decimate_selected_pc)
         self.menuModify.addAction(self.actionDecimate_Pc)
-        
+
         self.actionSegment_Pc = QAction("Segment Point Cloud", self)
         self.actionSegment_Pc.triggered.connect(
             lambda: self.run_point_cloud_tool(segment_pc)
         )
         self.menuModify.addAction(self.actionSegment_Pc)
-        
+
         self.actionProperty_filter = QAction("Filter Point Cloud with a property", self)
         self.actionProperty_filter.triggered.connect(
             lambda: self.run_point_cloud_tool(thresh_filt)
         )
         self.menuModify.addAction(self.actionProperty_filter)
-        
-        self.actionCalibrate_Pc = QAction("Calculate distance with the best plane", self)
+
+        self.actionCalibrate_Pc = QAction(
+            "Calculate distance with the best plane", self
+        )
         self.actionCalibrate_Pc.triggered.connect(
             lambda: self.run_point_cloud_tool(calibration_pc)
         )

@@ -79,9 +79,13 @@ def normals2dd(self):
 
         # self.parent.dom_coll.replace_vtk(uid, vtk_obj)
         # self.clear_selection()
-            
-        self.parent.dom_coll.append_uid_property(uid=uid, property_name="dip", property_components=1)
-        self.parent.dom_coll.append_uid_property(uid=uid, property_name="dip direction", property_components=1)
+
+        self.parent.dom_coll.append_uid_property(
+            uid=uid, property_name="dip", property_components=1
+        )
+        self.parent.dom_coll.append_uid_property(
+            uid=uid, property_name="dip direction", property_components=1
+        )
         vtk_obj.set_point_data(data_key="dip", attribute_matrix=dip)
         vtk_obj.set_point_data(data_key="dip direction", attribute_matrix=dip_dir)
         self.parent.dom_coll.replace_vtk(uid, vtk_obj)
