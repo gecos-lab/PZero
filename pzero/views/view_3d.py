@@ -2978,10 +2978,6 @@ class View3D(ViewVTK):
         )
         self.menuAnalysis.addAction(self.actionCalibrate_Pc)
 
-        self.actionManual_picking = QAction("Pick", self)
-        self.actionManual_picking.triggered.connect(lambda: self.act_att())
-        self.menuCreate.addAction(self.actionManual_picking)
-
         # Create Mesh Tools menu if it doesn't exist
         if not hasattr(self, "menuMeshTools"):
             self.menuMeshTools = QMenu("Mesh Tools", self)

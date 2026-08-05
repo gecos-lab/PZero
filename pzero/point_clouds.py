@@ -66,6 +66,7 @@ def normals2dd(self):
         prop_keys = vtk_obj.point_data_keys
         if "Normals" not in prop_keys:
             print("Normal data not present. Import or create normal data to proceed")
+            continue
         else:
             dip = vtk_obj.points_map_dip
             dip_dir = vtk_obj.points_map_dip_direction
@@ -79,11 +80,12 @@ def normals2dd(self):
         # self.parent.dom_coll.replace_vtk(uid, vtk_obj)
         # self.clear_selection()
             
-            self.parent.geol_coll.append_uid_property(uid=uid, property_name="dip", property_components=1)
-            self.parent.geol_coll.append_uid_property(uid=uid, property_name="dip direction", property_components=1)
-            vtk_obj.set_point_data(data_key="dip", attribute_matrix=dip)
-            vtk_obj.set_point_data(data_key="dip", attribute_matrix=dip_dir)
-            self.parent.prop_legend.update_widget(self.parent)
+        self.parent.dom_coll.append_uid_property(uid=uid, property_name="dip", property_components=1)
+        self.parent.dom_coll.append_uid_property(uid=uid, property_name="dip direction", property_components=1)
+        vtk_obj.set_point_data(data_key="dip", attribute_matrix=dip)
+        vtk_obj.set_point_data(data_key="dip direction", attribute_matrix=dip_dir)
+        self.parent.dom_coll.replace_vtk(uid, vtk_obj)
+    self.parent.prop_legend.update_widget(self.parent)
 
 
 def extract_id(vtk_obj, ids):
