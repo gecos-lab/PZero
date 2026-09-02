@@ -120,6 +120,12 @@ def _stm_import_payload(payload):
 
 def _read_stm_export_payload(file_path):
     """Read an STm JSON file or an STm footer embedded in a CSV file."""
+    # TODO: Move STm import to a dedicated Table View command/dialog.  For now
+    # the generic table importer auto-detects full STm exports here: JSON files
+    # are read directly, while CSV/text exports are scanned for the embedded STm
+    # JSON footer written between stm_export_marker_begin/end.  The generic
+    # preview only shows a boundary projection, but import_tables() stores the
+    # full boundaries/units/link payload in custom_table_options.
     if str(file_path).lower().endswith(".json"):
         try:
             with open(file_path, "r", encoding="utf-8-sig") as input_stream:
