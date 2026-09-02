@@ -698,10 +698,10 @@ def _stm_intrusive_anchor_candidate(
         return None
     anchor_name, anchor_level = numeric_contacts[0]
     lower, upper = _stm_interval_from_anchor_side(
-        anchor_level, "above", finite_levels
+        anchor_level, "below", finite_levels
     )
     gap = upper - lower
-    value = anchor_level + gap * 0.1
+    value = anchor_level - gap * 0.1
     if not lower < value < upper:
         value = (lower + upper) / 2.0
     return _stm_candidate(
@@ -711,7 +711,7 @@ def _stm_intrusive_anchor_candidate(
         120,
         value=value,
         unit=unit_name,
-        side="above",
+        side="below",
         anchor=anchor_name,
         endpoint_boundaries={anchor_name},
     )

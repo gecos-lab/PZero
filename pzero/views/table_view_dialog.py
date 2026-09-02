@@ -1657,6 +1657,7 @@ class EditableDataFrameModel(QAbstractTableModel):
                 self, index.column(), index.row()
             ):
                 return False
+        old_value = self._dataframe.iloc[index.row(), index.column()]
         self._dataframe.iloc[index.row(), index.column()] = (
             "" if value is None else str(value)
         )
@@ -1669,6 +1670,7 @@ class EditableDataFrameModel(QAbstractTableModel):
                 row_index=index.row(),
                 column_index=index.column(),
                 table_model=self,
+                old_value=old_value,
             )
         return True
 
@@ -2013,7 +2015,7 @@ class ImportStructuralTopologyUnitsDialog(QDialog):
                 unit_info.get(stm_level_col, "")
             ).strip()
             item = QListWidgetItem(
-                f"{unit_name} ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â {role_name}" if role_name else unit_name
+                f"{unit_name} - {role_name}" if role_name else unit_name
             )
             item.setData(Qt.UserRole, dict(unit_info))
             tooltip_txt = f"Level: {polarity_value}"
@@ -2551,6 +2553,53 @@ class ViewTable(QWidget):
         return self._links_from_options(
             (self.current_table_options or {}).get(option_name, [])
         )
+
+    def _rename_stm_unit_references(self, old_unit_name, new_unit_name):
+        """Move STm option references when a unit Feature is renamed inline."""
+        old_unit_name = str(old_unit_name or "").strip()
+        new_unit_name = str(new_unit_name or "").strip()
+        if (
+            not old_unit_name
+            or not new_unit_name
+            or old_unit_name == new_unit_name
+            or not self.current_table_name
+        ):
+            return
+
+        options = dict(
+            self.parent.custom_table_options.get(self.current_table_name, {}) or {}
+        )
+
+        def remap_links(option_name):
+            remapped = []
+            changed = False
+            for unit_name, boundary_name in sorted(
+                self._links_from_options(options.get(option_name, []))
+            ):
+                if unit_name == old_unit_name:
+                    unit_name = new_unit_name
+                    changed = True
+                remapped.append({"unit": unit_name, "boundary": boundary_name})
+            if changed:
+                options[option_name] = remapped
+
+        remap_links("stm_conformable_links")
+        remap_links("stm_unconformable_links")
+        remap_links("stm_locked_conformable_links")
+
+        level_overrides = dict(options.get("stm_unit_level_overrides", {}) or {})
+        if old_unit_name in level_overrides and new_unit_name not in level_overrides:
+            level_overrides[new_unit_name] = level_overrides.pop(old_unit_name)
+            options["stm_unit_level_overrides"] = level_overrides
+
+        color_codes = dict(options.get("stm_color_codes", {}) or {})
+        feature_colors = dict(color_codes.get("features", {}) or {})
+        if old_unit_name in feature_colors and new_unit_name not in feature_colors:
+            feature_colors[new_unit_name] = feature_colors.pop(old_unit_name)
+            color_codes["features"] = feature_colors
+            options["stm_color_codes"] = color_codes
+
+        self.parent.custom_table_options[self.current_table_name] = options
 
     def _reconcile_stm_relationships(self, edited_side=None):
         """Refresh the read-only reciprocal columns from stored link types."""
@@ -3091,7 +3140,7 @@ class ViewTable(QWidget):
         self.update_editing_ui()
 
     def on_table_model_edited(
-        self, row_index=None, column_index=None, table_model=None
+        self, row_index=None, column_index=None, table_model=None, old_value=None
     ):
         """React to cell edits coming from the table model."""
         if self.current_table_type == stm_table_type:
@@ -3100,6 +3149,19 @@ class ViewTable(QWidget):
                 if table_model is self.boundaries_table_model
                 else "units"
             )
+            if (
+                edited_side == "units"
+                and column_index is not None
+                and 0 <= int(column_index) < len(self.table_model.dataframe.columns)
+                and str(self.table_model.dataframe.columns[int(column_index)])
+                == stm_feature_col
+                and row_index is not None
+                and 0 <= int(row_index) < len(self.table_model.dataframe.index)
+            ):
+                new_value = self.table_model.dataframe.iloc[
+                    int(row_index), int(column_index)
+                ]
+                self._rename_stm_unit_references(old_value, new_value)
             self._persist_stm_composite(
                 edited_side=edited_side,
                 reset_models=True,
@@ -3927,7 +3989,7 @@ class ViewTable(QWidget):
             self._stm_level_overrides(),
             row_labels=row_labels,
         )
-        self.table_model.dataframe = updated_units
+        self.table_model.set_dataframe(updated_units)
         return applied_rows
 
     def _keep_stm_level_overrides_for_rows(self, row_labels):
