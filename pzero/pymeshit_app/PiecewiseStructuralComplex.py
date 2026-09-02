@@ -36,6 +36,18 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from pzero.helpers.structural_topology import (
+    stm_boundary_level_col,
+    stm_boundary_role_col,
+    stm_conformable_boundaries_col,
+    stm_feature_col,
+    stm_level_col,
+    stm_links,
+    stm_names,
+    stm_unit_role_col,
+    stm_unconformable_boundaries_col,
+)
+
 
 
 class PSCSectionSeedSelectionDialog(QDialog):
@@ -2961,18 +2973,18 @@ class PiecewiseStructuralComplex:
             boundary_info
             for boundary_info in boundary_records
             if isinstance(boundary_info, dict)
-            and self._psc_key(boundary_info.get("Role", ""))
+            and self._psc_key(boundary_info.get(stm_boundary_role_col, ""))
             == self._psc_key("model_boundary")
         ]
         model_boundary_feature = self._psc_text(
-            model_boundary_records[0].get("Feature", "")
+            model_boundary_records[0].get(stm_feature_col, "")
             if model_boundary_records
             else ""
         )
         model_boundary_keys = {
-            self._psc_key(boundary_info.get("Feature", ""))
+            self._psc_key(boundary_info.get(stm_feature_col, ""))
             for boundary_info in model_boundary_records
-            if self._psc_key(boundary_info.get("Feature", ""))
+            if self._psc_key(boundary_info.get(stm_feature_col, ""))
         }
         model_boundary_source = options.get("stm_model_boundary_source", {}) or {}
         model_boundary_uid = self._psc_text(model_boundary_source.get("uid", ""))
@@ -2986,28 +2998,32 @@ class PiecewiseStructuralComplex:
                 return "Boundary"
             return name
 
-        representative_by_unit = {}
-        for link in options.get("stm_representative_links", []) or []:
-            if not isinstance(link, dict):
-                continue
-            unit_name = self._psc_text(link.get("unit", ""))
-            representative = boundary_name(link.get("boundary", ""))
-            if unit_name and representative:
-                representative_by_unit[unit_name] = representative
+        conformable_by_unit = {}
+        for unit_name, raw_boundary_name in stm_links(
+            options.get("stm_conformable_links", [])
+        ):
+            unit_name = self._psc_text(unit_name)
+            boundary = boundary_name(raw_boundary_name)
+            if unit_name and boundary:
+                conformable_by_unit.setdefault(unit_name, set()).add(boundary)
         for unit_info in unit_records:
             if not isinstance(unit_info, dict):
                 continue
-            unit_name = self._psc_text(unit_info.get("Feature", ""))
-            representative = boundary_name(
-                unit_info.get("Representative Boundary", "")
-            )
-            if unit_name and representative:
-                representative_by_unit[unit_name] = representative
+            unit_name = self._psc_text(unit_info.get(stm_feature_col, ""))
+            if not unit_name:
+                continue
+            for raw_boundary_name in stm_names(
+                unit_info.get(stm_conformable_boundaries_col, "")
+            ):
+                boundary = boundary_name(raw_boundary_name)
+                if boundary:
+                    conformable_by_unit.setdefault(unit_name, set()).add(boundary)
 
         representative_boundary_keys = {
-            self._psc_key(representative)
-            for representative in representative_by_unit.values()
-            if self._psc_key(representative)
+            self._psc_key(boundary)
+            for boundaries in conformable_by_unit.values()
+            for boundary in boundaries
+            if self._psc_key(boundary)
             != self._psc_key("Boundary")
         }
         units: Dict[str, Dict[str, Any]] = {}
@@ -3018,21 +3034,21 @@ class PiecewiseStructuralComplex:
         for boundary_info in boundary_records:
             if not isinstance(boundary_info, dict):
                 continue
-            feature = boundary_name(boundary_info.get("Feature", ""))
+            feature = boundary_name(boundary_info.get(stm_feature_col, ""))
             if not feature:
                 continue
             feature_key = self._psc_key(feature)
             boundary_features.add(feature)
             boundary_roles.setdefault(
                 feature_key,
-                self._psc_text(boundary_info.get("Role", "")),
+                self._psc_text(boundary_info.get(stm_boundary_role_col, "")),
             )
             boundary_order.append(
                 {
                     "feature": feature,
-                    "role": self._psc_text(boundary_info.get("Role", "")),
+                    "role": self._psc_text(boundary_info.get(stm_boundary_role_col, "")),
                     "polarity": self._psc_sort_key(
-                        boundary_info.get("Level", "")
+                        boundary_info.get(stm_boundary_level_col, "")
                     ),
                     "row_index": len(boundary_order),
                     "is_representative": feature_key
@@ -3043,20 +3059,23 @@ class PiecewiseStructuralComplex:
         for unit_idx, unit_info in enumerate(unit_records):
             if not isinstance(unit_info, dict):
                 continue
-            feature = self._psc_text(unit_info.get("Feature", ""))
+            feature = self._psc_text(unit_info.get(stm_feature_col, ""))
             if not feature:
                 continue
-            raw_boundaries = unit_info.get("Boundaries", [])
-            if isinstance(raw_boundaries, str):
-                raw_boundaries = raw_boundaries.split(",")
             boundaries = {
                 boundary_name(value)
-                for value in (raw_boundaries or [])
+                for value in stm_names(
+                    unit_info.get(stm_unconformable_boundaries_col, "")
+                )
                 if boundary_name(value)
             }
-            representative = representative_by_unit.get(feature, "")
-            if representative:
-                boundaries.add(representative)
+            conformable_boundaries = set(conformable_by_unit.get(feature, set()))
+            boundaries.update(conformable_boundaries)
+            representative = (
+                sorted(conformable_boundaries, key=self._psc_key)[0]
+                if conformable_boundaries
+                else ""
+            )
             domain_items = [
                 (column_name, value)
                 for column_name, value in unit_info.items()
@@ -3080,11 +3099,12 @@ class PiecewiseStructuralComplex:
                 "name": feature,
                 "feature": feature,
                 "unit_role": self._psc_unit_role(
-                    unit_info.get("Unit Role", "TU")
+                    unit_info.get(stm_unit_role_col, "TU")
                 ),
-                "polarity": self._psc_sort_key(unit_info.get("Level", "")),
+                "polarity": self._psc_sort_key(unit_info.get(stm_level_col, "")),
                 "domains": domains,
                 "boundaries": boundaries,
+                "conformable_boundaries": conformable_boundaries,
                 "representative_boundary": representative,
                 "source": "stm",
             }
@@ -3101,6 +3121,7 @@ class PiecewiseStructuralComplex:
             "boundary_features": boundary_features,
             "boundary_order": boundary_order,
             "boundary_roles": boundary_roles,
+            "conformable_boundary_keys": representative_boundary_keys,
             "representative_boundary_keys": representative_boundary_keys,
             "model_boundary_feature": model_boundary_feature,
             "model_boundary_uid": model_boundary_uid,
@@ -4040,10 +4061,13 @@ class PiecewiseStructuralComplex:
     def _psc_representative_boundary_keys(
         self, psc_model: Dict[str, Any]
     ) -> set:
-        """Return boundary keys explicitly linked as unit representatives."""
+        """Return boundary keys explicitly linked as conformable surfaces."""
         keys = {
             self._psc_key(value)
-            for value in psc_model.get("representative_boundary_keys", set())
+            for value in psc_model.get(
+                "conformable_boundary_keys",
+                psc_model.get("representative_boundary_keys", set()),
+            )
             if self._psc_key(value)
         }
         if keys:
@@ -4055,13 +4079,27 @@ class PiecewiseStructuralComplex:
             and boundary_info.get("is_representative")
             and self._psc_key(boundary_info.get("feature", ""))
         }
+
+    def _psc_unit_conformable_boundary_keys(self, unit_info: Dict[str, Any]) -> set:
+        """Return conformable boundary keys linked to one STm unit."""
+        keys = {
+            self._psc_key(boundary)
+            for boundary in unit_info.get("conformable_boundaries", []) or []
+            if self._psc_key(boundary)
+        }
+        if keys:
+            return keys
+        representative_key = self._psc_key(
+            unit_info.get("representative_boundary", "")
+        )
+        return {representative_key} if representative_key else set()
     
     def _psc_prepare_topology_side_context(
         self,
         psc_model: Dict[str, Any],
         mapped_units: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """Infer owner/opposite sides for representative surfaces from STm topology."""
+        """Infer owner/opposite sides for conformable surfaces from STm topology."""
         context: Dict[str, Any] = {"representative_unit_signs": {}}
         bounds = self._psc_domain_bounds()
         diagonal = 1.0
@@ -4106,12 +4144,7 @@ class PiecewiseStructuralComplex:
                 sign_value = self._psc_sign(signed_distance, tolerance)
                 if sign_value == 0:
                     continue
-                if (
-                    self._psc_key(
-                        unit_info.get("representative_boundary", "")
-                    )
-                    == boundary_key
-                ):
+                if boundary_key in self._psc_unit_conformable_boundary_keys(unit_info):
                     matching_signs.append(sign_value)
                 else:
                     non_matching_signs.append(sign_value)
@@ -4138,11 +4171,9 @@ class PiecewiseStructuralComplex:
         reference_seed: np.ndarray,
         target_surface_map: Dict[str, Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """Return signed side constraints implied by STm representative surfaces."""
+        """Return signed side constraints implied by STm conformable surfaces."""
         constraints = []
-        unit_representative_key = self._psc_key(
-            unit_info.get("representative_boundary", "")
-        )
+        unit_conformable_keys = self._psc_unit_conformable_boundary_keys(unit_info)
         side_context = getattr(self, "_psc_side_context", {}) or {}
         representative_signs = side_context.get("representative_unit_signs", {}) or {}
         representative_boundary_keys = self._psc_representative_boundary_keys(
@@ -4169,16 +4200,16 @@ class PiecewiseStructuralComplex:
                     )
                 if owner_sign == 0:
                     continue
-                owns_boundary = unit_representative_key == boundary_key
+                owns_boundary = boundary_key in unit_conformable_keys
                 desired_sign = owner_sign if owns_boundary else -owner_sign
                 constraints.append(
                     {
                         "surface_idx": surface_idx,
                         "sign": desired_sign,
                         "label": boundary_info.get("label", boundary_key),
-                        "reason": "representative-own-side"
+                        "reason": "conformable-own-side"
                         if owns_boundary
-                        else "representative-opposite-side",
+                        else "conformable-opposite-side",
                     }
                 )
     

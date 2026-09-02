@@ -78,6 +78,17 @@ from pzero.helpers.structural_topology import (
     build_stm_json,
     is_stm_json,
     read_stm_json,
+    stm_base_cols,
+    stm_boundary_cols,
+    stm_boundary_level_col,
+    stm_boundary_role_col,
+    stm_domain_col,
+    stm_feature_col,
+    stm_level_col,
+    stm_links,
+    stm_table_type,
+    stm_unit_cols,
+    stm_unit_role_col,
 )
 from pzero.imports.cesium2vtk import vtk2cesium
 from pzero.imports.dem2vtk import dem2vtk
@@ -2252,15 +2263,20 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         for table_name, dataframe in self.custom_tables.items():
             table_type = self.custom_table_types.get(table_name, "manual")
             table_options = dict(self.custom_table_options.get(table_name, {}) or {})
-            if table_type == "stm" and isinstance(
+            if table_type == stm_table_type and isinstance(
                 table_options.get("stm_tables"), dict
             ):
                 stm_tables = table_options.pop("stm_tables")
+                locked_conformable_links = stm_links(
+                    table_options.get("stm_locked_conformable_links", [])
+                )
                 table_options.pop("manual_units", None)
-                table_options.pop("manual_connections", None)
-                table_options.pop("representative_connections", None)
-                table_options.pop("stm_representative_links", None)
-                table_options.pop("stm_manual_links", None)
+                table_options.pop("conformable_connections", None)
+                table_options.pop("unconformable_connections", None)
+                table_options.pop("locked_conformable_connections", None)
+                table_options.pop("stm_conformable_links", None)
+                table_options.pop("stm_unconformable_links", None)
+                table_options.pop("stm_locked_conformable_links", None)
                 table_options.pop("unit_renames", None)
                 table_options.pop("stm_color_codes", None)
                 tables_payload["tables"].append(
@@ -2272,17 +2288,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             name=table_name,
                             boundaries=stm_tables.get("boundaries", []),
                             units=stm_tables.get("units", []),
-                            boundary_columns=[
-                                "Feature", "Role", "Level", "Units"
-                            ],
-                            unit_columns=[
-                                "Feature",
-                                "Unit Role",
-                                "Level",
-                                "Boundaries",
-                                "Representative Boundary",
-                                "Domain_1",
-                            ],
+                            locked_conformable_links=locked_conformable_links,
+                            boundary_columns=stm_boundary_cols,
+                            unit_columns=stm_unit_cols,
                         ),
                     }
                 )
@@ -2328,35 +2336,33 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             table_type = table_payload.get("table_type", "manual")
             stm_payload = table_payload.get("stm")
             if (
-                table_type == "stm"
+                table_type == stm_table_type
                 and is_stm_json(stm_payload)
             ):
                 decoded = read_stm_json(stm_payload)
                 boundaries = decoded["boundaries"]
                 table_rows = [
                     {
-                        "Feature": boundary.get("Feature", ""),
-                        "Unit Role": "Discontinuity",
-                        "Level": boundary.get("Level", ""),
-                        "Domain_1": "",
+                        stm_feature_col: boundary.get(stm_feature_col, ""),
+                        stm_unit_role_col: "Discontinuity",
+                        stm_level_col: boundary.get(stm_boundary_level_col, ""),
+                        stm_domain_col(1): "",
                     }
                     for boundary in boundaries
                     if isinstance(boundary, dict)
                 ]
                 self.custom_tables[table_name] = pd_DataFrame(
                     table_rows,
-                    columns=[
-                        "Feature",
-                        "Unit Role",
-                        "Level",
-                        "Domain_1",
-                    ],
+                    columns=stm_base_cols,
                 )
                 table_options = dict(table_payload.get("options", {}) or {})
                 table_options["stm_tables"] = {
                     "boundaries": boundaries,
                     "units": decoded["units"],
                 }
+                table_options["stm_locked_conformable_links"] = decoded.get(
+                    "locked_conformable_links", []
+                )
                 self.custom_table_options[table_name] = table_options
             else:
                 dataframe_payload = table_payload.get("dataframe", {})
@@ -3945,10 +3951,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             if not feature_name:
                 continue
             units.append({
-                "Feature": feature_name,
-                "Unit Role": "Discontinuity",
-                "Level": row.get("time", 0.0),
-                "Domain_1": "",
+                stm_feature_col: feature_name,
+                stm_unit_role_col: "Discontinuity",
+                stm_level_col: row.get("time", 0.0),
+                stm_domain_col(1): "",
                 "feature": feature_name,
                 "role": role_name,
                 "color_R": row.get("color_R", 255),
@@ -3959,7 +3965,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         return sorted(
             units,
             key=lambda unit_info: (
-                str(unit_info.get("Feature", "")).casefold(),
+                str(unit_info.get(stm_feature_col, "")).casefold(),
                 str(unit_info.get("role", "")).casefold(),
             ),
         )
@@ -3968,7 +3974,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Push STm level values from one table into the geology legend."""
         if not table_name:
             return
-        if self.custom_table_types.get(table_name) != "stm":
+        if self.custom_table_types.get(table_name) != stm_table_type:
             return
 
         legend_df = getattr(self.geol_coll, "legend_df", pd_DataFrame())
@@ -3978,8 +3984,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             or legend_df.empty
             or table_df is None
             or table_df.empty
-            or "Feature" not in table_df.columns
-            or "Level" not in table_df.columns
+            or stm_feature_col not in table_df.columns
+            or stm_level_col not in table_df.columns
         ):
             return
 
@@ -3999,10 +4005,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             for boundary in boundaries:
                 if not isinstance(boundary, dict):
                     continue
-                stm_feature = str(boundary.get("Feature", "")).strip()
-                stm_role = str(boundary.get("Role", "")).strip().casefold()
+                stm_feature = str(boundary.get(stm_feature_col, "")).strip()
+                stm_role = str(
+                    boundary.get(stm_boundary_role_col, "")
+                ).strip().casefold()
                 try:
-                    polarity_value = float(boundary.get("Level", ""))
+                    polarity_value = float(boundary.get(stm_boundary_level_col, ""))
                 except (TypeError, ValueError):
                     continue
                 mask = (legend_features == stm_feature) & (
@@ -4013,9 +4021,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     legend_updated = True
         else:
             for _, row in table_df.iterrows():
-                stm_feature = str(row.get("Feature", "")).strip()
+                stm_feature = str(row.get(stm_feature_col, "")).strip()
                 try:
-                    polarity_value = float(row.get("Level", ""))
+                    polarity_value = float(row.get(stm_level_col, ""))
                 except (TypeError, ValueError):
                     continue
                 mask = legend_features == stm_feature
@@ -4038,9 +4046,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         polarity_by_key = {
             (
-                unit_info["Feature"],
+                unit_info[stm_feature_col],
                 str(unit_info.get("role", "")).strip().casefold(),
-            ): unit_info.get("Level", "")
+            ): unit_info.get(stm_level_col, "")
             for unit_info in legend_units
         }
         feature_counts = {}
@@ -4054,21 +4062,22 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         tables_updated = False
 
         for table_name, table_df in self.custom_tables.items():
-            if self.custom_table_types.get(table_name) != "stm":
+            if self.custom_table_types.get(table_name) != stm_table_type:
                 continue
             if table_df is None:
                 continue
 
-            if "Domain" in table_df.columns and "Domain_1" not in table_df.columns:
-                table_df.rename(columns={"Domain": "Domain_1"}, inplace=True)
-            if "Feature" not in table_df.columns:
-                table_df["Feature"] = ""
-            if "Unit Role" not in table_df.columns:
-                table_df["Unit Role"] = "Discontinuity"
-            if "Level" not in table_df.columns:
-                table_df["Level"] = ""
+            first_domain_col = stm_domain_col(1)
+            if "Domain" in table_df.columns and first_domain_col not in table_df.columns:
+                table_df.rename(columns={"Domain": first_domain_col}, inplace=True)
+            if stm_feature_col not in table_df.columns:
+                table_df[stm_feature_col] = ""
+            if stm_unit_role_col not in table_df.columns:
+                table_df[stm_unit_role_col] = "Discontinuity"
+            if stm_level_col not in table_df.columns:
+                table_df[stm_level_col] = ""
             if not any(str(column).startswith("Domain") for column in table_df.columns):
-                table_df["Domain_1"] = ""
+                table_df[first_domain_col] = ""
 
             table_options = self.custom_table_options.get(table_name, {}) or {}
             stm_tables = table_options.get("stm_tables", {})
@@ -4077,20 +4086,22 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 for boundary in stm_tables.get("boundaries", []):
                     if not isinstance(boundary, dict):
                         continue
-                    feature = str(boundary.get("Feature", "")).strip()
-                    role = str(boundary.get("Role", "")).strip().casefold()
+                    feature = str(boundary.get(stm_feature_col, "")).strip()
+                    role = str(
+                        boundary.get(stm_boundary_role_col, "")
+                    ).strip().casefold()
                     polarity = polarity_by_key.get((feature, role))
                     if polarity is not None:
-                        boundary["Level"] = polarity
+                        boundary[stm_boundary_level_col] = polarity
                         table_polarities[feature] = polarity
             for row_label in table_df.index.tolist():
-                stm_feature = str(table_df.at[row_label, "Feature"]).strip()
+                stm_feature = str(table_df.at[row_label, stm_feature_col]).strip()
                 polarity = table_polarities.get(
                     stm_feature,
                     unique_feature_polarities.get(stm_feature),
                 )
                 if polarity is not None:
-                    table_df.at[row_label, "Level"] = polarity
+                    table_df.at[row_label, stm_level_col] = polarity
             tables_updated = True
 
         if tables_updated:

@@ -26,6 +26,14 @@ from pzero.helpers.helper_functions import auto_sep
 from pzero.helpers.structural_topology import (
     is_stm_json,
     read_stm_json,
+    stm_domain_col,
+    stm_export_marker_begin,
+    stm_export_marker_end,
+    stm_feature_col,
+    stm_level_col,
+    stm_table_type,
+    stm_unit_role_col,
+    stm_unit_roles,
 )
 from pzero.properties_manager import PropertiesCMaps
 from pzero.ui.import_window_ui import Ui_ImportOptionsWindow
@@ -39,24 +47,8 @@ TEXT_TABLE_FILTER = (
 )
 SPECIAL_ASSIGNMENTS = ["As is", "User defined", "N.a."]
 COLORMAP_ASSIGNMENTS = ["value", "color_R", "color_G", "color_B"]
-STRUCTURAL_TOPOLOGY_TABLE_TYPE = "stm"
-STRUCTURAL_TOPOLOGY_FEATURE_COLUMN = "Feature"
-STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN = "Unit Role"
-STRUCTURAL_TOPOLOGY_POLARITY_COLUMN = "Level"
-STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS = [
-    STRUCTURAL_TOPOLOGY_FEATURE_COLUMN,
-    STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN,
-    STRUCTURAL_TOPOLOGY_POLARITY_COLUMN,
-]
-STRUCTURAL_TOPOLOGY_EXPORT_MARKER_BEGIN = "# PZERO_STM_EXPORT BEGIN"
-STRUCTURAL_TOPOLOGY_EXPORT_MARKER_END = "# PZERO_STM_EXPORT END"
-STRUCTURAL_TOPOLOGY_UNIT_VALUES = [
-    "TU",
-    "SU",
-    "IU",
-    "SD",
-    "Discontinuity",
-]
+stm_required_cols = [stm_feature_col, stm_unit_role_col, stm_level_col]
+stm_import_unit_roles = [*stm_unit_roles, "Discontinuity"]
 
 
 def _normalise_stm_unit_role(raw_value):
@@ -64,7 +56,7 @@ def _normalise_stm_unit_role(raw_value):
     value = str(raw_value or "").strip()
     valid_by_casefold = {
         str(valid_value).casefold(): str(valid_value)
-        for valid_value in STRUCTURAL_TOPOLOGY_UNIT_VALUES
+        for valid_value in stm_import_unit_roles
     }
     return valid_by_casefold.get(
         value.casefold(),
@@ -112,13 +104,16 @@ def _stm_import_payload(payload):
         return None
     decoded = read_stm_json(payload)
     return {
-        "table_type": STRUCTURAL_TOPOLOGY_TABLE_TYPE,
+        "table_type": stm_table_type,
         "table_name": decoded["name"],
         "options": {
             "stm_tables": {
                 "boundaries": decoded["boundaries"],
                 "units": decoded["units"],
             },
+            "stm_locked_conformable_links": decoded.get(
+                "locked_conformable_links", []
+            ),
         },
     }
 
@@ -140,7 +135,7 @@ def _read_stm_export_payload(file_path):
 
     end_index = None
     for line_index in range(len(file_lines) - 1, -1, -1):
-        if file_lines[line_index].strip() == STRUCTURAL_TOPOLOGY_EXPORT_MARKER_END:
+        if file_lines[line_index].strip() == stm_export_marker_end:
             end_index = line_index
             break
     if end_index is None:
@@ -148,7 +143,7 @@ def _read_stm_export_payload(file_path):
 
     start_index = None
     for line_index in range(end_index - 1, -1, -1):
-        if file_lines[line_index].strip() == STRUCTURAL_TOPOLOGY_EXPORT_MARKER_BEGIN:
+        if file_lines[line_index].strip() == stm_export_marker_begin:
             start_index = line_index + 1
             break
     if start_index is None:
@@ -182,14 +177,14 @@ def _stm_boundary_dataframe(payload):
             continue
         rows.append(
             {
-                STRUCTURAL_TOPOLOGY_FEATURE_COLUMN: boundary.get("Feature", ""),
-                STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN: "Discontinuity",
-                STRUCTURAL_TOPOLOGY_POLARITY_COLUMN: boundary.get("Level", ""),
-                "Domain_1": "",
+                stm_feature_col: boundary.get(stm_feature_col, ""),
+                stm_unit_role_col: "Discontinuity",
+                stm_level_col: boundary.get(stm_level_col, ""),
+                stm_domain_col(1): "",
             }
         )
     return pd_DataFrame(rows) if rows else pd_DataFrame(
-        columns=STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS + ["Domain_1"]
+        columns=stm_required_cols + [stm_domain_col(1)]
     )
 
 
@@ -297,9 +292,9 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         if self.ImportAsSTmCheckBox.isChecked():
             return [
                 "As is",
-                STRUCTURAL_TOPOLOGY_FEATURE_COLUMN,
-                STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN,
-                STRUCTURAL_TOPOLOGY_POLARITY_COLUMN,
+                stm_feature_col,
+                stm_unit_role_col,
+                stm_level_col,
                 "Domain",
                 "User defined",
                 "N.a.",
@@ -353,7 +348,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         self.preview_stm_payload = _read_stm_export_payload(self.preview_path)
         if self.preview_stm_payload is not None and self.preview_stm_payload.get(
             "table_type"
-        ) == STRUCTURAL_TOPOLOGY_TABLE_TYPE:
+        ) == stm_table_type:
             self.ImportAsSTmCheckBox.setChecked(True)
             self.ImportAsColormapCheckBox.setChecked(False)
 
@@ -396,7 +391,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         if (
             self.preview_stm_payload is not None
             and self.preview_stm_payload.get("table_type")
-            == STRUCTURAL_TOPOLOGY_TABLE_TYPE
+            == stm_table_type
         ):
             return _stm_boundary_dataframe(self.preview_stm_payload)
         delimiter = self._current_separator()
@@ -475,7 +470,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         if self.ImportAsColormapCheckBox.isChecked():
             target_assignments = COLORMAP_ASSIGNMENTS
         else:
-            target_assignments = STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS
+            target_assignments = stm_required_cols
 
         self.rename_dict = {}
         remaining_targets = {
@@ -486,7 +481,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             matched_target = remaining_targets.pop(column_name_txt.casefold(), None)
             if self.ImportAsSTmCheckBox.isChecked():
                 if column_name_txt == "Domain":
-                    self.rename_dict[idx] = "Domain_1"
+                    self.rename_dict[idx] = stm_domain_col(1)
                     continue
                 if column_name_txt.startswith("Domain_"):
                     suffix = column_name_txt.split("_", 1)[1]
@@ -716,7 +711,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
                 return
         if import_as_stm:
             mapped_names = {spec["final_name"] for spec in column_specs}
-            required_names = set(STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS)
+            required_names = set(stm_required_cols)
             if not required_names.issubset(mapped_names):
                 QMessageBox.warning(
                     self,
@@ -779,7 +774,7 @@ def _read_table_dataframe(file_path, import_config):
     stm_payload = _read_stm_export_payload(file_path)
     if (
         stm_payload is not None
-        and stm_payload.get("table_type") == STRUCTURAL_TOPOLOGY_TABLE_TYPE
+        and stm_payload.get("table_type") == stm_table_type
     ):
         return _stm_boundary_dataframe(stm_payload)
     column_specs = import_config["column_specs"]
@@ -844,25 +839,26 @@ def _normalise_stm_dataframe(input_df):
         return 9999
 
     output_df = input_df.copy()
-    if "Domain" in output_df.columns and "Domain_1" not in output_df.columns:
-        output_df.rename(columns={"Domain": "Domain_1"}, inplace=True)
-    for required_column in STRUCTURAL_TOPOLOGY_REQUIRED_COLUMNS:
+    first_domain_col = stm_domain_col(1)
+    if "Domain" in output_df.columns and first_domain_col not in output_df.columns:
+        output_df.rename(columns={"Domain": first_domain_col}, inplace=True)
+    for required_column in stm_required_cols:
         if required_column not in output_df.columns:
             output_df[required_column] = ""
     for row_label in output_df.index.tolist():
         unit_role = _normalise_stm_unit_role(
-            output_df.at[row_label, STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN]
+            output_df.at[row_label, stm_unit_role_col]
         )
-        output_df.at[row_label, STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN] = unit_role
+        output_df.at[row_label, stm_unit_role_col] = unit_role
     if not any(str(column).startswith("Domain") for column in output_df.columns):
-        output_df["Domain_1"] = ""
+        output_df[first_domain_col] = ""
 
     ordered_columns = [
         column_name
         for column_name in [
-            STRUCTURAL_TOPOLOGY_FEATURE_COLUMN,
-            STRUCTURAL_TOPOLOGY_UNIT_ROLE_COLUMN,
-            STRUCTURAL_TOPOLOGY_POLARITY_COLUMN,
+            stm_feature_col,
+            stm_unit_role_col,
+            stm_level_col,
         ]
         if column_name in output_df.columns
     ]
@@ -917,7 +913,7 @@ def import_tables(self=None, in_file_names=None):
             import_as_colormap = bool(import_config.get("import_as_colormap", False))
             import_as_stm = bool(import_config.get("import_as_stm", False))
             stm_options = {}
-            if stm_payload is not None and stm_payload.get("table_type") == STRUCTURAL_TOPOLOGY_TABLE_TYPE:
+            if stm_payload is not None and stm_payload.get("table_type") == stm_table_type:
                 import_as_stm = True
                 import_as_colormap = False
                 stm_options = dict(stm_payload.get("options", {}))
@@ -945,7 +941,7 @@ def import_tables(self=None, in_file_names=None):
                     "mode": import_config.get("colormap_mode", "continuous")
                 }
             elif import_as_stm:
-                self.custom_table_types[table_name] = STRUCTURAL_TOPOLOGY_TABLE_TYPE
+                self.custom_table_types[table_name] = stm_table_type
                 self.custom_table_options[table_name] = stm_options
             else:
                 self.custom_table_types[table_name] = "manual"
