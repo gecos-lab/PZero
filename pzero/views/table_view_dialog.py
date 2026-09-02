@@ -85,6 +85,7 @@ from pzero.helpers.structural_topology import (
     stm_feature_colors_from_options,
     stm_level_diagnostic_messages,
     stm_level_overrides_for_rows,
+    stm_links,
     stm_structural_level_preflight,
     stm_table_type,
     stm_unit_feature_counts,
