@@ -2867,7 +2867,6 @@ class ViewTable(QWidget):
                 stm_boundary_units_col,
             }
         return column_name not in {
-            stm_unit_level_col,
             stm_unconformable_boundaries_col,
             stm_conformable_boundaries_col,
         }
@@ -3162,6 +3161,16 @@ class ViewTable(QWidget):
                     int(row_index), int(column_index)
                 ]
                 self._rename_stm_unit_references(old_value, new_value)
+            if (
+                edited_side == "units"
+                and column_index is not None
+                and 0 <= int(column_index) < len(self.table_model.dataframe.columns)
+                and str(self.table_model.dataframe.columns[int(column_index)])
+                == stm_unit_level_col
+                and row_index is not None
+                and 0 <= int(row_index) < len(self.table_model.dataframe.index)
+            ):
+                self._store_stm_unit_level_override(int(row_index), old_value)
             self._persist_stm_composite(
                 edited_side=edited_side,
                 reset_models=True,
@@ -3983,6 +3992,39 @@ class ViewTable(QWidget):
             options.pop("stm_unit_level_overrides", None)
         self.parent.custom_table_options[table_name] = options
 
+    def _store_stm_unit_level_override(self, row_index, old_value=None):
+        """Persist a manually edited unit Level as a user override."""
+        if row_index < 0 or row_index >= len(self.table_model.dataframe.index):
+            return
+        row_label = self.table_model.dataframe.index[row_index]
+        unit_name = str(
+            self.table_model.dataframe.at[row_label, stm_feature_col] or ""
+        ).strip()
+        if not unit_name:
+            return
+        overrides = self._stm_level_overrides()
+        raw_value = str(
+            self.table_model.dataframe.at[row_label, stm_unit_level_col] or ""
+        ).strip()
+        if not raw_value:
+            overrides.pop(unit_name, None)
+            self._save_stm_level_overrides(overrides)
+            return
+        try:
+            overrides[unit_name] = float(raw_value)
+        except (TypeError, ValueError):
+            QMessageBox.warning(
+                self,
+                "Invalid level",
+                "Level must be numeric or empty.",
+            )
+            self.table_model.dataframe.at[row_label, stm_unit_level_col] = (
+                "" if old_value is None else old_value
+            )
+            self._save_stm_level_overrides(overrides)
+            return
+        self._save_stm_level_overrides(overrides)
+
     def _apply_stm_level_overrides_to_table(self, row_labels=None):
         updated_units, applied_rows = apply_stm_level_overrides(
             self.table_model.dataframe,
@@ -4070,6 +4112,60 @@ class ViewTable(QWidget):
                 break
         self._save_stm_level_overrides(overrides)
         return assigned_rows
+
+    def _confirm_stm_existing_unit_levels(self):
+        """Ask whether existing unit levels should override the calculation."""
+        units = self.table_model.dataframe
+        if (
+            units is None
+            or stm_feature_col not in units.columns
+            or stm_unit_level_col not in units.columns
+        ):
+            return True
+        existing_levels = []
+        for row_label, row in units.iterrows():
+            unit_name = str(row.get(stm_feature_col, "") or "").strip()
+            raw_level = str(row.get(stm_unit_level_col, "") or "").strip()
+            if not unit_name or not raw_level:
+                continue
+            try:
+                float(raw_level)
+            except (TypeError, ValueError):
+                continue
+            existing_levels.append((unit_name, raw_level))
+        if not existing_levels:
+            return True
+
+        preview = "\n".join(
+            f"- {unit_name}: {level_value}"
+            for unit_name, level_value in existing_levels[:8]
+        )
+        if len(existing_levels) > 8:
+            preview += f"\n- ... and {len(existing_levels) - 8} more"
+        reply = QMessageBox.question(
+            self,
+            "Unit level",
+            "Some unit Levels are already filled.\n\n"
+            "Keep these values as manual overrides after recalculation?\n\n"
+            f"{preview}\n\n"
+            "Choose No to let the automatic calculation overwrite all existing "
+            "unit Levels.\n\n"
+            "To keep only some values, cancel this calculation and clear the "
+            "Levels you want to overwrite.",
+            QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+            QMessageBox.Yes,
+        )
+        if reply == QMessageBox.Cancel:
+            return None
+        if reply == QMessageBox.No:
+            self._save_stm_level_overrides({})
+            return False
+
+        overrides = self._stm_level_overrides()
+        for unit_name, raw_level in existing_levels:
+            overrides[unit_name] = float(raw_level)
+        self._save_stm_level_overrides(overrides)
+        return True
 
     def generate_units_from_boundaries(self):
         """Generate TU units from selected boundaries and create reciprocal links."""
@@ -4303,6 +4399,9 @@ class ViewTable(QWidget):
         """Calculate unit structural levels from STm topology."""
         if self.current_table_type != stm_table_type:
             return
+        keep_existing_levels = self._confirm_stm_existing_unit_levels()
+        if keep_existing_levels is None:
+            return
         if not self._confirm_stm_level_preflight():
             return
         result = calculate_stm_unit_levels(
@@ -4311,6 +4410,9 @@ class ViewTable(QWidget):
             conformable_links=self._stm_option_links("stm_conformable_links"),
             unconformable_links=self._stm_option_links(
                 "stm_unconformable_links"
+            ),
+            locked_conformable_links=self._stm_option_links(
+                "stm_locked_conformable_links"
             ),
         )
         error_messages = self._stm_level_diagnostic_messages(
@@ -4353,14 +4455,16 @@ class ViewTable(QWidget):
             if row_label in units.index:
                 units.at[row_label, stm_unit_level_col] = level_value
         unresolved_rows = set(result.get("unresolved_rows", {}))
-        self._keep_stm_level_overrides_for_rows(unresolved_rows)
-        override_rows = self._apply_stm_level_overrides_to_table(unresolved_rows)
+        override_rows = set()
+        if keep_existing_levels:
+            self._save_stm_level_overrides(self._stm_level_overrides())
+            override_rows = self._apply_stm_level_overrides_to_table()
         prompted_rows = self._prompt_stm_unresolved_unit_levels(unresolved_rows)
         override_rows.update(prompted_rows)
 
         self._persist_stm_composite(reset_models=True)
         calculated = len(result.get("levels_by_row", {}))
-        unresolved = max(0, len(result.get("unresolved_rows", {})) - len(override_rows))
+        unresolved = len(unresolved_rows - override_rows)
         message = f"Calculated {calculated} unit levels."
         if override_rows:
             message += (

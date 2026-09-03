@@ -67,7 +67,6 @@ stm_non_boundary_roles = {"TU", "SU", "IU", "SD"}
 stm_generated_unit_roles = {
     "top": "SU",
     "base": "SU",
-    "bottom": "SU",
     "intrusive": "IU",
     "tectonic": "TU",
     "fault": "TU",
@@ -642,7 +641,7 @@ def _stm_preferred_side(unit_role, boundary_role):
     role_key = str(boundary_role or "").strip().casefold()
     if role_key == "top":
         return "above"
-    if role_key in {"base", "bottom"}:
+    if role_key == "base":
         return "below"
     return None
 
@@ -726,6 +725,7 @@ def _stm_single_conformable_candidates(
     boundary_levels,
     boundary_roles,
     finite_levels,
+    locked_anchor=False,
 ):
     side_candidates = {}
     for boundary_name in linked_boundaries:
@@ -767,9 +767,12 @@ def _stm_single_conformable_candidates(
     )
     if preferred_side:
         if preferred_side in side_candidates:
-            side_candidates[preferred_side]["score"] += 5
+            side_candidates[preferred_side]["score"] += (
+                80 if locked_anchor else 5
+            )
             side_candidates[preferred_side]["source"] = (
-                f"{side_candidates[preferred_side]['source']}+role"
+                f"{side_candidates[preferred_side]['source']}+"
+                f"{'locked-role' if locked_anchor else 'role'}"
             )
         else:
             lower, upper = _stm_interval_from_anchor_side(
@@ -778,10 +781,31 @@ def _stm_single_conformable_candidates(
             side_candidates[preferred_side] = _stm_candidate(
                 lower,
                 upper,
-                "role-hint",
-                5,
+                "locked-role"
+                if locked_anchor
+                else "role-hint",
+                80
+                if locked_anchor
+                else 5,
                 unit=unit_name,
                 side=preferred_side,
+                anchor=anchor_name,
+                endpoint_boundaries={anchor_name},
+            )
+        if locked_anchor and preferred_side in side_candidates:
+            return [side_candidates[preferred_side]]
+        if len(side_candidates) == 1 and not locked_anchor:
+            opposite_side = "below" if preferred_side == "above" else "above"
+            lower, upper = _stm_interval_from_anchor_side(
+                anchor_level, opposite_side, finite_levels
+            )
+            side_candidates[opposite_side] = _stm_candidate(
+                lower,
+                upper,
+                "ambiguous-side",
+                0,
+                unit=unit_name,
+                side=opposite_side,
                 anchor=anchor_name,
                 endpoint_boundaries={anchor_name},
             )
@@ -823,6 +847,7 @@ def _stm_interval_conflict_count(
     unit_info_by_name,
     links_by_unit,
     boundary_levels,
+    conformable_by_unit=None,
 ):
     conflicts = 0
     units_by_interval = {}
@@ -841,6 +866,21 @@ def _stm_interval_conflict_count(
             boundary_levels,
         ):
             conflicts += len(interval_units)
+    conformable_by_unit = conformable_by_unit or {}
+    units_by_anchor_side = {}
+    for unit_name, candidate in assignment.items():
+        anchor_name = candidate.get("anchor")
+        side = candidate.get("side")
+        if (
+            not anchor_name
+            or not side
+            or anchor_name not in conformable_by_unit.get(unit_name, set())
+        ):
+            continue
+        units_by_anchor_side.setdefault((anchor_name, side), []).append(unit_name)
+    for anchor_units in units_by_anchor_side.values():
+        if len(anchor_units) > 1:
+            conflicts += len(anchor_units)
     return conflicts
 
 
@@ -849,6 +889,7 @@ def _stm_resolve_candidate_options(
     unit_info_by_name,
     links_by_unit,
     boundary_levels,
+    conformable_by_unit=None,
 ):
     """Return the best side/interval combinations for calculable units."""
     unit_names = tuple(
@@ -890,11 +931,11 @@ def _stm_resolve_candidate_options(
                 unit_info_by_name,
                 links_by_unit,
                 boundary_levels,
+                conformable_by_unit=conformable_by_unit,
             )
             score = (
                 -conflict_count,
                 sum(candidate["score"] for candidate in assignment.values()),
-                sum(candidate["value"] for candidate in assignment.values()),
             )
             if best_score is None or score > best_score:
                 best_score = score
@@ -971,6 +1012,7 @@ def calculate_stm_unit_levels(
     units,
     conformable_links=None,
     unconformable_links=None,
+    locked_conformable_links=None,
 ):
     """Calculate STm unit levels from conformable topology.
 
@@ -1004,6 +1046,7 @@ def calculate_stm_unit_levels(
     conformable = (
         context["conformable_links"] | stm_links(conformable_links)
     )
+    locked_conformable = stm_links(locked_conformable_links)
     unconformable = (
         context["unconformable_links"] | stm_links(unconformable_links)
     )
@@ -1011,6 +1054,11 @@ def calculate_stm_unit_levels(
         link
         for link in conformable
         if link[0] in unit_names and link[1] in boundary_names
+    }
+    locked_conformable = {
+        link
+        for link in locked_conformable
+        if link in conformable
     }
     unconformable = {
         link
@@ -1075,6 +1123,8 @@ def calculate_stm_unit_levels(
                         boundary_levels,
                         boundary_roles,
                         finite_levels,
+                        locked_anchor=(unit_name, anchor_name)
+                        in locked_conformable,
                     )
                 )
             if intrusive_candidates:
@@ -1209,6 +1259,7 @@ def calculate_stm_unit_levels(
             boundary_levels,
             boundary_roles,
             finite_levels,
+            locked_anchor=(unit_name, anchor_name) in locked_conformable,
         )
         result["candidates_by_unit"][unit_name] = candidates
         candidate_options_by_unit[unit_name] = candidates
@@ -1224,33 +1275,62 @@ def calculate_stm_unit_levels(
         unit_info_by_name,
         links_by_unit,
         boundary_levels,
+        conformable_by_unit=conformable_by_unit,
     )
     selected_candidates = best_solutions[0] if best_solutions else {}
     if len(best_solutions) > 1:
-        result["ambiguity_solutions"] = [
-            {
-                unit_name: {
+        compared_solutions = best_solutions[:2]
+        finite_boundary_levels = {
+            round(level, 9)
+            for level in boundary_levels.values()
+            if math.isfinite(level)
+        }
+        ambiguous_units = []
+        for unit_name in sorted(compared_solutions[0]):
+            rounded_values = set()
+            for solution in compared_solutions:
+                if unit_name not in solution:
+                    continue
+                try:
+                    value = float(solution[unit_name].get("value"))
+                except (TypeError, ValueError):
+                    continue
+                if math.isfinite(value):
+                    rounded_values.add(round(value, 9))
+            if len(rounded_values) <= 1:
+                continue
+            if rounded_values & finite_boundary_levels:
+                continue
+            ambiguous_units.append(unit_name)
+        ambiguity_solutions = []
+        for solution in compared_solutions:
+            solution_payload = {}
+            for unit_name in ambiguous_units:
+                candidate = solution.get(unit_name)
+                if candidate is None:
+                    continue
+                solution_payload[unit_name] = {
                     "row_label": unit_info_by_name[unit_name]["row_label"],
                     "value": candidate["value"],
                     "source": candidate.get("source", ""),
                     "lower": candidate.get("lower"),
                     "upper": candidate.get("upper"),
                 }
-                for unit_name, candidate in solution.items()
-            }
-            for solution in best_solutions[:2]
-        ]
-        diagnostics.append(
-            {
-                "severity": "warning",
-                "code": "ambiguous_topological_assignment",
-                "units": sorted(best_solutions[0]),
-                "message": (
-                    "Equivalent STm level assignments are available; "
-                    "choose one before applying the result."
-                ),
-            }
-        )
+            if solution_payload:
+                ambiguity_solutions.append(solution_payload)
+        if ambiguity_solutions:
+            result["ambiguity_solutions"] = ambiguity_solutions
+            diagnostics.append(
+                {
+                    "severity": "warning",
+                    "code": "ambiguous_topological_assignment",
+                    "units": ambiguous_units,
+                    "message": (
+                        "Equivalent STm level assignments are available; "
+                        "choose one before applying the result."
+                    ),
+                }
+            )
 
     units_by_interval = {}
     for unit_name, candidate in selected_candidates.items():
@@ -1272,7 +1352,7 @@ def calculate_stm_unit_levels(
             links_by_unit,
             boundary_levels,
         )
-        if has_intrusive or has_separator:
+        if has_intrusive:
             ordered_units = sorted(
                 interval_units,
                 key=lambda name: (
@@ -1298,15 +1378,68 @@ def calculate_stm_unit_levels(
             diagnostics.append(
                 {
                     "severity": "warning",
-                    "code": (
-                        "intrusive_interval_split"
-                        if has_intrusive
-                        else "internal_separator_interval_split"
-                    ),
+                    "code": "intrusive_interval_split",
                     "units": ordered_units,
                     "message": (
-                        "Multiple units fall in the same structural interval; "
-                        "partial levels were assigned by table order."
+                        "Multiple units including an intrusive unit fall in "
+                        "the same structural interval; partial levels were "
+                        "assigned by table order."
+                    ),
+                }
+            )
+            continue
+
+        if has_separator:
+            ordered_units = sorted(
+                interval_units,
+                key=lambda name: (
+                    unit_info_by_name[name]["row_order"],
+                    name,
+                ),
+            )
+            split_values = _stm_distribute_interval(
+                lower, upper, len(ordered_units)
+            )
+            alternatives = [
+                list(zip(ordered_units, split_values)),
+                list(zip(ordered_units, reversed(split_values))),
+            ]
+            seen_alternatives = set()
+            for alternative in alternatives:
+                key = tuple((unit_name, round(value, 9)) for unit_name, value in alternative)
+                if key in seen_alternatives:
+                    continue
+                seen_alternatives.add(key)
+                result["ambiguity_solutions"].append(
+                    {
+                        unit_name: {
+                            "row_label": unit_info_by_name[unit_name]["row_label"],
+                            "value": value,
+                            "source": (
+                                selected_candidates[unit_name].get("source", "")
+                                + "+ambiguous-interval"
+                            ),
+                            "lower": lower,
+                            "upper": upper,
+                        }
+                        for unit_name, value in alternative
+                    }
+                )
+            for unit_name in interval_units:
+                unit_info = unit_info_by_name[unit_name]
+                result["unresolved_rows"][unit_info["row_label"]] = (
+                    "ambiguous_shared_interval"
+                )
+                selected_candidates.pop(unit_name, None)
+            diagnostics.append(
+                {
+                    "severity": "warning",
+                    "code": "ambiguous_shared_interval",
+                    "units": ordered_units,
+                    "message": (
+                        "Multiple non-intrusive units fall in the same "
+                        "structural interval with an internal separator; "
+                        "choose the partial-level order manually."
                     ),
                 }
             )
