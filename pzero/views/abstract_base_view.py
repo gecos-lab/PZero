@@ -120,6 +120,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
 
         It is IMPORTANT to check that all signals connected here are in the list of signals to be disconnected.
         """
+        self._signals_disconnected = False
         # prop_legend_cmap_modified ---
         self.prop_legend_lambda = (
             lambda this_property: self.prop_legend_cmap_modified_update_views(
@@ -207,46 +208,43 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         # selection_changed
 
     def disconnect_all_signals(self):
-        """
-        Used to disconnect all windows signals correctly, when a window is closed.
-        If this method is removed PZero will crash when closing a window.
-        If new signals are added, they must be listed also here.
-        It would be nicer to keep a list of signals and then disconnect all signals in
-        the list, but we have not found a way to do this at the moment.
-        """
-        # view signals
-        # # Disconnect signal ===========================================================================================
-        # self.signals.checkboxToggled.disconnect(self.view_sig_check_lmb)
-        # # Disconnect signal ===========================================================================================
-        # self.signals.propertyToggled.disconnect(self.view_sig_prop_lmb)
-
-        # prop_legend_cmap_modified ---
-        self.parent.signals.prop_legend_cmap_modified.disconnect(
-            self.prop_legend_lambda
+        """Disconnect each subscription independently before a view is deleted."""
+        if getattr(self, "_signals_disconnected", False):
+            return
+        self._signals_disconnected = True
+        if hasattr(self, "_cancel_pending_horizon_scan"):
+            self._cancel_pending_horizon_scan()
+        subscriptions = (
+            ("prop_legend_cmap_modified", "prop_legend_lambda"),
+            ("entities_added", "sig_add_lmb"),
+            ("entities_removed", "sig_rem_lmb"),
+            ("geom_modified", "sig_geom_lmb"),
+            ("data_keys_added", "sig_k_add_lmb"),
+            ("data_keys_removed", "sig_k_rmv_lmb"),
+            ("data_val_modified", "sig_val_lmb"),
+            ("metadata_modified", "sig_meta_lmb"),
+            ("legend_color_modified", "sig_clr_lmb"),
+            ("legend_thick_modified", "sig_thk_lmb"),
+            ("legend_point_size_modified", "sig_pnt_lmb"),
+            ("legend_opacity_modified", "sig_opct_lmb"),
+            ("prop_legend_cmap_modified", "update_slices_for_property_change"),
+            ("entities_added", "on_entities_added"),
+            ("entities_removed", "on_entities_removed"),
+            ("prop_legend_cmap_modified", "on_colormap_changed"),
+            ("legend_color_modified", "on_geology_legend_style_changed"),
+            ("legend_thick_modified", "on_geology_legend_style_changed"),
+            ("legend_opacity_modified", "on_geology_legend_style_changed"),
         )
-        # entities_added
-        self.parent.signals.entities_added.disconnect(self.sig_add_lmb)
-        # entities_removed
-        self.parent.signals.entities_removed.disconnect(self.sig_rem_lmb)
-        # geom_modified
-        self.parent.signals.geom_modified.disconnect(self.sig_geom_lmb)
-        # data_keys_added
-        self.parent.signals.data_keys_added.disconnect(self.sig_k_add_lmb)
-        # data_keys_removed
-        self.parent.signals.data_keys_removed.disconnect(self.sig_k_rmv_lmb)
-        # data_val_modified
-        self.parent.signals.data_val_modified.disconnect(self.sig_val_lmb)
-        # metadata_modified
-        self.parent.signals.metadata_modified.disconnect(self.sig_meta_lmb)
-        # legend_color_modified
-        self.parent.signals.legend_color_modified.disconnect(self.sig_clr_lmb)
-        # legend_thick_modified
-        self.parent.signals.legend_thick_modified.disconnect(self.sig_thk_lmb)
-        # legend_point_size_modified
-        self.parent.signals.legend_point_size_modified.disconnect(self.sig_pnt_lmb)
-        # legend_opacity_modified
-        self.parent.signals.legend_opacity_modified.disconnect(self.sig_opct_lmb)
-        # selection_changed
+        for signal_name, slot_name in subscriptions:
+            slot = getattr(self, slot_name, None)
+            signal = getattr(self.parent.signals, signal_name, None)
+            if signal is not None and slot is not None:
+                try:
+                    signal.disconnect(slot)
+                except (RuntimeError, TypeError):
+                    # A prior close or partial initialization may have already
+                    # disconnected this slot; still clean up the remaining ones.
+                    pass
 
     def disable_actions(self):
         """Freeze all actions while doing something."""
@@ -393,10 +391,12 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         for uid in updated_uids:
             # This replaces the previous copy of the actor with the same uid, and updates the actors dataframe.
             # See issue #33 for a discussion on actors replacement by the PyVista add_mesh and add_volume methods.
-            show = self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]
-            show_property = self.actors_df.loc[
-                self.actors_df["uid"] == uid, "show_property"
-            ].values[0]
+            actor_rows = self.actors_df.loc[self.actors_df["uid"] == uid]
+            if actor_rows.empty:
+                # Interpretation views intentionally defer some full actors.
+                continue
+            show = actor_rows["show"].values[0]
+            show_property = actor_rows["show_property"].values[0]
             self.show_actor_with_property(
                 uid=uid,
                 coll_name=collection.collection_name,

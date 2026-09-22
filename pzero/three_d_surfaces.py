@@ -1064,6 +1064,8 @@ def interpolation_delaunay_2d(self):
     delaunay_2d.Update()  # executes the interpolation
     # ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning
     surf_dict["vtk_obj"].ShallowCopy(delaunay_2d.GetOutput())
+    from .helpers.seismic_relink import inherit_surface_seismic_parent
+    inherit_surface_seismic_parent(self.geol_coll, input_uids, surf_dict)
     surf_dict["vtk_obj"].Modified()
     # Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
     if surf_dict["vtk_obj"].points_number > 0:
@@ -1168,6 +1170,8 @@ def regularized_grid_surface_interpolation(self):
         return
 
     surf_dict["vtk_obj"].ShallowCopy(structured_surface)
+    from .helpers.seismic_relink import inherit_surface_seismic_parent
+    inherit_surface_seismic_parent(self.geol_coll, input_uids, surf_dict)
     surf_dict["vtk_obj"].Modified()
     if surf_dict["vtk_obj"].points_number > 0:
         self.geol_coll.add_entity_from_dict(surf_dict)

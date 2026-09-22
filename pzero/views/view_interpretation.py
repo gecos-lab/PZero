@@ -40,6 +40,7 @@ from ..helpers.helper_dialogs import (
 )
 from ..helpers.helper_widgets import Editor, Tracer
 from ..helpers.helper_functions import freeze_gui_off, freeze_gui_on
+from ..imports.segy_reader import get_seismic_metadata, set_seismic_metadata
 
 
 class ViewInterpretation(ViewMap):
@@ -1107,7 +1108,8 @@ class ViewInterpretation(ViewMap):
             return
 
         # dimensions are (nx, ny, nz) - use VTK method
-        dims = seismic.GetDimensions()
+        dims = [0, 0, 0]
+        seismic.GetDimensions(dims)
 
         max_idx = 0
         if self.current_axis == "Inline":  # X-axis usually? or Y?
@@ -1131,35 +1133,8 @@ class ViewInterpretation(ViewMap):
             self.slider_slice.setValue(max_idx)
 
     def update_camera_orientation(self):
-        """Set camera orthogonal to the slice and fit view."""
-        self.plotter.enable_parallel_projection()
-        self.plotter.enable_image_style()
-
-        # If we have current slice bounds and scale, use the robust helper
-        if (
-            hasattr(self, "current_slice_bounds")
-            and self.current_slice_bounds is not None
-        ):
-            scale = [1.0, 1.0, 1.0]
-            if self.plotter.scale is not None:
-                scale = self.plotter.scale
-
-            # Re-calculate center from bounds?
-            # Slice center might not be stored directly unless we calculated it in `update_slice`.
-            # `update_slice` calculates slice_center.
-            # Ideally update_camera_orientation is called AFTER update_slice logic or relies on stored state.
-            # But usually on_view_type_changed calls update_slice immediately after.
-            # So let's rely on update_slice to set the camera.
-            pass
-
-        # Set initial view orientation (before slice is fully loaded)
-        # Don't call reset_camera() here - let update_camera_to_slice() handle the complete camera setup
-        if self.current_axis == "Inline":
-            self.plotter.view_yz()
-        elif self.current_axis == "Crossline":
-            self.plotter.view_xz()
-        elif self.current_axis == "Z-slice":
-            self.plotter.view_xy()
+        """Restore the survey-plane camera, including after finishing a pick."""
+        self.update_camera_to_slice()
 
     def end_pick(self, pos):
         """Override View2D.end_pick to prevent resetting to default View XY."""
@@ -1416,6 +1391,8 @@ class ViewInterpretation(ViewMap):
                     plane_center, plane_normal, _row_vec, _col_vec, _dims = plane_info
                     self.current_slice_plane_center = plane_center
                     self.current_slice_plane_normal = plane_normal
+                    axis_index = {"Inline": 0, "Crossline": 1, "Z-slice": 2}[self.current_axis]
+                    self.current_slice_position = float(plane_center[axis_index])
                     try:
                         pts = subset.points.astype(np.float64, copy=False)
                         subset.points = self._project_points_to_plane(
@@ -1463,32 +1440,8 @@ class ViewInterpretation(ViewMap):
                 )
 
             self.current_slice_bounds = subset.bounds
-            slice_center = subset.center
-
-            scale = [1.0, 1.0, 1.0]
-            if self.plotter.scale is not None:
-                scale = self.plotter.scale
-
-            # Apply scale to center for camera positioning
-            scaled_center = [
-                slice_center[0] * scale[0],
-                slice_center[1] * scale[1],
-                slice_center[2] * scale[2],
-            ]
-
-            # Update camera to fit the slice
-            # Only reset camera on first load, axis change, or if explicitly requested (e.g. on slice move)
-            # The user requested that moving the slicer resets the camera to respect VE and fit the slice.
-            # So we effectively update it every time the slice bounds/position changes significantly or if we want to enforce the lock.
-
-            # For now, we update it if not initialized OR if we want to force "Fit to View" behavior on slice change
-            # However, forceful reset on every scroll might be annoying if user zoomed in.
-            # User said: "when we are moving the slicer ... the camera doesnt respect the vertical exageration ... like it must repsect it"
-            # And "camera is still not properly position to the whole slice"
-            # This implies we SHOULD match the slice bounds.
-
-            # Let's do it on every update for now to ensure "locking" behavior as requested ("lock the camera view to the slice").
-            self.update_camera_to_slice(scaled_center, bounds, scale)
+            # Use the survey plane, not the volume's global X/Y bounds.
+            self.update_camera_to_slice()
 
             # Update grid annotations on every slice change to show current slice number
             self.update_grid_annotations()
@@ -1519,21 +1472,18 @@ class ViewInterpretation(ViewMap):
     def update_grid_annotations(self):
         """Update grid rulers, title, and direction labels based on toggle states."""
         try:
+            seismic_metadata = get_seismic_metadata(self._get_current_source_vtk())
+            domain = seismic_metadata.get("vertical_domain")
+            units = seismic_metadata.get("vertical_units", "unknown units")
+            domain_name = {"twt": "TWT", "owt": "OWT", "depth": "Elevation"}.get(domain, "Z")
+            vertical_title = f"{domain_name} ({units}, positive up)" if domain in ("twt", "owt", "depth") else "Z (domain/units unknown)"
             # 1. Update Grid (Rulers)
             if self.slice_actor:
                 # Check toggle
                 if hasattr(self, "chk_grid") and self.chk_grid.isChecked():
-                    # Determine labels based on axis
-                    xtitle, ytitle, ztitle = "", "", ""
-                    if self.current_axis == "Inline":
-                        xtitle = "Crossline"
-                        ytitle = "Depth/Time"
-                    elif self.current_axis == "Crossline":
-                        xtitle = "Inline"
-                        ytitle = "Depth/Time"
-                    elif self.current_axis == "Z-slice":
-                        xtitle = "Inline"
-                        ytitle = "Crossline"
+                    # VTK bounds rulers use world coordinates, not line numbers.
+                    xy_units = seismic_metadata.get("xy_units", "unknown units")
+                    xtitle, ytitle, ztitle = f"X ({xy_units})", f"Y ({xy_units})", vertical_title
 
                     # Auto-scale large coordinates to keep labels short (e.g. 6.08e8 -> 6.08)
                     bounds = self.slice_actor.bounds
@@ -1598,6 +1548,19 @@ class ViewInterpretation(ViewMap):
 
             if hasattr(self, "chk_title") and self.chk_title.isChecked():
                 title_text = f"{self.current_axis}: {self.current_slice_index}"
+                source = self._get_current_source_vtk()
+                field_name = {"Inline": "seismic_inline_numbers", "Crossline": "seismic_crossline_numbers"}.get(self.current_axis)
+                if source is not None and field_name:
+                    numbers = source.GetFieldData().GetArray(field_name)
+                    if numbers is not None and self.current_slice_index < numbers.GetNumberOfTuples():
+                        title_text = f"{self.current_axis}: {int(numbers.GetTuple1(self.current_slice_index))}"
+                if self.current_axis == "Z-slice" and source is not None:
+                    dimensions = [0, 0, 0]
+                    source.GetDimensions(dimensions)
+                    point_id = self.current_slice_index * dimensions[0] * dimensions[1]
+                    title_text = f"{vertical_title}: {source.GetPoint(point_id)[2]:g}"
+                elif domain:
+                    title_text += f" · {vertical_title}"
                 self._title_actor = self.plotter.add_text(
                     title_text,
                     position="upper_edge",
@@ -1614,14 +1577,15 @@ class ViewInterpretation(ViewMap):
             self._direction_actors = []
 
             if hasattr(self, "chk_dirs") and self.chk_dirs.isChecked():
-                # Logic for labels
                 left_label, right_label = "", ""
-                if self.current_axis == "Inline":
-                    left_label = "S"
-                    right_label = "N"
-                elif self.current_axis == "Crossline":
-                    left_label = "W"
-                    right_label = "E"
+                if self.current_axis in ("Inline", "Crossline"):
+                    right, _up = self._current_camera_label_basis()
+                    right = right / np.asarray(self.plotter.scale)
+                    bearing = np.degrees(np.arctan2(right[0], right[1])) % 360
+                    directions = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+                    direction_index = int(np.floor((bearing + 22.5) / 45)) % 8
+                    right_label = directions[direction_index]
+                    left_label = directions[(direction_index + 4) % 8]
 
                 if left_label and right_label:
                     act_l = self.plotter.add_text(
@@ -1638,90 +1602,40 @@ class ViewInterpretation(ViewMap):
         except Exception as e:
             self.print_terminal(f"Error updating annotations: {e}")
 
-    def update_camera_to_slice(self, center, bounds, scale):
-        """
-        Enforce a 2D-like view locked to the current axis, fitted to the slice bounds,
-        respecting Vertical Exaggeration.
-        """
-        # Lock rotation by using Image style (Left=Pan, Right=Zoom)
+    def update_camera_to_slice(self):
+        """Face and fit the actual survey slice with actor scaling applied."""
+        from ..helpers.seismic_coordinates import slice_camera_frame
+
+        if not getattr(self, "current_seismic_uid", None):
+            return
+        plane = self._get_slice_plane_from_affine(self.current_slice_index)
+        if plane is None:
+            return
+        center, _normal, row_vec, col_vec, dims = plane
+        row_axis, col_axis = self._slice_parameter_axes(self.current_axis)
+        row_span = row_vec * float(self._axis_parameter(row_axis, dims[row_axis] - 1))
+        col_span = col_vec * float(self._axis_parameter(col_axis, dims[col_axis] - 1))
+        # Vertical sections keep physical elevation increasing upwards, including
+        # legacy grids whose sample order runs from top to bottom.
+        if self.current_axis != "Z-slice" and col_span[2] < 0:
+            col_span = -col_span
+        win_w, win_h = self.plotter.window_size
+        vx0, vy0, vx1, vy1 = self.plotter.renderer.GetViewport()
+        aspect = max(win_w * (vx1 - vx0), 1) / max(win_h * (vy1 - vy0), 1)
+        frame = slice_camera_frame(
+            center, row_span, col_span, self.plotter.scale, aspect,
+            north_up=self.current_axis == "Z-slice",
+        )
+
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
-
-        # Get camera reference - we'll set orientation manually without calling view methods
-        # to avoid the automatic reset_camera() that view_xy/xz/yz trigger
+        # Keep image-style interactions in the same frame as the displayed slice.
+        self.plotter.iren.style.SetImageOrientation(frame["right"], frame["view_up"])
         camera = self.plotter.camera
-
-        # Calculate fitting dimensions with Scale (VE) applied
-        # bounds is [xmin, xmax, ymin, ymax, zmin, zmax] (unscaled)
-        # scale is [sx, sy, sz]
-
-        # Determine width/height of the slice in WORLD (scaled) units
-        width = 0.0
-        height = 0.0
-
-        if self.current_axis == "Inline":
-            # YZ plane - camera looks along +X axis (from negative X towards positive X)
-            width = abs(bounds[3] - bounds[2]) * scale[1]
-            height = abs(bounds[5] - bounds[4]) * scale[2]
-
-            # Position camera on NEGATIVE X side looking towards POSITIVE X (front view)
-            camera.position = (center[0] - max(width, height) * 2, center[1], center[2])
-            camera.focal_point = center
-            camera.view_up = (0, 0, 1)
-
-        elif self.current_axis == "Crossline":
-            # XZ plane - camera looks along +Y axis (from negative Y towards positive Y)
-            width = abs(bounds[1] - bounds[0]) * scale[0]
-            height = abs(bounds[5] - bounds[4]) * scale[2]
-
-            # Position camera on NEGATIVE Y side looking towards POSITIVE Y (front view)
-            camera.position = (center[0], center[1] - max(width, height) * 2, center[2])
-            camera.focal_point = center
-            camera.view_up = (0, 0, 1)
-
-        elif self.current_axis == "Z-slice":
-            # XY plane
-            width = abs(bounds[1] - bounds[0]) * scale[0]
-            height = abs(bounds[3] - bounds[2]) * scale[1]
-
-            # Position: Look down Z axis
-            camera.position = (center[0], center[1], center[2] + max(width, height) * 2)
-            camera.focal_point = center
-            camera.view_up = (0, 1, 0)
-
-        # Refine Parallel Scale to FIT WHOLE SLICE
-        # parallel_scale is half the viewport height in world units.
-        # We need to consider the viewport aspect ratio.
-
-        try:
-            # window_size is (width, height)
-            win_w, win_h = self.plotter.window_size
-            if win_h > 0:
-                view_aspect = win_w / win_h
-            else:
-                view_aspect = 1.0
-        except:
-            view_aspect = 1.0
-
-        # Slice aspect ratio
-        slice_aspect = width / height if height > 0 else 1.0
-
-        # If slice is "wider" than the view (relative to aspect), we fit to WIDTH
-        if slice_aspect > view_aspect:
-            # Fit width:
-            # The view width must be at least 'width'.
-            # view_width = width
-            # view_height = view_width / view_aspect
-            # parallel_scale = view_height / 2
-            desired_height = width / view_aspect
-            padding = 1.05  # 5% padding
-            camera.parallel_scale = (desired_height / 2) * padding
-        else:
-            # Fit height:
-            # The view height must be at least 'height'
-            padding = 1.05
-            camera.parallel_scale = (height / 2) * padding
-
+        camera.position = frame["position"]
+        camera.focal_point = frame["focal_point"]
+        camera.up = frame["view_up"]
+        camera.parallel_scale = frame["parallel_scale"]
         self.plotter.reset_camera_clipping_range()
         self._camera_initialized = True
 
@@ -1787,6 +1701,11 @@ class ViewInterpretation(ViewMap):
         entity_dict["parent_uid"] = (
             str(self.current_seismic_uid) if self.current_seismic_uid else ""
         )
+        vtk_object = entity_dict.get("vtk_obj")
+        if vtk_object is not None:
+            metadata = get_seismic_metadata(self._get_current_source_vtk())
+            if metadata:
+                set_seismic_metadata(vtk_object, metadata)
 
     def _get_entity_parent_seismic_uid(self, uid):
         """Resolve the seismic parent uid stored on an interpretation entity."""
@@ -2349,17 +2268,19 @@ class ViewInterpretation(ViewMap):
         if affine is not None:
             origin, a0, a1, a2, _dims = affine
             if axis == "Inline":
-                base = origin + int(slice_idx) * a0
+                base = origin + self._axis_parameter(0, int(slice_idx)) * a0
                 basis = np.column_stack([a1, a2])
             elif axis == "Crossline":
-                base = origin + int(slice_idx) * a1
+                base = origin + self._axis_parameter(1, int(slice_idx)) * a1
                 basis = np.column_stack([a0, a2])
             else:
-                base = origin + int(slice_idx) * a2
+                base = origin + self._axis_parameter(2, int(slice_idx)) * a2
                 basis = np.column_stack([a0, a1])
             try:
                 uv, *_ = np.linalg.lstsq(basis, (pts - base).T, rcond=None)
-                return np.asarray(uv.T, dtype=float)
+                row_axis, col_axis = self._slice_parameter_axes(axis)
+                return np.column_stack((self._axis_parameter(row_axis, uv[0], inverse=True),
+                                        self._axis_parameter(col_axis, uv[1], inverse=True)))
             except Exception:
                 return None
 
@@ -2410,17 +2331,20 @@ class ViewInterpretation(ViewMap):
         if affine is not None:
             origin, a0, a1, a2, _dims = affine
             if axis == "Inline":
-                base = origin + int(slice_idx) * a0
+                base = origin + self._axis_parameter(0, int(slice_idx)) * a0
                 basis_row = a1
                 basis_col = a2
             elif axis == "Crossline":
-                base = origin + int(slice_idx) * a1
+                base = origin + self._axis_parameter(1, int(slice_idx)) * a1
                 basis_row = a0
                 basis_col = a2
             else:
-                base = origin + int(slice_idx) * a2
+                base = origin + self._axis_parameter(2, int(slice_idx)) * a2
                 basis_row = a0
                 basis_col = a1
+            row_axis, col_axis = self._slice_parameter_axes(axis)
+            uv = np.column_stack((self._axis_parameter(row_axis, uv[:, 0]),
+                                  self._axis_parameter(col_axis, uv[:, 1])))
             pts = (
                 base[None, :]
                 + uv[:, 0:1] * basis_row[None, :]
@@ -3733,6 +3657,8 @@ class ViewInterpretation(ViewMap):
         vtk_obj = PolyLine()
         vtk_obj.points = snapped_points
         vtk_obj.auto_cells()
+        old_object = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        self._copy_field_data_arrays(old_object, vtk_obj)
 
         self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
 
@@ -7639,6 +7565,8 @@ class ViewInterpretation(ViewMap):
                 continue
 
             t0 = perf_counter()
+            if vtk_obj.GetNumberOfPolys() > 0:
+                return
             explicit_slice_info = self._extract_single_slice_interpretation_metadata(
                 uid=uid, vtk_obj=vtk_obj
             )
@@ -7793,6 +7721,8 @@ class ViewInterpretation(ViewMap):
         """Register a line in both the main dict and the spatial index."""
         self.interpretation_lines[uid] = slice_info
         self._store_single_slice_interpretation_metadata(uid=uid, slice_info=slice_info)
+        # Registering a line does not establish or transform its coordinate
+        # domain. New creation and explicit legacy migration attach that metadata.
 
         key = (slice_info["seismic_uid"], slice_info["axis"], slice_info["slice_index"])
         if key not in self.interpretation_lines_by_slice:
@@ -9136,6 +9066,22 @@ class ViewInterpretation(ViewMap):
         if vtk_obj is None:
             return
 
+        source_metadata = get_seismic_metadata(self._get_current_source_vtk())
+        if source_metadata.get("vertical_domain") in ("twt", "owt"):
+            well_metadata = get_seismic_metadata(vtk_obj)
+            required = ("vertical_domain", "vertical_units", "vertical_datum", "z_positive", "crs")
+            if any(well_metadata.get(key) != source_metadata.get(key) for key in required):
+                notice_key = (self.current_seismic_uid, uid)
+                notices = getattr(self, "_well_domain_notices", set())
+                if notice_key not in notices:
+                    self.print_terminal(
+                        "Well overlay hidden: this seismic is in time. A well transformed to "
+                        "the same time domain, units and datum is required."
+                    )
+                    notices.add(notice_key)
+                    self._well_domain_notices = notices
+                return
+
         try:
             slice_polydata, label_point = self._extract_well_slice_polydata(vtk_obj)
         except Exception:
@@ -9245,7 +9191,7 @@ class ViewInterpretation(ViewMap):
 
     def _register_multipart_from_slice_index(self, uid=None, vtk_obj=None, emit_updates=True):
         """Fast path for multipart lines already carrying `slice_index` cell data."""
-        if uid is None or vtk_obj is None:
+        if uid is None or vtk_obj is None or vtk_obj.GetNumberOfPolys() > 0:
             return False
 
         try:
@@ -9454,6 +9400,8 @@ class ViewInterpretation(ViewMap):
             if not vtk_obj or vtk_obj.GetNumberOfPoints() == 0:
                 return
 
+            if vtk_obj.GetNumberOfPolys() > 0:
+                return
             explicit_slice_info = self._extract_single_slice_interpretation_metadata(
                 uid=uid, vtk_obj=vtk_obj
             )
@@ -9853,6 +9801,13 @@ class ViewInterpretation(ViewMap):
             cost_map: 2D numpy array where low values indicate strong edges (horizons)
         """
         # Normalize data to 0-1 range
+        invalid = ~np.isfinite(slice_data)
+        if invalid.all():
+            return np.full(slice_data.shape, np.inf)
+        if invalid.any():
+            # Nearest valid samples avoid artificial Sobel edges around holes.
+            nearest = ndimage.distance_transform_edt(invalid, return_distances=False, return_indices=True)
+            slice_data = np.asarray(slice_data)[tuple(nearest)]
         data_min = np.nanmin(slice_data)
         data_max = np.nanmax(slice_data)
         if data_max - data_min > 0:
@@ -9878,6 +9833,7 @@ class ViewInterpretation(ViewMap):
         # Add small epsilon to avoid zero costs
         cost_map = 1.0 - edge_magnitude + 0.01
 
+        cost_map[invalid] = np.inf
         return cost_map
 
     def compute_fault_edge_cost_map(self, slice_data):
@@ -9890,6 +9846,13 @@ class ViewInterpretation(ViewMap):
         Returns:
             cost_map: 2D numpy array where low values indicate likely fault pixels
         """
+        invalid = ~np.isfinite(slice_data)
+        if invalid.all():
+            return np.full(slice_data.shape, np.inf)
+        if invalid.any():
+            # Nearest valid samples avoid artificial Sobel edges around holes.
+            nearest = ndimage.distance_transform_edt(invalid, return_distances=False, return_indices=True)
+            slice_data = np.asarray(slice_data)[tuple(nearest)]
         data_min = np.nanmin(slice_data)
         data_max = np.nanmax(slice_data)
         if data_max - data_min > 0:
@@ -9906,7 +9869,9 @@ class ViewInterpretation(ViewMap):
             edge_strength = edge_strength / edge_max
 
         # Invert: strong vertical edge => low cost
-        return 1.0 - edge_strength + 0.01
+        cost_map = 1.0 - edge_strength + 0.01
+        cost_map[invalid] = np.inf
+        return cost_map
 
     def add_existing_lines_to_cost_map(self, cost_map, axis_info, spacing, v_exag):
         """
@@ -10090,6 +10055,8 @@ class ViewInterpretation(ViewMap):
                 if not (0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols):
                     continue
 
+                if not np.isfinite(cost_map[neighbor]):
+                    continue
                 if neighbor in visited:
                     continue
 
@@ -10197,6 +10164,8 @@ class ViewInterpretation(ViewMap):
             for dr, dc in neighbors:
                 neighbor = (current[0] + dr, current[1] + dc)
                 if not (0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols):
+                    continue
+                if not np.isfinite(cost_map[neighbor]):
                     continue
                 if neighbor in visited:
                     continue
@@ -10681,6 +10650,19 @@ class ViewInterpretation(ViewMap):
 
         return (x, y, z)
 
+    def _axis_parameter(self, axis, value, inverse=False):
+        """Convert indices using imported physical axes (including uneven decimation)."""
+        from ..helpers.seismic_coordinates import axis_coordinate
+        from vtkmodules.util.numpy_support import vtk_to_numpy
+        source = self._get_current_source_vtk()
+        array = source.GetFieldData().GetArray(f"seismic_axis_{axis}") if source is not None else None
+        values = vtk_to_numpy(array) if array is not None else None
+        return axis_coordinate(values, value, inverse=inverse)
+
+    @staticmethod
+    def _slice_parameter_axes(axis):
+        return {"Inline": (1, 2), "Crossline": (0, 2), "Z-slice": (0, 1)}[axis]
+
     def _get_seismic_axis_vectors(self):
         """Return affine axis vectors derived from the current seismic StructuredGrid."""
         try:
@@ -10690,7 +10672,8 @@ class ViewInterpretation(ViewMap):
             seismic_vtk = self._get_current_source_vtk()
             if seismic_vtk is None:
                 return None
-            dims = seismic_vtk.GetDimensions()
+            dims = [0, 0, 0]
+            seismic_vtk.GetDimensions(dims)
             nx, ny, nz = int(dims[0]), int(dims[1]), int(dims[2])
             if hasattr(seismic_vtk, "GetOrigin") and hasattr(seismic_vtk, "GetSpacing"):
                 origin = np.array(seismic_vtk.GetOrigin(), dtype=float)
@@ -10746,20 +10729,20 @@ class ViewInterpretation(ViewMap):
         i = int(slice_idx)
 
         if axis == "Inline":
-            base = origin + i * a0
+            base = origin + self._axis_parameter(0, i) * a0
             row_vec = a1
             col_vec = a2
-            center = base + (ny - 1) * 0.5 * row_vec + (nz - 1) * 0.5 * col_vec
+            center = base + self._axis_parameter(1, ny - 1) * 0.5 * row_vec + self._axis_parameter(2, nz - 1) * 0.5 * col_vec
         elif axis == "Crossline":
-            base = origin + i * a1
+            base = origin + self._axis_parameter(1, i) * a1
             row_vec = a0
             col_vec = a2
-            center = base + (nx - 1) * 0.5 * row_vec + (nz - 1) * 0.5 * col_vec
+            center = base + self._axis_parameter(0, nx - 1) * 0.5 * row_vec + self._axis_parameter(2, nz - 1) * 0.5 * col_vec
         else:  # Z-slice
-            base = origin + i * a2
+            base = origin + self._axis_parameter(2, i) * a2
             row_vec = a0
             col_vec = a1
-            center = base + (nx - 1) * 0.5 * row_vec + (ny - 1) * 0.5 * col_vec
+            center = base + self._axis_parameter(0, nx - 1) * 0.5 * row_vec + self._axis_parameter(1, ny - 1) * 0.5 * col_vec
 
         normal = np.cross(row_vec, col_vec)
         n_norm = float(np.linalg.norm(normal))
@@ -10785,14 +10768,14 @@ class ViewInterpretation(ViewMap):
         nx, ny, nz = dims
 
         if self.current_axis == "Inline":
-            i_size = max(row_len * max(ny - 1, 1), 1.0)
-            j_size = max(col_len * max(nz - 1, 1), 1.0)
+            i_size = max(row_len * max(float(self._axis_parameter(1, ny - 1)), 1), 1.0)
+            j_size = max(col_len * max(float(self._axis_parameter(2, nz - 1)), 1), 1.0)
         elif self.current_axis == "Crossline":
-            i_size = max(row_len * max(nx - 1, 1), 1.0)
-            j_size = max(col_len * max(nz - 1, 1), 1.0)
+            i_size = max(row_len * max(float(self._axis_parameter(0, nx - 1)), 1), 1.0)
+            j_size = max(col_len * max(float(self._axis_parameter(2, nz - 1)), 1), 1.0)
         else:  # Z-slice
-            i_size = max(row_len * max(nx - 1, 1), 1.0)
-            j_size = max(col_len * max(ny - 1, 1), 1.0)
+            i_size = max(row_len * max(float(self._axis_parameter(0, nx - 1)), 1), 1.0)
+            j_size = max(col_len * max(float(self._axis_parameter(1, ny - 1)), 1), 1.0)
 
         return center_disp, normal_disp.tolist(), i_size, j_size
 
@@ -10822,11 +10805,11 @@ class ViewInterpretation(ViewMap):
         r = float(row)
         c = float(col)
         if axis == "Inline":
-            p = origin + i * a0 + r * a1 + c * a2
+            p = origin + self._axis_parameter(0, i) * a0 + self._axis_parameter(1, r) * a1 + self._axis_parameter(2, c) * a2
         elif axis == "Crossline":
-            p = origin + r * a0 + i * a1 + c * a2
+            p = origin + self._axis_parameter(0, r) * a0 + self._axis_parameter(1, i) * a1 + self._axis_parameter(2, c) * a2
         else:  # "Z-slice"
-            p = origin + r * a0 + c * a1 + i * a2
+            p = origin + self._axis_parameter(0, r) * a0 + self._axis_parameter(1, c) * a1 + self._axis_parameter(2, i) * a2
         return (float(p[0]), float(p[1]), float(p[2]))
 
     def _world_to_slice_rc(self, world_point, slice_idx: int, affine=None, axis=None):
@@ -10841,21 +10824,24 @@ class ViewInterpretation(ViewMap):
         i = int(slice_idx)
 
         if axis == "Inline":
-            base = origin + i * a0
+            base = origin + self._axis_parameter(0, i) * a0
             A = np.column_stack([a1, a2])
             size_row, size_col = dims[1], dims[2]
         elif axis == "Crossline":
-            base = origin + i * a1
+            base = origin + self._axis_parameter(1, i) * a1
             A = np.column_stack([a0, a2])
             size_row, size_col = dims[0], dims[2]
         else:  # "Z-slice"
-            base = origin + i * a2
+            base = origin + self._axis_parameter(2, i) * a2
             A = np.column_stack([a0, a1])
             size_row, size_col = dims[0], dims[1]
 
         b = p - base
         try:
             rc, *_ = np.linalg.lstsq(A, b, rcond=None)
+            row_axis, col_axis = self._slice_parameter_axes(axis)
+            rc = (self._axis_parameter(row_axis, rc[0], inverse=True),
+                  self._axis_parameter(col_axis, rc[1], inverse=True))
             row = int(np.clip(np.round(rc[0]), 0, max(size_row - 1, 0)))
             col = int(np.clip(np.round(rc[1]), 0, max(size_col - 1, 0)))
             return (row, col)
@@ -10877,17 +10863,19 @@ class ViewInterpretation(ViewMap):
                 i = int(slice_idx)
 
                 if axis == "Inline":
-                    base = origin + i * a0
+                    base = origin + self._axis_parameter(0, i) * a0
                     A = np.column_stack([a1, a2])
                 elif axis == "Crossline":
-                    base = origin + i * a1
+                    base = origin + self._axis_parameter(1, i) * a1
                     A = np.column_stack([a0, a2])
                 else:  # "Z-slice"
-                    base = origin + i * a2
+                    base = origin + self._axis_parameter(2, i) * a2
                     A = np.column_stack([a0, a1])
 
                 rc, *_ = np.linalg.lstsq(A, p - base, rcond=None)
-                return (float(rc[0]), float(rc[1]))
+                row_axis, col_axis = self._slice_parameter_axes(axis)
+                return (float(self._axis_parameter(row_axis, rc[0], inverse=True)),
+                        float(self._axis_parameter(col_axis, rc[1], inverse=True)))
             except Exception:
                 pass
 
@@ -10928,11 +10916,11 @@ class ViewInterpretation(ViewMap):
                 r = float(row)
                 c = float(col)
                 if axis == "Inline":
-                    p = origin + i * a0 + r * a1 + c * a2
+                    p = origin + self._axis_parameter(0, i) * a0 + self._axis_parameter(1, r) * a1 + self._axis_parameter(2, c) * a2
                 elif axis == "Crossline":
-                    p = origin + r * a0 + i * a1 + c * a2
+                    p = origin + self._axis_parameter(0, r) * a0 + self._axis_parameter(1, i) * a1 + self._axis_parameter(2, c) * a2
                 else:
-                    p = origin + r * a0 + c * a1 + i * a2
+                    p = origin + self._axis_parameter(0, r) * a0 + self._axis_parameter(1, c) * a1 + self._axis_parameter(2, i) * a2
                 return (float(p[0]), float(p[1]), float(p[2]))
             except Exception:
                 pass
@@ -14012,6 +14000,23 @@ class ViewInterpretation(ViewMap):
         if not horizon_uids and not fault_uids:
             return
 
+        for uid in horizon_uids | fault_uids:
+            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            if vtk_obj is not None and vtk_obj.GetNumberOfPolys() > 0:
+                self.multipart_horizons.pop(uid, None)
+                self.multipart_faults.pop(uid, None)
+                self._remove_filtered_actor(f"multipart_slice_{uid}")
+                self._remove_filtered_actor(f"multipart_fault_slice_{uid}")
+        horizon_uids = changed & set(getattr(self, "multipart_horizons", {}).keys())
+        fault_uids = changed & set(getattr(self, "multipart_faults", {}).keys())
+        # Relinking may transpose slice axes or reverse sample indices. Re-read
+        # persisted arrays instead of retaining the pre-migration registry.
+        for uid in horizon_uids | fault_uids:
+            self._register_multipart_from_slice_index(
+                uid=uid, vtk_obj=self.parent.geol_coll.get_uid_vtk_obj(uid), emit_updates=False
+            )
+        horizon_uids = changed & set(getattr(self, "multipart_horizons", {}).keys())
+        fault_uids = changed & set(getattr(self, "multipart_faults", {}).keys())
         for uid in horizon_uids:
             self.multipart_horizons[uid]["seismic_uid"] = (
                 self._get_entity_parent_seismic_uid(uid)

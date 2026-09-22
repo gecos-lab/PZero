@@ -27,7 +27,7 @@ class DockWindow(QDockWidget):
         n_docks = len(parent.findChildren(QDockWidget))
 
         # Connect signal and set attribute to delete dock widget (not only hide it) when the project is closed.
-        parent.signals.project_close.connect(self.deleteLater)
+        parent.signals.project_close.connect(self._close_for_project)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
 
         # Set other dock window graphical properties.
@@ -89,6 +89,21 @@ class DockWindow(QDockWidget):
             pass
 
 
+    def _dispose_canvas(self):
+        """Disconnect before deletion, including project changes via deleteLater."""
+        if getattr(self, "_canvas_disposed", False):
+            return
+        self._canvas_disposed = True
+        self.canvas.disconnect_all_signals()
+        if isinstance(self.canvas, ViewVTK):
+            self.canvas.plotter.close()
+
+    def _close_for_project(self):
+        # deleteLater does not call closeEvent. Floating docks must be disposed
+        # too, rather than taking the normal "dock again" close-button route.
+        self._dispose_canvas()
+        self.deleteLater()
+
     def closeEvent(self, event):
         """Override the standard closeEvent method in two cases:
         1) when a window is floating, "closing" it actually brings it back in
@@ -103,6 +118,5 @@ class DockWindow(QDockWidget):
         # Case to actually close/delete a window, disconnecting all signals
         # of BaseView(), then cleanly close the VTK plotter.
         self.canvas.enable_actions()
-        self.canvas.disconnect_all_signals()
-        if isinstance(self.canvas, ViewVTK):
-            self.canvas.plotter.close()
+        self._dispose_canvas()
+        event.accept()

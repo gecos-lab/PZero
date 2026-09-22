@@ -1935,6 +1935,13 @@ class Seismics(vtkStructuredGrid):
         return seismics_copy
 
     @property
+    def seismic_metadata(self):
+        """Persisted coordinate/domain definition; empty for unlabelled legacy data."""
+        from pzero.imports.segy_reader import get_seismic_metadata
+
+        return get_seismic_metadata(self)
+
+    @property
     def bounds(self):
         """Returns a list with xmin, xmax, ymin, ymax, zmin, zmax"""
         return self.GetBounds()

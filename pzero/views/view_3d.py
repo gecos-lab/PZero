@@ -439,7 +439,9 @@ class View3D(ViewVTK):
             ):
                 return None
 
-            dims = tuple(int(v) for v in vtk_obj.GetDimensions())
+            dimensions = [0, 0, 0]
+            vtk_obj.GetDimensions(dimensions)
+            dims = tuple(int(v) for v in dimensions)
             if len(dims) != 3 or any(v <= 0 for v in dims):
                 return None
 
@@ -3666,7 +3668,8 @@ class View3D(ViewVTK):
                     return None
 
                 try:
-                    src_dims = src_obj.GetDimensions()
+                    src_dims = [0, 0, 0]
+                    src_obj.GetDimensions(src_dims)
                     strike = float(self.parent.xsect_coll.get_uid_strike(xuid))
                     normal = np.asarray(
                         self.parent.xsect_coll.get_uid_normal_vect(section_uid=xuid),

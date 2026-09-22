@@ -53,6 +53,8 @@ class SeismicAttributes:
         Returns:
             Dictionary of computed attributes
         """
+        if not np.all(np.isfinite(slice_data)):
+            raise ValueError("The selected slice contains missing seismic bins. Attribute-guided tracking requires a fully sampled slice.")
         if attribute_types is None:
             attribute_types = ['amplitude', 'phase', 'edge_strength', 'similarity']
 
@@ -211,6 +213,8 @@ class SeismicAttributes:
         
         Returns dict with: vertical_edge, discontinuity, variance, fault_likelihood
         """
+        if not np.all(np.isfinite(slice_data)):
+            raise ValueError("The selected slice contains missing seismic bins. Attribute-guided tracking requires a fully sampled slice.")
         return {
             'vertical_edge': self.compute_vertical_edge(slice_data),
             'discontinuity': self.compute_discontinuity(slice_data),
