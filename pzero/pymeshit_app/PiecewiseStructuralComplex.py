@@ -339,8 +339,9 @@ class PiecewiseStructuralComplex:
         max_missing_spin.setRange(0, 10)
         max_missing_spin.setValue(self.MAX_RELAXED_MISSING_BOUNDARIES)
         max_missing_spin.setToolTip(
-            "Maximum number of expected boundaries that may be absent in a LIKELY "
-            "3D topology match. Observed extra boundaries are never accepted."
+            "Maximum number of expected boundaries that may be absent in any "
+            "partial 3D topology match, including possible repeats. Observed "
+            "extra boundaries are never accepted."
         )
         selector_layout.addWidget(max_missing_spin)
         swap_seed_button = QPushButton("Swap selected seeds", dialog)
@@ -650,6 +651,22 @@ class PiecewiseStructuralComplex:
                             "UNASSIGNED",
                         }:
                             item.setForeground(QColor(190, 95, 20))
+                            tooltip_lines = []
+                            repeat_match_statuses = sorted(
+                                {
+                                    str(assignment.get("match_status", ""))
+                                    for assignment in unit_info.get(
+                                        "psc_assignments", []
+                                    )
+                                    if assignment.get("is_repeat")
+                                    and assignment.get("match_status")
+                                }
+                            )
+                            if repeat_match_statuses:
+                                tooltip_lines.append(
+                                    "Repeat match quality: "
+                                    + ", ".join(repeat_match_statuses)
+                                )
                             blocked = sorted(
                                 {
                                     label
@@ -663,9 +680,11 @@ class PiecewiseStructuralComplex:
                                 key=str.casefold,
                             )
                             if blocked:
-                                item.setToolTip(
+                                tooltip_lines.append(
                                     "Blocked repeat across: " + ", ".join(blocked)
                                 )
+                            if tooltip_lines:
+                                item.setToolTip("\n".join(tooltip_lines))
                         preview_table.setItem(row_idx, col_idx, item)
             finally:
                 self._psc_side_context = previous_side_context
@@ -1284,6 +1303,19 @@ class PiecewiseStructuralComplex:
             statuses,
             key=lambda status: status_priority.get(status, 4),
         )
+
+    @staticmethod
+    def _psc_occurrence_status(
+        exact: bool,
+        assigned_before: int = 0,
+        ambiguous: bool = False,
+    ) -> str:
+        """Combine match confidence and repeat state into the public PSC status."""
+        if ambiguous:
+            return "AMBIGUOUS"
+        if int(assigned_before or 0) > 0:
+            return "POSSIBLE_REPEAT"
+        return "CERTAIN" if exact else "LIKELY"
     
     def _psc_structural_boundary_keys_for_unit(
         self,
@@ -1508,15 +1540,24 @@ class PiecewiseStructuralComplex:
         candidate: Dict[str, Any],
         observed_labels: List[str],
     ) -> Dict[str, Any]:
-        """Score one intended unit signature against the surfaces near its seed."""
+        """Score an observed local signature against the unit's global STM signature."""
         candidate = dict(candidate)
         labels_by_key = {}
-        for label in candidate.get("boundaries", []) or []:
+        unit_info = candidate.get("unit_info", {}) or {}
+        global_boundaries = list(unit_info.get("boundaries", []) or [])
+        comparison_boundaries = global_boundaries or list(
+            candidate.get("boundaries", []) or []
+        )
+        for label in comparison_boundaries:
             label_text = self._psc_text(label)
             label_key = self._psc_key(label_text)
             if label_key and label_key not in labels_by_key:
                 labels_by_key[label_key] = label_text
-        signature_keys = set(candidate.get("signature_keys", set()) or set(labels_by_key))
+        signature_keys = set(labels_by_key)
+        candidate["boundaries"] = [
+            labels_by_key[key] for key in sorted(labels_by_key)
+        ]
+        candidate["signature_keys"] = signature_keys
 
         observed_by_key = {}
         for label in observed_labels or []:
@@ -1632,7 +1673,10 @@ class PiecewiseStructuralComplex:
 
         conflicts = []
         for assignment in assignments or []:
-            if assignment.get("unit_key", "") != unit_key:
+            if (
+                assignment.get("status") == "AMBIGUOUS"
+                or assignment.get("unit_key", "") != unit_key
+            ):
                 continue
             other_indices = assignment.get("closest_surface_indices", {}) or {}
             shared_keys = set(closest_surface_indices).intersection(other_indices)
@@ -2212,7 +2256,10 @@ class PiecewiseStructuralComplex:
         adjacency = region.get("adjacent_regions", {}) or {}
         conflicts = []
         for assignment in assignments or []:
-            if assignment.get("unit_key") != unit_key:
+            if (
+                assignment.get("status") == "AMBIGUOUS"
+                or assignment.get("unit_key") != unit_key
+            ):
                 continue
             other_region_id = int(assignment.get("volumetric_region_id", -1))
             interfaces = adjacency.get(
@@ -2344,9 +2391,10 @@ class PiecewiseStructuralComplex:
         )
 
         assigned_counts: Dict[str, int] = {}
-        # In the exact 3D PSC, partial signatures are accepted only as repeats
-        # after the same unit has already received an exact assignment.
-        exact_assigned_counts: Dict[str, int] = {}
+        allocation_counts: Dict[str, int] = {}
+        # Exact matches are sorted first.  If no exact occurrence exists for a
+        # unit, its strongest admissible partial match becomes the LIKELY
+        # reference and later occurrences may be classified as repeats.
         accepted = []
         rejected_by_unit: Dict[str, List[Dict[str, Any]]] = {}
         payloads = []
@@ -2424,13 +2472,12 @@ class PiecewiseStructuralComplex:
             chosen = min(
                 best_candidates,
                 key=lambda candidate: (
-                    assigned_counts.get(candidate["unit_key"], 0),
+                    allocation_counts.get(candidate["unit_key"], 0),
                     candidate["feature"].casefold(),
                     candidate["unit_key"].casefold(),
                 ),
             )
             assigned_before = assigned_counts.get(chosen["unit_key"], 0)
-            exact_assigned_before = exact_assigned_counts.get(chosen["unit_key"], 0)
             topology_peers = [
                 candidate
                 for candidate in record["candidates"]
@@ -2452,55 +2499,12 @@ class PiecewiseStructuralComplex:
             topology_is_ambiguous = len(ambiguity_group_peers) > 1 or len(
                 {candidate["unit_key"] for candidate in topology_peers}
             ) > 1
-
-            if not chosen["exact"] and exact_assigned_before <= 0:
-                payload = {
-                    "status": "UNASSIGNED",
-                    "unit_key": "",
-                    "source_unit_key": chosen["unit_key"],
-                    "seed_point": list(record["seed_point"]),
-                    "boundaries": list(region.get("boundary_labels", []) or []),
-                    "candidate_names": [
-                        self._psc_text(candidate["unit_info"].get("name", ""))
-                        or self._psc_text(candidate["feature"])
-                        or candidate["unit_key"]
-                        for candidate in best_candidates
-                    ],
-                    "missing_labels": list(chosen.get("missing_labels", []) or []),
-                    "extra_labels": list(chosen.get("extra_labels", []) or []),
-                    "blocked_repeat_labels": sorted(
-                        set(blocked_labels), key=str.casefold
-                    ),
-                    "volumetric_region_id": record["region_id"],
-                    "tetra_count": int(region.get("tetra_count", 0)),
-                    "clearance": float(region.get("clearance", 0.0)),
-                    "signature": {
-                        "target": list(chosen.get("boundaries", []) or []),
-                        "closest": list(region.get("boundary_labels", []) or []),
-                        "exact": False,
-                        "missing_count": int(chosen["missing_count"]),
-                        "extra_count": int(chosen["extra_count"]),
-                        "observed_count": int(chosen["observed_count"]),
-                        "volumetric_region": True,
-                        "volumetric_region_id": record["region_id"],
-                    },
-                }
-                payloads.append(payload)
-                rejected_by_unit.setdefault(chosen["unit_key"], []).append(payload)
-                continue
-
-            if not chosen["exact"]:
-                status = "POSSIBLE_REPEAT"
-            elif assigned_before > 0:
-                status = "POSSIBLE_REPEAT"
-            elif topology_is_ambiguous or len(best_candidates) > 1:
-                status = "AMBIGUOUS"
-            elif record["pinned"]:
-                status = "CERTAIN"
-            elif chosen["exact"]:
-                status = "CERTAIN"
-            else:
-                status = "LIKELY"
+            match_status = "CERTAIN" if chosen["exact"] else "LIKELY"
+            status = self._psc_occurrence_status(
+                exact=bool(chosen["exact"]),
+                assigned_before=assigned_before,
+                ambiguous=topology_is_ambiguous or len(best_candidates) > 1,
+            )
 
             candidate_names = []
             display_unit_infos = ambiguity_group_peers or [
@@ -2539,6 +2543,8 @@ class PiecewiseStructuralComplex:
             }
             payload = {
                 "status": status,
+                "match_status": match_status,
+                "is_repeat": assigned_before > 0,
                 "unit_key": chosen["unit_key"],
                 "source_unit_key": chosen["unit_key"],
                 "seed_point": list(record["seed_point"]),
@@ -2561,11 +2567,11 @@ class PiecewiseStructuralComplex:
             }
             accepted.append(payload)
             payloads.append(payload)
-            assigned_counts[chosen["unit_key"]] = assigned_before + 1
-            if chosen["exact"]:
-                exact_assigned_counts[chosen["unit_key"]] = (
-                    exact_assigned_before + 1
-                )
+            allocation_counts[chosen["unit_key"]] = (
+                allocation_counts.get(chosen["unit_key"], 0) + 1
+            )
+            if status != "AMBIGUOUS":
+                assigned_counts[chosen["unit_key"]] = assigned_before + 1
 
         units_by_key = {
             str(
@@ -2792,9 +2798,9 @@ class PiecewiseStructuralComplex:
         )
 
         assigned_counts = {}
-        # In the exact 3D PSC, partial signatures are accepted only as repeats
-        # after the same unit has already received an exact assignment.
-        exact_assigned_counts = {}
+        allocation_counts = {}
+        # Exact matches are sorted first.  A partial match can establish a
+        # LIKELY reference when that unit has no exact occurrence in the model.
         accepted = []
         rejected_by_source = {}
         payloads = []
@@ -2855,59 +2861,21 @@ class PiecewiseStructuralComplex:
             chosen = min(
                 best_candidates,
                 key=lambda candidate: (
-                    assigned_counts.get(candidate["unit_key"], 0),
+                    allocation_counts.get(candidate["unit_key"], 0),
                     str(candidate.get("feature", "")).casefold(),
                     str(candidate.get("unit_key", "")).casefold(),
                 ),
             )
             assigned_before = assigned_counts.get(chosen["unit_key"], 0)
-            exact_assigned_before = exact_assigned_counts.get(chosen["unit_key"], 0)
             topology_is_ambiguous = int(
                 chosen["unit_info"].get("ambiguity_group_size", 1) or 1
             ) > 1
-
-            if not chosen.get("exact") and exact_assigned_before <= 0:
-                payload = {
-                    "status": "UNASSIGNED",
-                    "unit_key": "",
-                    "source_unit_key": record["source_unit_key"],
-                    "seed_point": list(record["seed_point"]),
-                    "candidate_names": [
-                        self._psc_text(candidate["unit_info"].get("name", ""))
-                        or self._psc_text(candidate["unit_info"].get("feature", ""))
-                        or candidate["unit_key"]
-                        for candidate in best_candidates
-                    ],
-                    "missing_labels": list(chosen.get("missing_labels", []) or []),
-                    "extra_labels": list(chosen.get("extra_labels", []) or []),
-                    "blocked_repeat_labels": sorted(
-                        set(blocked_labels), key=str.casefold
-                    ),
-                    "closest_surface_indices": dict(
-                        record["closest_surface_indices"]
-                    ),
-                    "signature": dict(record["signature"]),
-                }
-                payloads.append(payload)
-                rejected_by_source.setdefault(
-                    record["source_unit_key"], []
-                ).append(payload)
-                continue
-
-            if not chosen.get("exact"):
-                status = "POSSIBLE_REPEAT"
-            elif topology_is_ambiguous:
-                status = "AMBIGUOUS"
-            elif record.get("seed_override") and assigned_before == 0:
-                status = "CERTAIN"
-            elif len(best_candidates) > 1 and assigned_before == 0:
-                status = "AMBIGUOUS"
-            elif assigned_before > 0:
-                status = "POSSIBLE_REPEAT"
-            elif chosen.get("exact"):
-                status = "CERTAIN"
-            else:
-                status = "LIKELY"
+            match_status = "CERTAIN" if chosen.get("exact") else "LIKELY"
+            status = self._psc_occurrence_status(
+                exact=bool(chosen.get("exact")),
+                assigned_before=assigned_before,
+                ambiguous=topology_is_ambiguous or len(best_candidates) > 1,
+            )
 
             candidate_names = []
             for candidate in best_candidates:
@@ -2929,6 +2897,8 @@ class PiecewiseStructuralComplex:
 
             payload = {
                 "status": status,
+                "match_status": match_status,
+                "is_repeat": assigned_before > 0,
                 "unit_key": chosen["unit_key"],
                 "source_unit_key": record["source_unit_key"],
                 "seed_point": list(record["seed_point"]),
@@ -2948,11 +2918,11 @@ class PiecewiseStructuralComplex:
             }
             accepted.append(payload)
             payloads.append(payload)
-            assigned_counts[chosen["unit_key"]] = assigned_before + 1
-            if chosen.get("exact"):
-                exact_assigned_counts[chosen["unit_key"]] = (
-                    exact_assigned_before + 1
-                )
+            allocation_counts[chosen["unit_key"]] = (
+                allocation_counts.get(chosen["unit_key"], 0) + 1
+            )
+            if status != "AMBIGUOUS":
+                assigned_counts[chosen["unit_key"]] = assigned_before + 1
 
         units_by_key = {
             str(
@@ -5195,7 +5165,8 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         max_missing_spin.setRange(0, 10)
         max_missing_spin.setValue(self.MAX_RELAXED_MISSING_BOUNDARIES)
         max_missing_spin.setToolTip(
-            "Maximum number of STm boundaries that may be absent from the local section signature."
+            "Maximum number of STm boundaries that may be absent from any "
+            "partial section match, including possible repeats."
         )
         form_layout.addRow("Max missing boundaries", max_missing_spin)
 
@@ -5416,6 +5387,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             "UNASSIGNED": 0,
         }
         assigned_counts: Dict[str, int] = {}
+        allocation_counts: Dict[str, int] = {}
         area_infos = []
         match_area_infos = []
         if dom_cut_entries:
@@ -5501,17 +5473,33 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 if assigned_counts.get(candidate["unit_key"], 0)
                 else "CERTAIN"
             )
-            assignment_results[info_idx] = self._section_assignment_payload(
+            assignment = self._section_assignment_payload(
                 candidate=candidate,
                 status=status,
                 candidate_pool=exact_candidates,
                 assigned_counts=assigned_counts,
             )
-            assigned_counts[candidate["unit_key"]] = (
-                assigned_counts.get(candidate["unit_key"], 0) + 1
+            assignment_results[info_idx] = assignment
+            allocation_counts[candidate["unit_key"]] = (
+                allocation_counts.get(candidate["unit_key"], 0) + 1
             )
+            if assignment.get("status") != "AMBIGUOUS":
+                assigned_counts[candidate["unit_key"]] = (
+                    assigned_counts.get(candidate["unit_key"], 0) + 1
+                )
 
-        for info_idx, area_info in enumerate(assignment_area_infos):
+        remaining_indices = [
+            info_idx
+            for info_idx, assignment in enumerate(assignment_results)
+            if assignment is None
+        ]
+        remaining_indices.sort(
+            key=lambda info_idx: self._section_area_candidate_quality(
+                assignment_area_infos[info_idx]
+            )
+        )
+        for info_idx in remaining_indices:
+            area_info = assignment_area_infos[info_idx]
             if assignment_results[info_idx] is not None:
                 continue
             assignment = self._section_best_area_assignment(
@@ -5521,11 +5509,16 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 assignments=assignment_results,
                 line_entries=line_entries,
                 tolerance=tolerance,
+                allocation_counts=allocation_counts,
             )
             assignment_results[info_idx] = assignment
             unit_key = assignment.get("unit_key", "")
             if unit_key:
-                assigned_counts[unit_key] = assigned_counts.get(unit_key, 0) + 1
+                allocation_counts[unit_key] = (
+                    allocation_counts.get(unit_key, 0) + 1
+                )
+                if assignment.get("status") != "AMBIGUOUS":
+                    assigned_counts[unit_key] = assigned_counts.get(unit_key, 0) + 1
 
         if match_area_infos:
             assignment_by_parent_idx = {
@@ -6214,6 +6207,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         assignments: List[Optional[Dict[str, Any]]],
         line_entries: List[Dict[str, Any]],
         tolerance: float,
+        allocation_counts: Optional[Dict[str, int]] = None,
     ) -> Dict[str, Any]:
         "Returns the best assignment for the given area_info based on candidates and conflict checks."
         candidates = list(area_info.get("candidates", []) or [])
@@ -6256,22 +6250,48 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             )
             == best_quality
         ]
-        chosen = self._section_choose_candidate(best_candidates, assigned_counts)
+        chosen = self._section_choose_candidate(
+            best_candidates,
+            allocation_counts if allocation_counts is not None else assigned_counts,
+        )
         assigned_before = assigned_counts.get(chosen["unit_key"], 0)
-        if len(best_candidates) > 1 and assigned_before == 0:
-            status = "AMBIGUOUS"
-        elif assigned_before > 0:
-            status = "POSSIBLE_REPEAT"
-        elif chosen.get("exact"):
-            status = "CERTAIN"
-        else:
-            status = "LIKELY"
+        status = self._psc_occurrence_status(
+            exact=bool(chosen.get("exact")),
+            assigned_before=assigned_before,
+            ambiguous=len(best_candidates) > 1,
+        )
         return self._section_assignment_payload(
             candidate=chosen,
             status=status,
             candidate_pool=best_candidates,
             assigned_counts=assigned_counts,
         )
+
+    @staticmethod
+    def _section_area_candidate_quality(
+        area_info: Dict[str, Any],
+    ) -> Tuple[Any, ...]:
+        """Order unresolved areas so the strongest partial match is considered first."""
+        candidates = list(area_info.get("candidates", []) or [])
+        if not candidates:
+            return (9, 10**9, 0, 10**9, int(area_info.get("area_idx", 0) or 0))
+        best = candidates[0]
+        quality = (
+            0 if best.get("exact") else 1,
+            int(best.get("missing_count", 0)),
+            -int(best.get("observed_count", 0)),
+        )
+        tied_count = sum(
+            1
+            for candidate in candidates
+            if (
+                0 if candidate.get("exact") else 1,
+                int(candidate.get("missing_count", 0)),
+                -int(candidate.get("observed_count", 0)),
+            )
+            == quality
+        )
+        return (*quality, tied_count, int(area_info.get("area_idx", 0) or 0))
 
     def _section_choose_candidate(
         self,
@@ -6313,6 +6333,10 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             ]
         return {
             "status": status,
+            "match_status": "CERTAIN" if candidate.get("exact") else "LIKELY",
+            "is_repeat": int(
+                assigned_counts.get(candidate.get("unit_key", ""), 0)
+            ) > 0,
             "unit_info": candidate.get("unit_info"),
             "unit_key": candidate.get("unit_key", ""),
             "missing_labels": list(candidate.get("missing_labels", []) or []),
@@ -6344,7 +6368,11 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
 
         conflict_labels = []
         for other_area_info, assignment in zip(area_infos, assignments):
-            if not assignment or assignment.get("unit_key", "") != unit_key:
+            if (
+                not assignment
+                or assignment.get("status") == "AMBIGUOUS"
+                or assignment.get("unit_key", "") != unit_key
+            ):
                 continue
             shared_labels = self._section_shared_boundary_labels(
                 polygon=area_info.get("polygon"),
@@ -6436,6 +6464,9 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         assigned_before = int(assignment.get("assigned_before", 0) or 0)
         if assigned_before:
             details.append(f"already assigned={assigned_before}")
+        match_status = self._psc_text(assignment.get("match_status", ""))
+        if match_status and match_status != status:
+            details.append(f"match={match_status}")
         blocked_repeat_labels = assignment.get("blocked_repeat_labels", []) or []
         if blocked_repeat_labels:
             details.append(

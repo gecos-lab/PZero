@@ -794,24 +794,12 @@ def _stm_single_conformable_candidates(
             )
         if locked_anchor and preferred_side in side_candidates:
             return [side_candidates[preferred_side]]
-        if len(side_candidates) == 1 and not locked_anchor:
-            opposite_side = "below" if preferred_side == "above" else "above"
-            lower, upper = _stm_interval_from_anchor_side(
-                anchor_level, opposite_side, finite_levels
-            )
-            side_candidates[opposite_side] = _stm_candidate(
-                lower,
-                upper,
-                "ambiguous-side",
-                0,
-                unit=unit_name,
-                side=opposite_side,
-                anchor=anchor_name,
-                endpoint_boundaries={anchor_name},
-            )
 
-    if not side_candidates:
-        for side in ("below", "above"):
+    # A single conformable surface bounds the unit but does not, by itself,
+    # determine which side contains it. Other links provide soft topological
+    # evidence; they must not remove the opposite side from the global solver.
+    for side in ("below", "above"):
+        if side not in side_candidates:
             lower, upper = _stm_interval_from_anchor_side(
                 anchor_level, side, finite_levels
             )
@@ -826,6 +814,49 @@ def _stm_single_conformable_candidates(
                 endpoint_boundaries={anchor_name},
             )
     return list(side_candidates.values())
+
+
+def _stm_unanchored_topological_candidates(
+    unit_name,
+    linked_boundaries,
+    boundary_levels,
+    finite_levels,
+):
+    """Return adjacent interval candidates for a unit without conformables."""
+    numeric_links = {
+        boundary_name: boundary_levels[boundary_name]
+        for boundary_name in linked_boundaries
+        if boundary_name in boundary_levels
+        and math.isfinite(boundary_levels[boundary_name])
+    }
+    candidates_by_interval = {}
+    for anchor_name, anchor_level in sorted(
+        numeric_links.items(), key=lambda item: (item[1], item[0])
+    ):
+        for side in ("below", "above"):
+            lower, upper = _stm_interval_from_anchor_side(
+                anchor_level, side, finite_levels
+            )
+            endpoint_boundaries = {
+                boundary_name
+                for boundary_name, level in numeric_links.items()
+                if level in {lower, upper}
+            }
+            candidate = _stm_candidate(
+                lower,
+                upper,
+                "unanchored-topological-signature",
+                10 * len(endpoint_boundaries),
+                unit=unit_name,
+                side=side,
+                anchor=anchor_name,
+                endpoint_boundaries=endpoint_boundaries,
+            )
+            interval = (lower, upper)
+            current = candidates_by_interval.get(interval)
+            if current is None or candidate["score"] > current["score"]:
+                candidates_by_interval[interval] = candidate
+    return list(candidates_by_interval.values())
 
 
 def _stm_interval_split_allowed(
@@ -1175,16 +1206,39 @@ def calculate_stm_unit_levels(
             and math.isfinite(boundary_levels[boundary_name])
         ]
         if not conformable_boundaries:
+            candidates = _stm_unanchored_topological_candidates(
+                unit_name,
+                linked_boundaries,
+                boundary_levels,
+                finite_levels,
+            )
+            if candidates:
+                result["candidates_by_unit"][unit_name] = candidates
+                candidate_options_by_unit[unit_name] = candidates
+                diagnostics.append(
+                    {
+                        "severity": "info",
+                        "code": "topological_level_without_conformable",
+                        "unit": unit_name,
+                        "message": (
+                            f'Unit "{unit_name}" has no conformable boundary; '
+                            "its candidate intervals were derived from the "
+                            "complete topological signature."
+                        ),
+                    }
+                )
+                continue
             result["unresolved_rows"][unit_info["row_label"]] = (
-                "no_conformable_boundary"
+                "no_numeric_linked_boundary"
             )
             diagnostics.append(
                 {
                     "severity": "info",
-                    "code": "no_conformable_boundary",
+                    "code": "no_numeric_linked_boundary",
                     "unit": unit_name,
                     "message": (
-                        f'Unit "{unit_name}" has no conformable boundary.'
+                        f'Unit "{unit_name}" has no conformable boundary or '
+                        "other linked boundary with a numeric Level."
                     ),
                 }
             )
