@@ -77,7 +77,7 @@ _boundary_roles_by_case = {role.casefold(): role for role in stm_boundary_roles}
 
 
 def stm_domain_col(order_value) -> str:
-    """Return the canonical STm domain column name for an order value."""
+    """Return the canonical STM domain column name for an order value."""
     return f"Domain_{int(order_value)}"
 
 
@@ -202,7 +202,7 @@ def stm_records_with_colors(dataframe, feature_colors=None):
 
 
 def normalise_stm_boundaries(dataframe=None):
-    """Return the canonical STm Boundaries dataframe."""
+    """Return the canonical STM Boundaries dataframe."""
     out_df = (
         dataframe.copy()
         if dataframe is not None
@@ -241,7 +241,7 @@ def normalise_stm_boundaries(dataframe=None):
 
 
 def normalise_stm_units(dataframe=None):
-    """Return the canonical STm Units dataframe."""
+    """Return the canonical STM Units dataframe."""
     out_df = (
         dataframe.copy()
         if dataframe is not None
@@ -323,7 +323,7 @@ def reconcile_stm_relationships(
     unconformable_links=None,
     locked_conformable_links=None,
 ):
-    """Refresh reciprocal relation columns from typed STm links."""
+    """Refresh reciprocal relation columns from typed STM links."""
     boundaries = normalise_stm_boundaries(boundaries)
     units = normalise_stm_units(units)
     boundary_names = {
@@ -389,7 +389,7 @@ def reconcile_stm_relationships(
 
 
 def stm_feature_colors_from_options(options):
-    """Return persistent STm feature colours from table options."""
+    """Return persistent STM feature colours from table options."""
     color_codes = dict(options or {}).get("stm_color_codes", {})
     if not isinstance(color_codes, dict):
         return {}
@@ -1045,7 +1045,7 @@ def calculate_stm_unit_levels(
     unconformable_links=None,
     locked_conformable_links=None,
 ):
-    """Calculate STm unit levels from conformable topology.
+    """Calculate STM unit levels from conformable topology.
 
     Unit features are still the graph keys. If duplicated unit Feature values
     become first-class objects, this helper should move to stable row/object IDs.
@@ -1380,7 +1380,7 @@ def calculate_stm_unit_levels(
                     "code": "ambiguous_topological_assignment",
                     "units": ambiguous_units,
                     "message": (
-                        "Equivalent STm level assignments are available; "
+                        "Equivalent STM level assignments are available; "
                         "choose one before applying the result."
                     ),
                 }
@@ -1526,7 +1526,7 @@ def calculate_stm_unit_levels(
 
 
 def stm_color(raw_key):
-    """Return a stable pastel color for STm nodes/links."""
+    """Return a stable pastel color for STM nodes/links."""
     key_text = str(raw_key or "").encode("utf-8", errors="ignore")
     digest = md5(key_text).hexdigest()
     hue = int(digest[:4], 16) % 360
@@ -1554,7 +1554,7 @@ def stm_color_to_dict(color_value):
 
 
 def write_stm_export_footer(output_stream, export_payload):
-    """Append a JSON footer that keeps STm metadata inside the CSV file."""
+    """Append a JSON footer that keeps STM metadata inside the CSV file."""
     output_stream.write("\n")
     output_stream.write(f"{stm_export_marker_begin}\n")
     json_text = json.dumps(export_payload, ensure_ascii=True, indent=2)
@@ -1610,7 +1610,7 @@ def build_stm_json(
     boundary_columns=None,
     unit_columns=None,
 ):
-    """Return an STm payload containing two dataframe-style tables."""
+    """Return an STM payload containing two dataframe-style tables."""
     boundaries_df = _as_dataframe(boundaries, boundary_columns)
     units_df = _as_dataframe(units, unit_columns)
     color_map = {
@@ -1651,7 +1651,7 @@ def build_stm_json(
 
 
 def is_stm_json(payload):
-    """Return whether a payload contains the two required STm tables."""
+    """Return whether a payload contains the two required STM tables."""
     return (
         isinstance(payload, dict)
         and isinstance(payload.get("boundaries"), dict)
@@ -1660,9 +1660,9 @@ def is_stm_json(payload):
 
 
 def read_stm_json(payload):
-    """Return enriched boundary/unit records from an STm payload."""
+    """Return enriched boundary/unit records from an STM payload."""
     if not is_stm_json(payload):
-        raise ValueError("Not a PZero STm payload")
+        raise ValueError("Not a PZero STM payload")
 
     def dataframe(table_name):
         table = payload.get(table_name, {})

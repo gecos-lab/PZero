@@ -1,7 +1,7 @@
 """
 Piecewise Structural Complex support for the PyMeshIt workflow GUI.
 
-This module keeps the PSC/STm material-assignment workflow out of the main
+This module keeps the PSC/STM material-assignment workflow out of the main
 PyMeshIt GUI file. The controller deliberately works with the GUI as its host
 so the refactor is organizational: existing tetra-surface data, material state,
 PZero bridge access, and visualization refresh methods remain owned by the GUI.
@@ -300,7 +300,7 @@ class PiecewiseStructuralComplex:
             setattr(self.host, name, value)
 
     def open_mapping_dialog(self) -> None:
-        """Preview a Piecewise Structural Complex mapping from an STm table."""
+        """Preview a Piecewise Structural Complex mapping from an STM table."""
         project = self._pzero_project()
         if project is None:
             return
@@ -323,14 +323,14 @@ class PiecewiseStructuralComplex:
         layout = QVBoxLayout(dialog)
     
         info_label = QLabel(
-            "Select an STm table. PSC discovers the connected 3D volumes formed by "
-            "the conforming surfaces, then matches each volume to an STm signature."
+            "Select an STM table. PSC discovers the connected 3D volumes formed by "
+            "the conforming surfaces, then matches each volume to an STM signature."
         )
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
     
         selector_layout = QHBoxLayout()
-        selector_layout.addWidget(QLabel("STm table"))
+        selector_layout.addWidget(QLabel("STM table"))
         table_combo = QComboBox(dialog)
         table_combo.addItems(stm_tables)
         selector_layout.addWidget(table_combo, 1)
@@ -340,8 +340,8 @@ class PiecewiseStructuralComplex:
         max_missing_spin.setValue(self.MAX_RELAXED_MISSING_BOUNDARIES)
         max_missing_spin.setToolTip(
             "Maximum number of expected boundaries that may be absent in any "
-            "partial 3D topology match, including possible repeats. Observed "
-            "extra boundaries are never accepted."
+            "partial 3D topology match. Observed extra boundaries are never "
+            "accepted."
         )
         selector_layout.addWidget(max_missing_spin)
         swap_seed_button = QPushButton("Swap selected seeds", dialog)
@@ -647,26 +647,10 @@ class PiecewiseStructuralComplex:
                         if col_idx == 6 and assignment_status in {
                             "LIKELY",
                             "AMBIGUOUS",
-                            "POSSIBLE_REPEAT",
                             "UNASSIGNED",
                         }:
                             item.setForeground(QColor(190, 95, 20))
                             tooltip_lines = []
-                            repeat_match_statuses = sorted(
-                                {
-                                    str(assignment.get("match_status", ""))
-                                    for assignment in unit_info.get(
-                                        "psc_assignments", []
-                                    )
-                                    if assignment.get("is_repeat")
-                                    and assignment.get("match_status")
-                                }
-                            )
-                            if repeat_match_statuses:
-                                tooltip_lines.append(
-                                    "Repeat match quality: "
-                                    + ", ".join(repeat_match_statuses)
-                                )
                             blocked = sorted(
                                 {
                                     label
@@ -700,7 +684,6 @@ class PiecewiseStructuralComplex:
                 f"CERTAIN={status_counts.get('CERTAIN', 0)}, "
                 f"LIKELY={status_counts.get('LIKELY', 0)}, "
                 f"AMBIGUOUS={status_counts.get('AMBIGUOUS', 0)}, "
-                f"POSSIBLE_REPEAT={status_counts.get('POSSIBLE_REPEAT', 0)}, "
                 f"UNASSIGNED={status_counts.get('UNASSIGNED', 0)}"
             )
             ambiguity_groups = self._psc_ambiguity_groups(rows)
@@ -844,7 +827,7 @@ class PiecewiseStructuralComplex:
         )
         if assigned_count == 0:
             self.print_terminal(
-                "No PSC unit could be assigned. Check that STm boundaries match the loaded tetra surfaces."
+                "No PSC unit could be assigned. Check that STM boundaries match the loaded tetra surfaces."
             )
             return
     
@@ -852,7 +835,7 @@ class PiecewiseStructuralComplex:
         assignment_counts = getattr(self, "_psc_last_assignment_counts", {}) or {}
         self.print_terminal(
             f"Assigned {assigned_count} material(s) with "
-            f"{seed_count} seed location(s) from STm table '{table_name}'."
+            f"{seed_count} seed location(s) from STM table '{table_name}'."
             + (f" Skipped {skipped_count} unit(s) without a valid seed." if skipped_count else "")
             + " Assignments: "
             + ", ".join(
@@ -861,7 +844,6 @@ class PiecewiseStructuralComplex:
                     "CERTAIN",
                     "LIKELY",
                     "AMBIGUOUS",
-                    "POSSIBLE_REPEAT",
                     "UNASSIGNED",
                 )
             )
@@ -1151,7 +1133,7 @@ class PiecewiseStructuralComplex:
         self,
         seed_rows: List[Dict[str, Any]],
     ) -> Dict[str, Dict[str, Any]]:
-        """Build metadata for section seed overrides that are not STm units."""
+        """Build metadata for section seed overrides that are not STM units."""
         metadata_by_key: Dict[str, Dict[str, Any]] = {}
         for seed_row in seed_rows or []:
             unit_key = str(seed_row.get("target_unit_key", ""))
@@ -1162,7 +1144,7 @@ class PiecewiseStructuralComplex:
         return metadata_by_key
     
     def _available_stm_tables(self) -> List[str]:
-        """Return STm table names from the embedded PZero project."""
+        """Return STM table names from the embedded PZero project."""
         project = self._pzero_project()
         if project is None:
             return []
@@ -1286,9 +1268,8 @@ class PiecewiseStructuralComplex:
         status_priority = {
             "CERTAIN": 0,
             "LIKELY": 1,
-            "POSSIBLE_REPEAT": 2,
-            "AMBIGUOUS": 3,
-            "UNASSIGNED": 4,
+            "AMBIGUOUS": 2,
+            "UNASSIGNED": 3,
         }
         assignments = list(unit_info.get("psc_assignments", []) or [])
         if include_rejected:
@@ -1310,18 +1291,16 @@ class PiecewiseStructuralComplex:
         assigned_before: int = 0,
         ambiguous: bool = False,
     ) -> str:
-        """Combine match confidence and repeat state into the public PSC status."""
+        """Return match confidence after the internal repeat validation."""
         if ambiguous:
             return "AMBIGUOUS"
-        if int(assigned_before or 0) > 0:
-            return "POSSIBLE_REPEAT"
         return "CERTAIN" if exact else "LIKELY"
     
     def _psc_structural_boundary_keys_for_unit(
         self,
         unit_info: Dict[str, Any],
     ) -> set:
-        """Return normalized non-Boundary STm boundary keys for one mapped unit."""
+        """Return normalized non-Boundary STM boundary keys for one mapped unit."""
         boundary_key = self._psc_key("Boundary")
         return {
             self._psc_key(boundary)
@@ -1333,7 +1312,7 @@ class PiecewiseStructuralComplex:
         self,
         unit_info: Dict[str, Any],
     ) -> Dict[str, str]:
-        """Return display labels keyed by normalized STm boundary key."""
+        """Return display labels keyed by normalized STM boundary key."""
         labels = {}
         for boundary in unit_info.get("boundaries", []) or []:
             boundary_text = self._psc_text(boundary)
@@ -1814,7 +1793,7 @@ class PiecewiseStructuralComplex:
         triface_markers: Any,
         border_surface_indices: Optional[set] = None,
     ) -> Dict[str, Any]:
-        """Split an unseeded tetrahedralization at every constrained PLC face."""
+        """Find PLC regions and their exposed or region-separating surfaces."""
         nodes = np.asarray(nodes, dtype=float)
         elements = np.asarray(elements, dtype=int)
         trifaces = np.asarray(trifaces, dtype=int)
@@ -1885,6 +1864,11 @@ class PiecewiseStructuralComplex:
             if marker <= 0:
                 continue
             owner_regions = sorted({int(tetra_to_region[owner]) for owner in owners})
+            # A constrained face with the same region on both sides is an
+            # internal surface, not part of that region's boundary signature.
+            # Keep one-owner faces: they bound the domain or an excluded cavity.
+            if len(owners) == 2 and len(owner_regions) == 1:
+                continue
             for region_idx in owner_regions:
                 region_markers[region_idx].add(marker)
             if len(owner_regions) != 2:
@@ -2392,9 +2376,10 @@ class PiecewiseStructuralComplex:
 
         assigned_counts: Dict[str, int] = {}
         allocation_counts: Dict[str, int] = {}
-        # Exact matches are sorted first.  If no exact occurrence exists for a
-        # unit, its strongest admissible partial match becomes the LIKELY
-        # reference and later occurrences may be classified as repeats.
+        # Exact matches are sorted first. If no exact occurrence exists for a
+        # unit, its strongest admissible partial match becomes the first LIKELY
+        # reference. Later occurrences are validated as repeats internally but
+        # retain their normal CERTAIN or LIKELY public match status.
         accepted = []
         rejected_by_unit: Dict[str, List[Dict[str, Any]]] = {}
         payloads = []
@@ -2659,7 +2644,7 @@ class PiecewiseStructuralComplex:
                 is_override = bool(unit_info.get("seed_override"))
                 if not observed_labels and (is_override or boundaries):
                     # Explicit overrides are authoritative.  The fallback for
-                    # legacy generated seeds also keeps their STm signature
+                    # legacy generated seeds also keeps their STM signature
                     # instead of allowing a seed to migrate to an unrelated
                     # unit solely because nearest-surface data is absent.
                     observed_labels = list(boundaries)
@@ -2715,7 +2700,7 @@ class PiecewiseStructuralComplex:
                     candidates = [source_candidate]
                 else:
                     # Candidate ownership comes from the intended global/local
-                    # STm signature.  Nearest-surface observations only score
+                    # STM signature.  Nearest-surface observations only score
                     # that candidate pool; they must not redirect an Int1 seed,
                     # for example, to an unrelated Top unit.
                     candidates = self._psc_unit_candidates_for_topology_signature(
@@ -2799,8 +2784,9 @@ class PiecewiseStructuralComplex:
 
         assigned_counts = {}
         allocation_counts = {}
-        # Exact matches are sorted first.  A partial match can establish a
+        # Exact matches are sorted first. A partial match can establish a
         # LIKELY reference when that unit has no exact occurrence in the model.
+        # Valid later occurrences retain their normal public match status.
         accepted = []
         rejected_by_source = {}
         payloads = []
@@ -2971,7 +2957,7 @@ class PiecewiseStructuralComplex:
     
     @staticmethod
     def _psc_key(value: Any) -> str:
-        """Return a normalized key for STm/PyMeshIt feature matching."""
+        """Return a normalized key for STM/PyMeshIt feature matching."""
         if value is None:
             return ""
         try:
@@ -2986,7 +2972,7 @@ class PiecewiseStructuralComplex:
     
     @staticmethod
     def _psc_text(value: Any) -> str:
-        """Return clean display text for STm values, treating NaN as empty."""
+        """Return clean display text for STM values, treating NaN as empty."""
         if value is None:
             return ""
         try:
@@ -3002,20 +2988,20 @@ class PiecewiseStructuralComplex:
         return self._psc_key(value).endswith("_eroded")
 
     def _psc_unit_role(self, value: Any, default: str = "TU") -> str:
-        """Return a canonical STm unit role for PSC outputs."""
+        """Return a canonical STM unit role for PSC outputs."""
         role = self._psc_text(value).upper()
         return role if role in self.SECTION_SEED_ROLES else default
 
     @staticmethod
     def _psc_sort_key(value: Any) -> float:
-        """Return a numeric STm level key."""
+        """Return a numeric STM level key."""
         try:
             return float(value)
         except (TypeError, ValueError):
             return float("inf")
     
     def _build_psc_model_from_stm(self, table_name: str) -> Dict[str, Any]:
-        """Read the canonical Boundaries and Units tables from an STm model."""
+        """Read the canonical Boundaries and Units tables from an STM model."""
         project = self._pzero_project()
         if project is None:
             return {"units": {}, "boundary_features": set(), "boundary_order": []}
@@ -3322,7 +3308,7 @@ class PiecewiseStructuralComplex:
         }
     
     def _psc_surface_indices_for_boundary(self, boundary_feature: str) -> List[int]:
-        """Return surfaces matching an STm Feature and, when available, Role."""
+        """Return surfaces matching an STM Feature and, when available, Role."""
         key = self._psc_key(boundary_feature)
         expected_role = self._psc_key(
             (getattr(self, "_psc_active_boundary_roles", {}) or {}).get(
@@ -3507,7 +3493,7 @@ class PiecewiseStructuralComplex:
         return np.mean(vertices, axis=0)
     
     def _psc_stacking_axis(self, psc_model: Dict[str, Any]) -> np.ndarray:
-        """Estimate a geometric search axis without using STm levels."""
+        """Estimate a geometric search axis without using STM levels."""
         centroids = []
         normals = []
         for feature in psc_model.get("boundary_features", set()) or []:
@@ -4127,7 +4113,7 @@ class PiecewiseStructuralComplex:
         }
 
     def _psc_unit_conformable_boundary_keys(self, unit_info: Dict[str, Any]) -> set:
-        """Return conformable boundary keys linked to one STm unit."""
+        """Return conformable boundary keys linked to one STM unit."""
         return {
             self._psc_key(boundary)
             for boundary in unit_info.get("conformable_boundaries", []) or []
@@ -4139,7 +4125,7 @@ class PiecewiseStructuralComplex:
         psc_model: Dict[str, Any],
         mapped_units: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """Infer owner/opposite sides for conformable surfaces from STm topology."""
+        """Infer owner/opposite sides for conformable surfaces from STM topology."""
         context: Dict[str, Any] = {"conformable_unit_signs": {}}
         bounds = self._psc_domain_bounds()
         diagonal = 1.0
@@ -4209,7 +4195,7 @@ class PiecewiseStructuralComplex:
         reference_seed: np.ndarray,
         target_surface_map: Dict[str, Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
-        """Return signed side constraints implied by STm conformable surfaces."""
+        """Return signed side constraints implied by STM conformable surfaces."""
         constraints = []
         unit_conformable_keys = self._psc_unit_conformable_boundary_keys(unit_info)
         side_context = getattr(self, "_psc_side_context", {}) or {}
@@ -4846,7 +4832,7 @@ class PiecewiseStructuralComplex:
         mapped_units: Optional[List[Dict[str, Any]]] = None,
         max_missing_boundaries: Optional[int] = None,
     ) -> List[List[float]]:
-        """Compute one or more PSC seed points for a mapped STm unit."""
+        """Compute one or more PSC seed points for a mapped STM unit."""
         if max_missing_boundaries is None:
             max_missing_boundaries = self.MAX_RELAXED_MISSING_BOUNDARIES
         try:
@@ -5154,7 +5140,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         form_layout = QFormLayout()
         table_combo = QComboBox(dialog)
         table_combo.addItems(stm_tables)
-        form_layout.addRow("STm table", table_combo)
+        form_layout.addRow("STM table", table_combo)
 
         boundary_combo = QComboBox(dialog)
         for label, uid in self._available_boundary_options():
@@ -5165,8 +5151,8 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         max_missing_spin.setRange(0, 10)
         max_missing_spin.setValue(self.MAX_RELAXED_MISSING_BOUNDARIES)
         max_missing_spin.setToolTip(
-            "Maximum number of STm boundaries that may be absent from any "
-            "partial section match, including possible repeats."
+            "Maximum number of STM boundaries that may be absent from any "
+            "partial section match."
         )
         form_layout.addRow("Max missing boundaries", max_missing_spin)
 
@@ -5193,7 +5179,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         use_domxs_cut_check.toggled.connect(domxs_cut_combo.setEnabled)
         use_domxs_cut_check.setToolTip(
             "Use the selected DomXs to split PSC areas and seeds. "
-            "The DomXs is not used as an STm topology boundary."
+            "The DomXs is not used as an STM topology boundary."
             if domxs_cut_options
             else "No DomXs is available in the active Xsection."
         )
@@ -5365,7 +5351,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         if dom_cut_entries:
             self.print_terminal(
                 f"Using DomXs cut with {len(dom_cut_entries)} line part(s). "
-                "The cut splits PSC areas/seeds but is not used in STm matching."
+                "The cut splits PSC areas/seeds but is not used in STM matching."
             )
 
         if dangle_count or cut_count or invalid_count or not coverage_ok:
@@ -5383,7 +5369,6 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             "CERTAIN": 0,
             "LIKELY": 0,
             "AMBIGUOUS": 0,
-            "POSSIBLE_REPEAT": 0,
             "UNASSIGNED": 0,
         }
         assigned_counts: Dict[str, int] = {}
@@ -5468,14 +5453,9 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 tolerance=tolerance,
             ):
                 continue
-            status = (
-                "POSSIBLE_REPEAT"
-                if assigned_counts.get(candidate["unit_key"], 0)
-                else "CERTAIN"
-            )
             assignment = self._section_assignment_payload(
                 candidate=candidate,
-                status=status,
+                status="CERTAIN",
                 candidate_pool=exact_candidates,
                 assigned_counts=assigned_counts,
             )
@@ -5617,7 +5597,6 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             f"CERTAIN={status_counts.get('CERTAIN', 0)}, "
             f"LIKELY={status_counts.get('LIKELY', 0)}, "
             f"AMBIGUOUS={status_counts.get('AMBIGUOUS', 0)}, "
-            f"POSSIBLE_REPEAT={status_counts.get('POSSIBLE_REPEAT', 0)}, "
             f"UNASSIGNED={status_counts.get('UNASSIGNED', 0)}."
         )
         self.print_terminal(
@@ -6457,13 +6436,10 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             assignment.get("dom_cut_parent_area_idx", 0) or 0
         )
         if dom_cut_parent_area_idx:
-            details.append(f"STm match area={dom_cut_parent_area_idx}")
+            details.append(f"STM match area={dom_cut_parent_area_idx}")
         candidate_names = assignment.get("candidate_names", []) or []
         if len(candidate_names) > 1:
             details.append(f"candidates={', '.join(candidate_names)}")
-        assigned_before = int(assignment.get("assigned_before", 0) or 0)
-        if assigned_before:
-            details.append(f"already assigned={assigned_before}")
         match_status = self._psc_text(assignment.get("match_status", ""))
         if match_status and match_status != status:
             details.append(f"match={match_status}")

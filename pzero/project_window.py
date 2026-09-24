@@ -3939,7 +3939,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     pass
 
     def get_structural_topology_legend_units(self):
-        """Return STm-ready units derived from the geological legend."""
+        """Return STM-ready units derived from the geological legend."""
         legend_df = getattr(self.geol_coll, "legend_df", pd_DataFrame())
         if legend_df is None or legend_df.empty:
             return []
@@ -3971,7 +3971,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
 
     def sync_structural_topology_table_to_legend(self, table_name=None):
-        """Push STm level values from one table into the geology legend."""
+        """Push STM level values from one table into the geology legend."""
         if not table_name:
             return
         if self.custom_table_types.get(table_name) != stm_table_type:
@@ -4039,7 +4039,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.legend.update_widget(parent=self)
 
     def sync_structural_topology_tables_from_legend(self):
-        """Refresh all STm table levels from the geology legend."""
+        """Refresh all STM table levels from the geology legend."""
         legend_units = self.get_structural_topology_legend_units()
         if not legend_units:
             return

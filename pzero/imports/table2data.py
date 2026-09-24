@@ -41,7 +41,7 @@ from pzero.ui.import_window_ui import Ui_ImportOptionsWindow
 
 TEXT_TABLE_FILTER = (
     "Supported table files (*.csv *.dat *.txt *.tsv *.asc *.xyz *.json);;"
-    "STm JSON files (*.json);;"
+    "STM JSON files (*.json);;"
     "CSV files (*.csv);;"
     "Delimited text files (*.dat *.txt *.tsv *.asc *.xyz)"
 )
@@ -119,10 +119,10 @@ def _stm_import_payload(payload):
 
 
 def _read_stm_export_payload(file_path):
-    """Read an STm JSON file or an STm footer embedded in a CSV file."""
-    # TODO: Move STm import to a dedicated Table View command/dialog.  For now
-    # the generic table importer auto-detects full STm exports here: JSON files
-    # are read directly, while CSV/text exports are scanned for the embedded STm
+    """Read an STM JSON file or an STM footer embedded in a CSV file."""
+    # TODO: Move STM import to a dedicated Table View command/dialog.  For now
+    # the generic table importer auto-detects full STM exports here: JSON files
+    # are read directly, while CSV/text exports are scanned for the embedded STM
     # JSON footer written between stm_export_marker_begin/end.  The generic
     # preview only shows a boundary projection, but import_tables() stores the
     # full boundaries/units/link payload in custom_table_options.
@@ -254,10 +254,10 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         )
 
         self.ImportAsSTmCheckBox = QCheckBox(self.OptionsFrame)
-        self.ImportAsSTmCheckBox.setText("Import as STm")
+        self.ImportAsSTmCheckBox.setText("Import as STM")
         self.ImportAsSTmCheckBox.setChecked(False)
         self.formLayout.setWidget(
-            5, QFormLayout.ItemRole.LabelRole, QLabel("STm type")
+            5, QFormLayout.ItemRole.LabelRole, QLabel("STM type")
         )
         self.formLayout.setWidget(
             5, QFormLayout.ItemRole.FieldRole, self.ImportAsSTmCheckBox
@@ -321,7 +321,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         self._update_preview_model()
 
     def _on_import_as_stm_toggled(self, checked):
-        """Switch between manual-table and STm import modes."""
+        """Switch between manual-table and STM import modes."""
         if checked and self.ImportAsColormapCheckBox.isChecked():
             self.ImportAsColormapCheckBox.blockSignals(True)
             self.ImportAsColormapCheckBox.setChecked(False)
@@ -721,8 +721,8 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             if not required_names.issubset(mapped_names):
                 QMessageBox.warning(
                     self,
-                    "Invalid STm mapping",
-                    "An STm import requires at least these fields: "
+                    "Invalid STM mapping",
+                    "An STM import requires at least these fields: "
                     "Feature, Unit Role, Level.",
                 )
                 return
@@ -832,7 +832,7 @@ def _read_table_dataframe(file_path, import_config):
 
 
 def _normalise_stm_dataframe(input_df):
-    """Ensure imported STm tables always expose the expected core columns."""
+    """Ensure imported STM tables always expose the expected core columns."""
     def domain_sort_key(column_name):
         text = str(column_name)
         if text == "Domain":

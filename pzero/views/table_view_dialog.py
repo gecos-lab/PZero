@@ -143,7 +143,7 @@ class ZoomableGraphicsView(QGraphicsView):
 
 
 class STmGraphicsScene(QGraphicsScene):
-    """Graphics scene that forwards graph-item clicks back to the STm dialog."""
+    """Graphics scene that forwards graph-item clicks back to the STM dialog."""
 
     def __init__(self, dialog=None, parent=None):
         super().__init__(parent)
@@ -168,7 +168,7 @@ class STmGraphicsScene(QGraphicsScene):
 
 
 class ManualSTmUnitDialog(QDialog):
-    """Dialog used to add an extra STm unit node."""
+    """Dialog used to add an extra STM unit node."""
 
     def __init__(self, parent=None, domain_columns=None, unit_info=None):
         super().__init__(parent)
@@ -288,10 +288,10 @@ class ManualSTmUnitDialog(QDialog):
         }
 
 
-# TODO: Evaluate whether STm-specific dialogs should move to a dedicated view
+# TODO: Evaluate whether STM-specific dialogs should move to a dedicated view
 # module if table_view_dialog.py grows with more table families.
 class STmBuildDialog(QDialog):
-    """Preview dialog that builds an STm graph from the current table."""
+    """Preview dialog that builds an STM graph from the current table."""
 
     LEFT_X = 180
     RIGHT_X = 760
@@ -313,7 +313,7 @@ class STmBuildDialog(QDialog):
         polarity_calculator=None,
     ):
         super().__init__(parent)
-        self.table_name = str(table_name or "").strip() or "STm"
+        self.table_name = str(table_name or "").strip() or "STM"
         self.dataframe_provider = dataframe_provider
         self.metadata_provider = metadata_provider
         self.options_provider = options_provider
@@ -339,7 +339,7 @@ class STmBuildDialog(QDialog):
         self.node_items = {}
         self.domain_items = {}
         self.editing_enabled = False
-        self.setWindowTitle(f"Build STm - {self.table_name}")
+        self.setWindowTitle(f"Build STM - {self.table_name}")
         self.resize(1120, 860)
         self._fit_on_next_rebuild = True
         self._fit_after_show_pending = True
@@ -405,7 +405,7 @@ class STmBuildDialog(QDialog):
         reset_zoom_button.clicked.connect(self.reset_zoom_to_fit)
         buttons_layout.addWidget(reset_zoom_button)
         export_image_button = QPushButton("Export image")
-        export_image_button.setToolTip("Save the STm graph as an image")
+        export_image_button.setToolTip("Save the STM graph as an image")
         export_image_button.clicked.connect(self.export_scene_image)
         buttons_layout.addWidget(export_image_button)
         zoom_hint_label = QLabel("Ctrl + mouse wheel to zoom")
@@ -449,7 +449,7 @@ class STmBuildDialog(QDialog):
             QTimer.singleShot(80, self.reset_zoom_to_fit)
 
     def on_editing_toggled(self, checked):
-        """Enable/disable editing actions for manual STm links."""
+        """Enable/disable editing actions for manual STM links."""
         self.editing_enabled = bool(checked)
         if not self.editing_enabled:
             self.selected_node_key = None
@@ -458,7 +458,7 @@ class STmBuildDialog(QDialog):
         self._update_node_highlight()
 
     def update_editing_ui(self):
-        """Refresh editing controls in the STm builder."""
+        """Refresh editing controls in the STM builder."""
         self.editing_toggle_button.setText(
             "Disable editing" if self.editing_enabled else "Enable editing"
         )
@@ -479,7 +479,7 @@ class STmBuildDialog(QDialog):
         )
 
     def rebuild_scene(self):
-        """Rebuild the graphics scene from the current STm table."""
+        """Rebuild the graphics scene from the current STM table."""
         self.scene.clear()
         self.node_items = {}
         self.domain_items = {}
@@ -503,20 +503,20 @@ class STmBuildDialog(QDialog):
         self.graphics_view.fit_scene(scene_rect)
 
     def export_scene_image(self):
-        """Save the current STm graph scene to a raster image."""
+        """Save the current STM graph scene to a raster image."""
         scene_rect = self.scene.itemsBoundingRect().adjusted(-40, -40, 40, 40)
         if scene_rect.isEmpty():
-            QMessageBox.information(self, "Export image", "There is no STm graph to export.")
+            QMessageBox.information(self, "Export image", "There is no STM graph to export.")
             return
 
         safe_table_name = "".join(
             char if char.isalnum() or char in "._-" else "_"
             for char in self.table_name
         ).strip("_")
-        default_name = f"{safe_table_name or 'STm'}_graph.png"
+        default_name = f"{safe_table_name or 'STM'}_graph.png"
         file_path, selected_filter = QFileDialog.getSaveFileName(
             self,
-            "Export STm graph image",
+            "Export STM graph image",
             default_name,
             "PNG image (*.png);;JPEG image (*.jpg);;BMP image (*.bmp);;All files (*.*)",
         )
@@ -554,7 +554,7 @@ class STmBuildDialog(QDialog):
             )
 
     def _draw_scene(self, dataframe):
-        """Populate the scene with STm nodes and the automatically-derived links."""
+        """Populate the scene with STM nodes and the automatically-derived links."""
         header_font = QFont()
         header_font.setPointSize(16)
         header_font.setBold(True)
@@ -562,7 +562,7 @@ class STmBuildDialog(QDialog):
         self.scene.addText("Boundaries", header_font).setPos(self.RIGHT_X - 90, 35)
 
         if (dataframe is None or dataframe.empty) and not self.manual_units:
-            empty_text = self.scene.addText("The STm table is empty.")
+            empty_text = self.scene.addText("The STM table is empty.")
             empty_text.setPos(260, 220)
             return
 
@@ -727,7 +727,7 @@ class STmBuildDialog(QDialog):
         self._update_node_highlight()
 
     def _build_rows_payload(self, dataframe):
-        """Convert the dataframe into normalized STm rows."""
+        """Convert the dataframe into normalized STM rows."""
         rows = []
         if dataframe is None or dataframe.empty:
             return rows
@@ -857,7 +857,7 @@ class STmBuildDialog(QDialog):
         return connections
 
     def _all_connections(self):
-        """Return all displayed STm graph links."""
+        """Return all displayed STM graph links."""
         return self.conformable_connections | self.unconformable_connections
 
     def _editable_connections(self):
@@ -893,7 +893,7 @@ class STmBuildDialog(QDialog):
         )
 
     def _load_manual_units(self):
-        """Load manual STm unit nodes from the table options."""
+        """Load manual STM unit nodes from the table options."""
         options = {}
         if callable(self.options_provider):
             options = self.options_provider() or {}
@@ -940,13 +940,13 @@ class STmBuildDialog(QDialog):
         return manual_units
 
     def _save_manual_units(self):
-        """Persist manual STm unit nodes."""
+        """Persist manual STM unit nodes."""
         if not callable(self.options_updater):
             return
         self.options_updater({"manual_units": list(self.manual_units)})
 
     def _load_unit_renames(self):
-        """Load display-name overrides for automatically generated STm units."""
+        """Load display-name overrides for automatically generated STM units."""
         options = {}
         if callable(self.options_provider):
             options = self.options_provider() or {}
@@ -968,7 +968,7 @@ class STmBuildDialog(QDialog):
         return unit_renames
 
     def _save_unit_renames(self):
-        """Persist display-name overrides for automatically generated STm units."""
+        """Persist display-name overrides for automatically generated STM units."""
         if not callable(self.options_updater):
             return
         self.options_updater({"unit_renames": dict(self.unit_renames)})
@@ -985,7 +985,7 @@ class STmBuildDialog(QDialog):
         return f"{base_id}_{suffix}"
 
     def _current_domain_columns(self):
-        """Return currently available STm domain columns for manual unit input."""
+        """Return currently available STM domain columns for manual unit input."""
         dataframe = pd_DataFrame()
         if callable(self.dataframe_provider):
             current_df = self.dataframe_provider()
@@ -1018,7 +1018,7 @@ class STmBuildDialog(QDialog):
         )
 
     def add_manual_unit(self):
-        """Add a persisted unit node that is not generated by the STm table."""
+        """Add a persisted unit node that is not generated by the STM table."""
         if not self.editing_enabled:
             return
         dialog = ManualSTmUnitDialog(
@@ -1157,7 +1157,7 @@ class STmBuildDialog(QDialog):
         self.update_editing_ui()
 
     def _draw_stm_connections(self):
-        """Draw persisted STm links between unit and boundary nodes."""
+        """Draw persisted STM links between unit and boundary nodes."""
         valid_conformable = set()
         valid_unconformable = set()
         for connection_set, valid_set, line_style in (
@@ -1900,7 +1900,7 @@ class NewColormapTableDialog(QDialog):
 
 
 class NewStructuralTopologyTableDialog(QDialog):
-    """Dialog used to create a new STm table."""
+    """Dialog used to create a new STM table."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1940,7 +1940,7 @@ class NewStructuralTopologyTableDialog(QDialog):
 
 
 class ImportStructuralTopologyUnitsDialog(QDialog):
-    """Dialog used to import legend boundaries into an STm table."""
+    """Dialog used to import legend boundaries into an STM table."""
 
     def __init__(
         self, parent=None, units_provider=None, existing_boundaries=None
@@ -2065,7 +2065,7 @@ class AddModelBoundaryDialog(QDialog):
         info_label = QLabel(
             "Select one boundary from the Boundary collection, or add a "
             "theoretical model boundary. Only one model boundary can belong "
-            "to an STm."
+            "to an STM."
         )
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
@@ -2241,7 +2241,7 @@ class ExtraSTmBoundaryDialog(QDialog):
 
 
 class UnitLevelAmbiguityDialog(QDialog):
-    """Resolve equivalent STm structural-level assignments."""
+    """Resolve equivalent STM structural-level assignments."""
 
     def __init__(self, parent, solutions):
         super().__init__(parent)
@@ -2292,7 +2292,7 @@ class ViewTable(QWidget):
     """Dockable view that lists and edits user-defined project tables."""
 
     EXPORT_FILTER = (
-        "STm JSON files (*.json);;"
+        "STM JSON files (*.json);;"
         "CSV files (*.csv);;"
         "Tab-separated text (*.tsv);;"
         "Text files (*.txt);;"
@@ -2387,7 +2387,7 @@ class ViewTable(QWidget):
         toolbar_layout.addWidget(self.action_menu_bar)
 
         toolbar_layout.addStretch(1)
-        self.build_stm_button = QPushButton("Open STm builder")
+        self.build_stm_button = QPushButton("Open STM builder")
         self.build_stm_button.clicked.connect(self.build_structural_topology_model)
         toolbar_layout.addWidget(self.build_stm_button)
         right_layout.addLayout(toolbar_layout)
@@ -2555,7 +2555,7 @@ class ViewTable(QWidget):
         )
 
     def _rename_stm_unit_references(self, old_unit_name, new_unit_name):
-        """Move STm option references when a unit Feature is renamed inline."""
+        """Move STM option references when a unit Feature is renamed inline."""
         old_unit_name = str(old_unit_name or "").strip()
         new_unit_name = str(new_unit_name or "").strip()
         if (
@@ -2910,7 +2910,7 @@ class ViewTable(QWidget):
             )
 
     def _install_stm_delegates(self):
-        """Install inline combo delegates for STm enumerated columns."""
+        """Install inline combo delegates for STM enumerated columns."""
         self._reset_table_delegates()
         dataframe_columns = self.table_model.dataframe.columns.tolist()
         if stm_unit_role_col in dataframe_columns:
@@ -3187,7 +3187,7 @@ class ViewTable(QWidget):
         edited_row_index=None,
         edited_column_name=None,
     ):
-        """Keep the edited STm dataframe internally coherent."""
+        """Keep the edited STM dataframe internally coherent."""
         dataframe = self.table_model.dataframe
         if (
             dataframe is None
@@ -3411,13 +3411,13 @@ class ViewTable(QWidget):
         )
 
     def _build_default_structural_topology_dataframe(self):
-        """Return the default empty STm dataframe."""
+        """Return the default empty STM dataframe."""
         return pd_DataFrame(columns=stm_base_cols)
 
     def _normalise_export_path(self, file_path: str, selected_filter: str) -> tuple[str, str]:
         """Return a normalized output path and delimiter for textual table export."""
         delimiter_map = {
-            "STm JSON files (*.json)": (".json", ","),
+            "STM JSON files (*.json)": (".json", ","),
             "CSV files (*.csv)": (".csv", ","),
             "Tab-separated text (*.tsv)": (".tsv", "\t"),
             "Text files (*.txt)": (".txt", "\t"),
@@ -3550,7 +3550,7 @@ class ViewTable(QWidget):
             table_name,
             export_filter,
             (
-                "STm JSON files (*.json)"
+                "STM JSON files (*.json)"
                 if self.current_table_type == stm_table_type
                 else "CSV files (*.csv)"
             ),
@@ -3670,7 +3670,7 @@ class ViewTable(QWidget):
             )
 
     def build_structural_topology_model(self):
-        """Open the STm builder dialog for the current table."""
+        """Open the STM builder dialog for the current table."""
         table_name = self.current_table_name
         if not table_name or self.current_table_type != stm_table_type:
             return
@@ -3698,7 +3698,7 @@ class ViewTable(QWidget):
         self.update_editing_ui()
 
     def _update_stm_build_options(self, table_name=None, updates=None):
-        """Persist STm builder options without discarding existing table options."""
+        """Persist STM builder options without discarding existing table options."""
         if not table_name:
             return
         merged_options = dict(self.parent.custom_table_options.get(table_name, {}))
@@ -3905,7 +3905,7 @@ class ViewTable(QWidget):
         self._notify_custom_table_metadata_changed()
 
     def add_model_boundary(self):
-        """Add the single explicit model boundary to the current STm."""
+        """Add the single explicit model boundary to the current STM."""
         if self.current_table_type != stm_table_type:
             return
         boundaries = self.boundaries_table_model.dataframe
@@ -3916,7 +3916,7 @@ class ViewTable(QWidget):
             QMessageBox.information(
                 self,
                 "Model boundary already present",
-                "This STm already contains a model boundary.",
+                "This STM already contains a model boundary.",
             )
             return
 
@@ -3938,7 +3938,7 @@ class ViewTable(QWidget):
             QMessageBox.warning(
                 self,
                 "Duplicate boundary",
-                f'A boundary named "{feature_name}" already exists in this STm.',
+                f'A boundary named "{feature_name}" already exists in this STM.',
             )
             return
 
@@ -4387,7 +4387,7 @@ class ViewTable(QWidget):
         confirm = QMessageBox.question(
             self,
             "Unit level",
-            "Potential STm level issues:\n\n"
+            "Potential STM level issues:\n\n"
             + "\n".join(f"- {message}" for message in warning_messages)
             + "\n\nContinue with the calculable units?",
             QMessageBox.Yes | QMessageBox.No,
@@ -4396,7 +4396,7 @@ class ViewTable(QWidget):
         return confirm == QMessageBox.Yes
 
     def calculate_unit_polarities(self):
-        """Calculate unit structural levels from STm topology."""
+        """Calculate unit structural levels from STM topology."""
         if self.current_table_type != stm_table_type:
             return
         keep_existing_levels = self._confirm_stm_existing_unit_levels()
