@@ -19,6 +19,7 @@ from PySide6.QtGui import (
     QFontMetrics,
     QImage,
     QPainter,
+    QPainterPath,
     QTransform,
 )
 from PySide6.QtWidgets import (
@@ -300,6 +301,7 @@ class STmBuildDialog(QDialog):
     NODE_HEIGHT = 74
     NODE_MIN_WIDTH = 220
     NODE_PADDING_X = 28
+    BOX_CORNER_RADIUS = 8
     DOMAIN_MARGIN = 32
 
     def __init__(
@@ -822,7 +824,7 @@ class STmBuildDialog(QDialog):
     def _legend_color_for_row(self, row_info=None, metadata=None):
         """Return the legend color for a row, falling back to a stable generated color."""
         metadata = metadata or {}
-        color_source = row_info if row_info and row_info.get("Manual") else metadata
+        color_source = metadata or row_info or {}
         try:
             red = int(float(color_source.get("color_R")))
             green = int(float(color_source.get("color_G")))
@@ -1405,9 +1407,13 @@ class STmBuildDialog(QDialog):
 
         rect_pen = QPen(outline_color or QColor(30, 30, 30))
         rect_pen.setWidth(3)
-        rect_item = self.scene.addRect(
-            rect_x, rect_y, rect_width, rect_height, rect_pen, QBrush(fill_color)
+        node_path = QPainterPath()
+        node_path.addRoundedRect(
+            QRectF(rect_x, rect_y, rect_width, rect_height),
+            self.BOX_CORNER_RADIUS,
+            self.BOX_CORNER_RADIUS,
         )
+        rect_item = self.scene.addPath(node_path, rect_pen, QBrush(fill_color))
         rect_item.setZValue(0)
         rect_item.setData(0, node_key)
 
@@ -1486,13 +1492,14 @@ class STmBuildDialog(QDialog):
             domain_key = f"domain:{domain_column}:{domain_value}"
             domain_brush_color = QColor(domain_color)
             domain_brush_color.setAlpha(1)
-            domain_rect = self.scene.addRect(
-                left,
-                top,
-                right - left,
-                bottom - top,
-                domain_pen,
-                QBrush(domain_brush_color),
+            domain_path = QPainterPath()
+            domain_path.addRoundedRect(
+                QRectF(left, top, right - left, bottom - top),
+                self.BOX_CORNER_RADIUS,
+                self.BOX_CORNER_RADIUS,
+            )
+            domain_rect = self.scene.addPath(
+                domain_path, domain_pen, QBrush(domain_brush_color)
             )
             domain_rect.setZValue(-25 - order_value)
             domain_rect.setData(0, domain_key)
@@ -2927,9 +2934,10 @@ class ViewTable(QWidget):
         else:
             units = []
 
-        boundary_coll = getattr(self.parent, "boundary_coll", None)
-        if boundary_coll is not None:
-            for boundary_name in getattr(boundary_coll, "get_names", []) or []:
+        boundary_sources = self._available_model_boundary_sources()
+        if boundary_sources:
+            for source_info in boundary_sources:
+                boundary_name = source_info.get("name", "")
                 boundary_text = str(boundary_name or "").strip()
                 if not boundary_text or boundary_text == stm_model_boundary:
                     continue
@@ -2941,9 +2949,9 @@ class ViewTable(QWidget):
                         "Domain_1": "",
                         "feature": boundary_text,
                         "role": "model_boundary",
-                        "color_R": 255,
-                        "color_G": 255,
-                        "color_B": 255,
+                        "color_R": source_info.get("color_R", 255),
+                        "color_G": source_info.get("color_G", 255),
+                        "color_B": source_info.get("color_B", 255),
                     }
                 )
 
@@ -3006,8 +3014,9 @@ class ViewTable(QWidget):
             unit_key = (feature_name, role_name)
             if unit_key in available_keys:
                 continue
-            unit_payload = dict(unit_info)
-            unit_payload.update(feature_color_map.get(feature_name, {}))
+            # Saved colours are a fallback; Refresh must read the live legend.
+            unit_payload = dict(feature_color_map.get(feature_name, {}))
+            unit_payload.update(unit_info)
             available_units.append(unit_payload)
             available_keys.add(unit_key)
         if feature_color_map:
