@@ -228,7 +228,7 @@ class ScreenshotExportDialog(QDialog):
         # Get colormaps from PropertiesCMaps
         self.colormap_combo = QComboBox()
         self.colormap_combo.addItem("(Use Current)")
-        self.colormap_combo.addItems(PropertiesCMaps.colormaps_list)
+        self.colormap_combo.addItems(PropertiesCMaps.get_colormaps_list())
         self.colormap_combo.setEditable(True)
         self.colormap_combo.setToolTip(
             "Select a colormap to apply to scalar properties in the export.\n"
