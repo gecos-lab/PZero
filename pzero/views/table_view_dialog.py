@@ -2248,51 +2248,110 @@ class ExtraSTmBoundaryDialog(QDialog):
 
 
 class UnitLevelAmbiguityDialog(QDialog):
-    """Resolve equivalent STM structural-level assignments."""
+    """Resolve one unit at a time while retaining compatible configurations."""
 
     def __init__(self, parent, solutions):
         super().__init__(parent)
         self.setWindowTitle("Resolve unit level")
         self.solutions = list(solutions or [])
-        self.solution_index = 0
+        self.remaining_solutions = self.solutions
+        self.unit_names = list(self.solutions[0]) if self.solutions else []
+        self.history = []
+        self.current_unit = None
+        self.setMinimumWidth(320)
+
         layout = QVBoxLayout(self)
-        layout.addWidget(
-            QLabel(
-                "These units have equivalent topological solutions.\n"
-                "Use Switch to choose the structural side assignment."
-            )
-        )
-        self.assignment_label = QLabel()
-        layout.addWidget(self.assignment_label)
-        switch_button = QPushButton("Switch")
-        switch_button.clicked.connect(self.switch_assignment)
-        layout.addWidget(switch_button)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
-        )
+        form = QFormLayout()
+        self.unit_label = QLabel()
+        self.unit_label.setTextFormat(Qt.PlainText)
+        self.unit_label.setWordWrap(True)
+        form.addRow("Unit", self.unit_label)
+        self.level_combo = QComboBox()
+        self.level_combo.currentIndexChanged.connect(self._update_next_button)
+        form.addRow("SL", self.level_combo)
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
+        self.back_button = QPushButton("Back")
+        self.back_button.clicked.connect(self.previous_unit)
+        self.next_button = buttons.addButton("Next", QDialogButtonBox.AcceptRole)
+        self.next_button.setDefault(True)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        self.update_assignment_label()
+        controls = QHBoxLayout()
+        controls.addWidget(self.back_button)
+        controls.addStretch()
+        controls.addWidget(buttons)
+        layout.addLayout(controls)
+        self._show_unit()
 
     @property
     def assignment(self):
-        if not self.solutions:
-            return {}
-        return self.solutions[self.solution_index]
+        return self.remaining_solutions[0] if self.remaining_solutions else {}
 
-    def switch_assignment(self):
-        if self.solutions:
-            self.solution_index = (self.solution_index + 1) % len(self.solutions)
-        self.update_assignment_label()
+    def _next_ambiguous_unit(self, solutions):
+        for name in self.unit_names:
+            if len({round(solution[name]["value"], 9) for solution in solutions}) > 1:
+                return name
+        return None
 
-    def update_assignment_label(self):
-        self.assignment_label.setText(
-            "\n".join(
-                f"{unit_name}: {info.get('value', ''):g}"
-                for unit_name, info in sorted(self.assignment.items())
-            )
+    def _selected_solutions(self):
+        if self.current_unit is None:
+            return self.remaining_solutions
+        selected_value = self.level_combo.currentData()
+        if selected_value is None:
+            return []
+        return [
+            solution
+            for solution in self.remaining_solutions
+            if round(solution[self.current_unit]["value"], 9) == selected_value
+        ]
+
+    def _show_unit(self, selected_value=None):
+        self.current_unit = self._next_ambiguous_unit(self.remaining_solutions)
+        self.unit_label.setText(self.current_unit or "")
+        self.level_combo.blockSignals(True)
+        self.level_combo.clear()
+        if self.current_unit is not None:
+            values = {
+                round(solution[self.current_unit]["value"], 9):
+                solution[self.current_unit]["value"]
+                for solution in self.remaining_solutions
+            }
+            for key, value in sorted(values.items()):
+                self.level_combo.addItem(f"{value:.12g}", key)
+            if selected_value is None:
+                selected_value = round(self.assignment[self.current_unit]["value"], 9)
+            self.level_combo.setCurrentIndex(self.level_combo.findData(selected_value))
+        self.level_combo.blockSignals(False)
+        self.back_button.setEnabled(bool(self.history))
+        self._update_next_button()
+
+    def _update_next_button(self):
+        selected = self._selected_solutions()
+        self.next_button.setEnabled(bool(selected))
+        self.next_button.setText(
+            "Next" if self._next_ambiguous_unit(selected) is not None else "OK"
         )
+
+    def accept(self):
+        selected = self._selected_solutions()
+        if not selected:
+            return
+        if self._next_ambiguous_unit(selected) is None:
+            self.remaining_solutions = selected
+            super().accept()
+            return
+        self.history.append(
+            (self.remaining_solutions, self.level_combo.currentData())
+        )
+        self.remaining_solutions = selected
+        self._show_unit()
+
+    def previous_unit(self):
+        if self.history:
+            self.remaining_solutions, selected_value = self.history.pop()
+            self._show_unit(selected_value)
 
 
 class ViewTable(QWidget):
@@ -4435,6 +4494,7 @@ class ViewTable(QWidget):
                 + "\n".join(f"- {message}" for message in error_messages),
             )
             return
+        resolved_ambiguous_rows = set()
         ambiguity_solutions = list(result.get("ambiguity_solutions", []) or [])
         if ambiguity_solutions:
             ambiguous_rows = {
@@ -4452,7 +4512,10 @@ class ViewTable(QWidget):
                     result["levels_by_row"][row_label] = info.get("value", "")
                     result["levels_by_unit"][unit_name] = info.get("value", "")
                     result["unresolved_rows"].pop(row_label, None)
+                    resolved_ambiguous_rows.add(row_label)
             else:
+                for unit_name in dialog.assignment:
+                    result["levels_by_unit"].pop(unit_name, None)
                 for row_label in ambiguous_rows:
                     result["levels_by_row"].pop(row_label, None)
                     result["unresolved_rows"][row_label] = (
@@ -4468,24 +4531,53 @@ class ViewTable(QWidget):
         if keep_existing_levels:
             self._save_stm_level_overrides(self._stm_level_overrides())
             override_rows = self._apply_stm_level_overrides_to_table()
-        prompted_rows = self._prompt_stm_unresolved_unit_levels(unresolved_rows)
+        prompted_rows = self._prompt_stm_unresolved_unit_levels(
+            unresolved_rows - override_rows
+        )
         override_rows.update(prompted_rows)
 
         self._persist_stm_composite(reset_models=True)
-        calculated = len(result.get("levels_by_row", {}))
-        unresolved = len(unresolved_rows - override_rows)
-        message = f"Calculated {calculated} unit levels."
+        assigned_rows = set(result.get("levels_by_row", {})) | override_rows
+        unresolved_rows -= override_rows
+        message = f"Assigned {len(assigned_rows)} unit levels."
+        resolved_ambiguous_rows -= override_rows
+        if resolved_ambiguous_rows:
+            message += (
+                f"\nResolved {len(resolved_ambiguous_rows)} ambiguous unit levels."
+            )
         if override_rows:
             message += (
                 f"\nApplied {len(override_rows)} user-defined level overrides."
             )
-        if unresolved:
+        if unresolved_rows:
             message += (
-                f"\nLeft {unresolved} unresolved: review conformable links, "
+                f"\nLeft {len(unresolved_rows)} unresolved: review conformable links, "
                 "missing levels, or ambiguous intervals."
             )
+        pending_units = {
+            str(units.at[row_label, stm_feature_col] or "").strip()
+            for row_label in unresolved_rows
+            if row_label in units.index
+        }
+        resolution_codes = {
+            "ambiguous_topological_assignment",
+            "ambiguous_shared_interval",
+            "shared_interval_without_separator",
+            "no_numeric_conformable_boundary",
+            "ambiguous_intrusive_contacts",
+            "level_search_limit",
+            "unit_level_on_boundary",
+        }
+        remaining_diagnostics = [
+            diagnostic
+            for diagnostic in result.get("diagnostics", [])
+            if diagnostic.get("code") not in resolution_codes
+            or pending_units.intersection(
+                diagnostic.get("units", []) + [diagnostic.get("unit", "")]
+            )
+        ]
         warning_messages = self._stm_level_diagnostic_messages(
-            result.get("diagnostics", []), {"warning"}, limit=5
+            remaining_diagnostics, {"warning"}, limit=5
         )
         if warning_messages:
             message += "\n\nNotes:\n" + "\n".join(

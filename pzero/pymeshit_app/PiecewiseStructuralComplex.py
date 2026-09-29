@@ -19,6 +19,7 @@ from vtkmodules.util.numpy_support import vtk_to_numpy
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -30,6 +31,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QSpinBox,
+    QStyle,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -319,15 +321,8 @@ class PiecewiseStructuralComplex:
     
         dialog = QDialog(self.host)
         dialog.setWindowTitle("Piecewise Structural Complex")
-        dialog.resize(920, 520)
+        dialog.resize(1120, 560)
         layout = QVBoxLayout(dialog)
-    
-        info_label = QLabel(
-            "Select an STM table. PSC discovers the connected 3D volumes formed by "
-            "the conforming surfaces, then matches each volume to an STM signature."
-        )
-        info_label.setWordWrap(True)
-        layout.addWidget(info_label)
     
         selector_layout = QHBoxLayout()
         selector_layout.addWidget(QLabel("STM table"))
@@ -344,38 +339,57 @@ class PiecewiseStructuralComplex:
             "accepted."
         )
         selector_layout.addWidget(max_missing_spin)
+        recalculate_button = QPushButton("Recalculate", dialog)
+        recalculate_button.setIcon(dialog.style().standardIcon(QStyle.SP_BrowserReload))
+        recalculate_button.setToolTip(
+            "Reload the selected STM and rebuild PSC volumes and assignments. "
+            "Saved seed overrides are preserved; Use calculated clears them."
+        )
+        selector_layout.addWidget(recalculate_button)
+        layout.addLayout(selector_layout)
+
+        commands_layout = QHBoxLayout()
         swap_seed_button = QPushButton("Swap selected seeds", dialog)
         swap_seed_button.setToolTip(
-            "Select two ambiguous units in the preview table and swap their seed coordinates."
+            "Swap the two selected seed locations between their units. "
+            "Other occurrences keep their current locations."
         )
-        selector_layout.addWidget(swap_seed_button)
+        commands_layout.addWidget(swap_seed_button)
         from_sections_button = QPushButton("From sections", dialog)
         from_sections_button.setToolTip(
             "Use XsVertex/XsVertexSet seeds from geol_coll with roles TU, SU, IU, or SD."
         )
-        selector_layout.addWidget(from_sections_button)
+        commands_layout.addWidget(from_sections_button)
         use_calculated_button = QPushButton("Use calculated", dialog)
         use_calculated_button.setToolTip(
             "Clear saved PSC seed overrides and return to automatically calculated "
             "3D volumetric seed locations."
         )
-        selector_layout.addWidget(use_calculated_button)
-        layout.addLayout(selector_layout)
+        commands_layout.addWidget(use_calculated_button)
+        commands_layout.addStretch(1)
+        layout.addLayout(commands_layout)
     
-        preview_table = QTableWidget(0, 7, dialog)
+        preview_table = QTableWidget(0, 6, dialog)
         preview_table.setHorizontalHeaderLabels(
             [
+                "Volume",
                 "Unit",
-                "Unit Role",
-                "Boundaries",
-                "Matched surfaces",
+                "Role",
                 "Seed point",
-                "Signature differences",
                 "Assignment",
+                "Details",
             ]
         )
-        preview_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        header = preview_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Interactive)
+        for column in (0, 2, 4):
+            header.setSectionResizeMode(column, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.Stretch)
+        preview_table.setColumnWidth(1, 150)
+        preview_table.setColumnWidth(3, 235)
         preview_table.verticalHeader().setVisible(False)
+        preview_table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        preview_table.setAlternatingRowColors(True)
         preview_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         preview_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         preview_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
@@ -385,11 +399,6 @@ class PiecewiseStructuralComplex:
         status_label.setWordWrap(True)
         layout.addWidget(status_label)
     
-        ambiguity_label = QLabel("")
-        ambiguity_label.setWordWrap(True)
-        ambiguity_label.setStyleSheet("color: rgb(160, 95, 0);")
-        layout.addWidget(ambiguity_label)
-    
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         assign_button = buttons.button(QDialogButtonBox.Ok)
         if assign_button is not None:
@@ -398,7 +407,7 @@ class PiecewiseStructuralComplex:
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
     
-        preview_state = {"psc_model": None, "mapping": None, "rows": []}
+        preview_state = {"psc_model": None, "mapping": None, "units": [], "rows": []}
         seed_overrides: Dict[str, List[List[float]]] = {}
         seed_override_metadata: Dict[str, Dict[str, Any]] = {}
     
@@ -499,6 +508,31 @@ class PiecewiseStructuralComplex:
             table_options[table_name] = options
 
         def apply_seed_overrides(mapping: Dict[str, Any]) -> None:
+            # STM keys include the row index. Preserve overrides across a row
+            # reorder only when the feature still identifies exactly one unit.
+            units_by_feature = {}
+            for unit_info in mapping.get("units", []) or []:
+                feature = self._psc_text(unit_info.get("feature", ""))
+                units_by_feature.setdefault(feature, []).append(unit_info)
+            overrides_rekeyed = False
+            for old_key in list(seed_overrides):
+                if not old_key.startswith("unit:stm:"):
+                    continue
+                parts = old_key.split(":", 3)
+                if len(parts) != 4:
+                    continue
+                matches = units_by_feature.get(parts[3], [])
+                if len(matches) != 1:
+                    continue
+                new_key = unit_seed_key(matches[0])
+                if new_key != old_key and new_key not in seed_overrides:
+                    seed_overrides[new_key] = seed_overrides.pop(old_key)
+                    if old_key in seed_override_metadata:
+                        seed_override_metadata[new_key] = seed_override_metadata.pop(old_key)
+                    overrides_rekeyed = True
+            if overrides_rekeyed:
+                save_seed_overrides(table_combo.currentText())
+
             matched_keys = set()
             for unit_info in mapping.get("units", []) or []:
                 unit_key = unit_seed_key(unit_info)
@@ -510,6 +544,9 @@ class PiecewiseStructuralComplex:
                     unit_info["seed_override"] = True
             for unit_key, seed_points in seed_overrides.items():
                 if unit_key in matched_keys:
+                    continue
+                # A removed STM unit is not an extra material imported from sections.
+                if unit_key.startswith("unit:stm:"):
                     continue
                 metadata = dict(seed_override_metadata.get(unit_key, {}))
                 feature = self._psc_text(metadata.get("feature", "")) or str(unit_key)
@@ -544,15 +581,12 @@ class PiecewiseStructuralComplex:
             preview_state["mapping"] = mapping
     
             rows = list(mapping.get("units", []))
-            preview_state["rows"] = rows
+            preview_state["units"] = rows
             previous_side_context = getattr(self, "_psc_side_context", {})
             self._psc_side_context = self._psc_prepare_topology_side_context(
                 psc_model,
                 rows,
             )
-            preview_table.setRowCount(len(rows))
-            missing_count = 0
-            seed_location_count = 0
             try:
                 assignment_payloads = self._psc_assign_volumetric_regions(
                     rows,
@@ -586,141 +620,75 @@ class PiecewiseStructuralComplex:
                     status = str(payload.get("status", "UNASSIGNED"))
                     status_counts[status] = status_counts.get(status, 0) + 1
 
-                for row_idx, unit_info in enumerate(rows):
-                    boundaries = unit_info.get("boundaries", [])
-                    matched_surfaces = unit_info.get("matched_surfaces", [])
-                    missing_boundaries = list(unit_info.get("missing_boundaries", []) or [])
-                    extra_boundaries = []
-                    for assignment in unit_info.get("psc_assignments", []) or []:
-                        missing_boundaries.extend(
-                            assignment.get("missing_labels", []) or []
-                        )
-                        extra_boundaries.extend(
-                            assignment.get("extra_labels", []) or []
-                        )
-                    missing_boundaries = sorted(
-                        {self._psc_text(label) for label in missing_boundaries if self._psc_text(label)},
-                        key=str.casefold,
-                    )
-                    extra_boundaries = sorted(
-                        {self._psc_text(label) for label in extra_boundaries if self._psc_text(label)},
-                        key=str.casefold,
-                    )
-                    missing_count += len(missing_boundaries) + len(extra_boundaries)
-                    signature_differences = []
-                    if missing_boundaries:
-                        signature_differences.append(
-                            "Missing: " + ", ".join(missing_boundaries)
-                        )
-                    if extra_boundaries:
-                        signature_differences.append(
-                            "Extra: " + ", ".join(extra_boundaries)
-                        )
-                    seed_points = list(unit_info.get("seed_points", []) or [])
-                    seed_location_count += len(seed_points or [])
-                    seed_text = self._psc_format_seed_list(seed_points)
-                    if unit_info.get("seed_override") and seed_text:
-                        seed_text += " *"
-                    assignment_status = unit_info.get(
-                        "psc_assignment_status",
-                        "UNASSIGNED",
-                    )
-                    values = [
-                        unit_info.get("feature", ""),
-                        unit_info.get("unit_role", ""),
-                        ", ".join(boundaries),
-                        ", ".join(matched_surfaces),
-                        seed_text,
-                        "; ".join(signature_differences),
-                        assignment_status,
-                    ]
-                    for col_idx, value in enumerate(values):
+                display_rows = self._psc_preview_rows(
+                    rows, assignment_payloads, seed_overrides
+                )
+                preview_state["rows"] = display_rows
+                preview_table.clearSelection()
+                preview_table.setRowCount(len(display_rows))
+                for row_idx, display_row in enumerate(display_rows):
+                    for col_idx, value in enumerate(display_row["values"]):
                         item = QTableWidgetItem(str(value))
-                        if col_idx == 4 and unit_info.get("seed_override"):
+                        item.setToolTip(display_row["tooltip"])
+                        if col_idx == 3 and display_row["seed_override"]:
                             item.setToolTip(
                                 "Seed overridden in this PSC dialog "
                                 "(manual swap or From sections)."
                             )
                             item.setForeground(QColor(40, 95, 170))
-                        if col_idx == 5 and signature_differences:
-                            item.setForeground(QColor(190, 40, 40))
-                        if col_idx == 6 and assignment_status in {
+                        if col_idx == 4 and display_row["status"] in {
                             "LIKELY",
                             "AMBIGUOUS",
                             "UNASSIGNED",
                         }:
                             item.setForeground(QColor(190, 95, 20))
-                            tooltip_lines = []
-                            blocked = sorted(
-                                {
-                                    label
-                                    for assignment in unit_info.get(
-                                        "psc_rejected_assignments", []
-                                    )
-                                    for label in assignment.get(
-                                        "blocked_repeat_labels", []
-                                    )
-                                },
-                                key=str.casefold,
-                            )
-                            if blocked:
-                                tooltip_lines.append(
-                                    "Blocked repeat across: " + ", ".join(blocked)
-                                )
-                            if tooltip_lines:
-                                item.setToolTip("\n".join(tooltip_lines))
                         preview_table.setItem(row_idx, col_idx, item)
             finally:
                 self._psc_side_context = previous_side_context
     
+            seed_location_count = sum(len(unit.get("seed_points", [])) for unit in rows)
             status_label.setText(
-                f"Units: {len(rows)} | "
-                f"3D volumes: {getattr(self, '_psc_last_volumetric_region_count', 0)} | "
-                f"Seed locations: {seed_location_count} | "
-                f"Known boundaries: {len(psc_model.get('boundary_features', set()))} | "
-                f"Signature differences: {missing_count} | "
-                f"Saved seed overrides: {len(seed_overrides)} | "
-                "Assignments: "
+                f"Volumes: {getattr(self, '_psc_last_volumetric_region_count', 0)} | "
+                f"Seeds: {seed_location_count} | "
                 f"CERTAIN={status_counts.get('CERTAIN', 0)}, "
                 f"LIKELY={status_counts.get('LIKELY', 0)}, "
                 f"AMBIGUOUS={status_counts.get('AMBIGUOUS', 0)}, "
                 f"UNASSIGNED={status_counts.get('UNASSIGNED', 0)}"
             )
-            ambiguity_groups = self._psc_ambiguity_groups(rows)
-            if ambiguity_groups:
-                group_text = "; ".join(
-                    ", ".join(unit.get("name") or unit.get("feature", "") for unit in group)
-                    for group in ambiguity_groups
-                )
-                ambiguity_label.setText(
-                    "Potential ambiguous PSC units: "
-                    f"{group_text}. Select two rows and use Swap selected seeds if the "
-                    "preview coordinates are inverted."
-                )
-            else:
-                ambiguity_label.setText("")
+            use_calculated_button.setEnabled(bool(seed_overrides))
+            update_swap_button()
+
+        def selected_occurrences():
+            selected = sorted(
+                index.row() for index in preview_table.selectionModel().selectedRows()
+            )
+            rows = preview_state["rows"]
+            if len(selected) != 2 or any(index >= len(rows) for index in selected):
+                return None
+            first, second = (rows[index] for index in selected)
+            if (
+                first["seed_index"] is None
+                or second["seed_index"] is None
+                or first["unit_info"]["key"] == second["unit_info"]["key"]
+            ):
+                return None
+            return first, second
+
+        def update_swap_button():
+            swap_seed_button.setEnabled(selected_occurrences() is not None)
     
         def swap_selected_seeds():
-            selection_model = preview_table.selectionModel()
-            selected_rows = []
-            if selection_model is not None:
-                selected_rows = sorted(
-                    {index.row() for index in selection_model.selectedRows()}
-                )
-            if not selected_rows:
-                selected_rows = sorted(
-                    {item.row() for item in preview_table.selectedItems()}
-                )
-            if len(selected_rows) != 2:
-                self.print_terminal("Select exactly two unit rows before swapping seeds.")
+            selected = selected_occurrences()
+            if selected is None:
+                self.print_terminal("Select two seed rows belonging to different units.")
                 return
-    
-            rows = list(preview_state.get("rows", []))
-            if any(row_idx < 0 or row_idx >= len(rows) for row_idx in selected_rows):
-                return
-            first_unit = rows[selected_rows[0]]
-            second_unit = rows[selected_rows[1]]
-            swapped_points = self._psc_swapped_seed_points(first_unit, second_unit)
+            first_row, second_row = selected
+            first_unit = first_row["unit_info"]
+            second_unit = second_row["unit_info"]
+            swapped_points = self._psc_swapped_seed_points(
+                first_unit, second_unit,
+                first_row["seed_index"], second_row["seed_index"],
+            )
             if swapped_points is None:
                 self.print_terminal(
                     "Both selected units need at least one valid seed before swapping."
@@ -735,10 +703,10 @@ class PiecewiseStructuralComplex:
             refresh_preview()
     
         def import_section_seeds():
-            rows = list(preview_state.get("rows", []))
+            rows = list(preview_state.get("units", []))
             if not rows:
                 refresh_preview()
-                rows = list(preview_state.get("rows", []))
+                rows = list(preview_state.get("units", []))
             table_name = table_combo.currentText()
             seed_rows = self._psc_section_seed_match_rows(
                 rows,
@@ -804,7 +772,22 @@ class PiecewiseStructuralComplex:
         def on_table_changed():
             load_seed_overrides(table_combo.currentText())
             refresh_preview()
+
+        def recalculate():
+            recalculate_button.setEnabled(False)
+            QApplication.setOverrideCursor(Qt.WaitCursor)
+            try:
+                self._psc_volumetric_partition_cache = None
+                self._psc_surface_polydata_cache = {}
+                self._psc_model_boundary_polydata_cache = None
+                load_seed_overrides(table_combo.currentText())
+                refresh_preview()
+            finally:
+                QApplication.restoreOverrideCursor()
+                recalculate_button.setEnabled(True)
     
+        recalculate_button.clicked.connect(recalculate)
+        preview_table.itemSelectionChanged.connect(update_swap_button)
         swap_seed_button.clicked.connect(swap_selected_seeds)
         from_sections_button.clicked.connect(import_section_seeds)
         use_calculated_button.clicked.connect(clear_seed_overrides)
@@ -894,8 +877,10 @@ class PiecewiseStructuralComplex:
         self,
         first_unit: Dict[str, Any],
         second_unit: Dict[str, Any],
+        first_seed_index: Optional[int] = None,
+        second_seed_index: Optional[int] = None,
     ) -> Optional[Tuple[List[List[float]], List[List[float]]]]:
-        """Return complete seed lists swapped between two PSC units."""
+        """Swap selected occurrences, or whole seed lists when indices are omitted."""
         first_points = self._psc_normalize_seed_points(
             first_unit.get("seed_points") or first_unit.get("seed_point")
         )
@@ -904,6 +889,17 @@ class PiecewiseStructuralComplex:
         )
         if not first_points or not second_points:
             return None
+        if first_seed_index is not None or second_seed_index is not None:
+            if (
+                first_seed_index is None or second_seed_index is None
+                or not 0 <= first_seed_index < len(first_points)
+                or not 0 <= second_seed_index < len(second_points)
+            ):
+                return None
+            first_points[first_seed_index], second_points[second_seed_index] = (
+                second_points[second_seed_index], first_points[first_seed_index]
+            )
+            return first_points, second_points
         return (
             [list(point) for point in second_points],
             [list(point) for point in first_points],
@@ -1194,6 +1190,98 @@ class PiecewiseStructuralComplex:
             else:
                 formatted.append(str(point))
         return f"{len(points)} pts: " + "; ".join(formatted)
+
+    def _psc_preview_rows(
+        self,
+        mapped_units: List[Dict[str, Any]],
+        assignments: List[Dict[str, Any]],
+        seed_overrides: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Build occurrence rows without aggregating confidence or diagnostics."""
+        units_by_key = {str(unit["key"]): unit for unit in mapped_units}
+        represented_units = set()
+        occurrences = []
+        for assignment in assignments:
+            unit_key = str(assignment.get("unit_key", ""))
+            unit_info = units_by_key.get(unit_key, {})
+            if unit_info:
+                represented_units.add(unit_key)
+            occurrences.append((unit_info, assignment))
+
+        # Units with no accepted seed remain visible, but are not fake volumes.
+        for unit_key, unit_info in units_by_key.items():
+            if unit_key not in represented_units:
+                occurrences.append((unit_info, None))
+
+        rows = []
+        for unit_info, assignment in occurrences:
+            placeholder = assignment is None
+            assignment = assignment or {}
+            status = "" if placeholder else assignment.get("status", "UNASSIGNED")
+            region_id = assignment.get("volumetric_region_id")
+            point = self._psc_normalize_seed_points(assignment.get("seed_point"))
+            seed_points = self._psc_normalize_seed_points(unit_info.get("seed_points"))
+            seed_index = None
+            if status != "UNASSIGNED" and point and point[0] in seed_points:
+                seed_index = seed_points.index(point[0])
+            override_points = self._psc_normalize_seed_points(
+                (seed_overrides or {}).get(unit_info.get("key", ""))
+            )
+            overridden = seed_index is not None and point[0] in override_points
+            seed_text = self._psc_format_seed_list(point)
+            if overridden:
+                seed_text += " *"
+
+            candidates = list(assignment.get("candidate_names", []) or [])
+            details = []
+            if placeholder:
+                details.append("No seed assigned")
+            elif status == "UNASSIGNED" and not candidates:
+                details.append("No matching unit")
+            if status in {"AMBIGUOUS", "UNASSIGNED"} and candidates:
+                details.append("Candidates: " + ", ".join(candidates))
+            for field, label in (
+                ("missing_labels", "Missing"),
+                ("extra_labels", "Extra"),
+                ("blocked_repeat_labels", "Blocked repeat across"),
+            ):
+                labels = assignment.get(field, []) or []
+                if labels:
+                    details.append(label + ": " + ", ".join(labels))
+
+            signature = assignment.get("signature", {}) or {}
+            tooltip_lines = list(details)
+            expected = signature.get("target", unit_info.get("boundaries", [])) or []
+            observed = signature.get("closest", []) or []
+            if expected:
+                tooltip_lines.append("Expected boundaries: " + ", ".join(expected))
+            if observed:
+                tooltip_lines.append("Observed boundaries: " + ", ".join(observed))
+            matched = unit_info.get("matched_surfaces", []) or []
+            if matched:
+                tooltip_lines.append("Mapped STM surfaces: " + ", ".join(matched))
+            unavailable = unit_info.get("missing_boundaries", []) or []
+            if unavailable:
+                tooltip_lines.append("Surfaces not loaded: " + ", ".join(unavailable))
+                if placeholder:
+                    details.append("Surfaces not loaded: " + ", ".join(unavailable))
+
+            rows.append({
+                "unit_info": unit_info,
+                "seed_index": seed_index,
+                "seed_override": overridden,
+                "status": status,
+                "values": [
+                    str(int(region_id) + 1) if region_id is not None else "",
+                    unit_info.get("feature") or unit_info.get("name", ""),
+                    unit_info.get("unit_role", ""),
+                    seed_text,
+                    status,
+                    "; ".join(details),
+                ],
+                "tooltip": "\n".join(tooltip_lines),
+            })
+        return rows
     
     def _psc_ambiguity_groups(
         self,
