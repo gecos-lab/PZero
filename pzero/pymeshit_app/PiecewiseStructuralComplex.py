@@ -6571,7 +6571,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
     @staticmethod
     def _lighten_rgb_color(
         color: Optional[List[float]],
-        factor: float = 0.45,
+        factor: float = 0.70,
     ) -> Optional[List[float]]:
         "Returns a lightened version of the given RGB color by the specified factor."
         if color is None:

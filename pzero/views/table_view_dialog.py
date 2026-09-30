@@ -9,7 +9,7 @@ from pandas import DataFrame as pd_DataFrame
 from pandas import isna as pd_isna
 from pandas import to_numeric as pd_to_numeric
 
-from PySide6.QtCore import QAbstractTableModel, QRectF, Qt, QTimer
+from PySide6.QtCore import QAbstractTableModel, QRect, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import (
     QAction,
     QColor,
@@ -48,6 +48,7 @@ from PySide6.QtWidgets import (
     QGraphicsView,
     QGraphicsScene,
 )
+from PySide6.QtSvg import QSvgGenerator
 
 from pzero.helpers.helper_dialogs import input_text_dialog
 from pzero.helpers.structural_topology import (
@@ -505,7 +506,7 @@ class STmBuildDialog(QDialog):
         self.graphics_view.fit_scene(scene_rect)
 
     def export_scene_image(self):
-        """Save the current STM graph scene to a raster image."""
+        """Save the current STM graph scene to a raster or SVG image."""
         scene_rect = self.scene.itemsBoundingRect().adjusted(-40, -40, 40, 40)
         if scene_rect.isEmpty():
             QMessageBox.information(self, "Export image", "There is no STM graph to export.")
@@ -515,12 +516,13 @@ class STmBuildDialog(QDialog):
             char if char.isalnum() or char in "._-" else "_"
             for char in self.table_name
         ).strip("_")
-        default_name = f"{safe_table_name or 'STM'}_graph.png"
+        default_name = f"{safe_table_name or 'STM'}_graph"
         file_path, selected_filter = QFileDialog.getSaveFileName(
             self,
             "Export STM graph image",
             default_name,
-            "PNG image (*.png);;JPEG image (*.jpg);;BMP image (*.bmp);;All files (*.*)",
+            "PNG image (*.png);;SVG image (*.svg);;JPEG image (*.jpg);;"
+            "BMP image (*.bmp);;All files (*.*)",
         )
         if not file_path:
             return
@@ -528,6 +530,7 @@ class STmBuildDialog(QDialog):
         if not os_path.splitext(file_path)[1]:
             extension_by_filter = {
                 "PNG image (*.png)": ".png",
+                "SVG image (*.svg)": ".svg",
                 "JPEG image (*.jpg)": ".jpg",
                 "BMP image (*.bmp)": ".bmp",
             }
@@ -535,6 +538,37 @@ class STmBuildDialog(QDialog):
 
         width = max(1, int(scene_rect.width()) + 1)
         height = max(1, int(scene_rect.height()) + 1)
+        if os_path.splitext(file_path)[1].casefold() == ".svg":
+            generator = QSvgGenerator()
+            generator.setFileName(file_path)
+            generator.setSize(QSize(width, height))
+            generator.setViewBox(QRect(0, 0, width, height))
+            generator.setTitle(f"STM graph - {self.table_name}")
+            generator.setDescription("Structural Topology Model graph exported by PZero")
+            painter = QPainter()
+            if not painter.begin(generator):
+                QMessageBox.warning(
+                    self,
+                    "Export image",
+                    f'Could not save image "{file_path}".',
+                )
+                return
+            try:
+                self.scene.render(
+                    painter,
+                    QRectF(0, 0, width, height),
+                    scene_rect,
+                )
+            finally:
+                painter.end()
+            if not os_path.isfile(file_path) or os_path.getsize(file_path) == 0:
+                QMessageBox.warning(
+                    self,
+                    "Export image",
+                    f'Could not save image "{file_path}".',
+                )
+            return
+
         image = QImage(width, height, QImage.Format_ARGB32_Premultiplied)
         image.fill(Qt.transparent)
 
@@ -1635,7 +1669,7 @@ class EditableDataFrameModel(QAbstractTableModel):
             if role == Qt.BackgroundRole and preview_color is not None:
                 return QBrush(preview_color)
             return None
-        if role not in (Qt.DisplayRole, Qt.EditRole):
+        if role not in (Qt.DisplayRole, Qt.EditRole, Qt.ToolTipRole):
             return None
         if (
             role == Qt.DisplayRole
@@ -1650,6 +1684,39 @@ class EditableDataFrameModel(QAbstractTableModel):
         value = self._dataframe.iloc[index.row(), index.column()]
         if pd_isna(value):
             return ""
+        if (
+            self.model_kind == "units"
+            and str(self._dataframe.columns[index.column()])
+            == stm_conformable_boundaries_col
+        ):
+            unit_name = str(
+                self._dataframe.iloc[index.row()].get(stm_feature_col, "")
+            ).strip()
+            locked_boundaries = set()
+            parent = self.parent()
+            if parent is not None and hasattr(
+                parent, "_stm_locked_boundaries_for_unit"
+            ):
+                locked_boundaries = set(
+                    parent._stm_locked_boundaries_for_unit(unit_name)
+                )
+            if role == Qt.ToolTipRole:
+                marked = [
+                    name for name in stm_names(value) if name in locked_boundaries
+                ]
+                if marked:
+                    return (
+                        "Locked conformable relation generated from boundary: "
+                        + ", ".join(marked)
+                    )
+                return None
+            if role == Qt.DisplayRole and locked_boundaries:
+                return stm_names_cell(
+                    [
+                        f"{name}*" if name in locked_boundaries else name
+                        for name in stm_names(value)
+                    ]
+                )
         return str(value)
 
     def setData(self, index, value, role=Qt.EditRole):
@@ -2619,6 +2686,17 @@ class ViewTable(QWidget):
         return self._links_from_options(
             (self.current_table_options or {}).get(option_name, [])
         )
+
+    def _stm_locked_boundaries_for_unit(self, unit_name):
+        """Return locked conformable boundaries for display in the Units table."""
+        unit_name = str(unit_name or "").strip()
+        return {
+            boundary_name
+            for linked_unit, boundary_name in self._stm_option_links(
+                "stm_locked_conformable_links"
+            )
+            if linked_unit == unit_name
+        }
 
     def _rename_stm_unit_references(self, old_unit_name, new_unit_name):
         """Move STM option references when a unit Feature is renamed inline."""
