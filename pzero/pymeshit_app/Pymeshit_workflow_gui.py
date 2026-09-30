@@ -10519,6 +10519,7 @@ class MeshItWorkflowGUI(QWidget):
                     "target_size": per_surface_target,
                     "min_angle":  float(self.mesh_min_angle_input.value()),
                     "max_area":   float(per_surface_target) ** 2 * 1.5,
+                    "gradient":   float(self.mesh_gradient_input.value()),
                     "interp":     self.mesh_interp_combo.currentText(),
                     "smoothing":  float(self.mesh_smoothing_input.value()),
                     "tri_method": surface_tri_method,  # Per-surface tri method
@@ -10602,7 +10603,11 @@ class MeshItWorkflowGUI(QWidget):
                                 uniform=self.mesh_uniform_checkbox.isChecked(),
                                 reference_points_3d=reference_points,  # Dense points for Isomap fitting
                                 smoothing=tps_smoothing,               # Smoothing parameter
-                                interpolator=interp_method             # TPS or IDW from GUI combo
+                                interpolator=interp_method,            # TPS or IDW from GUI combo
+                                well_feature_points_3d=np.array(
+                                    [[p.x, p.y, p.z] for p in well_feature_pts_3d], dtype=float
+                                ) if well_feature_pts_3d else None,
+                                well_feature_sizes=np.asarray(well_feature_sizes, dtype=float),
                             )
                             
                             if tri_res and 'vertices' in tri_res and 'triangles' in tri_res:
@@ -10653,6 +10658,8 @@ class MeshItWorkflowGUI(QWidget):
                         holes_xyz=holes_xyz,
                         target_size=per_surface_target,
                         result_field="conforming_mesh",
+                        well_feature_points_3d=well_feature_pts_3d,
+                        well_feature_sizes=well_feature_sizes,
                     )
                     if success:
                         ok += 1
@@ -10688,6 +10695,10 @@ class MeshItWorkflowGUI(QWidget):
                     holes_2d = (holes_3d - centroid) @ basis.T
                     holes_2d = holes_2d[:, :2]
 
+                self._add_well_triunsuitable_config(
+                    cfg, well_feature_pts_3d, well_feature_sizes, centroid, basis
+                )
+
                 v3d, tris, _ = run_constrained_triangulation_py(
                     pts2d, seg_arr, holes_2d, proj,
                     np.array([[p.x, p.y, p.z] for p in pts3d]), cfg
@@ -10713,68 +10724,50 @@ class MeshItWorkflowGUI(QWidget):
         self._update_export_to_pzero_button_state()  # Enable Export to PZero when surfaces are ready
         self.statusBar().showMessage(f"Conforming surface mesh generation finished: {ok}/{total} succeeded.", 6000)
 
-    def _is_well_enabled_in_refine_tree(self, well_idx: int) -> bool:
-        """Return True if the well is checked in the Step 6 constraint tree."""
-        tree = getattr(self, "refine_constraint_tree", None)
-        if not tree:
-            return True
-        for i in range(tree.topLevelItemCount()):
-            item = tree.topLevelItem(i)
-            data = item.data(0, Qt.UserRole) or {}
-            if data.get("type") == "well" and data.get("well_idx") == well_idx:
-                return item.checkState(0) != Qt.Unchecked
-        return True
-
     def _collect_well_feature_points_for_surface(self, surface_idx: int) -> Tuple[List[Vector3D], List[float]]:
         """
-        Collect well/surface intersection points to drive C++ triunsuitable-style
-        local grading during constrained surface triangulation.
+        Collect checked well/surface point constraints for local mesh grading.
         """
-        selected_wells = self._get_selected_well_indices() if hasattr(self, "_get_selected_well_indices") else set()
-        intersections = getattr(self, "refined_intersections_for_visualization", {}).get(surface_idx, [])
-        if not intersections:
+        tree = getattr(self, "refine_constraint_tree", None)
+        if tree is None:
             return [], []
 
         feature_by_key: Dict[Tuple[float, float, float], Tuple[Vector3D, float]] = {}
 
-        for inter in intersections:
-            if not inter.get("is_polyline_mesh", False):
-                continue
+        def walk(item: QTreeWidgetItem):
+            data = item.data(0, Qt.UserRole) or {}
+            if (data.get("type") == "constraint"
+                    and data.get("surface_idx") == surface_idx
+                    and item.checkState(0) == Qt.Checked):
+                entry = self._refine_segment_map.get((surface_idx, data.get("seg_uid")), {})
+                if entry.get("is_well_intersection", False):
+                    try:
+                        well_size = float(entry["well_target_size"])
+                    except (KeyError, TypeError, ValueError):
+                        well_size = 0.0
+                    if np.isfinite(well_size) and well_size > 1e-9:
+                        for p in entry.get("points", []):
+                            try:
+                                if hasattr(p, "x"):
+                                    x, y, z = float(p.x), float(p.y), float(p.z)
+                                else:
+                                    x, y, z = map(float, p[:3])
+                            except (TypeError, ValueError, IndexError):
+                                continue
+                            if not np.all(np.isfinite((x, y, z))):
+                                continue
+                            key = (round(x, 9), round(y, 9), round(z, 9))
+                            previous = feature_by_key.get(key)
+                            if previous is None or well_size < previous[1]:
+                                feature_by_key[key] = (
+                                    Vector3D(x, y, z, point_type="INTERSECTION_POINT"),
+                                    well_size,
+                                )
+            for child_idx in range(item.childCount()):
+                walk(item.child(child_idx))
 
-            d1 = inter.get("dataset_id1")
-            d2 = inter.get("dataset_id2")
-            well_idx = None
-
-            if isinstance(d1, int) and 0 <= d1 < len(self.datasets) and self.datasets[d1].get("type") == "WELL":
-                well_idx = d1
-            elif isinstance(d2, int) and 0 <= d2 < len(self.datasets) and self.datasets[d2].get("type") == "WELL":
-                well_idx = d2
-
-            if well_idx is None:
-                continue
-            if selected_wells and well_idx not in selected_wells:
-                continue
-            if not self._is_well_enabled_in_refine_tree(well_idx):
-                continue
-
-            try:
-                well_size = float(self._get_well_refine_length(well_idx))
-            except Exception:
-                well_size = float(self.mesh_target_feature_size_input.value())
-            if well_size <= 1e-9:
-                well_size = float(self.mesh_target_feature_size_input.value())
-
-            for p in inter.get("points", []):
-                if p is None or len(p) < 3:
-                    continue
-                x, y, z = float(p[0]), float(p[1]), float(p[2])
-                key = (round(x, 9), round(y, 9), round(z, 9))
-                previous = feature_by_key.get(key)
-                if previous is None or well_size < previous[1]:
-                    feature_by_key[key] = (
-                        Vector3D(x, y, z, point_type="INTERSECTION_POINT"),
-                        well_size,
-                    )
+        for item_idx in range(tree.topLevelItemCount()):
+            walk(tree.topLevelItem(item_idx))
 
         if not feature_by_key:
             return [], []
@@ -10787,6 +10780,24 @@ class MeshItWorkflowGUI(QWidget):
             len(points),
         )
         return points, sizes
+
+    @staticmethod
+    def _add_well_triunsuitable_config(config, feature_points, feature_sizes, centroid, basis):
+        """Project well cut points and enable local Triangle refinement."""
+        if not feature_points or feature_sizes is None or len(feature_points) != len(feature_sizes):
+            return
+        points_3d = np.array([[p.x, p.y, p.z] for p in feature_points], dtype=float)
+        feature_uv = ((points_3d - centroid) @ basis.T)[:, :2]
+        config["triunsuitable_feature_points_2d"] = feature_uv
+        config["triunsuitable_feature_sizes"] = np.asarray(feature_sizes, dtype=float)
+        config["enable_well_gradient_refinement"] = True
+        config["triunsuitable_max_iterations"] = 8
+        config["triunsuitable_max_new_points"] = int(
+            min(2500, max(900, 600 + 8 * len(feature_points)))
+        )
+        config["triunsuitable_max_feature_points"] = 800
+        config["triunsuitable_min_local_size_ratio"] = 0.0
+
     def _prepare_surface_data_for_triangulation(self, dataset_idx, dataset, config):
         """
         Prepare surface data dictionary for triangulation with projection parameters.
@@ -13460,6 +13471,8 @@ segmentation, triangulation, and visualization.
         holes_xyz: Optional[np.ndarray] = None,
         target_size: Optional[float] = None,
         result_field: str = "triangulation_result",
+        well_feature_points_3d: Optional[List[Vector3D]] = None,
+        well_feature_sizes: Optional[List[float]] = None,
     ) -> bool:
         """Triangulate with explicit PLC edge constraints."""
         try:
@@ -13500,6 +13513,10 @@ segmentation, triangulation, and visualization.
                 "smoothing": smoothing,
                 "uniform": uniform,
             }
+
+            self._add_well_triunsuitable_config(
+                config, well_feature_points_3d, well_feature_sizes, centroid, basis
+            )
 
             vertices_3d, triangles, _ = run_constrained_triangulation_py(
                 boundary_uv,

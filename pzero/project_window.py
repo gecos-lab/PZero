@@ -2606,7 +2606,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if len(diffs) > 0:
                     self.print_terminal(f"others_legend_table diffs: {diffs}")
                     for diff in diffs:
-                        self.others_legend_df[diff] = Legend.others_legend_dict[diff]
+                        if diff == "uid":
+                            self.others_legend_df[diff] = ""
+                        else:
+                            defaults = dict(
+                                zip(
+                                    Legend.others_legend_dict["other_collection"],
+                                    Legend.others_legend_dict[diff],
+                                )
+                            )
+                            self.others_legend_df[diff] = self.others_legend_df[
+                                "other_collection"
+                            ].map(defaults)
                 default_other_rows = []
                 for idx, other_collection in enumerate(
                     Legend.others_legend_dict["other_collection"]
@@ -2629,6 +2640,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         ],
                         ignore_index=True,
                     )
+                if "uid" in self.others_legend_df:
+                    self.others_legend_df["uid"] = self.others_legend_df["uid"].fillna("")
                 other_order = {
                     name: idx
                     for idx, name in enumerate(
@@ -3233,6 +3246,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     )
                     self.mesh3d_coll.df.reset_index(drop=True, inplace=True)
                 self.mesh3d_coll.table_model.endResetModel()
+                self.legend.update_widget(parent=self)
 
             # Read boundaries collection and files.
             if os_path.isfile((in_dir_name + "/boundary_table.csv")) or os_path.isfile(
