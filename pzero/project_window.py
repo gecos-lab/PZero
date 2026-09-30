@@ -2256,7 +2256,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         dtype=Legend.legend_dict_types,
                         keep_default_na=False,
                     )
-                in_keys = set(self.others_legend_df.keys())
+                in_keys = set(new_others_legend_df.keys())
                 def_keys = set(Legend.others_legend_dict.keys())
 
                 diffs = def_keys.difference(in_keys)
@@ -2264,7 +2264,20 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 if len(diffs) > 0:
                     self.print_terminal(f"others_legend_table diffs: {diffs}")
                     for diff in diffs:
-                        self.others_legend_df[diff] = Legend.others_legend_dict[diff]
+                        if diff == "uid":
+                            new_others_legend_df[diff] = ""
+                        else:
+                            defaults = dict(
+                                zip(
+                                    Legend.others_legend_dict["other_collection"],
+                                    Legend.others_legend_dict[diff],
+                                )
+                            )
+                            new_others_legend_df[diff] = new_others_legend_df[
+                                "other_collection"
+                            ].map(defaults)
+                new_others_legend_df["uid"] = new_others_legend_df["uid"].fillna("")
+                self.others_legend_df = new_others_legend_df
 
             if os_path.isfile((in_dir_name + "/prop_legend_df.csv")) or os_path.isfile(
                 (in_dir_name + "/prop_legend_df.json")
@@ -2819,6 +2832,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     )
                     self.mesh3d_coll.df.reset_index(drop=True, inplace=True)
                 self.mesh3d_coll.table_model.endResetModel()
+                self.legend.update_widget(parent=self)
 
             # Read boundaries collection and files.
             if os_path.isfile((in_dir_name + "/boundary_table.csv")) or os_path.isfile(

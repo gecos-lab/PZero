@@ -87,6 +87,7 @@ class Legend(QObject):
 
     others_legend_dict = {
         "other_collection": ["Boundary", "DOM", "Image", "Mesh3D", "XSection"],
+        "uid": ["", "", "", "", ""],
         "color_R": [255, 255, 255, 255, 255],
         "color_G": [255, 255, 255, 255, 255],
         "color_B": [255, 255, 255, 255, 255],
@@ -182,6 +183,50 @@ class Legend(QObject):
                 parent.LegendTreeWidget,
                 [other_collection, str(color_R), str(color_G), str(color_B)],
             )  # self.GeologyTreeWidget as parent -> top level
+            if other_collection == "Mesh3D":
+                for uid, name in parent.mesh3d_coll.df[["uid", "name"]].itertuples(
+                    index=False, name=None
+                ):
+                    legend = parent.mesh3d_coll.get_uid_legend(uid)
+                    mesh_item = QTreeWidgetItem(
+                        llevel_1,
+                        [
+                            str(name),
+                            str(legend["color_R"]),
+                            str(legend["color_G"]),
+                            str(legend["color_B"]),
+                        ],
+                    )
+                    color_button = QPushButton()
+                    color_button.setStyleSheet(
+                        "background-color:rgb({},{},{})".format(
+                            legend["color_R"], legend["color_G"], legend["color_B"]
+                        )
+                    )
+                    parent.LegendTreeWidget.setItemWidget(mesh_item, 4, color_button)
+                    color_button.clicked.connect(
+                        lambda *, mesh_uid=uid, item=mesh_item, button=color_button: self.change_mesh_color(
+                            parent=parent, uid=mesh_uid, item=item, button=button
+                        )
+                    )
+                    thick_spin = QSpinBox()
+                    thick_spin.setValue(legend["line_thick"])
+                    parent.LegendTreeWidget.setItemWidget(mesh_item, 5, thick_spin)
+                    thick_spin.valueChanged.connect(
+                        lambda value, mesh_uid=uid: self.change_mesh_style(
+                            parent, mesh_uid, "line_thick", value
+                        )
+                    )
+                    opacity_spin = QSpinBox()
+                    opacity_spin.setMaximum(100)
+                    opacity_spin.setValue(legend["opacity"])
+                    parent.LegendTreeWidget.setItemWidget(mesh_item, 7, opacity_spin)
+                    opacity_spin.valueChanged.connect(
+                        lambda value, mesh_uid=uid: self.change_mesh_style(
+                            parent, mesh_uid, "opacity", value
+                        )
+                    )
+                continue
             parent.LegendTreeWidget.setItemWidget(llevel_1, 4, other_color_dialog_btn)
             parent.LegendTreeWidget.setItemWidget(llevel_1, 5, other_line_thick_spn)
             if other_collection == "DOM":
@@ -752,6 +797,34 @@ class Legend(QObject):
             parent.LegendTreeWidget.resizeColumnToContents(col)
         # Expand all tree items
         parent.LegendTreeWidget.expandAll()
+
+    def change_mesh_color(self, parent, uid, item, button):
+        legend = parent.mesh3d_coll.get_uid_legend(uid)
+        color = QColorDialog.getColor(
+            initial=QColor(
+                legend["color_R"], legend["color_G"], legend["color_B"]
+            ),
+            title="Select color",
+        )
+        if not color.isValid():
+            return
+        values = (color.red(), color.green(), color.blue())
+        parent.mesh3d_coll.set_uid_legend(
+            uid=uid, color_R=values[0], color_G=values[1], color_B=values[2]
+        )
+        for column, value in enumerate(values, start=1):
+            item.setText(column, str(value))
+        button.setStyleSheet("background-color:rgb({},{},{})".format(*values))
+        parent.signals.legend_color_modified.emit([uid], parent.mesh3d_coll)
+
+    def change_mesh_style(self, parent, uid, property_name, value):
+        parent.mesh3d_coll.set_uid_legend(uid=uid, **{property_name: value})
+        signal = (
+            parent.signals.legend_thick_modified
+            if property_name == "line_thick"
+            else parent.signals.legend_opacity_modified
+        )
+        signal.emit([uid], parent.mesh3d_coll)
 
     def change_geology_feature_color(self, sender=None, parent=None):
         # role = self.sender().role
