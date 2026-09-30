@@ -3,8 +3,9 @@ Bridge for C++ MeshIt triunsuitable behavior in the Python workflow.
 
 Triangle's Python wrapper does not expose the original C callback hook used by
 MeshIt (`triunsuitable` with switch `-u`). This module ports the exact
-`triunsuitable` criterion from the C++ code and applies it iteratively by
-inserting Steiner points at centroids of unsuitable triangles.
+`triunsuitable` criterion from the C++ code. Surface workflows subdivide an
+already lifted mesh to preserve its geometry; the 2D bridge also supports
+iterative centroid insertion for callers working entirely in the plane.
 """
 
 from __future__ import annotations
@@ -16,6 +17,114 @@ import numpy as np
 import triangle as tr
 
 ONETHIRD = 1.0 / 3.0
+
+
+def refine_surface_with_cpp_triunsuitable(
+    vertices_2d, vertices_3d, triangles, segments, gradient, mesh_size,
+    feature_points, feature_sizes, max_iterations=8, max_new_points=2500,
+    min_point_spacing=None, logger=None,
+):
+    """Apply the C++ size criterion without changing the input 3D surface.
+
+    Bisect shared interior edges in both incident triangles. New 3D vertices
+    are averages of their parents, so every child stays in its parent's plane.
+    PLC segments and open boundary edges stay intact: adjacent surfaces must
+    retain exactly the same intersection discretization for TetGen.
+
+    This must run *after* the initial mesh has been lifted to 3D. Evaluating a
+    smooth height interpolator again at refinement points can bend triangles
+    across another surface even when all PLC vertices were snapped exactly.
+    """
+    log = logger or logging.getLogger(__name__)
+    uv = np.asarray(vertices_2d, dtype=float)
+    xyz = np.asarray(vertices_3d, dtype=float)
+    tris = np.asarray(triangles, dtype=np.int32)
+    fpts, fsizes = _normalize_feature_inputs(feature_points, feature_sizes, mesh_size)
+    if not len(fpts) or not len(tris):
+        return uv, xyz, tris
+    if uv.shape != (len(xyz), 2) or xyz.shape[1:] != (3,):
+        raise ValueError("Surface refinement requires matching Nx2 and Nx3 vertices")
+    spacing = float(min_point_spacing) if min_point_spacing is not None else max(
+        1e-10, min(float(np.min(fsizes)), float(mesh_size)) * 0.25
+    )
+    protected = set()
+    if segments is not None:
+        protected.update(tuple(sorted(map(int, edge))) for edge in segments)
+    all_edges = np.sort(np.vstack((tris[:, [0, 1]], tris[:, [1, 2]], tris[:, [2, 0]])), axis=1)
+    edges, counts = np.unique(all_edges, axis=0, return_counts=True)
+    protected.update(map(tuple, edges[counts != 2]))
+
+    added = 0
+    for iteration in range(max(0, int(max_iterations))):
+        bad = triunsuitable_mask(uv, tris, gradient, mesh_size, fpts, fsizes)
+        bad_ids = np.flatnonzero(bad)
+        if not len(bad_ids) or added >= max_new_points:
+            break
+        # Spend a limited point budget near the well before the far field.
+        centers = uv[tris[bad_ids]].mean(axis=1)
+        distances = np.min(np.sum((centers[:, None] - fpts[None]) ** 2, axis=2), axis=1)
+        bad_ids = bad_ids[np.argsort(distances, kind="stable")]
+        midpoints, seeds, new_uv, new_xyz = {}, {}, [], []
+        for ti in bad_ids:
+            t = tris[ti]
+            candidates = [tuple(sorted((int(t[j]), int(t[(j + 1) % 3])))) for j in range(3)]
+            candidates = [edge for edge in candidates if edge not in protected]
+            if candidates:
+                edge = max(candidates, key=lambda e: np.sum((uv[e[1]] - uv[e[0]]) ** 2))
+                if edge in midpoints or np.linalg.norm(uv[edge[1]] - uv[edge[0]]) <= 2 * spacing:
+                    continue
+                midpoints[edge] = len(uv) + len(new_uv)
+                new_uv.append((uv[edge[0]] + uv[edge[1]]) * 0.5)
+                new_xyz.append((xyz[edge[0]] + xyz[edge[1]]) * 0.5)
+            else:
+                # A triangle enclosed entirely by constraints needs an interior
+                # seed before it has any edges that may safely be bisected.
+                center = uv[t].mean(axis=0)
+                if np.min(np.linalg.norm(uv[t] - center, axis=1)) <= spacing:
+                    continue
+                seeds[int(ti)] = len(uv) + len(new_uv)
+                new_uv.append(center)
+                new_xyz.append(xyz[t].mean(axis=0))
+            if added + len(new_uv) >= max_new_points:
+                break
+        if not new_uv:
+            break
+
+        children = []
+        for ti, t in enumerate(tris):
+            if ti in seeds:
+                m = seeds[ti]
+                children.extend((int(t[j]), int(t[(j + 1) % 3]), m) for j in range(3))
+                continue
+            parts = [tuple(map(int, t))]
+            split_edges = [tuple(sorted((int(t[j]), int(t[(j + 1) % 3])))) for j in range(3)]
+            split_edges = [edge for edge in split_edges if edge in midpoints]
+            split_edges.sort(key=lambda e: -np.sum((uv[e[1]] - uv[e[0]]) ** 2))
+            for edge in split_edges:
+                m, next_parts = midpoints[edge], []
+                for part in parts:
+                    if edge[0] not in part or edge[1] not in part:
+                        next_parts.append(part)
+                        continue
+                    for j in range(3):
+                        a, b, c = part[j], part[(j + 1) % 3], part[(j + 2) % 3]
+                        if tuple(sorted((a, b))) == edge:
+                            next_parts.extend(((a, m, c), (m, b, c)))
+                            break
+                parts = next_parts
+            children.extend(parts)
+        uv = np.vstack((uv, new_uv))
+        xyz = np.vstack((xyz, new_xyz))
+        tris = np.asarray(children, dtype=np.int32)
+        added += len(new_uv)
+
+    remaining = np.count_nonzero(triunsuitable_mask(uv, tris, gradient, mesh_size, fpts, fsizes))
+    log.info(
+        "Surface-preserving triunsuitable refinement: added %d vertices; "
+        "%d unsuitable triangles remain (fixed constraints / refinement limits)",
+        added, remaining,
+    )
+    return uv, xyz, tris
 
 
 def _normalize_feature_inputs(

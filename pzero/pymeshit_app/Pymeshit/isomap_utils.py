@@ -438,7 +438,9 @@ class IsomapTriangulator:
         uniform: bool = True,
         reference_points_3d: Optional[np.ndarray] = None,
         smoothing: float = 0.0,
-        interpolator: str = "tps"
+        interpolator: str = "tps",
+        well_feature_points_3d: Optional[np.ndarray] = None,
+        well_feature_sizes: Optional[np.ndarray] = None,
     ) -> Dict[str, Any]:
         """
         Perform constrained triangulation using Isomap unfolding.
@@ -468,6 +470,9 @@ class IsomapTriangulator:
             interpolator: Interpolation method for Steiner points:
                          - "tps" or "Thin Plate Spline": Globally smooth, best for folds
                          - "idw" or "IDW": Local smoothing, faster but may create bumps
+            well_feature_points_3d: Well/surface cut points for local refinement.
+            well_feature_sizes: Target lengths at those cut points. Refinement
+                                subdivides the mapped mesh without deforming it.
             
         Returns:
             Dictionary with:
@@ -563,6 +568,25 @@ class IsomapTriangulator:
             min_angle=min_angle,
             base_size=base_size
         )
+
+        well_uv = np.empty((0, 2), dtype=float)
+        well_sizes = np.empty((0,), dtype=float)
+        if well_feature_points_3d is not None and well_feature_sizes is not None:
+            well_points = np.asarray(well_feature_points_3d, dtype=float)
+            well_sizes = np.asarray(well_feature_sizes, dtype=float).reshape(-1)
+            if (well_points.ndim == 2 and well_points.shape[1] == 3
+                    and len(well_points) > 0 and len(well_points) == len(well_sizes)):
+                well_uv = self.transform(well_points)
+                triangulator.set_cpp_compatible_mode(True)
+                # Apply local subdivision after the initial Isomap inverse map,
+                # so refinement cannot change the geometry of that mesh.
+                triangulator.triunsuitable_max_iterations = 8
+                triangulator.triunsuitable_max_new_points = int(
+                    min(2500, max(900, 600 + 8 * len(well_points)))
+                )
+                triangulator.triunsuitable_min_point_spacing = max(
+                    1e-10, min(float(np.min(well_sizes)), float(base_size)) * 0.25
+                )
         
         triangulation_start = time.perf_counter()
         try:
@@ -599,6 +623,17 @@ class IsomapTriangulator:
             reference_points,   # All reference points in 3D (for TPS)
             n_original
         )
+        if len(well_uv):
+            from Pymeshit.triangle_callback import refine_surface_with_cpp_triunsuitable
+            vertices_2d, vertices_3d, triangles = refine_surface_with_cpp_triunsuitable(
+                vertices_2d, vertices_3d, triangles, tri_result.get('segments'),
+                self.gradient, base_size, well_uv, well_sizes,
+                max_iterations=triangulator.triunsuitable_max_iterations,
+                max_new_points=triangulator.triunsuitable_max_new_points,
+                min_point_spacing=triangulator.triunsuitable_min_point_spacing,
+                logger=logger,
+            )
+            n_steiner = len(vertices_3d) - n_original
         logger.info(f"Isomap triangulation stage: map_to_3d={time.perf_counter() - map_start:.3f}s")
         
         # Step 6: Validate mesh quality - check for potential self-intersections

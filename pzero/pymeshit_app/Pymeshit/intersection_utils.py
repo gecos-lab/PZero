@@ -3090,13 +3090,14 @@ def run_constrained_triangulation_py(
                 )
 
             if feature_points_2d.shape[0] > 0:
-                tri.set_feature_points(feature_points_2d, feature_sizes)
+                # Refine after lifting the baseline mesh to 3D. Reinterpolating
+                # well-local Steiner points can create surface crossings.
                 tri.triunsuitable_min_point_spacing = max(
                     1e-10,
                     min(float(np.min(feature_sizes)), float(target_sz)) * 0.25,
                 )
                 logger.info(
-                    "Constrained triangulation: enabled C++ triunsuitable bridge with %d feature point(s), "
+                    "Constrained triangulation: enabled surface-preserving triunsuitable with %d feature point(s), "
                     "max_iterations=%d, max_new_points=%d",
                     feature_points_2d.shape[0],
                     tri.triunsuitable_max_iterations,
@@ -3107,6 +3108,7 @@ def run_constrained_triangulation_py(
                 "Ignoring triunsuitable feature points with invalid shape %s (expected Nx2)",
                 feature_points_2d.shape,
             )
+            feature_points_2d = np.empty((0, 2))
 
     tri_res = tri.triangulate(points=plc_points_2d, segments=plc_segments_indices, holes=plc_holes_2d,
                               uniform=uniform, create_transition=not uniform, create_feature_points=False)
@@ -3206,6 +3208,17 @@ def run_constrained_triangulation_py(
     snap_mask = dists <= tol_uv
     if np.any(snap_mask):
         final_vertices_3d[snap_mask] = original_3d_points_for_plc[nn[snap_mask]]
+
+    if feature_points_2d.size:
+        from Pymeshit.triangle_callback import refine_surface_with_cpp_triunsuitable
+        vertices_uv, final_vertices_3d, triangles = refine_surface_with_cpp_triunsuitable(
+            vertices_uv, final_vertices_3d, triangles, tri_res.get('segments'),
+            gradient, target_sz, feature_points_2d, feature_sizes,
+            max_iterations=tri.triunsuitable_max_iterations,
+            max_new_points=tri.triunsuitable_max_new_points,
+            min_point_spacing=tri.triunsuitable_min_point_spacing,
+            logger=logger,
+        )
 
     # dedupe + drop degenerates
     def vkey(vec): return (round(vec[0],12), round(vec[1],12), round(vec[2],12))

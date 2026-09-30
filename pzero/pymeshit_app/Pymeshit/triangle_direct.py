@@ -215,7 +215,7 @@ class DirectTriangleWrapper:
                 len(self.feature_points) > 0
             )
 
-            if use_triunsuitable_bridge and HAS_TRIANGLE_CALLBACK and hasattr(triangle_callback, "triangulate_with_cpp_triunsuitable"):
+            if use_triunsuitable_bridge and HAS_TRIANGLE_CALLBACK_BRIDGE and hasattr(triangle_callback, "triangulate_with_cpp_triunsuitable"):
                 self.logger.info(
                     "Using C++ triunsuitable bridge with %d feature point(s)",
                     len(self.feature_points),
@@ -233,7 +233,7 @@ class DirectTriangleWrapper:
                     logger=self.logger,
                 )
             else:
-                if use_triunsuitable_bridge and not HAS_TRIANGLE_CALLBACK:
+                if use_triunsuitable_bridge and not HAS_TRIANGLE_CALLBACK_BRIDGE:
                     self.logger.warning(
                         "Feature points are set but triunsuitable bridge module is unavailable; "
                         "falling back to standard Triangle call"
