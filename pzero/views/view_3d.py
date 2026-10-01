@@ -84,6 +84,7 @@ from ..helpers.helper_dialogs import (
     progress_dialog,
 )
 from ..helpers.helper_functions import best_fitting_plane, gen_frame, freeze_gui_off
+from ..helpers.extend_surface import extend_geology_entity
 from ..collections.geological_collection import GeologicalCollection
 from ..entities_factory import PolyData, Attitude, PolyLine, TriSurf
 from ..two_d_lines import draw_line_3d
@@ -3995,6 +3996,70 @@ class View3D(ViewVTK):
         from ..helpers.fix_geometry import open_fix_geometry_dialog
 
         open_fix_geometry_dialog(self)
+
+    def _resolve_extend_surface_selection(self):
+        """Find the single selected geological entity in the table or 3D view."""
+        selected = []
+        if self.parent.shown_table == "tabGeology":
+            selected = self.parent.get_selected_uids_from_table(
+                self.parent.GeologyTableView
+            )
+        if not selected:
+            selected = list(getattr(self, "selected_uids", []))
+        geological_uids = set(self.parent.geol_coll.df["uid"])
+        if len(selected) != 1 or selected[0] not in geological_uids:
+            self.print_terminal(
+                "Select exactly one geological surface or line to extend."
+            )
+            return None
+        return selected[0]
+
+    @staticmethod
+    def _default_extension_distance(vtk_obj):
+        bounds = vtk_obj.GetBounds()
+        size = np_array(
+            [bounds[1] - bounds[0], bounds[3] - bounds[2], bounds[5] - bounds[4]],
+            dtype=float,
+        )
+        return max(float(np_linalg.norm(size)) * 0.1, 0.001)
+
+    @staticmethod
+    def _default_extension_vector(vtk_obj, topology, role):
+        if topology == "TriSurf" and role == "fault":
+            return np_array([0.0, 0.0, 1.0])
+        return np_array([1.0, 0.0, 0.0])
+
+    def _build_extended_geology_entity(
+        self, vtk_obj, topology, direction, distance, side
+    ):
+        result = extend_geology_entity(vtk_obj, topology, direction, distance, side)
+        if result is None:
+            self.print_terminal(
+                "Cannot extend this entity with the selected vector and side."
+            )
+        return result
+
+    def _build_extension_preview_geometry(
+        self, vtk_obj, topology, direction, distance, side
+    ):
+        return extend_geology_entity(vtk_obj, topology, direction, distance, side)
+
+    def _cleanup_extend_surface_preview(self):
+        self.plotter.remove_actor("_extend_surface_preview", render=False)
+        self.plotter.render()
+
+    def _show_extend_surface_preview(self, uid, vtk_obj):
+        self.plotter.remove_actor("_extend_surface_preview", render=False)
+        if vtk_obj is not None:
+            self.plotter.add_mesh(
+                vtk_obj,
+                name="_extend_surface_preview",
+                color="cyan",
+                opacity=0.5,
+                pickable=False,
+                render=False,
+            )
+        self.plotter.render()
 
     def open_extend_surface_dialog(self):
         """Open a live-preview tool to extend the selected geological surface/line."""
