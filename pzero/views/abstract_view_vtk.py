@@ -28,6 +28,9 @@ from ..orientation_analysis import get_dip_dir_vectors
 from ..helpers.helper_dialogs import input_one_value_dialog, save_file_dialog
 from ..helpers.screenshot_dialog import ScreenshotExportDialog
 from ..helpers.gif_export_dialog import GifExportDialog
+from ..helpers.loop_structural_formations import (
+    FORMATION_PROPERTY, formation_lookup_table, read_formation_metadata,
+)
 from ..entities_factory import (
     VertexSet,
     PolyLine,
@@ -220,6 +223,21 @@ class ViewVTK(BaseView):
                 self.get_actor_by_uid(uid).GetProperty().SetColor(color_RGB)
             else:
                 continue
+        # PSC formations reference geological legend entries, even though
+        # their displayed actor belongs to the Meshes collection.
+        if collection.collection_name == "geol_coll":
+            for uid in self.parent.mesh3d_coll.get_uids:
+                if uid not in self.uids_in_view:
+                    continue
+                voxet = self.parent.mesh3d_coll.get_uid_vtk_obj(uid)
+                if not isinstance(voxet, Voxet) or not read_formation_metadata(voxet):
+                    continue
+                property_name = self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"].values[0]
+                if property_name != FORMATION_PROPERTY:
+                    continue
+                self.get_actor_by_uid(uid).GetMapper().SetLookupTable(
+                    formation_lookup_table(voxet, project=self.parent)
+                )
 
     def change_actor_opacity(self, updated_uids: list = None, collection=None):
         """Change opacity for actor uid"""
@@ -826,7 +844,7 @@ class ViewVTK(BaseView):
                 this_actor = self.plot_mesh(
                     uid=uid,
                     plot_entity=plot_entity,
-                    color_RGB=None,
+                    color_RGB=color_RGB,
                     show_property=show_property,
                     color_bar_range=None,
                     show_property_title=show_property_title,
@@ -1173,6 +1191,24 @@ class ViewVTK(BaseView):
         else:
             show_property_cmap = None
 
+        formation_colors = None
+        if (
+            isinstance(plot_entity, Voxet)
+            and isinstance(show_property, str)
+            and show_property == FORMATION_PROPERTY
+        ):
+            formation_colors = formation_lookup_table(
+                plot_entity, project=self.parent, cmap=show_property_cmap
+            )
+            if formation_colors is not None:
+                show_property_cmap = formation_colors
+                if plot_entity.GetNumberOfCells() == 0:
+                    return None
+                # Colour the original voxel cells without reconstructing contacts.
+                preference = "cell"
+                if "Formations" in self.plotter.scalar_bars:
+                    self.plotter.remove_scalar_bar("Formations", render=False)
+
         this_actor = self.plotter.add_mesh(
             plot_entity,
             color=color_RGB,  # string, RGB list, or hex string, overridden if scalars are specified
@@ -1187,12 +1223,12 @@ class ViewVTK(BaseView):
             flip_scalars=False,  # flip direction of cmap
             lighting=None,  # bool to enable view-direction lighting
             n_colors=256,  # number of colors to use when displaying scalars
-            interpolate_before_map=True,  # bool for smoother scalars display (default True)
+            interpolate_before_map=formation_colors is None,
             cmap=show_property_cmap,  # name of the Matplotlib colormap, includes 'colorcet' and 'cmocean', and custom colormaps like ['green', 'red', 'blue']
             label=None,  # string label for legend with pyvista.BasePlotter.add_legend
             reset_camera=None,
-            scalar_bar_args=None,  # keyword arguments for scalar bar, see pyvista.BasePlotter.add_scalar_bar
-            show_scalar_bar=False,  # bool (default True)
+            scalar_bar_args=None,
+            show_scalar_bar=False,
             multi_colors=False,  # for MultiBlock datasets
             name=uid,  # actor name
             texture=plot_texture_option,  # vtk.vtkTexture or np_ndarray or boolean, will work if input mesh has texture coordinates. True > first available texture. String > texture with that name already associated to mesh.

@@ -2790,6 +2790,10 @@ class ViewTable(QWidget):
 
         manual_units = []
         unit_key_by_name = {}
+        saved_unit_ids = {
+            str(unit.get("feature", "")): str(unit.get("id", ""))
+            for unit in options.get("manual_units", []) if isinstance(unit, dict)
+        }
         boundary_polarities = {}
         model_boundary_names = set()
         for _, boundary_row in boundaries.iterrows():
@@ -2810,7 +2814,7 @@ class ViewTable(QWidget):
             unit_name = str(row.get(stm_feature_col, "")).strip()
             if not unit_name:
                 continue
-            unit_id = md5(unit_name.encode("utf-8")).hexdigest()[:10]
+            unit_id = saved_unit_ids.get(unit_name) or md5(unit_name.encode("utf-8")).hexdigest()[:10]
             unit_key_by_name[unit_name] = f"unit:manual:{unit_id}"
             linked_polarities = [
                 boundary_polarities[boundary_name]
@@ -3837,23 +3841,51 @@ class ViewTable(QWidget):
             ),
             polarity_calculator=self.calculate_unit_polarities,
         )
-        dialog.exec()
+        result = dialog.exec()
         boundaries, units = self._load_stm_composite(table_name)
         self.boundaries_table_model.set_dataframe(boundaries)
         self.table_model.set_dataframe(units)
         self.update_editing_ui()
+        return result
 
     def _update_stm_build_options(self, table_name=None, updates=None):
         """Persist STM builder options without discarding existing table options."""
         if not table_name:
             return
         merged_options = dict(self.parent.custom_table_options.get(table_name, {}))
+        previous_manual_names = {
+            str(unit.get("id", "")): str(unit.get("feature", ""))
+            for unit in merged_options.get("manual_units", []) if isinstance(unit, dict)
+        }
         merged_options.update(dict(updates or {}))
         self.parent.custom_table_options[table_name] = merged_options
+        if "manual_units" in (updates or {}):
+            # The connection builder edits graph nodes; PSC consumers read the
+            # canonical Units table. Keep names, levels and domains in sync.
+            previous_rows = {
+                str(row.get(stm_feature_col, "")): row
+                for row in self.table_model.dataframe.to_dict("records")
+            }
+            rows = []
+            for unit in merged_options["manual_units"]:
+                name = str(unit.get("feature", "")).strip()
+                old_name = previous_manual_names.get(str(unit.get("id", "")), name)
+                row = dict(previous_rows.get(old_name, {}))
+                row.update({stm_feature_col: name,
+                            stm_unit_role_col: unit.get("unit_role", "SU"),
+                            stm_unit_level_col: unit.get("structural_polarity", "")})
+                for column in list(row):
+                    if stm_domain_order(column) is not None:
+                        row[column] = ""
+                for domain in unit.get("domains", []):
+                    row[domain["column"]] = domain["value"]
+                rows.append(row)
+            self.table_model.set_dataframe(normalise_stm_units(pd_DataFrame(rows)))
         connection_update_keys = {
             "conformable_connections",
             "unconformable_connections",
             "locked_conformable_connections",
+            "manual_units",
         }
         if connection_update_keys & set((updates or {}).keys()):
             unit_names_by_key = {}

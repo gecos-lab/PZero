@@ -5178,6 +5178,177 @@ class PiecewiseStructuralComplex:
         return len(assigned_materials), skipped_count
 
 
+class LoopStructuralPiecewiseStructuralComplex(PiecewiseStructuralComplex):
+    """Read manually prepared PSC/STM connections to define Loop voxel units."""
+
+    def _pzero_project(self):
+        return self.host
+
+    def loop_formations_from_connections(self, table_name, sequence, contacts):
+        """Translate PSC connections into unambiguous scalar intervals.
+
+        PSC unit levels locate units on a side of a single contact. Two bounding
+        contacts directly define an interval. Missing links and overlapping
+        units are rejected rather than assigning arbitrary voxel materials.
+        """
+        from pzero.helpers.loop_structural_formations import validate_formations
+        from pzero.legend_manager import Legend
+
+        project = self._pzero_project()
+        model = self._build_psc_model_from_stm(table_name)
+        options = getattr(project, "custom_table_options", {}).get(table_name, {}) or {}
+        tables = options.get("stm_tables", {})
+        selected = {str(row["feature"]): row for row in contacts}
+        contact_values = {name: float(row["time"]) for name, row in selected.items()}
+        for boundary in tables.get("boundaries", []):
+            name = str(boundary.get(stm_feature_col, ""))
+            if name in contact_values:
+                try:
+                    value = float(boundary.get(stm_level_col, np.nan))
+                except (TypeError, ValueError):
+                    value = np.nan
+                if not np.isfinite(value):
+                    raise ValueError(f"Contact {name} needs a finite scalar level.")
+                contact_values[name] = value
+        levels = sorted(set(contact_values.values()))
+        edges = [-np.inf, *levels, np.inf]
+        ids = dict(options.get("loop_formation_ids", {}))
+        next_id = max(ids.values(), default=0) + 1
+        definitions = []
+        for unit in model["units"].values():
+            linked = sorted(
+                set(unit["boundaries"]) & set(contact_values),
+                key=lambda name: contact_values[name],
+            )
+            if not linked:
+                continue
+            bounds = sorted(set(contact_values[name] for name in linked))
+            if len(bounds) > 2:
+                raise ValueError(
+                    f"{unit['name']}: connect the unit to its bounding contacts, not internal contacts."
+                )
+            if len(bounds) == 2:
+                lower, upper = bounds
+                if any(lower < value < upper for value in levels):
+                    raise ValueError(
+                        f"{unit['name']}: an internal contact separates the connected boundaries."
+                    )
+            else:
+                marker = unit["polarity"]
+                if not np.isfinite(marker) or marker in levels:
+                    raise ValueError(
+                        f"{unit['name']}: calculate its unit level in the connection builder to choose the contact side."
+                    )
+                interval = int(np.searchsorted(levels, marker))
+                lower, upper = edges[interval], edges[interval + 1]
+                if bounds[0] not in (lower, upper):
+                    raise ValueError(
+                        f"{unit['name']}: its unit level is not adjacent to the connected contact."
+                    )
+            source = selected.get(unit["name"], selected[linked[0]])
+            key = {
+                "feature": source["feature"],
+                "role": source["role"],
+                "scenario": source.get("scenario", "undef"),
+            }
+            # Prefer the unit's own legend entry when it is present.
+            legend = project.geol_coll.legend_df
+            own = legend.loc[
+                (legend["feature"] == unit["name"])
+                & (legend["scenario"] == key["scenario"])
+                & (legend["sequence"] == sequence)
+            ]
+            unit_rows = own.loc[own["role"].str.upper() == unit["unit_role"]]
+            if not unit_rows.empty:
+                own = unit_rows
+            elif source["feature"] == unit["name"]:
+                own = own.loc[own["role"] == source["role"]]
+            if len(own) == 1:
+                key = {
+                    name: own.iloc[0][name] for name in ("feature", "role", "scenario")
+                }
+            if unit["name"] not in ids:
+                ids[unit["name"]] = next_id
+                next_id += 1
+            definition = {
+                "name": unit["name"],
+                "id": ids[unit["name"]],
+                "min": lower,
+                "max": upper,
+                "psc_unit_key": unit["key"],
+                "psc_table": table_name,
+                "boundaries": linked,
+                "legend_key": key,
+            }
+            definition["color"] = Legend.loop_formation_color(project, definition)
+            definitions.append(definition)
+        if not definitions:
+            raise ValueError(
+                "Connect PSC units to the selected LoopStructural contacts before running the model."
+            )
+        definitions = validate_formations(definitions)
+        # Persist IDs only after the complete mapping has been validated.
+        project.custom_table_options[table_name] = {
+            **options,
+            "loop_formation_ids": ids,
+        }
+        return {
+            "formations": definitions,
+            "psc_table": table_name,
+            "contact_values": contact_values,
+            "scenario": contacts[0].get("scenario", "undef"),
+        }
+
+    def open_loop_connections(self, sequence, contacts, metadata=None):
+        """Prompt for an existing STM table and read its saved connections."""
+        from pzero.helpers.helper_dialogs import input_combo_dialog
+        from PySide6.QtWidgets import QMessageBox
+
+        project = self._pzero_project()
+        saved_tables = getattr(project, "custom_tables", {}) or {}
+        tables = [name for name in self._available_stm_tables() if name in saved_tables]
+        if not tables:
+            QMessageBox.information(
+                project,
+                "LoopStructural STM table",
+                "Prepare a Structural Topology Model (STM) table in Table View first. "
+                "Define units, connect their boundaries, and save their unit levels "
+                "in the structural topology connection builder. Then run LoopStructural "
+                "and select that table.",
+            )
+            return None
+        previous_table = (metadata or {}).get("psc_table")
+        if previous_table in tables:
+            tables.remove(previous_table)
+            tables.insert(0, previous_table)
+        table_name = input_combo_dialog(
+            parent=project,
+            title="LoopStructural STM table",
+            label="Select the prepared STM table to read its units and boundary connections:",
+            choice_list=tables,
+        )
+        if table_name is None:
+            return None
+        try:
+            return self.loop_formations_from_connections(table_name, sequence, contacts)
+        except ValueError as error:
+            QMessageBox.warning(
+                project,
+                "LoopStructural STM table",
+                f'Table "{table_name}": {error}\n\n'
+                "Edit this STM table manually in Table View, save its connections "
+                "and unit levels, then run LoopStructural again.",
+            )
+            return None
+
+
+def loop_structural_psc_dialog(project, sequence, contacts, metadata=None):
+    """Entry point shared by new Loop runs and existing Voxet reassignment."""
+    return LoopStructuralPiecewiseStructuralComplex(project).open_loop_connections(
+        sequence, contacts, metadata
+    )
+
+
 class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
     """Build PSC-derived editable seeds and section fill polygons in Xsection views."""
 

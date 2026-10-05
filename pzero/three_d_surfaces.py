@@ -17,6 +17,7 @@ from numpy import cos as np_cos
 from numpy import flip as np_flip
 from numpy import float32 as np_float32
 from numpy import float64 as np_float64
+from numpy import isfinite as np_isfinite
 from numpy import ndarray as np_ndarray
 from numpy import pi as np_pi
 from numpy import sin as np_sin
@@ -85,6 +86,13 @@ from .entities_factory import (
     Attitude,
 )
 from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
+from .helpers.loop_structural_formations import (
+    FORMATION_PROPERTY,
+    assign_voxet_formations,
+    read_formation_metadata,
+    voxet_sample_points,
+)
+from .pymeshit_app.PiecewiseStructuralComplex import loop_structural_psc_dialog
 
 
 def _build_extrusion_output_dict(self, input_uid, title, default_suffix):
@@ -688,6 +696,80 @@ def poisson_interpolation(self):
         self.print_terminal(" -- empty object -- ")
 
 
+def assign_loop_structural_formations(self):
+    """Edit formation assignment on selected LoopStructural Voxets."""
+    for uid in deepcopy(self.selected_uids):
+        voxet = self.mesh3d_coll.get_uid_vtk_obj(uid)
+        if not isinstance(voxet, Voxet):
+            self.print_terminal("Select a LoopStructural Voxet to assign formations.")
+            continue
+        metadata = read_formation_metadata(voxet)
+        if metadata:
+            sequence = metadata["sequence"]
+        elif "strati_0" in voxet.point_data_keys:
+            sequence = "strati_0"
+        else:
+            self.print_terminal("The selected Voxet has no LoopStructural scalar field.")
+            continue
+        contacts = (metadata or {}).get("contacts") or [
+            row for row in self.geol_coll.legend_df.to_dict("records")
+            if row["sequence"] == sequence and row["time"] != -999999.0
+            and np_isfinite(row["time"])
+        ]
+        if not contacts:
+            self.print_terminal("No geological contacts are available for this LoopStructural sequence.")
+            continue
+        mapping = loop_structural_psc_dialog(self, sequence, contacts, metadata)
+        if mapping is None:
+            return
+        if any(mapping["contact_values"][row["feature"]] != float(row["time"]) for row in contacts):
+            self.print_terminal("PSC contact levels changed. Rebuild the LoopStructural model to update its scalar field.")
+            continue
+        definitions = mapping["formations"]
+        updated = voxet.deep_copy()
+        try:
+            counts = assign_voxet_formations(updated, sequence, definitions,
+                                             context={"psc_table": mapping["psc_table"], "contacts": contacts})
+        except ValueError as error:
+            self.print_terminal(str(error))
+            continue
+        # Update explicitly: generic replace_vtk assumes a PolyData property shape.
+        old_properties = list(self.mesh3d_coll.get_uid_properties_names(uid))
+        properties = list(updated.point_data_keys)
+        self.mesh3d_coll.set_uid_properties_names(uid, properties)
+        self.mesh3d_coll.set_uid_properties_components(uid, [
+            updated.GetPointData().GetArray(key).GetNumberOfComponents() for key in properties
+        ])
+        row_index = self.mesh3d_coll.df.index[self.mesh3d_coll.df["uid"] == uid][0]
+        self.mesh3d_coll.df.at[row_index, "properties_types"] = [
+            updated.GetPointData().GetArray(key).GetDataTypeAsString() for key in properties
+        ]
+        self.mesh3d_coll.set_uid_vtk_obj(uid, updated)
+        self.mesh3d_coll.modelReset.emit()
+        self.prop_legend.update_widget(self)
+        if FORMATION_PROPERTY not in old_properties:
+            self.signals.data_keys_added.emit([uid], self.mesh3d_coll)
+        self.signals.geom_modified.emit([uid], self.mesh3d_coll)
+        for item in definitions:
+            self.print_terminal(f"Formation {item['id']} ({item['name']}): {counts[item['id']]} voxels")
+
+
+def _sample_loop_model_voxet(model, sequence, origin, spacing, cell_dimensions, formations, context=None):
+    """Sample scalar values and formation IDs at their actual voxel locations."""
+    voxet = Voxet()
+    voxet.origin = origin
+    voxet.spacing = spacing
+    # vtkImageData dimensions count nodes: N cells require N + 1 nodes.
+    voxet.dimensions = [count + 1 for count in cell_dimensions]
+    points = voxet_sample_points(origin, spacing, voxet.dimensions)
+    scalars = model.evaluate_feature_value(sequence, points, scale=True)
+    voxet.set_point_data(data_key=sequence, attribute_matrix=scalars)
+    centres = voxet_sample_points(origin, spacing, voxet.dimensions, cell_centres=True)
+    cell_values = model.evaluate_feature_value(sequence, centres, scale=True)
+    counts = assign_voxet_formations(voxet, sequence, formations, cell_values=cell_values, context=context)
+    return voxet, counts
+
+
 @freeze_gui_onoff
 def implicit_model_loop_structural(self):
     """Function to call LoopStructural's implicit modelling algorithms.
@@ -712,8 +794,14 @@ def implicit_model_loop_structural(self):
     self.print_terminal(
         "LoopStructural implicit geomodeller\ngithub.com/Loop3D/LoopStructural"
     )
+    if self.shown_table == "tabMeshes":
+        if not self.selected_uids:
+            self.print_terminal("Select a LoopStructural Voxet to assign formations.")
+            return
+        assign_loop_structural_formations(self)
+        return
     if self.shown_table != "tabGeology":
-        self.print_terminal(" -- Only geological objects can be interpolated -- ")
+        self.print_terminal("Select geological inputs to model, or a LoopStructural Voxet in Meshes to edit formations.")
         return
     # Check if some vtkPolyData is selected
     if not self.selected_uids:
@@ -795,6 +883,7 @@ def implicit_model_loop_structural(self):
         if val_single == -999999.0:
             val_single = float("nan")
         entity_input_data_df["val"] = val_single
+        entity_input_data_df["_loop_contact_feature"] = self.geol_coll.get_uid_feature(uid)
         # nx, ny and nz: TO BE IMPLEMENTED
         # gx, gy and gz: TO BE IMPLEMENTED
         # Append dataframe for this input entity to the general input dataframe.
@@ -815,6 +904,64 @@ def implicit_model_loop_structural(self):
     all_input_data_df.dropna(axis=1, how="all", inplace=True)
     toc(parent=self)
     self.print_terminal(f"all_input_data_df:\n{all_input_data_df}")
+    # One scalar field can represent many formations within a sequence. Do not
+    # silently combine contacts belonging to independent sequences/scenarios.
+    sequences = (
+        all_input_data_df["feature_name"].dropna().unique().tolist()
+        if "feature_name" in all_input_data_df else []
+    )
+    if not sequences:
+        self.print_terminal("Assign a sequence in the geological legend before modelling.")
+        return
+    sequence = sequences[0]
+    if len(sequences) > 1:
+        sequence = input_combo_dialog(
+            parent=self, title="LoopStructural sequence", label="Sequence to model",
+            choice_list=sequences,
+        )
+        if sequence is None:
+            return
+    all_input_data_df = all_input_data_df.loc[
+        all_input_data_df["feature_name"] == sequence
+    ].copy()
+    selected_legend = self.geol_coll.legend_df.loc[
+        self.geol_coll.legend_df["sequence"] == sequence
+    ].copy()
+    # Limit contact metadata to the selected inputs, using the complete key.
+    selected_keys = {
+        (self.geol_coll.get_uid_role(uid), self.geol_coll.get_uid_feature(uid),
+         self.geol_coll.get_uid_scenario(uid)) for uid in input_uids
+    }
+    selected_legend = selected_legend.loc[
+        selected_legend.apply(lambda row: (row["role"], row["feature"], row["scenario"])
+                              in selected_keys, axis=1)
+    ]
+    scenarios = selected_legend["scenario"].unique().tolist()
+    if len(scenarios) > 1:
+        self.print_terminal("Select inputs from one geological scenario per LoopStructural run.")
+        return
+    if "val" not in all_input_data_df or all_input_data_df["val"].dropna().empty:
+        self.print_terminal("Assign finite contact time values in the geological legend before modelling formations.")
+        return
+    contacts = [row for row in selected_legend.to_dict("records")
+                if row["time"] != -999999.0 and np_isfinite(row["time"])]
+    if not contacts:
+        self.print_terminal("Assign finite scalar levels to the selected contacts before running LoopStructural.")
+        return
+    mapping = loop_structural_psc_dialog(self, sequence, contacts)
+    if mapping is None:
+        return
+    formations = mapping["formations"]
+    values = all_input_data_df["_loop_contact_feature"].map(mapping["contact_values"])
+    all_input_data_df.loc[values.notna(), "val"] = values.loc[values.notna()]
+    all_input_data_df.drop(columns=["_loop_contact_feature"], inplace=True)
+    selected_legend["time"] = selected_legend["feature"].map(mapping["contact_values"]).fillna(selected_legend["time"])
+    for row in contacts:
+        row["time"] = mapping["contact_values"][row["feature"]]
+    context = {"psc_table": mapping["psc_table"], "contacts": contacts}
+    if not self.boundary_coll.get_names:
+        self.print_terminal("Create a model boundary before running LoopStructural.")
+        return
     # Ask for bounding box for the model
     input_dict = {
         "boundary": ["Boundary: ", self.boundary_coll.get_names],
@@ -824,8 +971,7 @@ def implicit_model_loop_structural(self):
         title="Implicit Modelling - LoopStructural algorithms", input_dict=input_dict
     )
     if options_dict is None:
-        options_dict["boundary"] = self.boundary_coll.get_names[0]
-        options_dict["method"] = "PLI"
+        return
     boundary_uid = self.boundary_coll.df.loc[
         self.boundary_coll.df["name"] == options_dict["boundary"], "uid"
     ].values[0]
@@ -867,6 +1013,8 @@ def implicit_model_loop_structural(self):
             title="Implicit Modelling - LoopStructural algorithms",
             input_dict=vertical_extension_in,
         )
+        if vertical_extension_updt is None:
+            return
         if vertical_extension_updt["top"] is None:
             vertical_extension_updt["top"] = 1000.0
         if vertical_extension_updt["bottom"] is None:
@@ -888,6 +1036,9 @@ def implicit_model_loop_structural(self):
     edge_x = maximum_x - origin_x
     edge_y = maximum_y - origin_y
     edge_z = maximum_z - origin_z
+    if min(edge_x, edge_y, edge_z) <= 0:
+        self.print_terminal("The model boundary must have a positive extent on all three axes.")
+        return
     # Define origin and maximum extension of modelling domain
     origin = [origin_x, origin_y, origin_z]
     maximum = [maximum_x, maximum_y, maximum_z]
@@ -952,48 +1103,26 @@ def implicit_model_loop_structural(self):
     tic(parent=self)
     # interpolator_type can be 'PLI', 'FDI' or 'surfe'
     model.create_and_add_foliation(
-        "strati_0",
-        interpolator_type=options_dict["method"],
+        sequence,
+        interpolatortype=options_dict["method"],
         nelements=(dimensions[0] * dimensions[1] * dimensions[2]),
     )
+    model.set_stratigraphic_column({sequence: {
+        item["name"]: {"min": item["min"], "max": item["max"],
+                       "id": item["id"], "colour": item["color"]}
+        for item in formations
+    }})
     # In version 1.1+ the implicit function representing a geological feature does not have to be solved to generate the model object.
     # The scalar field is solved on demand when the geological features are evaluated. This means that parts of the geological model
     # can be modified and only the older (features lower in the feature list) are updated.
     # All features in the model can be updated with model.update(verbose=True).
     # model.update(verbose=True)  # This will solve the implicit function for all features in the model and provide a progress bar -- causes crash
-    # A GeologicalFeature can be extracted from the model either by name...
-    # my_feature = model[feature_name_value]  # useful?
-    # A regular grid inside the model bounding box can be retrieved in the following way:
-    # - nsteps defines how many points in x, y and z
-    # - shuffle defines whether the points should be ordered by axis x, y, z (False?) or random (True?).
-    # - rescale defines whether the returned points should be in model coordinates or real world coordinates.
-    # Set calculation grid resolution. Default resolution is set as to obtain a model close to 10000 cells.
-    # FOR THE FUTURE: anisotropic resolution?
-    # rescale is True by default
-    regular_grid = model.regular_grid(nsteps=dimensions, shuffle=False, rescale=False)
     toc(parent=self)
-    # Evaluate scalar field.#
-    self.print_terminal("-> evaluate_feature_value...")
+    self.print_terminal("-> evaluate scalar field and assign voxel formations...")
     tic(parent=self)
-    scalar_field = model.evaluate_feature_value("strati_0", regular_grid, scale=False)
-    scalar_field = scalar_field.reshape((dimension_x, dimension_y, dimension_z))
-    # OLD ----------------
-    # VTK image data is ordered (z,y,x) in memory, while the Loop Structural output
-    # Numpy array is ordered as regular_grid, so (x,y,-z). See explanations on VTK here:
-    # https://discourse.vtk.org/t/numpy-tensor-to-vtkimagedata/5154/3
-    # https://discourse.vtk.org/t/the-direction-of-vtkimagedata-make-something-wrong/4997
-    # scalar_field = scalar_field[:, :, ::-1]
-    # scalar_field = np_flip(scalar_field, 2)
-    # OLD ----------------
-    # NEW ----------------
-    # It looks like that the Numpy output from LoopStructural now is
-    # ordered as (x,y,z), so inverting the 'z' is no more required.
-    # NEW ----------------
-    scalar_field = scalar_field.transpose(2, 1, 0)
-    scalar_field = scalar_field.ravel()  # flatten returns a copy
-    # Evaluate scalar field gradient.
-    # print("-> evaluate_feature_gradient...")
-    # scalar_field_gradient = model.evaluate_feature_gradient("strati_0", regular_grid, scale=False)
+    sampled_voxet, formation_counts = _sample_loop_model_voxet(
+        model, sequence, origin, spacing, dimensions, formations, context=context
+    )
     toc(parent=self)
     # Create deepcopy of the Mesh3D entity dictionary.
     self.print_terminal("-> create Voxet...")
@@ -1010,21 +1139,21 @@ def implicit_model_loop_structural(self):
     # print(model_name)
     voxet_dict["name"] = model_name
     voxet_dict["topology"] = "Voxet"
-    voxet_dict["properties_names"] = ["strati_0"]
-    voxet_dict["properties_components"] = [1]
-    # Create new instance of Voxet() class
-    voxet_dict["vtk_obj"] = Voxet()
-    
-    # Calculate origin in aligned space (cell centers)
-    aligned_origin = [
-        origin_x + spacing_x / 2,
-        origin_y + spacing_y / 2,
-        origin_z + spacing_z / 2,
+    voxet_dict["scenario"] = scenarios[0] if scenarios else "undef"
+    voxet_dict["properties_names"] = [sequence, FORMATION_PROPERTY]
+    voxet_dict["properties_components"] = [1, 1]
+    voxet_dict["properties_types"] = [
+        sampled_voxet.GetPointData().GetArray(key).GetDataTypeAsString()
+        for key in voxet_dict["properties_names"]
     ]
+    voxet_dict["vtk_obj"] = sampled_voxet
+    aligned_origin = origin
+    # Extract contacts from an unrotated copy, then transform those surfaces
+    # explicitly. This avoids dependence on VTK filter direction handling.
+    contour_voxet = sampled_voxet.deep_copy()
     
     # If OBB alignment was used, transform Voxet back to world space
     if use_obb_alignment:
-        from numpy import array as np_array
         from vtk import vtkMatrix3x3
         
         angle = obb_info["angle"]
@@ -1059,23 +1188,10 @@ def implicit_model_loop_structural(self):
         
         voxet_dict["vtk_obj"].origin = world_origin
         voxet_dict["vtk_obj"].direction_matrix = direction_matrix
-        # Store world_origin for surface transformation later
-        voxet_world_origin = world_origin
         self.print_terminal(f"-> Voxet transformed to OBB orientation")
-    else:
-        voxet_dict["vtk_obj"].origin = aligned_origin
-        voxet_world_origin = None
-    
-    voxet_dict["vtk_obj"].dimensions = dimensions
-    voxet_dict["vtk_obj"].spacing = spacing
-    # print(voxet_dict)
     toc(parent=self)
-    # Pass calculated values of the LoopStructural model to the Voxet, as scalar fields
-    self.print_terminal("-> populate Voxet...")
+    self.print_terminal("-> store Voxet formations...")
     tic(parent=self)
-    voxet_dict["vtk_obj"].set_point_data(
-        data_key="strati_0", attribute_matrix=scalar_field
-    )
     # Create new entity in mesh3d_coll from the populated voxet dictionary
     if voxet_dict["vtk_obj"].points_number > 0:
         self.mesh3d_coll.add_entity_from_dict(voxet_dict)
@@ -1083,6 +1199,8 @@ def implicit_model_loop_structural(self):
         self.print_terminal(" -- empty object -- ")
         return
     voxet_dict["vtk_obj"].Modified()
+    for item in formations:
+        self.print_terminal(f"Formation {item['id']} ({item['name']}): {formation_counts[item['id']]} voxels")
     toc(parent=self)
     # Extract isosurfaces with vtkFlyingEdges3D. Documentation in:
     # https://vtk.org/doc/nightly/html/classvtkFlyingEdges3D.html
@@ -1091,23 +1209,16 @@ def implicit_model_loop_structural(self):
     tic(parent=self)
     for value in all_input_data_df["val"].dropna().unique():
         value = float(value)
-        voxet_dict["vtk_obj"].GetPointData().SetActiveScalars("strati_0")
+        contour_voxet.GetPointData().SetActiveScalars(sequence)
         self.print_terminal(f"-> extract iso-surface at value = {value}")
         # Get metadata of first geological feature of this time
-        role = self.geol_coll.legend_df.loc[
-            self.geol_coll.legend_df["time"] == value, "role"
-        ].values[0]
-        feature = self.geol_coll.legend_df.loc[
-            self.geol_coll.legend_df["time"] == value, "feature"
-        ].values[0]
-        scenario = self.geol_coll.legend_df.loc[
-            self.geol_coll.legend_df["time"] == value, "scenario"
-        ].values[0]
+        contact = selected_legend.loc[selected_legend["time"] == value].iloc[0]
+        role, feature, scenario = contact["role"], contact["feature"], contact["scenario"]
         # Iso-surface algorithm
         iso_surface = vtkContourFilter()
         # iso_surface = vtkFlyingEdges3D()
         # iso_surface = vtkMarchingCubes()
-        iso_surface.SetInputData(voxet_dict["vtk_obj"])
+        iso_surface.SetInputData(contour_voxet)
         iso_surface.ComputeScalarsOn()
         iso_surface.ComputeGradientsOn()
         iso_surface.SetArrayComponent(0)
@@ -1125,10 +1236,10 @@ def implicit_model_loop_structural(self):
         surf_dict["vtk_obj"] = TriSurf()
         surf_dict["vtk_obj"].ShallowCopy(iso_surface.GetOutput())
         
-        # vtkContourFilter does NOT apply the direction matrix to its output,
-        # so we need to manually transform the isosurface from aligned space to OBB world space
         if use_obb_alignment:
-            surf_dict["vtk_obj"] = transform_vtk_to_obb(surf_dict["vtk_obj"], obb_info, voxet_world_origin)
+            points = surf_dict["vtk_obj"].points.copy()
+            points[:, :2] = (R_to_world_2d @ points[:, :2].T).T + center
+            surf_dict["vtk_obj"].points = points
             self.print_terminal(f"-> iso-surface transformed to OBB coordinate system")
         
         surf_dict["vtk_obj"].Modified()

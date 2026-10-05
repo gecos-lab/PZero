@@ -99,6 +99,23 @@ class Legend(QObject):
     def __init__(self, parent=None, *args, **kwargs):
         QObject.__init__(self, parent)
 
+    @staticmethod
+    def loop_formation_color(project, formation):
+        """Resolve a formation's current geological legend colour by its source key."""
+        legend = getattr(getattr(project, "geol_coll", None), "legend_df", None)
+        if legend is None or legend.empty:
+            return "#808080"
+        key = formation.get("legend_key", {"feature": formation["name"]})
+        rows = legend
+        for column in ("feature", "role", "scenario"):
+            if column in key:
+                rows = rows.loc[rows[column] == key[column]]
+        if rows.empty:
+            return "#808080"
+        rgb = [max(0, min(255, int(rows.iloc[0][channel])))
+               for channel in ("color_R", "color_G", "color_B")]
+        return "#" + "".join(f"{value:02x}" for value in rgb)
+
     def update_widget(self, parent=None):
         """Update the legend widget based on the legend table.
         The pattern to extract a cell value from a Pandas dataframe is: dataframe.loc[boolean_index_rows, boolean_index_columns].values[cell_id]
