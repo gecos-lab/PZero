@@ -4042,7 +4042,13 @@ class View3D(ViewVTK):
     def _build_extension_preview_geometry(
         self, vtk_obj, topology, direction, distance, side
     ):
-        return extend_geology_entity(vtk_obj, topology, direction, distance, side)
+        result = extend_geology_entity(vtk_obj, topology, direction, distance, side)
+        if result is None:
+            return None
+        # Show only the added cells; overlaying the source causes depth flicker.
+        return pv.wrap(result).extract_cells(
+            range(vtk_obj.GetNumberOfCells(), result.GetNumberOfCells())
+        ).extract_surface()
 
     def _cleanup_extend_surface_preview(self):
         self.plotter.remove_actor("_extend_surface_preview", render=False)
@@ -4104,7 +4110,9 @@ class View3D(ViewVTK):
         info_layout.addWidget(QLabel(f"{name} [{topology}]"))
         info_layout.addWidget(
             QLabel(
-                "Enter real X/Y/Z extension values. Faults default to Z growth; horizons/polylines default to XY growth."
+                "X/Y/Z guide growth along the surface slope. Faults default to Z; horizons to XY."
+                if topology == "TriSurf"
+                else "Enter real X/Y/Z extension values for the selected line endpoints."
             )
         )
         info_layout.addWidget(QLabel(f"Role: {role_txt}"))
