@@ -133,7 +133,7 @@ from .entities_factory import (
     XsImage,
 )
 from .helpers.helper_functions import freeze_gui_onoff
-from .legend_manager import Legend
+from .legend_manager import Legend, legend_level_col
 from .orientation_analysis import set_normals
 from .point_clouds import decimate_pc
 from .properties_manager import PropertiesCMaps
@@ -2483,17 +2483,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     new_geol_coll_legend_df = pd_read_json(
                         in_dir_name + "/geol_legend_table.json",
                         orient="index",
-                        dtype=Legend.legend_dict_types,
+                        dtype=Legend.legacy_legend_dict_types,
                     )
                 else:
                     new_geol_coll_legend_df = pd_read_csv(
                         in_dir_name + "/geol_legend_table.csv",
                         encoding="utf-8",
-                        dtype=Legend.legend_dict_types,
+                        dtype=Legend.legacy_legend_dict_types,
                         keep_default_na=False,
                     )
                 if not new_geol_coll_legend_df.empty:
                     self.geol_coll.legend_df = new_geol_coll_legend_df
+                Legend.normalize_legend_dataframe(self.geol_coll.legend_df)
 
                 in_keys = set(self.geol_coll.legend_df.keys())
                 def_keys = set(Legend.geol_legend_dict.keys())
@@ -2511,7 +2512,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         )
 
                 self.geol_coll.legend_df.sort_values(
-                    by="time", ascending=True, inplace=True
+                    by=legend_level_col, ascending=True, inplace=True
                 )
 
             # Read fluids legend tables.
@@ -2522,17 +2523,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     new_fluids_legend_df = pd_read_json(
                         in_dir_name + "/fluids_legend_table.json",
                         orient="index",
-                        dtype=Legend.legend_dict_types,
+                        dtype=Legend.legacy_legend_dict_types,
                     )
                 else:
                     new_fluids_legend_df = pd_read_csv(
                         in_dir_name + "/fluids_legend_table.csv",
                         encoding="utf-8",
-                        dtype=Legend.legend_dict_types,
+                        dtype=Legend.legacy_legend_dict_types,
                         keep_default_na=False,
                     )
                 if not new_fluids_legend_df.empty:
                     self.fluid_coll.legend_df = new_fluids_legend_df
+                Legend.normalize_legend_dataframe(self.fluid_coll.legend_df)
                 in_keys = set(self.fluid_coll.legend_df.keys())
                 def_keys = set(Legend.fluids_legend_dict.keys())
 
@@ -2544,9 +2546,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         self.fluid_coll.legend_df[diff] = Legend.fluids_legend_dict[
                             diff
                         ]
-                    self.fluid_coll.legend_df.sort_values(
-                        by="time", ascending=True, inplace=True
-                    )
+                self.fluid_coll.legend_df.sort_values(
+                    by=legend_level_col, ascending=True, inplace=True
+                )
 
             # Read Backgrounds legend tables.
             if os_path.isfile(
@@ -2556,17 +2558,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     new_backgrounds_legend_df = pd_read_json(
                         in_dir_name + "/backgrounds_legend_table.json",
                         orient="index",
-                        dtype=Legend.legend_dict_types,
+                        dtype=Legend.legacy_legend_dict_types,
                     )
                 else:
                     new_backgrounds_legend_df = pd_read_csv(
                         in_dir_name + "/backgrounds_legend_table.csv",
                         encoding="utf-8",
-                        dtype=Legend.legend_dict_types,
+                        dtype=Legend.legacy_legend_dict_types,
                         keep_default_na=False,
                     )
                 if not new_backgrounds_legend_df.empty:
                     self.backgrnd_coll.legend_df = new_backgrounds_legend_df
+                Legend.normalize_legend_dataframe(self.backgrnd_coll.legend_df)
                 in_keys = set(self.backgrnd_coll.legend_df.keys())
                 def_keys = set(Legend.backgrounds_legend_dict.keys())
 
@@ -3967,7 +3970,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             units.append({
                 stm_feature_col: feature_name,
                 stm_unit_role_col: "Discontinuity",
-                stm_level_col: row.get("time", 0.0),
+                stm_level_col: row.get(legend_level_col, 0.0),
                 stm_domain_col(1): "",
                 "feature": feature_name,
                 "role": role_name,
@@ -4031,7 +4034,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     legend_roles == stm_role
                 )
                 if mask.any():
-                    self.geol_coll.legend_df.loc[mask, "time"] = polarity_value
+                    self.geol_coll.legend_df.loc[mask, legend_level_col] = polarity_value
                     legend_updated = True
         else:
             for _, row in table_df.iterrows():
@@ -4042,12 +4045,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     continue
                 mask = legend_features == stm_feature
                 if mask.sum() == 1:
-                    self.geol_coll.legend_df.loc[mask, "time"] = polarity_value
+                    self.geol_coll.legend_df.loc[mask, legend_level_col] = polarity_value
                     legend_updated = True
 
         if legend_updated:
             self.geol_coll.legend_df.sort_values(
-                by="time", ascending=True, inplace=True
+                by=legend_level_col, ascending=True, inplace=True
             )
             if hasattr(self, "legend"):
                 self.legend.update_widget(parent=self)

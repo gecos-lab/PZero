@@ -1177,8 +1177,8 @@ def vtk2gocad(self=None, out_file_name=None):
                 # these are not implemented in GOCAD
                 pass
             # not yet implemented in PZero, but implemented in GOCAD: topography, boundary, ghost
-            time = self.geol_coll.get_uid_legend(uid=uid)["time"]
-            fout.write("STRATIGRAPHIC_POSITION " + str(time) + "\n")
+            level = self.geol_coll.get_uid_legend(uid=uid)["Level"]
+            fout.write("STRATIGRAPHIC_POSITION " + str(level) + "\n")
             # Options for properties
             if properties_names != []:
                 fout.write(

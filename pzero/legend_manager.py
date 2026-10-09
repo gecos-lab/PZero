@@ -17,6 +17,10 @@ from pandas import unique as pd_unique
 from math import isnan
 
 
+legend_level_col = "Level"
+legacy_legend_time_col = "time"
+
+
 class Legend(QObject):
     """Legend for geological and all other entities.
     Dictionaries used to define types of legend columns."""
@@ -24,7 +28,7 @@ class Legend(QObject):
     geol_legend_dict = {
         "role": "undef",
         "feature": "undef",
-        "time": 0.0,
+        legend_level_col: 0.0,
         "sequence": "strati_0",
         "scenario": "undef",
         "color_R": int(255),
@@ -37,7 +41,7 @@ class Legend(QObject):
     fluids_legend_dict = {
         "role": "undef",
         "feature": "undef",
-        "time": 0.0,
+        legend_level_col: 0.0,
         "sequence": "fluid_0",
         "scenario": "undef",
         "color_R": int(255),
@@ -50,7 +54,7 @@ class Legend(QObject):
     backgrounds_legend_dict = {
         "role": "undef",
         "feature": "undef",
-        "time": 0.0,
+        legend_level_col: 0.0,
         "sequence": "back_0",
         "scenario": "undef",
         "color_R": int(255),
@@ -74,7 +78,7 @@ class Legend(QObject):
     legend_dict_types = {
         "role": str,
         "feature": str,
-        "time": float,
+        legend_level_col: float,
         "sequence": str,
         "scenario": str,
         "color_R": int,
@@ -84,6 +88,28 @@ class Legend(QObject):
         "point_size": int,
         "opacity": int,
     }
+    legacy_legend_dict_types = {
+        **legend_dict_types,
+        legacy_legend_time_col: float,
+    }
+
+    @staticmethod
+    def normalize_legend_dataframe(dataframe):
+        """Migrate the legacy legend ``time`` column to ``Level`` in place."""
+        if dataframe is None or legacy_legend_time_col not in dataframe.columns:
+            return dataframe
+        if legend_level_col not in dataframe.columns:
+            dataframe.rename(
+                columns={legacy_legend_time_col: legend_level_col}, inplace=True
+            )
+            return dataframe
+
+        missing_level = dataframe[legend_level_col].isna()
+        dataframe.loc[missing_level, legend_level_col] = dataframe.loc[
+            missing_level, legacy_legend_time_col
+        ]
+        dataframe.drop(columns=legacy_legend_time_col, inplace=True)
+        return dataframe
 
     others_legend_dict = {
         "other_collection": ["Boundary", "DOM", "Image", "Mesh3D", "Wells", "XSection"],
@@ -123,7 +149,7 @@ class Legend(QObject):
                 "Line thickness",
                 "Point size",
                 "Opacity",
-                "Time",
+                "Level",
                 "Sequence",
                 "Show edges",
                 "Show nodes",
@@ -310,17 +336,12 @@ class Legend(QObject):
                         & (parent.geol_coll.legend_df["scenario"] == scenario),
                         "opacity",
                     ].values[0]
-                    time_value = parent.geol_coll.legend_df.loc[
+                    level_value = parent.geol_coll.legend_df.loc[
                         (parent.geol_coll.legend_df["role"] == role)
                         & (parent.geol_coll.legend_df["feature"] == feature)
                         & (parent.geol_coll.legend_df["scenario"] == scenario),
-                        "time",
+                        legend_level_col,
                     ].values[0]
-                    # time_value = str(parent.geol_coll.legend_df.loc[(parent.geol_coll.legend_df['role'] == role) & (parent.geol_coll.legend_df['feature'] == feature) & (parent.geol_coll.legend_df['scenario'] == scenario), "time"].values[0])
-                    # if np.isnan(time_value):
-                    #     print("time_value: ", time_value)
-                    #     time_value = 0.0
-                    #     print("time_value: ", time_value)
                     sequence_value = parent.geol_coll.legend_df.loc[
                         (parent.geol_coll.legend_df["role"] == role)
                         & (parent.geol_coll.legend_df["feature"] == feature)
@@ -364,21 +385,13 @@ class Legend(QObject):
                     if isnan(opacity):
                         opacity = 0
                     geol_opacity_spn.setValue(opacity)
-                    "geol_time_spn > QDoubleSpinBox used to give relative geological time"
-                    geol_time_spn = QDoubleSpinBox()
-                    geol_time_spn.setMinimum(-999999.0)  # no negative relative ages
-                    geol_time_spn.role = role  # this is to pass these values to the update function below
-                    geol_time_spn.feature = feature
-                    geol_time_spn.scenario = scenario
-                    geol_time_spn.setValue(time_value)
-                    # "geol_time_combo > QComboBox used to define relative geological time"
-                    # geol_time_combo = QComboBox()
-                    # geol_time_combo.setEditable(True)
-                    # geol_time_combo.role = role  # this is to pass these values to the update function below
-                    # geol_time_combo.feature = feature
-                    # geol_time_combo.scenario = scenario
-                    # geol_time_combo.addItems(parent.geol_coll.legend_df['time'].unique().astype(str))
-                    # geol_time_combo.setCurrentText(time_value)
+                    "geol_level_spn > QDoubleSpinBox used to set the structural level"
+                    geol_level_spn = QDoubleSpinBox()
+                    geol_level_spn.setMinimum(-999999.0)
+                    geol_level_spn.role = role  # this is to pass these values to the update function below
+                    geol_level_spn.feature = feature
+                    geol_level_spn.scenario = scenario
+                    geol_level_spn.setValue(level_value)
                     "geol_sequence_combo > QComboBox used to define geological sequence"
                     geol_sequence_combo = QComboBox()
                     geol_sequence_combo.setEditable(True)
@@ -405,8 +418,7 @@ class Legend(QObject):
                         llevel_3, 6, geol_point_size_spn
                     )
                     parent.LegendTreeWidget.setItemWidget(llevel_3, 7, geol_opacity_spn)
-                    parent.LegendTreeWidget.setItemWidget(llevel_3, 8, geol_time_spn)
-                    # parent.LegendTreeWidget.setItemWidget(llevel_3, 6, geol_time_combo)
+                    parent.LegendTreeWidget.setItemWidget(llevel_3, 8, geol_level_spn)
                     parent.LegendTreeWidget.setItemWidget(
                         llevel_3, 9, geol_sequence_combo
                     )
@@ -431,12 +443,11 @@ class Legend(QObject):
                             sender=sender, parent=parent
                         )
                     )
-                    geol_time_spn.editingFinished.connect(
-                        lambda *, sender=geol_time_spn: self.change_time(
+                    geol_level_spn.editingFinished.connect(
+                        lambda *, sender=geol_level_spn: self.change_level(
                             sender=sender, parent=parent
                         )
                     )
-                    # geol_time_combo.currentTextChanged.connect(lambda: self.change_time(parent=parent))
                     geol_sequence_combo.currentTextChanged.connect(
                         lambda *, sender=geol_sequence_combo: self.change_geological_sequence(
                             sender=sender, parent=parent
@@ -498,17 +509,12 @@ class Legend(QObject):
                         & (parent.fluid_coll.legend_df["scenario"] == scenario),
                         "opacity",
                     ].values[0]
-                    time_value = parent.fluid_coll.legend_df.loc[
+                    level_value = parent.fluid_coll.legend_df.loc[
                         (parent.fluid_coll.legend_df["role"] == role)
                         & (parent.fluid_coll.legend_df["feature"] == feature)
                         & (parent.fluid_coll.legend_df["scenario"] == scenario),
-                        "time",
+                        legend_level_col,
                     ].values[0]
-                    # time_value = str(parent.geol_coll.legend_df.loc[(parent.geol_coll.legend_df['role'] == role) & (parent.geol_coll.legend_df['feature'] == feature) & (parent.geol_coll.legend_df['scenario'] == scenario), "time"].values[0])
-                    # if np.isnan(time_value):
-                    #     print("time_value: ", time_value)
-                    #     time_value = 0.0
-                    #     print("time_value: ", time_value)
                     # fluid_sequence_value = parent.fluid_coll.legend_df.loc[(parent.fluid_coll.legend_df['role'] == role) & (parent.fluid_coll.legend_df['feature'] == feature) & (parent.fluid_coll.legend_df['scenario'] == scenario), "sequence"].values[0]
                     # if not isinstance(sequence_value, str):
                     #     print("sequence_value: ", sequence_value)
@@ -543,21 +549,13 @@ class Legend(QObject):
                     fluid_opacity_spn.scenario = scenario
                     fluid_opacity_spn.setMaximum(100)
                     fluid_opacity_spn.setValue(opacity)
-                    "geol_time_spn > QDoubleSpinBox used to give relative geological time"
-                    fluid_time_spn = QDoubleSpinBox()
-                    fluid_time_spn.setMinimum(-999999.0)  # no negative relative ages
-                    fluid_time_spn.role = role  # this is to pass these values to the update function below
-                    fluid_time_spn.feature = feature
-                    fluid_time_spn.scenario = scenario
-                    fluid_time_spn.setValue(time_value)
-                    # "geol_time_combo > QComboBox used to define relative geological time"
-                    # geol_time_combo = QComboBox()
-                    # geol_time_combo.setEditable(True)
-                    # geol_time_combo.role = role  # this is to pass these values to the update function below
-                    # geol_time_combo.feature = feature
-                    # geol_time_combo.scenario = scenario
-                    # geol_time_combo.addItems(parent.geol_coll.legend_df['time'].unique().astype(str))
-                    # geol_time_combo.setCurrentText(time_value)
+                    "fluid_level_spn > QDoubleSpinBox used to set the structural level"
+                    fluid_level_spn = QDoubleSpinBox()
+                    fluid_level_spn.setMinimum(-999999.0)
+                    fluid_level_spn.role = role  # this is to pass these values to the update function below
+                    fluid_level_spn.feature = feature
+                    fluid_level_spn.scenario = scenario
+                    fluid_level_spn.setValue(level_value)
                     "geol_sequence_combo > QComboBox used to define geological sequence"
                     # geol_sequence_combo = QComboBox()
                     # geol_sequence_combo.setEditable(True)
@@ -584,8 +582,7 @@ class Legend(QObject):
                     parent.LegendTreeWidget.setItemWidget(
                         llevel_3, 7, fluid_opacity_spn
                     )
-                    parent.LegendTreeWidget.setItemWidget(llevel_3, 8, fluid_time_spn)
-                    # parent.LegendTreeWidget.setItemWidget(llevel_3, 6, geol_time_combo)
+                    parent.LegendTreeWidget.setItemWidget(llevel_3, 8, fluid_level_spn)
                     # parent.LegendTreeWidget.setItemWidget(llevel_3, 7, geol_sequence_combo)
                     "Set signals for the widgets below"
                     fluid_color_dialog_btn.clicked.connect(
@@ -608,12 +605,11 @@ class Legend(QObject):
                             sender=sender, parent=parent
                         )
                     )
-                    fluid_time_spn.editingFinished.connect(
-                        lambda *, sender=fluid_time_spn: self.change_fluid_time(
+                    fluid_level_spn.editingFinished.connect(
+                        lambda *, sender=fluid_level_spn: self.change_fluid_level(
                             sender=sender, parent=parent
                         )
                     )
-                    # geol_time_combo.currentTextChanged.connect(lambda: self.change_time(parent=parent))
                     # fluid_sequence_combo.currentTextChanged.connect(lambda: self.change_fluid_sequence(parent=parent))
 
         for role in pd_unique(parent.backgrnd_coll.legend_df["role"]):
@@ -912,38 +908,22 @@ class Legend(QObject):
         ].to_list()
         parent.signals.legend_opacity_modified.emit(updated_list, parent.geol_coll)
 
-    def change_time(self, sender=None, parent=None):
-        # role = self.sender().role
-        # feature = self.sender().feature
-        # scenario = self.sender().scenario
-        # time = self.sender().value()
+    def change_level(self, sender=None, parent=None):
         role = sender.role
         feature = sender.feature
         scenario = sender.scenario
-        time = sender.value()
+        level = sender.value()
         parent.geol_coll.legend_df.loc[
             (parent.geol_coll.legend_df["role"] == role)
             & (parent.geol_coll.legend_df["feature"] == feature)
             & (parent.geol_coll.legend_df["scenario"] == scenario),
-            "time",
-        ] = time
-        # Order geological legend entities with descending time values
-        parent.geol_coll.legend_df.sort_values(by="time", ascending=True, inplace=True)
+            legend_level_col,
+        ] = level
+        parent.geol_coll.legend_df.sort_values(
+            by=legend_level_col, ascending=True, inplace=True
+        )
         if hasattr(parent, "sync_structural_topology_tables_from_legend"):
             parent.sync_structural_topology_tables_from_legend()
-        # THE FOLLOWING MUST BE CHANGED IN A SORT COMMAND
-        # UPDATE AT THE MOMENT DOES NOT WORK PROPERLY
-        # parent.LegendTreeWidget.setSortingEnabled(True)
-        # parent.LegendTreeWidget.sortByColumn(7, Qt.AscendingOrder)
-        # parent.LegendTreeWidget.setSortingEnabled(False)
-        # try:
-        #     time = float(self.sender().currentText())
-        # except:
-        #     time = float('nan')
-        #     parent.geol_coll.legend_df.loc[(parent.geol_coll.legend_df['role'] == role) & (parent.geol_coll.legend_df['feature'] == feature) & (parent.geol_coll.legend_df['scenario'] == scenario), "time"] = time
-        #     """Order geological legend entities with descending time values"""
-        #     parent.geol_coll.legend_df.sort_values(by='time', ascending=True, inplace=True)
-        #     self.update_widget(parent=parent)
 
     def change_geological_sequence(self, sender=None, parent=None):
         # role = self.sender().role
@@ -1287,36 +1267,20 @@ class Legend(QObject):
         ].to_list()
         parent.signals.legend_opacity_modified.emit(updated_list, parent.fluid_coll)
 
-    def change_fluid_time(self, sender=None, parent=None):
-        # role = self.sender().role
-        # feature = self.sender().feature
-        # scenario = self.sender().scenario
-        # time = self.sender().value()
+    def change_fluid_level(self, sender=None, parent=None):
         role = sender.role
         feature = sender.feature
         scenario = sender.scenario
-        time = sender.value()
+        level = sender.value()
         parent.fluid_coll.legend_df.loc[
             (parent.fluid_coll.legend_df["role"] == role)
             & (parent.fluid_coll.legend_df["feature"] == feature)
             & (parent.fluid_coll.legend_df["scenario"] == scenario),
-            "time",
-        ] = time
-        # Order geological legend entities with descending time values
-        parent.fluid_coll.legend_df.sort_values(by="time", ascending=True, inplace=True)
-        # THE FOLLOWING MUST BE CHANGED IN A SORT COMMAND
-        # UPDATE AT THE MOMENT DOES NOT WORK PROPERLY#
-        # parent.LegendTreeWidget.setSortingEnabled(True)
-        # parent.LegendTreeWidget.sortByColumn(7, Qt.AscendingOrder)
-        # parent.LegendTreeWidget.setSortingEnabled(False)
-        # try:
-        #     time = float(self.sender().currentText())
-        # except:
-        #     time = float('nan')
-        #     parent.geol_coll.legend_df.loc[(parent.geol_coll.legend_df['role'] == role) & (parent.geol_coll.legend_df['feature'] == feature) & (parent.geol_coll.legend_df['scenario'] == scenario), "time"] = time
-        #     """Order geological legend entities with descending time values"""
-        #     parent.geol_coll.legend_df.sort_values(by='time', ascending=True, inplace=True)
-        #     self.update_widget(parent=parent)
+            legend_level_col,
+        ] = level
+        parent.fluid_coll.legend_df.sort_values(
+            by=legend_level_col, ascending=True, inplace=True
+        )
 
     def change_background_feature_color(self, sender=None, parent=None):
         # role = self.sender().role

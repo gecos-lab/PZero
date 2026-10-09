@@ -106,7 +106,7 @@ class GFBCollection(BaseCollection):
                             {
                                 "role": role,
                                 "feature": feature,
-                                "time": 0.0,
+                                "Level": 0.0,
                                 "sequence": self.default_sequence,
                                 "scenario": scenario,
                                 "color_R": R,
@@ -192,7 +192,7 @@ class GFBCollection(BaseCollection):
                                 {
                                     "role": role,
                                     "feature": feature,
-                                    "time": 0.0,
+                                    "Level": 0.0,
                                     "sequence": self.default_sequence,
                                     "scenario": scenario,
                                     "color_R": round(np_random.random() * 255),

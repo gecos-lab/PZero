@@ -696,7 +696,7 @@ def implicit_model_loop_structural(self):
     Y - y component of the cartesian coordinates
     Z - z component of the cartesian coordinates
     feature_name - unique name of the geological feature being modelled - this is not the feature generally defined in geological_collection.py, but the sequence defined in legend_manager.py
-    val - value observations of the scalar field - this is the time defined in legend_manager.py
+    val - value observations of the scalar field - this is the level defined in legend_manager.py
     interface - unique identifier for an interface containing similar scalar field values
     nx - x component of the gradient norm
     ny - y component of the gradient norm
@@ -790,7 +790,7 @@ def implicit_model_loop_structural(self):
                 self.geol_coll.legend_df["scenario"]
                 == self.geol_coll.get_uid_scenario(uid)
             ),
-            "time",
+            "Level",
         ].values[0]
         if val_single == -999999.0:
             val_single = float("nan")
@@ -1093,15 +1093,15 @@ def implicit_model_loop_structural(self):
         value = float(value)
         voxet_dict["vtk_obj"].GetPointData().SetActiveScalars("strati_0")
         self.print_terminal(f"-> extract iso-surface at value = {value}")
-        # Get metadata of first geological feature of this time
+        # Get metadata of first geological feature at this level
         role = self.geol_coll.legend_df.loc[
-            self.geol_coll.legend_df["time"] == value, "role"
+            self.geol_coll.legend_df["Level"] == value, "role"
         ].values[0]
         feature = self.geol_coll.legend_df.loc[
-            self.geol_coll.legend_df["time"] == value, "feature"
+            self.geol_coll.legend_df["Level"] == value, "feature"
         ].values[0]
         scenario = self.geol_coll.legend_df.loc[
-            self.geol_coll.legend_df["time"] == value, "scenario"
+            self.geol_coll.legend_df["Level"] == value, "scenario"
         ].values[0]
         # Iso-surface algorithm
         iso_surface = vtkContourFilter()

@@ -51,6 +51,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtSvg import QSvgGenerator
 
 from pzero.helpers.helper_dialogs import input_text_dialog
+from pzero.legend_manager import legend_level_col
 from pzero.helpers.structural_topology import (
     build_stm_json,
     calculate_stm_unit_levels,
@@ -3100,7 +3101,7 @@ class ViewTable(QWidget):
                         row.get("feature", "")
                     ).strip(),
                     stm_unit_role_col: "Discontinuity",
-                    stm_level_col: row.get("time", 0.0),
+                    stm_level_col: row.get(legend_level_col, 0.0),
                     "Domain_1": "",
                     "feature": str(row.get("feature", "")).strip(),
                     "role": normalise_stm_boundary_role(
