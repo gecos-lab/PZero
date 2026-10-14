@@ -26,6 +26,10 @@ from pzero.collections.background_collection import BackgroundCollection
 from pzero.collections.geological_collection import GeologicalCollection
 from pzero.collections.well_collection import WellCollection
 from pzero.entities_factory import Well, VertexSet
+from pzero.helpers.well_coordinates import (
+    load_well_coordinate_metadata, validate_well_time_coordinates, well_time_column,
+)
+from pzero.imports.segy_reader import set_seismic_metadata
 
 
 def well2vtk(self, path=None):
@@ -53,7 +57,21 @@ def well2vtk(self, path=None):
 
     xyz_trace = np_vstack([x, y, z]).T.reshape(-1, 3)
 
+    embedded = (
+        well_data["COORDINATE_METADATA"].values[0]
+        if "COORDINATE_METADATA" in well_data.columns else None
+    )
+    coordinate_metadata = load_well_coordinate_metadata(path, well_id, embedded)
+    if coordinate_metadata:
+        column = well_time_column(coordinate_metadata)
+        samples = data.get("ORIGINAL_MD")
+        if samples is None or column not in samples.columns:
+            raise ValueError(f"Declared time-domain well requires ORIGINAL_MD.{column}")
+        validate_well_time_coordinates(coordinate_metadata, xyz_trace, samples[column].values)
+
     well_obj = Well(ID=well_id, trace_xyz=xyz_trace, head_xyz=xyz_head)
+    if coordinate_metadata:
+        set_seismic_metadata(well_obj.trace, coordinate_metadata)
 
     # Get and set curve data
 
@@ -88,6 +106,8 @@ def well2vtk(self, path=None):
                             marker_obj = VertexSet()
                             marker_obj.points = marker_pos
                             marker_obj.auto_cells()
+                            if coordinate_metadata:
+                                set_seismic_metadata(marker_obj, coordinate_metadata)
 
                             marker_obj_dict = deepcopy(
                                 GeologicalCollection().entity_dict
