@@ -28,6 +28,7 @@ from ..orientation_analysis import get_dip_dir_vectors
 from ..helpers.helper_dialogs import input_one_value_dialog, save_file_dialog
 from ..helpers.screenshot_dialog import ScreenshotExportDialog
 from ..helpers.gif_export_dialog import GifExportDialog
+from ..properties_manager import get_property_render_settings
 from ..entities_factory import (
     VertexSet,
     PolyLine,
@@ -111,6 +112,19 @@ class ViewVTK(BaseView):
             pass
 
         return None
+
+    def _get_property_render_settings(self, property_name=None):
+        return get_property_render_settings(parent=self.parent, property_name=property_name)
+
+    def _resolve_scalar_range_and_cmap(self, property_name=None, color_bar_range=None):
+        if property_name is None:
+            return None, color_bar_range
+        if color_bar_range is not None:
+            settings = self._get_property_render_settings(property_name=property_name)
+            return settings.get("cmap"), color_bar_range
+
+        settings = self._get_property_render_settings(property_name=property_name)
+        return settings.get("cmap"), settings.get("clim")
 
     def initialize_menu_tools(self):
         """This method collects menus and actions in superclasses and then adds custom ones, specific to this view."""
@@ -296,8 +310,15 @@ class ViewVTK(BaseView):
         # plotter.remove_actor can remove a single entity or a list of entities as actors ->
         # here we remove a single entity
         if not self.actors_df.loc[self.actors_df["uid"] == uid].empty:
-            this_actor = self.get_actor_by_uid(uid)
-            success = self.plotter.remove_actor(this_actor)
+            try:
+                this_actor = self.get_actor_by_uid(uid)
+            except Exception:
+                this_actor = None
+            if this_actor is not None:
+                try:
+                    self.plotter.remove_actor(this_actor)
+                except Exception:
+                    pass
 
     def initialize_interactor(self):
         """Add the pyvista interactor object to self.ViewFrameLayout ->
@@ -1103,10 +1124,9 @@ class ViewVTK(BaseView):
         if not self.actors_df.empty:
             camera_position = self.plotter.camera_position
         if show_property is not None and plot_rgb_option is None:
-            show_property_cmap = self.parent.prop_legend_df.loc[
-                self.parent.prop_legend_df["property_name"] == show_property_title,
-                "colormap",
-            ].values[0]
+            show_property_cmap, color_bar_range = self._resolve_scalar_range_and_cmap(
+                property_name=show_property_title, color_bar_range=color_bar_range
+            )
         else:
             show_property_cmap = None
         this_actor = self.plotter.add_points(
@@ -1160,16 +1180,9 @@ class ViewVTK(BaseView):
             # the scene to a very distant place or to the origin that is the default position before any mesh is plotted.
             camera_position = self.plotter.camera_position
         if show_property_title is not None and show_property_title != "none":
-            # Check if the property exists in prop_legend_df
-            matching_props = self.parent.prop_legend_df.loc[
-                self.parent.prop_legend_df["property_name"] == show_property_title,
-                "colormap",
-            ]
-            if len(matching_props) > 0:
-                show_property_cmap = matching_props.values[0]
-            else:
-                # Property not in legend (e.g., RGB properties like LITHOLOGY)
-                show_property_cmap = None
+            show_property_cmap, color_bar_range = self._resolve_scalar_range_and_cmap(
+                property_name=show_property_title, color_bar_range=color_bar_range
+            )
         else:
             show_property_cmap = None
 

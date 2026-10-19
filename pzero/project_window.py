@@ -106,7 +106,9 @@ from pzero.imports.obj2vtk import vtk2obj
 from pzero.imports.pc2vtk import pc2vtk
 from pzero.imports.ply2vtk import vtk2ply
 from pzero.imports.pyvista2vtk import pyvista2vtk
-from pzero.imports.segy2vtk import segy2vtk, read_segy_file
+from pzero.imports.segy2vtk import segy2vtk, read_segy_file, read_legacy_segy_file
+from pzero.imports.segy_reader import get_seismic_metadata, file_identity
+from pzero.helpers.project_storage import write_checked, write_seismic_snapshot, publish_project_revision
 from pzero.imports.shp2vtk import shp2vtk
 from pzero.imports.stl2vtk import vtk2stl, vtk2stl_dilation
 from pzero.imports.table2data import import_tables
@@ -136,10 +138,11 @@ from .helpers.helper_functions import freeze_gui_onoff
 from .legend_manager import Legend, legend_level_col
 from .orientation_analysis import set_normals
 from .point_clouds import decimate_pc
-from .properties_manager import PropertiesCMaps
+from .properties_manager import PropertiesCMaps, ensure_property_legend_schema
 from .three_d_surfaces import (
     interpolation_delaunay_2d,
     poisson_interpolation,
+    regularized_grid_surface_interpolation,
     implicit_model_loop_structural,
     surface_smoothing,
     linear_extrusion,
@@ -334,6 +337,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Interpolation actions -> slots"""
         self.actionDelaunay2D.triggered.connect(lambda: interpolation_delaunay_2d(self))
         self.actionPoisson.triggered.connect(lambda: poisson_interpolation(self))
+        self.actionRegularizedGridSurface.triggered.connect(
+            lambda: regularized_grid_surface_interpolation(self)
+        )
         self.actionLoopStructural.triggered.connect(
             lambda: implicit_model_loop_structural(self)
         )
@@ -367,12 +373,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionMapView.triggered.connect(
             lambda: DockWindow(parent=self, window_type="ViewMap")
         )
-
-        self.actionXSectionView.triggered.connect(
-            lambda: DockWindow(parent=self, window_type="ViewXsection")
-        )
         self.actionInterpretationView.triggered.connect(
             lambda: DockWindow(parent=self, window_type="ViewInterpretation")
+        )
+        self.actionXSectionView.triggered.connect(
+            lambda: DockWindow(parent=self, window_type="ViewXsection")
         )
         self.actionStereoplotView.triggered.connect(
             lambda: DockWindow(parent=self, window_type="ViewStereoplot")
@@ -836,6 +841,185 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.fluid_coll.remove_entity(uid=uid)
             elif self.shown_table == "tabBackgrounds":
                 self.backgrnd_coll.remove_entity(uid=uid)
+
+    def _get_seismic_image_uids(self):
+        """Return the uid set of imported seismic images currently stored in the project."""
+        try:
+            seismic_rows = self.image_coll.df.loc[
+                self.image_coll.df["topology"] == "Seismics", "uid"
+            ].to_list()
+        except Exception:
+            return set()
+        return {str(uid).strip() for uid in seismic_rows if str(uid).strip()}
+
+    def _collect_orphaned_seismic_parent_links(self):
+        """Collect geological entities whose parent_uid points to a missing seismic volume."""
+        try:
+            geol_df = self.geol_coll.df
+        except Exception:
+            return []
+
+        if geol_df.empty or "parent_uid" not in geol_df.columns:
+            return []
+
+        seismic_uids = self._get_seismic_image_uids()
+        xsection_uids = {str(uid).strip() for uid in self.xsect_coll.get_uids if str(uid).strip()}
+        well_uids = {str(uid).strip() for uid in self.well_coll.get_uids if str(uid).strip()}
+
+        orphan_groups = {}
+        for _, row in geol_df.iterrows():
+            parent_uid = str(row.get("parent_uid", "") or "").strip()
+            if not parent_uid:
+                continue
+
+            topology = str(row.get("topology", "") or "").strip()
+            if topology.startswith("Xs"):
+                continue
+
+            if (
+                parent_uid in seismic_uids
+                or parent_uid in xsection_uids
+                or parent_uid in well_uids
+            ):
+                continue
+
+            uid = str(row.get("uid", "") or "").strip()
+            if not uid:
+                continue
+
+            group = orphan_groups.setdefault(
+                parent_uid,
+                {
+                    "parent_uid": parent_uid,
+                    "uids": [],
+                    "names": set(),
+                    "roles": set(),
+                    "features": set(),
+                },
+            )
+            group["uids"].append(uid)
+
+            name = str(row.get("name", "") or "").strip()
+            role = str(row.get("role", "") or "").strip()
+            feature = str(row.get("feature", "") or "").strip()
+            if name:
+                group["names"].add(name)
+            if role:
+                group["roles"].add(role)
+            if feature:
+                group["features"].add(feature)
+
+        orphan_list = []
+        from pzero.helpers.seismic_relink import find_derived_surface_links, find_legacy_model_boundaries, find_legacy_reference_links
+        records = geol_df.to_dict("records")
+        for parent_uid, group in orphan_groups.items():
+            derived = find_derived_surface_links(records, parent_uid)
+            references = find_legacy_reference_links(records, parent_uid)
+            boundaries = find_legacy_model_boundaries(records, self.boundary_coll.df.to_dict("records"), parent_uid)
+            preview_names = ", ".join(sorted(group["names"])[:3])
+            role_preview = ", ".join(sorted(group["roles"])[:2])
+            label = f"{parent_uid} | {len(group['uids'])} linked objects + {len(derived)} surfaces + {len(references)} references + {len(boundaries)} model boundaries"
+            if role_preview:
+                label += f" | roles: {role_preview}"
+            if preview_names:
+                label += f" | {preview_names}"
+            group["label"] = label
+            orphan_list.append(group)
+
+        orphan_list.sort(
+            key=lambda item: (-len(item["uids"]), str(item["parent_uid"]).lower())
+        )
+        return orphan_list
+
+    def _prompt_orphaned_seismic_relink(self, imported_file_name=None):
+        """Optionally map orphaned interpretation entities to the newly imported seismic."""
+        orphan_groups = self._collect_orphaned_seismic_parent_links()
+        if not orphan_groups:
+            return None
+
+        choice_list = ["Do not link interpreted entities"]
+        label_to_parent_uid = {choice_list[0]: None}
+        for group in orphan_groups:
+            choice_list.append(group["label"])
+            label_to_parent_uid[group["label"]] = group["parent_uid"]
+
+        imported_name = (
+            os_path.basename(imported_file_name)
+            if imported_file_name
+            else "the imported SEG-Y"
+        )
+        selected_label = input_combo_dialog(
+            parent=self,
+            title="Link interpreted entities",
+            label=(
+                f"Link interpreted horizons/faults to {imported_name}? "
+                "Legacy lines, matching derived surfaces, tagged reference horizons and model boundaries will be aligned to this import; "
+                "original coordinates are retained in the object metadata."
+            ),
+            choice_list=choice_list,
+        )
+        return label_to_parent_uid.get(selected_label)
+
+    def relink_geological_parent_uid(self, old_parent_uid=None, new_parent_uid=None):
+        """Relink a seismic interpretation group and migrate its legacy frame atomically."""
+        old_parent_uid = str(old_parent_uid or "").strip()
+        new_parent_uid = str(new_parent_uid or "").strip()
+        if not old_parent_uid or not new_parent_uid or old_parent_uid == new_parent_uid:
+            return []
+
+        try:
+            mask = (
+                self.geol_coll.df["parent_uid"].fillna("").astype(str).str.strip()
+                == old_parent_uid
+            )
+            if "topology" in self.geol_coll.df.columns:
+                mask = mask & (
+                    ~self.geol_coll.df["topology"].fillna("").astype(str).str.startswith("Xs")
+                )
+        except Exception:
+            return []
+
+        updated_uids = self.geol_coll.df.loc[mask, "uid"].astype(str).to_list()
+        if not updated_uids:
+            return []
+
+        from pzero.helpers.seismic_relink import (
+            prepare_relinked_interpretations, find_derived_surface_links, find_legacy_model_boundaries, find_legacy_reference_links,
+        )
+
+        boundary_sources = find_legacy_model_boundaries(
+            self.geol_coll.df.to_dict("records"), self.boundary_coll.df.to_dict("records"), old_parent_uid
+        )
+        derived_sources = find_derived_surface_links(self.geol_coll.df.to_dict("records"), old_parent_uid)
+        reference_sources = find_legacy_reference_links(self.geol_coll.df.to_dict("records"), old_parent_uid)
+        updated_uids.extend(uid for uid in derived_sources if uid not in updated_uids)
+        updated_uids.extend(uid for uid in reference_sources if uid not in updated_uids)
+        target = self.image_coll.get_uid_vtk_obj(new_parent_uid)
+        objects = {uid: self.geol_coll.get_uid_vtk_obj(uid) for uid in updated_uids}
+        objects.update({uid: self.boundary_coll.get_uid_vtk_obj(uid) for uid in boundary_sources})
+        try:
+            replacements = prepare_relinked_interpretations(objects, target, old_parent_uid, new_parent_uid, dict(derived_sources, **reference_sources, **boundary_sources))
+        except (ValueError, OSError, KeyError) as error:
+            self.print_terminal(f"Interpretation linking stopped: {error}")
+            QMessageBox.warning(self, "Cannot align interpretations", str(error))
+            return []
+        # No object or parent link changes until the entire group validates.
+        for uid, replacement in replacements.items():
+            objects[uid].DeepCopy(replacement)
+            objects[uid].Modified()
+        self.geol_coll.df.loc[self.geol_coll.df["uid"].isin(updated_uids), "parent_uid"] = new_parent_uid
+        self.geol_coll.modelReset.emit()
+        if replacements:
+            changed_geology = [uid for uid in updated_uids if uid in replacements]
+            self.signals.geom_modified.emit(changed_geology, self.geol_coll)
+            self.print_terminal(f"Aligned {len(changed_geology)} geological objects (including {len(derived_sources)} recovered surfaces and {len(reference_sources)} reference horizons) and {len(boundary_sources)} model boundaries to the imported seismic coordinates and domain.")
+        if boundary_sources:
+            self.boundary_coll.df.loc[self.boundary_coll.df["uid"].isin(boundary_sources), "parent_uid"] = new_parent_uid
+            self.boundary_coll.modelReset.emit()
+            self.signals.geom_modified.emit(list(boundary_sources), self.boundary_coll)
+            self.signals.metadata_modified.emit(list(boundary_sources), self.boundary_coll)
+        self.signals.metadata_modified.emit(updated_uids, self.geol_coll)
+        return updated_uids
 
     def entities_merge(self):
         """Merge entities of the same topology - VertexSet, PolyLine, TriSurf, ..."""
@@ -1849,7 +2033,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # PropertiesCMaps table widget self.prop_legend (a Qt QTableWidget that is internally connected to its data source),
         # and update the widget.
         # ____________________________________________________________________________________ UPDATE THIS TO ALLOW SORTING BY PROPERTY NAME
-        self.prop_legend_df = pd_DataFrame(PropertiesCMaps.prop_cmap_dict)
+        self.prop_legend_df = ensure_property_legend_schema(
+            pd_DataFrame(PropertiesCMaps.prop_cmap_dict)
+        )
         self.prop_legend = PropertiesCMaps()
         self.prop_legend.update_widget(parent=self)
 
@@ -1939,7 +2125,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # ________________________________________WRITERS TO BE MOVED TO COLLECTIONS
         """Save project to file and folder"""
         # Get date and time, used to save incremental revisions.
-        now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+        from uuid import uuid4
+        now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "-" + uuid4().hex[:8]
         # Select and open output file and folder. Saving always performs a complete backup since the output folder
         # is named with the present date and time "rev_<now>".
         self.out_file_name = save_file_dialog(
@@ -1955,18 +2142,21 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if not os_path.isdir(self.out_file_name[:-3] + "_p0"):
             os_mkdir(self.out_file_name[:-3] + "_p0")
         os_mkdir(out_dir_name)
-        # Save the root file pointing to the folder.
-        fout = open(self.out_file_name, "w")
-        fout.write(
-            "PZero project file saved in folder with the same name, including VTK files and CSV tables.\n"
-        )
-        fout.write("Last saved revision:\n")
-        fout.write(f"rev_{now}\n")
-        fout.write("CRS EPSG:\n")
-        test_epsg = 'test_epsg'
-        fout.write(f"{test_epsg}\n")
-        fout.close()
+        was_enabled = self.isEnabled()
+        self.setEnabled(False)
+        try:
+            self._save_project_revision(out_dir_name)
+            publish_project_revision(self.out_file_name, f"rev_{now}")
+        except Exception as error:
+            self.print_terminal(f"Project save failed: {error}. The previous completed revision is unchanged.")
+            QMessageBox.warning(self, "Project not saved", str(error))
+            return
+        finally:
+            self.setEnabled(was_enabled)
+        self.print_terminal("Project saved successfully.")
 
+    def _save_project_revision(self, out_dir_name):
+        """Write all payloads before publishing the project's revision pointer."""
         # --------------------- SAVE LEGENDS ---------------------
 
         # Save geological legend table to JSON file. Keep old CSV table format here in comments, in case it might be useful in the future.
@@ -2024,7 +2214,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer = vtkXMLPolyDataWriter()
             pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
             pd_writer.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
-            pd_writer.Write()
+            write_checked(pd_writer)
             prgs_bar.add_one()
 
         # Save DOM collection table to JSON file and entities as VTK.
@@ -2051,7 +2241,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 sg_writer = vtkXMLStructuredGridWriter()
                 sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
                 sg_writer.SetInputData(self.dom_coll.get_uid_vtk_obj(uid))
-                sg_writer.Write()
+                write_checked(sg_writer)
                 prgs_bar.add_one()
             elif (
                 self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "topology"].values[
@@ -2062,7 +2252,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 pl_writer = vtkXMLPolyDataWriter()
                 pl_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
                 pl_writer.SetInputData(self.dom_coll.get_uid_vtk_obj(uid))
-                pl_writer.Write()
+                write_checked(pl_writer)
                 prgs_bar.add_one()
             elif (
                 self.dom_coll.df.loc[self.dom_coll.df["uid"] == uid, "topology"].values[
@@ -2074,7 +2264,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 pd_writer = vtkXMLPolyDataWriter()
                 pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
                 pd_writer.SetInputData(self.dom_coll.get_uid_vtk_obj(uid))
-                pd_writer.Write()
+                write_checked(pd_writer)
                 prgs_bar.add_one()
 
         # Save image collection table to JSON file and entities as VTK.
@@ -2098,7 +2288,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 im_writer = vtkXMLImageDataWriter()
                 im_writer.SetFileName(out_dir_name + "/" + uid + ".vti")
                 im_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
-                im_writer.Write()
+                write_checked(im_writer)
+                prgs_bar.add_one()
+            elif self.image_coll.df.loc[
+                self.image_coll.df["uid"] == uid, "topology"
+            ].values[0] in ["Voxet", "XsVoxet"]:
+                im_writer = vtkXMLImageDataWriter()
+                im_writer.SetFileName(out_dir_name + "/" + uid + ".vti")
+                im_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
+                write_checked(im_writer)
                 prgs_bar.add_one()
             elif self.image_coll.df.loc[
                 self.image_coll.df["uid"] == uid, "topology"
@@ -2113,20 +2311,40 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         source_file = None
 
                 source_file = source_file if isinstance(source_file, str) and source_file.strip() else None
-                source_exists = bool(source_file and os_path.isfile(source_file))
-
-                # Fast path: keep only a reference to the original SEG-Y source when it is available.
-                # Fallback: persist a VTK copy only when the source cannot be reused on reopen.
-                if not source_exists:
-                    sg_writer = vtkXMLStructuredGridWriter()
-                    sg_writer.SetFileName(out_dir_name + "/" + uid + ".vts")
-                    sg_writer.SetInputData(self.image_coll.get_uid_vtk_obj(uid))
-                    sg_writer.Write()
+                # Persist the actual grid and its domain metadata. Re-reading the
+                # source alone loses import settings and later coordinate edits.
+                seismic_object = self.image_coll.get_uid_vtk_obj(uid)
+                from time import perf_counter
+                started = perf_counter()
+                self.print_terminal(f"Saving seismic {uid} ({seismic_object.GetNumberOfPoints():,} points)...")
+                seismic_progress = progress_dialog(
+                    max_value=100, title_txt="Save seismic", label_txt="Writing seismic snapshot...",
+                    cancel_txt=None, parent=self,
+                )
+                seismic_progress.setWindowModality(Qt.NonModal)
+                # Progress dialogs process paint events; exclude input while a
+                # snapshot is being written so the geometry cannot be edited.
+                from PySide6.QtCore import QCoreApplication, QEventLoop
+                last_percent = [-1]
+                def report_progress(fraction):
+                    percent = min(99, int(fraction * 100))
+                    if percent != last_percent[0]:
+                        last_percent[0] = percent
+                        seismic_progress.setValue(percent)
+                        seismic_progress.setLabelText(f"Writing seismic snapshot: {percent}%")
+                        seismic_progress.repaint()
+                        QCoreApplication.processEvents(QEventLoop.ExcludeUserInputEvents)
+                try:
+                    write_seismic_snapshot(seismic_object, out_dir_name + "/" + uid + ".vts", report_progress)
+                finally:
+                    seismic_progress.close()
+                self.print_terminal(f"Seismic snapshot saved in {perf_counter() - started:.1f} seconds.")
 
                 seismic_metadata = {
                     "uid": uid,
                     "source_file": source_file,
-                    "storage": "source_file" if source_exists else "embedded_vts",
+                    "storage": "embedded_vts",
+                    "seismic_metadata": get_seismic_metadata(seismic_object),
                 }
                 with open(out_dir_name + "/" + uid + "_seismic_metadata.json", "w") as f:
                     json_dump(seismic_metadata, f, indent=2)
@@ -2154,7 +2372,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 im_writer = vtkXMLImageDataWriter()
                 im_writer.SetFileName(out_dir_name + "/" + uid + ".vti")
                 im_writer.SetInputData(self.mesh3d_coll.get_uid_vtk_obj(uid))
-                im_writer.Write()
+                write_checked(im_writer)
             elif topology in ["TetraSolid"]:
                 out_mesh_file = out_dir_name + "/" + uid + ".vtu"
                 vtk_mesh = vtkUnstructuredGrid()
@@ -2162,11 +2380,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 ug_writer = vtkXMLUnstructuredGridWriter()
                 ug_writer.SetFileName(out_mesh_file)
                 ug_writer.SetInputData(vtk_mesh)
-                write_ok = ug_writer.Write()
-                if write_ok != 1 or not os_path.isfile(out_mesh_file):
-                    self.print_terminal(
-                        f"failed to save TetraSolid mesh file for uid {uid}"
-                    )
+                write_checked(ug_writer)
             prgs_bar.add_one()
 
         # Save boundaries collection table to CSV and JSON files.
@@ -2187,7 +2401,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer = vtkXMLPolyDataWriter()
             pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
             pd_writer.SetInputData(self.boundary_coll.get_uid_vtk_obj(uid))
-            pd_writer.Write()
+            write_checked(pd_writer)
             prgs_bar.add_one()
 
         # Save wells collection table to CSV and JSON files.
@@ -2209,7 +2423,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer = vtkXMLPolyDataWriter()
             pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
             pd_writer.SetInputData(self.well_coll.get_uid_vtk_obj(uid))
-            pd_writer.Write()
+            write_checked(pd_writer)
             prgs_bar.add_one()
 
         # Save fluids collection table to CSV and JSON files.
@@ -2230,7 +2444,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer = vtkXMLPolyDataWriter()
             pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
             pd_writer.SetInputData(self.fluid_coll.get_uid_vtk_obj(uid))
-            pd_writer.Write()
+            write_checked(pd_writer)
             prgs_bar.add_one()
 
         # Save Backgrounds collection table to CSV and JSON files.
@@ -2251,7 +2465,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer = vtkXMLPolyDataWriter()
             pd_writer.SetFileName(out_dir_name + "/" + uid + ".vtp")
             pd_writer.SetInputData(self.backgrnd_coll.get_uid_vtk_obj(uid))
-            pd_writer.Write()
+            write_checked(pd_writer)
             prgs_bar.add_one()
 
     def save_custom_tables(self, out_dir_name: str = None):
@@ -2670,7 +2884,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         dtype=PropertiesCMaps.prop_cmap_dict_types,
                     )
                     if not new_prop_legend_df.empty:
-                        self.prop_legend_df = new_prop_legend_df
+                        self.prop_legend_df = ensure_property_legend_schema(
+                            new_prop_legend_df
+                        )
                 else:
                     self.prop_legend.update_widget(parent=self)
 
@@ -3038,6 +3254,35 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 for uid in self.image_coll.df["uid"].to_list():
                     if self.image_coll.df.loc[
                         self.image_coll.df["uid"] == uid, "topology"
+                    ].values[0] in ["Voxet"]:
+                        if not os_path.isfile((in_dir_name + "/" + uid + ".vti")):
+                            print("error: missing image file")
+                            return
+                        vtk_object = Voxet()
+                        im_reader = vtkXMLImageDataReader()
+                        im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
+                        im_reader.Update()
+                        vtk_object.ShallowCopy(im_reader.GetOutput())
+                        vtk_object.Modified()
+                    elif self.image_coll.df.loc[
+                        self.image_coll.df["uid"] == uid, "topology"
+                    ].values[0] in ["XsVoxet"]:
+                        if not os_path.isfile((in_dir_name + "/" + uid + ".vti")):
+                            print("error: missing image file")
+                            return
+                        vtk_object = XsVoxet(
+                            parent=self,
+                            x_section_uid=self.image_coll.df.loc[
+                                self.image_coll.df["uid"] == uid, "parent_uid"
+                            ].values[0],
+                        )
+                        im_reader = vtkXMLImageDataReader()
+                        im_reader.SetFileName(in_dir_name + "/" + uid + ".vti")
+                        im_reader.Update()
+                        vtk_object.ShallowCopy(im_reader.GetOutput())
+                        vtk_object.Modified()
+                    elif self.image_coll.df.loc[
+                        self.image_coll.df["uid"] == uid, "topology"
                     ].values[0] in ["MapImage", "TSDomImage"]:
                         if not os_path.isfile((in_dir_name + "/" + uid + ".vti")):
                             print("error: missing image file")
@@ -3078,9 +3323,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             sg_reader = vtkXMLStructuredGridReader()
                             sg_reader.SetFileName(seismic_vts_path)
                             sg_reader.Update()
+                            if sg_reader.GetErrorCode() or sg_reader.GetOutput().GetNumberOfPoints() == 0:
+                                raise ValueError(f"Could not read saved seismic grid: {seismic_vts_path}")
                             vtk_object.ShallowCopy(sg_reader.GetOutput())
                         else:
                             source_file = None
+                            seismic_metadata = {}
                             if os_path.isfile(seismic_metadata_path):
                                 try:
                                     with open(seismic_metadata_path, "r") as fin:
@@ -3088,6 +3336,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                                     source_file = seismic_metadata.get("source_file")
                                 except Exception:
                                     source_file = None
+                            if seismic_metadata.get("storage") == "embedded_vts":
+                                raise ValueError(
+                                    f"Missing saved seismic grid {uid}.vts. Restore the snapshot; "
+                                    "the source SEG-Y cannot reproduce subsequent geometry edits."
+                                )
                             if not source_file:
                                 try:
                                     source_file = self.image_coll.df.loc[
@@ -3099,7 +3352,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             if not source_file or not os_path.isfile(source_file):
                                 print("error: missing seismic VTK file and source file")
                                 return
-                            vtk_object.ShallowCopy(read_segy_file(in_file_name=source_file))
+                            import_options = seismic_metadata.get("seismic_metadata", {}).get("import_options")
+                            if import_options:
+                                original_identity = seismic_metadata["seismic_metadata"].get("source_identity")
+                                if original_identity and original_identity != file_identity(source_file):
+                                    raise ValueError("Seismic snapshot is missing and the source SEG-Y has changed. Restore the saved .vts file.")
+                                vtk_object.ShallowCopy(read_segy_file(source_file, options=import_options))
+                            else:
+                                self.print_terminal(
+                                    "Opening legacy seismic with its original coordinate scale; "
+                                    "physical units remain unknown. Reimport to configure the domain."
+                                )
+                                vtk_object.ShallowCopy(read_legacy_segy_file(source_file))
                         vtk_object.Modified()
                     self.image_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                     prgs_bar.add_one()
@@ -4297,15 +4561,45 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def import_SEGY(self):
         # ___________________________________________________________ TO BE REVIEWED AND UPDATED IN MODULE segy2vtk
-        """Import SEGY file and update Mesh3D collection."""
+        """Import SEG-Y data and optionally relink orphaned interpretation entities."""
         self.print_terminal("Importing SEGY seismics file.")
         # Select and open input file
         in_file_name = open_file_dialog(
             parent=self, caption="Import SEGY from file", filter="SEGY (*.sgy *.segy)"
         )
         if in_file_name:
+            before_uids = self._get_seismic_image_uids()
             self.print_terminal("in_file_name: " + in_file_name)
             segy2vtk(self=self, in_file_name=in_file_name)
+            new_uids = list(self._get_seismic_image_uids() - before_uids)
+            if not new_uids:
+                return
+            new_seismic_uid = new_uids[0]
+
+            old_parent_uid = self._prompt_orphaned_seismic_relink(
+                imported_file_name=in_file_name
+            )
+            if not old_parent_uid:
+                return
+
+            updated_uids = self.relink_geological_parent_uid(
+                old_parent_uid=old_parent_uid,
+                new_parent_uid=new_seismic_uid,
+            )
+            if updated_uids:
+                self.print_terminal(
+                    "Linked "
+                    + str(len(updated_uids))
+                    + " geological entities from missing seismic "
+                    + old_parent_uid
+                    + " to imported seismic "
+                    + new_seismic_uid
+                    + "."
+                )
+            else:
+                self.print_terminal(
+                    "No interpretations were relinked."
+                )
 
     # Methods used to export entities to other file formats.
 

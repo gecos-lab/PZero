@@ -9,6 +9,10 @@ from pandas import DataFrame as pd_DataFrame
 from pandas import concat as pd_concat
 
 from .AbstractCollection import BaseCollection
+from ..properties_manager import (
+    create_property_legend_entry,
+    ensure_property_legend_schema,
+)
 
 
 class DIMCollection(BaseCollection):
@@ -48,6 +52,9 @@ class DIMCollection(BaseCollection):
         self.modelReset.emit()
         # Update properties colormaps if needed. This is generally necessary just for images,
         # but it is worth adding it here for a more general behaviour with no relevant computational cost.
+        self.parent.prop_legend_df = ensure_property_legend_schema(
+            self.parent.prop_legend_df
+        )
         refresh_prop_legend = False
         for i in range(len(entity_dict["properties_names"])):
             if entity_dict["properties_components"][i] == 1:
@@ -61,10 +68,9 @@ class DIMCollection(BaseCollection):
                             self.parent.prop_legend_df,
                             pd_DataFrame(
                                 [
-                                    {
-                                        "property_name": property_name,
-                                        "colormap": self.default_colormap,
-                                    }
+                                    create_property_legend_entry(
+                                        property_name, self.default_colormap
+                                    )
                                 ]
                             ),
                         ],
@@ -86,10 +92,9 @@ class DIMCollection(BaseCollection):
                                 self.parent.prop_legend_df,
                                 pd_DataFrame(
                                     [
-                                        {
-                                            "property_name": property_name,
-                                            "colormap": self.default_colormap,
-                                        }
+                                        create_property_legend_entry(
+                                            property_name, self.default_colormap
+                                        )
                                     ]
                                 ),
                             ],

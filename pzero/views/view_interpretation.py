@@ -4,9 +4,15 @@ PZero© Andrea Bistacchi"""
 # PySide6 imports
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QComboBox, QSlider, QSpinBox, QVBoxLayout, QCheckBox,
-    QDialog, QDockWidget, QDoubleSpinBox, QRadioButton, QButtonGroup, QGroupBox, 
-    QGridLayout, QFormLayout, QPushButton, QMessageBox
+    QWidget,
+    QHBoxLayout,
+    QLabel,
+    QComboBox,
+    QSlider,
+    QSpinBox,
+    QDoubleSpinBox,
+    QVBoxLayout,
+    QCheckBox,
 )
 from PySide6.QtCore import Qt, QTimer
 
@@ -15,30 +21,27 @@ import pyvista as pv
 import numpy as np
 from copy import deepcopy
 import heapq
+from time import perf_counter
+from uuid import uuid4
 from shapely.geometry import LineString as shp_linestring
+from shapely.geometry import Point as shp_point
 from scipy import ndimage
 from scipy.optimize import linear_sum_assignment
-from pandas import DataFrame as pd_DataFrame
-from pandas import concat as pd_concat
-from shiboken6 import isValid as shiboken_is_valid
-
-# VTK imports
-from vtk import (
-    vtkCellArray, vtkIntArray, vtkPoints, vtkStringArray, vtkIdList, vtkPolyData
-)
 
 # PZero imports
 from .view_map import ViewMap
-from ..entities_factory import Seismics, PolyLine
+from ..entities_factory import PolyLine
+from ..properties_manager import get_property_render_settings
 from ..helpers.helper_dialogs import (
     message_dialog,
     multiple_input_dialog,
     input_one_value_dialog,
     options_dialog,
-    progress_dialog,
 )
 from ..helpers.helper_widgets import Editor, Tracer
 from ..helpers.helper_functions import freeze_gui_off, freeze_gui_on
+from ..imports.segy_reader import get_seismic_metadata, set_seismic_metadata
+
 
 class ViewInterpretation(ViewMap):
     def add_all_entities(self):
@@ -46,12 +49,18 @@ class ViewInterpretation(ViewMap):
         Override BaseView bootstrap so slice-aware multipart geology is not added as a
         raw full actor before interpretation-specific filtering is ready.
         """
+        from pandas import DataFrame as pd_DataFrame
+        from pandas import concat as pd_concat
+        from ..helpers.helper_dialogs import progress_dialog
 
+        if not hasattr(self, "_deferred_geol_polyline_actor_uids"):
+            self._deferred_geol_polyline_actor_uids = set()
 
         for collection_name in self.tree_collection_dict.values():
             try:
                 collection = getattr(self.parent, collection_name)
-                uid_list = collection.df.query(self.view_filter)["uid"].tolist()
+                collection_df = collection.df.query(self.view_filter)
+                uid_list = collection_df["uid"].tolist()
                 prgs_bar = progress_dialog(
                     max_value=len(uid_list),
                     title_txt="Opening view",
@@ -59,23 +68,49 @@ class ViewInterpretation(ViewMap):
                     cancel_txt=None,
                     parent=self,
                 )
+                actor_rows = []
+                topology_by_uid = {}
+                if (
+                    collection_name == "geol_coll"
+                    and "topology" in collection_df.columns
+                ):
+                    topology_by_uid = dict(
+                        zip(collection_df["uid"].tolist(), collection_df["topology"].tolist())
+                    )
+
                 for uid in uid_list:
+                    topology = topology_by_uid.get(uid)
                     skip_raw_actor = False
+                    defer_polyline_actor = (
+                        collection_name == "geol_coll" and topology == "PolyLine"
+                    )
+                    if defer_polyline_actor:
+                        self._deferred_geol_polyline_actor_uids.add(uid)
+                        skip_raw_actor = True
+
                     if collection_name == "geol_coll":
-                        try:
-                            vtk_obj = collection.get_uid_vtk_obj(uid)
-                            cell_data = vtk_obj.GetCellData() if vtk_obj is not None else None
-                            field_data = vtk_obj.GetFieldData() if vtk_obj is not None else None
-                            skip_raw_actor = bool(
-                                (cell_data is not None and cell_data.HasArray("slice_index"))
-                                or (
-                                    field_data is not None
-                                    and field_data.HasArray("single_slice_index")
-                                    and field_data.HasArray("single_slice_axis")
+                        if not skip_raw_actor:
+                            try:
+                                vtk_obj = collection.get_uid_vtk_obj(uid)
+                                cell_data = (
+                                    vtk_obj.GetCellData() if vtk_obj is not None else None
                                 )
-                            )
-                        except Exception:
-                            skip_raw_actor = False
+                                field_data = (
+                                    vtk_obj.GetFieldData() if vtk_obj is not None else None
+                                )
+                                skip_raw_actor = bool(
+                                    (
+                                        cell_data is not None
+                                        and cell_data.HasArray("slice_index")
+                                    )
+                                    or (
+                                        field_data is not None
+                                        and field_data.HasArray("single_slice_index")
+                                        and field_data.HasArray("single_slice_axis")
+                                    )
+                                )
+                            except Exception:
+                                skip_raw_actor = False
 
                     if skip_raw_actor:
                         this_actor = None
@@ -87,24 +122,21 @@ class ViewInterpretation(ViewMap):
                             visible=True,
                         )
 
-                    self.actors_df = pd_concat(
-                        [
-                            self.actors_df,
-                            pd_DataFrame(
-                                [
-                                    {
-                                        "uid": uid,
-                                        "actor": this_actor,
-                                        "show": True,
-                                        "collection": collection_name,
-                                        "show_property": None,
-                                    }
-                                ]
-                            ),
-                        ],
-                        ignore_index=True,
+                    actor_rows.append(
+                        {
+                            "uid": uid,
+                            "actor": this_actor,
+                            "show": True,
+                            "collection": collection_name,
+                            "show_property": None,
+                        }
                     )
                     prgs_bar.add_one()
+                if actor_rows:
+                    self.actors_df = pd_concat(
+                        [self.actors_df, pd_DataFrame(actor_rows)],
+                        ignore_index=True,
+                    )
             except Exception:
                 self.print_terminal(f"ERROR in add_all_entities: {collection_name}")
                 pass
@@ -115,7 +147,9 @@ class ViewInterpretation(ViewMap):
 
         # Current state
         self.current_seismic_uid = None
-        self.current_axis = 'Inline' # Inline, Crossline, Z-slice
+        self.current_source_collection_name = None
+        self.current_source_topology = None
+        self.current_axis = "Inline"  # Inline, Crossline, Z-slice
         self.current_slice_index = 0
         self.slice_actor = None
 
@@ -140,27 +174,39 @@ class ViewInterpretation(ViewMap):
 
         # Spatial Index for fast lookup: {(seismic_uid, axis, slice_index): set(line_uids)}
         self.interpretation_lines_by_slice = {}
-        
+
         # Track multipart horizons (efficient single-entity containing multiple slices)
         # Format: {uid: {'seismic_uid': str, 'axis': str, 'slice_indices': list, 'slice_to_cell_index': dict}}
         self.multipart_horizons = {}
         self.multipart_faults = {}
-        
+        self.slice_well_actors = {}
+        self.slice_well_halo_actors = {}
+        self.slice_well_label_actors = {}
+        self.slice_well_marker_actors = {}
+        self.slice_well_marker_label_actors = {}
+        self.slice_well_marker_leader_actors = {}
+        self._well_marker_filter_dirty = True
+
         # Flag to batch updates during propagation
         self._is_propagating = False
 
         # Flag to track if initialization has been done
         self._initialized = False
+        self._horizon_scan_generation = 0
+        self._pending_horizon_scan_items = []
+        self._pending_horizon_scan_index = 0
+        self._pending_horizon_scan_processed_count = 0
+        self._pending_horizon_scan_started_at = None
+        self._pending_slice_metadata_uids = set()
+        self._pending_horizon_scan_stats = {}
+        self._pending_fast_added_entities = {}
+        self._ignore_next_on_entities_added = set()
 
         # Setup specific UI controls
         self.setup_controls()
 
         # Override default view to something neutral initially
         self.plotter.view_xy()
-
-        # Use trackball style instead of image style to allow proper 3D views
-        # Image style forces XY view which breaks Inline/Crossline views
-        # self.plotter.enable_trackball_style()
 
     @staticmethod
     def _build_control_tooltip(summary, low_text=None, high_text=None):
@@ -228,6 +274,123 @@ class ViewInterpretation(ViewMap):
                 return actors[actor_name]
         return super().get_actor_by_uid(uid)
 
+    def remove_actor_in_view(self, uid=None, redraw=False):
+        """Remove any interpretation actor aliases for a uid without assuming a raw actor exists."""
+        if not uid:
+            return
+
+        for actor_name in (
+            f"multipart_slice_{uid}",
+            f"multipart_fault_slice_{uid}",
+            uid,
+            f"geol_coll_{uid}",
+            f"geo_{uid}",
+        ):
+            try:
+                actors = getattr(self.plotter.renderer, "actors", {})
+                if actor_name in actors:
+                    self.plotter.remove_actor(actors[actor_name])
+            except Exception:
+                try:
+                    self.plotter.remove_actor(actor_name)
+                except Exception:
+                    pass
+
+        if hasattr(self, "_deferred_geol_polyline_actor_uids"):
+            self._deferred_geol_polyline_actor_uids.discard(uid)
+        if hasattr(self, "_pending_deferred_geol_realization"):
+            self._pending_deferred_geol_realization = [
+                pending_uid
+                for pending_uid in self._pending_deferred_geol_realization
+                if pending_uid != uid
+            ]
+        self._invalidate_actor_cache(uid)
+
+    def _apply_coplanar_interpretation_offset(self, actor=None, uid=None):
+        """Apply a small coincident-topology offset to interpretation line actors."""
+        if actor is None and uid:
+            try:
+                actor = self.get_actor_by_uid(uid)
+            except Exception:
+                actor = None
+        if actor is None:
+            return
+
+        try:
+            mapper = actor.GetMapper()
+        except Exception:
+            mapper = None
+        if mapper is None:
+            return
+
+        # Keep interpretation lines slightly in front of the slice plane to reduce z-fighting.
+        try:
+            mapper.SetResolveCoincidentTopologyToPolygonOffset()
+        except Exception:
+            try:
+                mapper.SetResolveCoincidentTopology(1)
+            except Exception:
+                pass
+
+        for setter_name, params in (
+            ("SetRelativeCoincidentTopologyLineOffsetParameters", (0.0, -4.0)),
+            ("SetRelativeCoincidentTopologyPolygonOffsetParameters", (0.0, -4.0)),
+            ("SetRelativeCoincidentTopologyPointOffsetParameter", (-4.0,)),
+        ):
+            try:
+                getattr(mapper, setter_name)(*params)
+            except Exception:
+                pass
+
+    def _supported_interpretation_source_topologies(self):
+        """Return volumetric topologies that can drive interpretation slices."""
+        return {"Seismics", "Voxet"}
+
+    def _iter_interpretation_source_candidates(self):
+        """Collect supported volumetric interpretation sources from project collections."""
+        source_specs = (
+            ("image_coll", "Image", {"Seismics", "Voxet"}),
+            ("mesh3d_coll", "Mesh", {"Voxet"}),
+        )
+        candidates = []
+
+        for collection_name, label_prefix, allowed_topologies in source_specs:
+            collection = getattr(self.parent, collection_name, None)
+            if collection is None:
+                continue
+            try:
+                all_uids = collection.get_uids
+            except Exception:
+                continue
+
+            for uid in all_uids:
+                try:
+                    topology = collection.get_uid_topology(uid)
+                except Exception:
+                    continue
+                if topology not in allowed_topologies:
+                    continue
+                try:
+                    name = collection.get_uid_name(uid)
+                except Exception:
+                    name = str(uid)
+                label = f"{label_prefix}: {name}"
+                candidates.append((label, (collection_name, uid, topology)))
+
+        return candidates
+
+    def _apply_source_selection(self, selection):
+        """Normalize combo-box selection payload into the current source state."""
+        if isinstance(selection, tuple) and len(selection) >= 3:
+            self.current_source_collection_name = selection[0]
+            self.current_seismic_uid = selection[1]
+            self.current_source_topology = selection[2]
+            return
+
+        self.current_source_collection_name = "image_coll"
+        self.current_seismic_uid = selection
+        self.current_source_topology = "Seismics" if selection else None
+
     def showEvent(self, event):
         """Override Qt showEvent to initialize the view when first shown."""
         super().showEvent(event)
@@ -238,39 +401,46 @@ class ViewInterpretation(ViewMap):
 
     def _initialize_view(self):
         """Initialize the slice view after window is shown."""
+        init_started_at = perf_counter()
         self.print_terminal("Initializing interpretation view...")
         # Clear any inherited volumetric actors
         self.clear_seismic_volumes()
         # Reset initialization flag used for indexing
         self._lines_indexed = False
-        #Refresh volume list and create initial slice
-        self.refresh_volume_list()
-        
-        # Scan and index existing horizons if we have a volume selected
-        # Note: on_volume_changed (triggered by refresh_volume_list) already handles this,
-        # but we call it again here as a safety net for edge cases
-        if self.current_seismic_uid:
-            # Ensure cache is populated before scanning
-            self._populate_seismic_cache()
-            self.scan_and_index_existing_horizons()
-            self._suppress_full_multipart_actors()
+        # Refresh once after the widget is shown. This is the only first-load path
+        # that should trigger volume selection, cache population and horizon indexing.
+        self.refresh_volume_list(force_reload=True)
+        self._suppress_full_multipart_actors()
+        self.print_terminal(
+            f"Interpretation view init dispatched in {perf_counter() - init_started_at:.2f}s"
+        )
         
     def show_actor_with_property(self, uid=None, coll_name=None, show_property=None, visible=None):
         """Override to prevent showing full seismic volumes and full multipart horizons - we only show slices."""
-        # Check if this is a seismic entity that we're slicing
-        if coll_name == 'image_coll' and uid:
+        # Check if this is a volumetric source that we're slicing
+        if coll_name in {"image_coll", "mesh3d_coll"} and uid:
             try:
-                topology = self.parent.image_coll.get_uid_topology(uid)
-                if topology == 'Seismics':
-                    # Don't show the full seismic volume - we show slices instead
-                    self.print_terminal(f"Skipping full volume display for seismic: {uid}")
+                collection = getattr(self.parent, coll_name)
+                topology = collection.get_uid_topology(uid)
+                if topology in self._supported_interpretation_source_topologies():
+                    self.print_terminal(
+                        f"Skipping full volume display for interpretation source: {uid}"
+                    )
                     self.seismic_uids_to_hide.add(uid)
                     return
             except:
                 pass
-        
+
         # Check if this is a multipart horizon - NEVER show the full version
-        if coll_name == 'geol_coll' and uid:
+        if coll_name == "geol_coll" and uid:
+            if self._is_well_child_marker_uid(uid):
+                self._well_marker_filter_dirty = True
+                self._remove_raw_actor_for_uid(uid)
+                parent_uid = self._get_well_child_marker_parent_uid(uid)
+                if parent_uid and hasattr(self, "current_seismic_uid"):
+                    self.update_well_visibility(uid=parent_uid)
+                return None
+
             try:
                 vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
                 cell_data = vtk_obj.GetCellData() if vtk_obj is not None else None
@@ -292,47 +462,55 @@ class ViewInterpretation(ViewMap):
             except Exception:
                 pass
 
-            if hasattr(self, 'multipart_horizons') and uid in self.multipart_horizons:
+            if hasattr(self, "multipart_horizons") and uid in self.multipart_horizons:
                 # Don't show the full multipart horizon - we show filtered slices instead
                 # Just update the visibility of our filtered version
                 self.update_multipart_horizon_visibility(uid)
                 return
-            if hasattr(self, 'multipart_faults') and uid in self.multipart_faults:
+            if hasattr(self, "multipart_faults") and uid in self.multipart_faults:
                 # Don't show the full multipart fault - we show filtered slices instead
                 self.update_multipart_fault_visibility(uid)
                 return
-        
+
+        if coll_name == "well_coll" and uid:
+            self.update_well_visibility(uid=uid, visible=visible)
+            return getattr(self, "slice_well_actors", {}).get(uid)
+
         # For all other entities, use normal display
-        super().show_actor_with_property(uid=uid, coll_name=coll_name, show_property=show_property, visible=visible)
-        # After showing, increase line width for interpretation lines
-        if coll_name == 'geol_coll' and uid:
+        this_actor = super().show_actor_with_property(
+            uid=uid, coll_name=coll_name, show_property=show_property, visible=visible
+        )
+
+        # Interpretation lines sit on the same plane as the active seismic slice.
+        # Apply a mapper offset so they do not z-fight and disappear behind the slice.
+        if coll_name == "geol_coll" and uid:
             try:
-                # Check if this is an interpretation line (not multipart - those are handled above)
-                is_interp_line = uid in self.interpretation_lines if hasattr(self, 'interpretation_lines') else False
-                
+                is_interp_line = (
+                    uid in self.interpretation_lines
+                    if hasattr(self, "interpretation_lines")
+                    else False
+                )
                 if is_interp_line:
-                    # Get the actor and increase line width significantly for better visibility
-                    if uid in self.plotter.renderer.actors:
-                        actor = self.plotter.renderer.actors[uid]
-                        if actor and hasattr(actor, 'GetProperty'):
-                            # Use thicker lines for multipart horizons (6) vs regular interpretation lines (4)
-                            line_width = 6 if is_multipart else 4
-                            actor.GetProperty().SetLineWidth(line_width)
-            except:
+                    self._apply_coplanar_interpretation_offset(
+                        actor=this_actor, uid=uid
+                    )
+            except Exception:
                 pass
+
+        return this_actor
 
     def set_orientation_widget(self):
         """Override ViewMap's North Arrow with a Seismic Axes widget."""
         self.plotter.add_axes(
-            xlabel='IL',
-            ylabel='XL', 
-            zlabel='Z',
+            xlabel="IL",
+            ylabel="XL",
+            zlabel="Z",
             line_width=2,
             interactive=False,
-            color='white',
-            viewport=(0, 0, 0.3, 0.3)
+            color="white",
+            viewport=(0, 0, 0.3, 0.3),
         )
-        
+
     def setup_controls(self):
         """Add controls for slicing to the layout"""
         # Main widget
@@ -340,39 +518,39 @@ class ViewInterpretation(ViewMap):
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(5, 5, 5, 5)
         control_widget.setLayout(main_layout)
-        
+
         # --- Top Row: Slicing Controls ---
         top_layout = QHBoxLayout()
         main_layout.addLayout(top_layout)
-        
-        # Seismic Volume Selector
-        top_layout.addWidget(QLabel("Volume:"))
+
+        # Structured source selector
+        top_layout.addWidget(QLabel("Source:"))
         self.combo_volume = QComboBox()
         self.combo_volume.currentIndexChanged.connect(self.on_volume_changed)
         top_layout.addWidget(self.combo_volume)
-        
+
         # Slice Type Selector
         top_layout.addWidget(QLabel("View:"))
         self.combo_view = QComboBox()
         self.combo_view.addItems(["Inline", "Crossline", "Z-slice"])
         self.combo_view.currentTextChanged.connect(self.on_view_type_changed)
         top_layout.addWidget(self.combo_view)
-        
+
         # Slice Index Slider
         top_layout.addWidget(QLabel("Slice:"))
         self.slider_slice = QSlider(Qt.Horizontal)
         self.slider_slice.valueChanged.connect(self.on_slider_changed)
         top_layout.addWidget(self.slider_slice)
-        
+
         # Slice Index SpinBox
         self.spin_slice = QSpinBox()
         self.spin_slice.valueChanged.connect(self.on_spin_changed)
         top_layout.addWidget(self.spin_slice)
-        
+
         # --- Bottom Row: Toggles ---
         bot_layout = QHBoxLayout()
         main_layout.addLayout(bot_layout)
-        
+
         # Grid Toggle
         self.chk_grid = QCheckBox("Grid")
         self.chk_grid.setChecked(False)
@@ -384,7 +562,7 @@ class ViewInterpretation(ViewMap):
         self.chk_title.setChecked(True)
         self.chk_title.stateChanged.connect(self._on_annotation_toggle_changed)
         bot_layout.addWidget(self.chk_title)
-        
+
         # Directions Toggle
         self.chk_dirs = QCheckBox("NS/EW")
         self.chk_dirs.setChecked(True)
@@ -396,19 +574,98 @@ class ViewInterpretation(ViewMap):
         self.chk_axes.setChecked(True)
         self.chk_axes.stateChanged.connect(self.toggle_orientation_widget)
         bot_layout.addWidget(self.chk_axes)
-        
+
+        # --- Well Row: slice-aware well display controls ---
+        well_layout = QHBoxLayout()
+        main_layout.addLayout(well_layout)
+
+        well_layout.addWidget(QLabel("Wells:"))
+
+        self.chk_wells = QCheckBox("Wells")
+        self.chk_wells.setChecked(True)
+        self.chk_wells.stateChanged.connect(self._on_well_display_changed)
+        well_layout.addWidget(self.chk_wells)
+
+        self.chk_well_names = QCheckBox("Names")
+        self.chk_well_names.setChecked(True)
+        self.chk_well_names.stateChanged.connect(self._on_well_display_changed)
+        well_layout.addWidget(self.chk_well_names)
+
+        self.chk_well_markers = QCheckBox("Markers")
+        self.chk_well_markers.setChecked(True)
+        self.chk_well_markers.stateChanged.connect(self._on_well_display_changed)
+        well_layout.addWidget(self.chk_well_markers)
+
+        self.chk_well_marker_labels = QCheckBox("Marker labels")
+        self.chk_well_marker_labels.setChecked(False)
+        self.chk_well_marker_labels.stateChanged.connect(self._on_well_display_changed)
+        well_layout.addWidget(self.chk_well_marker_labels)
+
+        well_layout.addWidget(QLabel("Well:"))
+        self.combo_well_filter = QComboBox()
+        self.combo_well_filter.addItem("No well on slice", "__none__")
+        self.combo_well_filter.currentIndexChanged.connect(
+            self._on_well_selection_changed
+        )
+        well_layout.addWidget(self.combo_well_filter)
+
+        well_layout.addWidget(QLabel("Marker:"))
+        self.combo_well_marker_filter = QComboBox()
+        self.combo_well_marker_filter.addItem("All markers for well")
+        self.combo_well_marker_filter.currentTextChanged.connect(
+            self._on_well_display_changed
+        )
+        well_layout.addWidget(self.combo_well_marker_filter)
+
+        well_layout.addWidget(QLabel("Corridor:"))
+        self.spin_well_corridor = QDoubleSpinBox()
+        self.spin_well_corridor.setRange(0.1, 50.0)
+        self.spin_well_corridor.setDecimals(1)
+        self.spin_well_corridor.setSingleStep(0.5)
+        self.spin_well_corridor.setValue(10.0)
+        self.spin_well_corridor.setSuffix(" sp")
+        self.spin_well_corridor.valueChanged.connect(self._on_well_display_changed)
+        well_layout.addWidget(self.spin_well_corridor)
+
+        well_layout.addWidget(QLabel("Label size:"))
+        self.spin_well_label_size = QSpinBox()
+        self.spin_well_label_size.setRange(6, 32)
+        self.spin_well_label_size.setValue(10)
+        self.spin_well_label_size.valueChanged.connect(self._on_well_display_changed)
+        well_layout.addWidget(self.spin_well_label_size)
+
         # Spacer to push checks to left? Or just let them flow.
         bot_layout.addStretch()
+        well_layout.addStretch()
 
-        # Auto-refresh volume list on startup
-        self.refresh_volume_list()
-        
         # Add to main layout
         # Using a QDockWidget for controls to ensure it doesn't interfere with the render window
+        from PySide6.QtWidgets import QDockWidget
+
         self.controls_dock = QDockWidget("Interpretation Controls", self)
         self.controls_dock.setWidget(control_widget)
-        self.controls_dock.setAllowedAreas(Qt.TopDockWidgetArea | Qt.BottomDockWidgetArea)
+        self.controls_dock.setAllowedAreas(
+            Qt.TopDockWidgetArea | Qt.BottomDockWidgetArea
+        )
         self.addDockWidget(Qt.TopDockWidgetArea, self.controls_dock)
+
+    def _on_well_display_changed(self):
+        """Refresh slice-projected wells after interpretation well controls change."""
+        self._well_marker_filter_dirty = True
+        self.update_all_well_visibility()
+        try:
+            self.plotter.render()
+        except Exception:
+            pass
+
+    def _on_well_selection_changed(self):
+        """Refresh marker choices and overlay after the active well changes."""
+        self._well_marker_filter_dirty = True
+        self.update_all_well_visibility()
+        try:
+            self.plotter.render()
+        except Exception:
+            pass
 
     def _on_annotation_toggle_changed(self):
         """Handle annotation toggle changes and render."""
@@ -417,41 +674,73 @@ class ViewInterpretation(ViewMap):
 
     def toggle_orientation_widget(self, state):
         """Toggle visibility of the orientation widget."""
-        if state == 2: # Checked
-            # Re-enable/Re-add. 
+        if state == 2:  # Checked
+            # Re-enable/Re-add.
             # PyVista add_axes adds it. If we hide it, we might remove it.
             # remove_axes() ?
             self.set_orientation_widget()
         else:
             self.plotter.hide_axes()
-        
+
     def on_entities_added(self, uids, collection):
         """Called when new entities are added to any collection"""
+        try:
+            incoming_uids = list(uids or [])
+        except Exception:
+            incoming_uids = [uids] if uids is not None else []
+        if incoming_uids and getattr(self, "_ignore_next_on_entities_added", None):
+            skipped = set(incoming_uids) & self._ignore_next_on_entities_added
+            if skipped:
+                self._ignore_next_on_entities_added -= skipped
+                incoming_uids = [uid for uid in incoming_uids if uid not in skipped]
+            if not incoming_uids:
+                return
+
         # Skip visual updates if we are batching (e.g. during propagation)
-        if hasattr(self, '_is_propagating') and self._is_propagating:
+        if hasattr(self, "_is_propagating") and self._is_propagating:
             return
 
-        # Check if it's the image collection (where seismics live)
-        if collection == self.parent.image_coll:
-            self.print_terminal("New entities added to image collection, refreshing volume list...")
+        # Check if structured volumetric sources changed
+        if collection in [
+            getattr(self.parent, "image_coll", None),
+            getattr(self.parent, "mesh3d_coll", None),
+        ]:
+            self.print_terminal(
+                "New volumetric entities added, refreshing source list..."
+            )
             self.refresh_volume_list()
         # Check if it's the geological collection (where lines live)
         elif collection == self.parent.geol_coll:
-            self.print_terminal(f"New geological entities added: {uids}")
+            self.print_terminal(f"New geological entities added: {incoming_uids}")
             # Display the new entities in this view
-            for uid in uids:
+            for uid in incoming_uids:
                 try:
+                    if self._is_well_child_marker_uid(uid):
+                        self._well_marker_filter_dirty = True
+                        self._refresh_well_marker_filter_options(force=True)
+                        self._remove_raw_actor_for_uid(uid)
+                        parent_uid = self._get_well_child_marker_parent_uid(uid)
+                        if parent_uid:
+                            self.update_well_visibility(uid=parent_uid)
+                        continue
+
                     # Check if this is an interpretation line we're tracking
                     if uid in self.interpretation_lines:
                         # Only show if it matches current slice
                         slice_info = self.interpretation_lines[uid]
                         matches_current_slice = (
-                            slice_info['seismic_uid'] == self.current_seismic_uid and
-                            slice_info['axis'] == self.current_axis and
-                            slice_info['slice_index'] == self.current_slice_index
+                            slice_info["seismic_uid"] == self.current_seismic_uid
+                            and slice_info["axis"] == self.current_axis
+                            and slice_info["slice_index"] == self.current_slice_index
                         )
-                        self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=matches_current_slice)
-                        self.print_terminal(f"Added interpretation line {uid}, visible={matches_current_slice}")
+                        self.show_actor_with_property(
+                            uid=uid,
+                            coll_name="geol_coll",
+                            visible=matches_current_slice,
+                        )
+                        self.print_terminal(
+                            f"Added interpretation line {uid}, visible={matches_current_slice}"
+                        )
                         continue
                     else:
                         # NEW: Try to classify it immediately if we have a volume loaded
@@ -464,152 +753,304 @@ class ViewInterpretation(ViewMap):
                                 # It was fully classified
                                 slice_info = self.interpretation_lines[uid]
                                 matches_current_slice = (
-                                    slice_info['seismic_uid'] == self.current_seismic_uid and
-                                    slice_info['axis'] == self.current_axis and
-                                    slice_info['slice_index'] == self.current_slice_index
+                                    slice_info["seismic_uid"]
+                                    == self.current_seismic_uid
+                                    and slice_info["axis"] == self.current_axis
+                                    and slice_info["slice_index"]
+                                    == self.current_slice_index
                                 )
-                                self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=matches_current_slice)
+                                self.show_actor_with_property(
+                                    uid=uid,
+                                    coll_name="geol_coll",
+                                    visible=matches_current_slice,
+                                )
                                 continue
 
                             classified_as_multipart_horizon = (
-                                hasattr(self, 'multipart_horizons') and
-                                uid in self.multipart_horizons
+                                hasattr(self, "multipart_horizons")
+                                and uid in self.multipart_horizons
                             )
                             classified_as_multipart_fault = (
-                                hasattr(self, 'multipart_faults') and
-                                uid in self.multipart_faults
+                                hasattr(self, "multipart_faults")
+                                and uid in self.multipart_faults
                             )
 
                         # For multipart interpretation entities, always force filtered-by-slice rendering.
                         if classified_as_multipart_horizon:
-                            self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=False)
+                            self.show_actor_with_property(
+                                uid=uid, coll_name="geol_coll", visible=False
+                            )
                             self.update_multipart_horizon_visibility(uid)
                             continue
 
                         if classified_as_multipart_fault:
-                            self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=False)
+                            self.show_actor_with_property(
+                                uid=uid, coll_name="geol_coll", visible=False
+                            )
                             self.update_multipart_fault_visibility(uid)
                             continue
 
                         # Not a tracked interpretation line, show normally
-                        self.show_actor_with_property(uid=uid, coll_name='geol_coll', visible=True)
+                        self.show_actor_with_property(
+                            uid=uid, coll_name="geol_coll", visible=True
+                        )
                 except Exception as e:
                     self.print_terminal(f"Error displaying new entity {uid}: {e}")
+        elif collection == getattr(self.parent, "well_coll", None):
+            self.print_terminal(f"New well entities added: {incoming_uids}")
+            self._well_marker_filter_dirty = True
+            self._refresh_well_marker_filter_options(force=True)
+            for uid in incoming_uids:
+                try:
+                    self.update_well_visibility(uid=uid)
+                except Exception as e:
+                    self.print_terminal(f"Error displaying new well {uid}: {e}")
+
+    def _append_actor_rows_for_uids(self, uids=None, collection_name=None):
+        """Append placeholder actor rows for newly added entities without creating raw actors."""
+        try:
+            uid_list = list(uids or [])
+        except Exception:
+            uid_list = []
+        if not uid_list or not collection_name:
+            return
+
+        existing_uids = set()
+        try:
+            existing_uids = set(self.actors_df["uid"].tolist())
+        except Exception:
+            existing_uids = set()
+
+        rows = []
+        for uid in uid_list:
+            if uid in existing_uids:
+                continue
+            rows.append(
+                {
+                    "uid": uid,
+                    "actor": None,
+                    "show": True,
+                    "collection": collection_name,
+                    "show_property": None,
+                }
+            )
+        if not rows:
+            return
+
+        from pandas import DataFrame as pd_DataFrame
+        from pandas import concat as pd_concat
+
+        self.actors_df = pd_concat(
+            [self.actors_df, pd_DataFrame(rows)],
+            ignore_index=True,
+        )
+
+    def entities_added_update_views(self, updated_uids=None, collection=None):
+        """Avoid generic raw-actor creation for interpretation entities we just created ourselves."""
+        if collection != getattr(self.parent, "geol_coll", None):
+            return super().entities_added_update_views(
+                updated_uids=updated_uids, collection=collection
+            )
+
+        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+        pending_specs = getattr(self, "_pending_fast_added_entities", {})
+        fast_uids = [uid for uid in updated_uids if uid in pending_specs]
+        normal_uids = [uid for uid in updated_uids if uid not in pending_specs]
+
+        if normal_uids:
+            super().entities_added_update_views(
+                updated_uids=normal_uids, collection=collection
+            )
+
+        if not fast_uids:
+            return
+
+        tree = self.tree_from_coll(coll=collection)
+        self._append_actor_rows_for_uids(
+            uids=fast_uids, collection_name=collection.collection_name
+        )
+        if tree is not None:
+            tree.add_items_to_tree(uids_to_add=fast_uids)
+
+        should_render = False
+        for uid in fast_uids:
+            spec = self._pending_fast_added_entities.pop(uid, None)
+            if not spec:
+                continue
+
+            kind = spec.get("kind")
+            if kind == "single_line":
+                slice_info = spec.get("slice_info")
+                if slice_info:
+                    self.register_interpretation_line(uid, slice_info)
+                    should_render = True
+            elif kind in {"multipart_horizon", "multipart_fault"}:
+                self._register_multipart_interpretation_entity(
+                    uid=uid,
+                    axis=spec.get("axis", self.current_axis),
+                    slice_indices=spec.get("slice_indices", []),
+                    slice_to_cell_index=spec.get("slice_to_cell_index", {}),
+                )
+                if "seed_slice" in spec:
+                    if (
+                        kind == "multipart_horizon"
+                        and uid in getattr(self, "multipart_horizons", {})
+                    ):
+                        self.multipart_horizons[uid]["seed_slice"] = spec["seed_slice"]
+                    if (
+                        kind == "multipart_fault"
+                        and uid in getattr(self, "multipart_faults", {})
+                    ):
+                        self.multipart_faults[uid]["seed_slice"] = spec["seed_slice"]
+
+                if kind == "multipart_horizon":
+                    self.update_multipart_horizon_visibility(uid)
+                else:
+                    self.update_multipart_fault_visibility(uid)
+                should_render = True
+
+        self._ignore_next_on_entities_added.update(fast_uids)
+        if should_render:
+            try:
+                self.plotter.render()
+            except Exception:
+                pass
         
-    def refresh_volume_list(self):
+    def refresh_volume_list(self, force_reload=False):
         """Refresh the list of available seismic volumes"""
         # Guard: Check if combo_volume exists (may not during early initialization)
-        if not hasattr(self, 'combo_volume') or self.combo_volume is None:
+        if not hasattr(self, "combo_volume") or self.combo_volume is None:
             self.print_terminal("refresh_volume_list: combo_volume not yet initialized")
             return
-            
-        self.print_terminal("Refreshing seismic volume list...")
+
+        self.print_terminal("Refreshing interpretation source list...")
         self.combo_volume.blockSignals(True)
-        
+
         # Remember current selection if any
-        previous_uid = self.current_seismic_uid
-        
+        previous_selection = (
+            self.current_source_collection_name,
+            self.current_seismic_uid,
+        )
+
         self.combo_volume.clear()
         
-        # Find all Seismics entities in image_coll - use the same approach as mesh slicer
         candidates = []
         try:
-            if hasattr(self.parent, 'image_coll') and self.parent.image_coll is not None:
-                # Get all UIDs from the collection using the property
-                all_uids = self.parent.image_coll.get_uids
-                self.print_terminal(f"image_coll has {len(all_uids)} entities (UIDs)")
-                
-                for uid in all_uids:
-                    topology = self.parent.image_coll.get_uid_topology(uid)
-                    name = self.parent.image_coll.get_uid_name(uid)
-                    self.print_terminal(f"  Entity: {name}, topology: {topology}, uid: {uid}")
-                    
-                    if topology == 'Seismics':
-                        candidates.append((name, uid))
-                        self.print_terminal(f"  -> Found Seismics: {name} ({uid})")
-                        
-                self.print_terminal(f"Total Seismics found: {len(candidates)}")
-            else:
-                self.print_terminal("No image_coll found on parent!")
+            candidates = self._iter_interpretation_source_candidates()
+            self.print_terminal(f"Total interpretation sources found: {len(candidates)}")
         except Exception as e:
-            self.print_terminal(f"Error getting seismic volumes: {e}")
-            self.print_terminal(traceback_format_exc())
+            self.print_terminal(f"Error getting interpretation sources: {e}")
+            import traceback
+
+            self.print_terminal(traceback.format_exc())
                     
         for name, uid in candidates:
             self.combo_volume.addItem(name, uid)
-            
-        self.combo_volume.blockSignals(False)
-        
+
         if self.combo_volume.count() > 0:
             # Try to restore previous selection, otherwise select first
-            restored = False
-            if previous_uid:
+            selected_index = 0
+            if previous_selection[1]:
                 for i in range(self.combo_volume.count()):
-                    if self.combo_volume.itemData(i) == previous_uid:
-                        self.combo_volume.setCurrentIndex(i)
-                        restored = True
+                    item_data = self.combo_volume.itemData(i)
+                    item_key = None
+                    if isinstance(item_data, tuple) and len(item_data) >= 2:
+                        item_key = (item_data[0], item_data[1])
+                    else:
+                        item_key = ("image_coll", item_data)
+                    if item_key == previous_selection:
+                        selected_index = i
                         break
-            
-            if not restored:
-                self.combo_volume.setCurrentIndex(0)
-            
-            self.current_seismic_uid = self.combo_volume.currentData()
-            self.print_terminal(f"Selected volume UID: {self.current_seismic_uid}")
-            self.update_slice_limits()
-            self.update_camera_orientation()
-            self.update_slice()
+
+            self.combo_volume.setCurrentIndex(selected_index)
+            self._apply_source_selection(self.combo_volume.currentData())
+            self.combo_volume.blockSignals(False)
+            self.print_terminal(f"Selected source UID: {self.current_seismic_uid}")
+            should_reload = (
+                force_reload
+                or previous_selection
+                != (self.current_source_collection_name, self.current_seismic_uid)
+                or not hasattr(self, "_cached_seismic_uid")
+                or self._cached_seismic_uid != self.current_seismic_uid
+            )
+            if should_reload:
+                self.on_volume_changed(selected_index)
+            else:
+                self.update_slice_limits()
+                self.update_camera_orientation()
+                self.update_slice()
         else:
+            self.combo_volume.blockSignals(False)
             self.current_seismic_uid = None
-            self.print_terminal("No seismic volumes found in image_coll!")
+            self.current_source_collection_name = None
+            self.current_source_topology = None
+            self.print_terminal("No interpretation sources found!")
         
     def on_volume_changed(self, index):
         if index < 0:
             return
-        self.current_seismic_uid = self.combo_volume.itemData(index)
+        self._apply_source_selection(self.combo_volume.itemData(index))
         if self.current_seismic_uid:
-            self.print_terminal(f"Volume changed to: {self.combo_volume.currentText()} ({self.current_seismic_uid})")
-            
+            change_started_at = perf_counter()
+            self.print_terminal(
+                f"Source changed to: {self.combo_volume.currentText()} ({self.current_seismic_uid})"
+            )
+
             # Reset indexing on volume change to re-scan for the new volume
+            self._cancel_pending_horizon_scan()
             self._lines_indexed = False
             self.interpretation_lines.clear()
             self.interpretation_lines_by_slice.clear()
             # Also clear multipart horizons tracking when volume changes
             self.multipart_horizons.clear()
             self.multipart_faults.clear()
-            
+
             self._camera_initialized = False  # Reset camera on volume change
             self.scalar_range = None  # Reset scalar range
             # Clear cached seismic data and scalar range when volume changes
-            if hasattr(self, '_cached_seismic'):
+            if hasattr(self, "_cached_seismic"):
                 del self._cached_seismic
-            if hasattr(self, '_cached_scalar_range'):
+            if hasattr(self, "_cached_scalar_range"):
                 del self._cached_scalar_range
-            
+            if hasattr(self, "_cached_scalar_name"):
+                del self._cached_scalar_name
+            if hasattr(self, "_cached_volume_data_3d"):
+                del self._cached_volume_data_3d
+            if hasattr(self, "_cached_volume_data_3d_key"):
+                del self._cached_volume_data_3d_key
+            if hasattr(self, "_cached_affine"):
+                del self._cached_affine
+            if hasattr(self, "_cached_affine_uid"):
+                del self._cached_affine_uid
+
             # Pre-populate the seismic cache BEFORE scanning horizons
             # This is needed because scan_and_index_single_horizon uses _cached_bounds/_cached_dims
             self._populate_seismic_cache()
-            
+
             self.update_slice_limits()
             self.update_camera_orientation()
-            # Scan for existing horizons compatible with this volume
-            self.scan_and_index_existing_horizons()
-            self._suppress_full_multipart_actors()
             self.update_slice()
-        
+            self.print_terminal(
+                f"Initial slice ready in {perf_counter() - change_started_at:.2f}s"
+            )
+            # Interpretation-only indexing is significantly more expensive than the
+            # shared 3D bootstrap. Run it incrementally so the window stays responsive.
+            self.scan_and_index_existing_horizons()
+
     def on_view_type_changed(self, text):
         self.current_axis = text
         self._camera_initialized = False  # Reset camera on axis change
         self.update_slice_limits()
         self.update_camera_orientation()
         self.update_slice()
-        
+
     def on_slider_changed(self, value):
         self.spin_slice.blockSignals(True)
         self.spin_slice.setValue(value)
         self.spin_slice.blockSignals(False)
         self.current_slice_index = value
         self.update_slice()
-        
+
     def on_spin_changed(self, value):
         self.slider_slice.blockSignals(True)
         self.slider_slice.setValue(value)
@@ -617,80 +1058,97 @@ class ViewInterpretation(ViewMap):
         self.current_slice_index = value
         self.update_slice()
 
+    def _get_current_source_vtk(self):
+        """Return the active interpretation source VTK object."""
+        if not self.current_seismic_uid:
+            return None
+
+        collection_name = self.current_source_collection_name or "image_coll"
+        try:
+            collection = getattr(self.parent, collection_name)
+        except Exception:
+            return None
+
+        try:
+            return collection.get_uid_vtk_obj(self.current_seismic_uid)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _get_current_scalar_name(dataset):
+        """Return the preferred scalar name for rendering a source dataset."""
+        if dataset is None:
+            return None
+
+        try:
+            active_name = getattr(dataset, "active_scalars_name", None)
+            if active_name:
+                return active_name
+        except Exception:
+            pass
+
+        try:
+            array_names = list(getattr(dataset, "array_names", []) or [])
+        except Exception:
+            array_names = []
+
+        for preferred_name in ("intensity", "values", "amplitude"):
+            if preferred_name in array_names:
+                return preferred_name
+
+        return array_names[0] if array_names else None
+
     def update_slice_limits(self):
         if not self.current_seismic_uid:
             return
-            
+
         # Get vtk object
-        seismic = self.parent.image_coll.get_uid_vtk_obj(self.current_seismic_uid)
+        seismic = self._get_current_source_vtk()
         if not seismic:
             return
-            
+
         # dimensions are (nx, ny, nz) - use VTK method
-        dims = seismic.GetDimensions()
-        
+        dims = [0, 0, 0]
+        seismic.GetDimensions(dims)
+
         max_idx = 0
-        if self.current_axis == 'Inline': # X-axis usually? or Y? 
+        if self.current_axis == "Inline":  # X-axis usually? or Y?
             # In SegyStandardizer/segy2vtk:
             # Inline is usually associated with segyfile.ilines
             # StructuredGrid dimensions correspond to shape.
             # We need to assume standard orientation or check.
             # Let's assume dims[0] is Inline/X, dims[1] is Crossline/Y, dims[2] is Time/Z
             max_idx = dims[0] - 1
-        elif self.current_axis == 'Crossline':
+        elif self.current_axis == "Crossline":
             max_idx = dims[1] - 1
-        elif self.current_axis == 'Z-slice':
+        elif self.current_axis == "Z-slice":
             max_idx = dims[2] - 1
-            
+
         self.slider_slice.setRange(0, max_idx)
         self.spin_slice.setRange(0, max_idx)
-        
+
         # Reset if out of bounds
         if self.current_slice_index > max_idx:
             self.current_slice_index = max_idx
             self.slider_slice.setValue(max_idx)
-            
+
     def update_camera_orientation(self):
-        """Set camera orthogonal to the slice and fit view."""
-        self.plotter.enable_parallel_projection()
-        self.plotter.enable_image_style()
-
-        # If we have current slice bounds and scale, use the robust helper
-        if hasattr(self, 'current_slice_bounds') and self.current_slice_bounds is not None:
-             scale = [1.0, 1.0, 1.0]
-             if self.plotter.scale is not None:
-                 scale = self.plotter.scale
-
-             # Re-calculate center from bounds?
-             # Slice center might not be stored directly unless we calculated it in `update_slice`.
-             # `update_slice` calculates slice_center.
-             # Ideally update_camera_orientation is called AFTER update_slice logic or relies on stored state.
-             # But usually on_view_type_changed calls update_slice immediately after.
-             # So let's rely on update_slice to set the camera.
-             pass
-
-        # Set initial view orientation (before slice is fully loaded)
-        # Don't call reset_camera() here - let update_camera_to_slice() handle the complete camera setup
-        if self.current_axis == 'Inline':
-            self.plotter.view_yz()
-        elif self.current_axis == 'Crossline':
-            self.plotter.view_xz()
-        elif self.current_axis == 'Z-slice':
-            self.plotter.view_xy()
+        """Restore the survey-plane camera, including after finishing a pick."""
+        self.update_camera_to_slice()
 
     def end_pick(self, pos):
         """Override View2D.end_pick to prevent resetting to default View XY."""
         # Remove the selector observer
-        if hasattr(self.plotter.iren, 'interactor'): # Safety check
+        if hasattr(self.plotter.iren, "interactor"):  # Safety check
             self.plotter.iren.interactor.RemoveObservers("LeftButtonPressEvent")
-        
+
         self.plotter.untrack_click_position(side="right")
         self.plotter.untrack_click_position(side="left")
 
         # Specific to ViewInterpretation: Restore our specific view orientation
         # instead of generic enable_image_style() which enforces view_xy()
         self.update_camera_orientation()
-        
+
         # Closing settings
         self.plotter.reset_key_events()
         self.selected_uids = self.parent.selected_uids
@@ -698,117 +1156,225 @@ class ViewInterpretation(ViewMap):
 
     def _populate_seismic_cache(self):
         """Pre-populate the seismic cache (dimensions, bounds) for horizon scanning.
-        
+
         This should be called before scan_and_index_existing_horizons() to ensure
         the cached bounds and dimensions are available for classifying horizons.
         """
         if not self.current_seismic_uid:
             return
-            
+
         # Check if cache is already valid for this seismic
-        if (hasattr(self, '_cached_seismic') and 
-            hasattr(self, '_cached_seismic_uid') and 
-            self._cached_seismic_uid == self.current_seismic_uid):
+        if (
+            hasattr(self, "_cached_seismic")
+            and hasattr(self, "_cached_seismic_uid")
+            and self._cached_seismic_uid == self.current_seismic_uid
+        ):
             return  # Cache is already valid
-        
+
         try:
-            seismic_vtk = self.parent.image_coll.get_uid_vtk_obj(self.current_seismic_uid)
+            seismic_vtk = self._get_current_source_vtk()
             if not seismic_vtk:
-                self.print_terminal("Could not get seismic VTK object for cache")
+                self.print_terminal(
+                    "Could not get interpretation source VTK object for cache"
+                )
                 return
             self._cached_seismic = pv.wrap(seismic_vtk)
             self._cached_seismic_uid = self.current_seismic_uid
             self._cached_dims = self._cached_seismic.dimensions
             self._cached_bounds = self._cached_seismic.bounds
-            self.print_terminal(f"Pre-cached seismic dims: {self._cached_dims}, bounds: {self._cached_bounds}")
-            
-            # Also cache scalar range for consistent colormap
-            if 'intensity' in self._cached_seismic.array_names:
-                self._cached_scalar_range = self._cached_seismic.get_data_range('intensity')
-            else:
-                self._cached_scalar_range = None
+            self._refresh_cached_scalar_style()
+            self.print_terminal(
+                f"Pre-cached source dims: {self._cached_dims}, bounds: {self._cached_bounds}"
+            )
         except Exception as e:
             self.print_terminal(f"Error pre-populating seismic cache: {e}")
 
+    def _refresh_cached_scalar_style(self):
+        """Refresh cached scalar name/range from the full active seismic volume."""
+        self._cached_scalar_name = self._get_current_scalar_name(self._cached_seismic)
+        if self._cached_scalar_name:
+            settings = get_property_render_settings(
+                parent=self.parent, property_name=self._cached_scalar_name
+            )
+            self._cached_scalar_range = settings.get("clim")
+            if self._cached_scalar_range is None:
+                self._cached_scalar_range = self._cached_seismic.get_data_range(
+                    self._cached_scalar_name
+                )
+        else:
+            self._cached_scalar_range = None
+        if hasattr(self, "_cached_volume_data_3d_key"):
+            del self._cached_volume_data_3d_key
+        if hasattr(self, "_cached_volume_data_3d"):
+            del self._cached_volume_data_3d
+
+    def _get_cached_volume_data_3d(self, cast_dtype=None):
+        """Return the active source scalar reshaped to a 3D numpy volume."""
+        if not hasattr(self, "_cached_seismic") or self._cached_seismic is None:
+            return None, None
+
+        scalar_name = getattr(self, "_cached_scalar_name", None)
+        if not scalar_name:
+            self._refresh_cached_scalar_style()
+            scalar_name = getattr(self, "_cached_scalar_name", None)
+        if not scalar_name:
+            return None, None
+
+        dtype_key = None
+        if cast_dtype is not None:
+            try:
+                dtype_key = np.dtype(cast_dtype).str
+            except Exception:
+                dtype_key = str(cast_dtype)
+        cache_key = (
+            getattr(self, "_cached_seismic_uid", None),
+            scalar_name,
+            tuple(int(v) for v in getattr(self, "_cached_dims", ())),
+            dtype_key,
+        )
+        if (
+            hasattr(self, "_cached_volume_data_3d_key")
+            and self._cached_volume_data_3d_key == cache_key
+            and hasattr(self, "_cached_volume_data_3d")
+        ):
+            return self._cached_volume_data_3d, scalar_name
+
+        dataset = self._cached_seismic
+        raw_values = None
+        for store_name in ("point_data", "cell_data", "field_data"):
+            try:
+                store = getattr(dataset, store_name)
+                if scalar_name in store:
+                    raw_values = np.asarray(store[scalar_name])
+                    break
+            except Exception:
+                continue
+
+        if raw_values is None:
+            return None, scalar_name
+
+        values = np.asarray(raw_values)
+        if values.ndim > 1:
+            if values.shape[-1] == 1:
+                values = values.reshape(-1)
+            else:
+                values = values[..., 0].reshape(-1)
+        else:
+            values = values.reshape(-1)
+
+        if cast_dtype is not None:
+            values = values.astype(cast_dtype, copy=False)
+
+        dims = tuple(int(v) for v in getattr(self, "_cached_dims", ()))
+        if len(dims) != 3 or any(v <= 0 for v in dims):
+            return None, scalar_name
+
+        n_points = int(np.prod(dims, dtype=np.int64))
+        if values.size == n_points:
+            volume = np.reshape(values, dims, order="F")
+        else:
+            cell_dims = tuple(max(v - 1, 1) for v in dims)
+            n_cells = int(np.prod(cell_dims, dtype=np.int64))
+            if values.size == n_cells:
+                volume = np.reshape(values, cell_dims, order="F")
+            else:
+                return None, scalar_name
+
+        self._cached_volume_data_3d_key = cache_key
+        self._cached_volume_data_3d = volume
+        return volume, scalar_name
+
     def update_slice(self):
         if not self.current_seismic_uid:
-            self.print_terminal("No seismic UID selected")
+            self.print_terminal("No interpretation source selected")
             return
-        
+
         # Disable rendering during updates to prevent flickering
         # We'll render once at the very end
         self.plotter.render_window.SetDesiredUpdateRate(0.01)
-        
+
         # Cache the seismic wrapper to avoid repeated wrapping
-        if not hasattr(self, '_cached_seismic') or not hasattr(self, '_cached_seismic_uid') or self._cached_seismic_uid != self.current_seismic_uid:
-            self.print_terminal(f"Caching seismic data for {self.current_seismic_uid}")
-            seismic_vtk = self.parent.image_coll.get_uid_vtk_obj(self.current_seismic_uid)
+        if (
+            not hasattr(self, "_cached_seismic")
+            or not hasattr(self, "_cached_seismic_uid")
+            or self._cached_seismic_uid != self.current_seismic_uid
+        ):
+            self.print_terminal(f"Caching source data for {self.current_seismic_uid}")
+            seismic_vtk = self._get_current_source_vtk()
             if not seismic_vtk:
-                self.print_terminal("Could not get seismic VTK object")
+                self.print_terminal("Could not get interpretation source VTK object")
                 return
             self._cached_seismic = pv.wrap(seismic_vtk)
             self._cached_seismic_uid = self.current_seismic_uid
             self._cached_dims = self._cached_seismic.dimensions
             self._cached_bounds = self._cached_seismic.bounds
-            self.print_terminal(f"Seismic dims: {self._cached_dims}, bounds: {self._cached_bounds}")
-            # Calculate scalar range from the FULL volume for consistent colormap across all slices
-            # Use get_data_range for the full extent (like mesh slicer does in view_3d)
-            if 'intensity' in self._cached_seismic.array_names:
-                self._cached_scalar_range = self._cached_seismic.get_data_range('intensity')
-                self.print_terminal(f"Scalar range (full volume): {self._cached_scalar_range}")
-            else:
-                self._cached_scalar_range = None
-        
+            self._refresh_cached_scalar_style()
+            self.print_terminal(
+                f"Source dims: {self._cached_dims}, bounds: {self._cached_bounds}"
+            )
+            self.print_terminal(
+                f"Scalar range (full volume): {self._cached_scalar_range}"
+            )
+        else:
+            self._refresh_cached_scalar_style()
+
         # Always use the cached scalar range from the full volume to ensure consistent colormap
         # This prevents per-slice rescaling which causes intensity changes when scrolling
-        if not hasattr(self, '_cached_scalar_range'):
+        if not hasattr(self, "_cached_scalar_range"):
             self._cached_scalar_range = None
         self.scalar_range = self._cached_scalar_range
-        
+
         seismic = self._cached_seismic
         dims = self._cached_dims
         bounds = self._cached_bounds
-        
+
         # Hide full volume if displayed
         try:
             if self.current_seismic_uid in self.plotter.renderer.actors:
                 self.plotter.remove_actor(self.current_seismic_uid)
         except:
             pass
-        
+
         slice_actor_name = "seismic_slice_actor"
-            
+
         try:
             # Helper to get coordinate from index
             def get_coord(axis_idx, idx):
-                min_val = bounds[axis_idx*2]
-                max_val = bounds[axis_idx*2+1]
+                min_val = bounds[axis_idx * 2]
+                max_val = bounds[axis_idx * 2 + 1]
                 n_points = dims[axis_idx]
-                if n_points <= 1: return min_val
+                if n_points <= 1:
+                    return min_val
                 return min_val + idx * (max_val - min_val) / (n_points - 1)
 
             # Use extract_subset then convert to surface for proper rendering
             subset = None
-            if self.current_axis == 'Inline':
+            if self.current_axis == "Inline":
                 i = self.current_slice_index
-                subset = seismic.extract_subset([i, i, 0, dims[1]-1, 0, dims[2]-1])
+                subset = seismic.extract_subset([i, i, 0, dims[1] - 1, 0, dims[2] - 1])
                 # Calculate exact slice position from index using original volume grid
-                self.current_slice_position = bounds[0] + i * (bounds[1] - bounds[0]) / max(dims[0] - 1, 1)
-            elif self.current_axis == 'Crossline':
+                self.current_slice_position = bounds[0] + i * (
+                    bounds[1] - bounds[0]
+                ) / max(dims[0] - 1, 1)
+            elif self.current_axis == "Crossline":
                 j = self.current_slice_index
-                subset = seismic.extract_subset([0, dims[0]-1, j, j, 0, dims[2]-1])
+                subset = seismic.extract_subset([0, dims[0] - 1, j, j, 0, dims[2] - 1])
                 # Calculate exact slice position from index using original volume grid
-                self.current_slice_position = bounds[2] + j * (bounds[3] - bounds[2]) / max(dims[1] - 1, 1)
-            elif self.current_axis == 'Z-slice':
+                self.current_slice_position = bounds[2] + j * (
+                    bounds[3] - bounds[2]
+                ) / max(dims[1] - 1, 1)
+            elif self.current_axis == "Z-slice":
                 k = self.current_slice_index
-                subset = seismic.extract_subset([0, dims[0]-1, 0, dims[1]-1, k, k])
+                subset = seismic.extract_subset([0, dims[0] - 1, 0, dims[1] - 1, k, k])
                 # Calculate exact slice position from index using original volume grid
-                self.current_slice_position = bounds[4] + k * (bounds[5] - bounds[4]) / max(dims[2] - 1, 1)
-            
+                self.current_slice_position = bounds[4] + k * (
+                    bounds[5] - bounds[4]
+                ) / max(dims[2] - 1, 1)
+
             if subset is None or subset.n_points == 0:
                 self.print_terminal("Subset is empty!")
                 return
-            
+
             # Convert StructuredGrid to surface for proper 2D rendering
             subset = subset.extract_surface()
 
@@ -825,87 +1391,79 @@ class ViewInterpretation(ViewMap):
                     plane_center, plane_normal, _row_vec, _col_vec, _dims = plane_info
                     self.current_slice_plane_center = plane_center
                     self.current_slice_plane_normal = plane_normal
+                    axis_index = {"Inline": 0, "Crossline": 1, "Z-slice": 2}[self.current_axis]
+                    self.current_slice_position = float(plane_center[axis_index])
                     try:
                         pts = subset.points.astype(np.float64, copy=False)
-                        subset.points = self._project_points_to_plane(pts, plane_center, plane_normal)
+                        subset.points = self._project_points_to_plane(
+                            pts, plane_center, plane_normal
+                        )
                     except Exception:
                         pass
-            
-            self.print_terminal(f"Slice position for {self.current_axis} index {self.current_slice_index}: {self.current_slice_position}")
-            
-            scalars = 'intensity' if 'intensity' in subset.array_names else (subset.array_names[0] if subset.array_names else None)
-            
+            else:
+                self.current_slice_plane_center = None
+                self.current_slice_plane_normal = None
+
+            self.print_terminal(
+                f"Slice position for {self.current_axis} index {self.current_slice_index}: {self.current_slice_position}"
+            )
+
+            scalars = self._get_current_scalar_name(subset)
+
             # Get colormap and scalar range
-            cmap = self.get_seismic_colormap()
-            scalar_range = self.scalar_range if hasattr(self, 'scalar_range') else None
-            
+            cmap = self.get_seismic_colormap(scalars)
+            scalar_range = self.scalar_range if hasattr(self, "scalar_range") else None
+
             # Check if actor exists - update in place for smooth transition
             actor_exists = slice_actor_name in self.plotter.renderer.actors
-            
+
             if actor_exists and self.slice_actor is not None:
                 # Update existing actor's mesh data in-place (smooth, no flicker)
                 self.slice_actor.mapper.SetInputData(subset)
-                self.slice_actor.mapper.SetScalarRange(scalar_range if scalar_range else subset.get_data_range())
+                self.slice_actor.mapper.SetScalarRange(
+                    scalar_range if scalar_range else subset.get_data_range()
+                )
                 self.slice_actor.mapper.Update()
                 self.slice_actor.SetPickable(False)
             else:
                 # First time: add new slice actor
                 self.slice_actor = self.plotter.add_mesh(
-                    subset, 
+                    subset,
                     name=slice_actor_name,
                     scalars=scalars,
                     clim=scalar_range,
-                    cmap=cmap, 
-                    show_scalar_bar=False, 
+                    cmap=cmap,
+                    show_scalar_bar=False,
                     pickable=False,
                     lighting=False,
-                    reset_camera=False
+                    reset_camera=False,
                 )
-            
+
             self.current_slice_bounds = subset.bounds
-            slice_center = subset.center
-            
-            scale = [1.0, 1.0, 1.0]
-            if self.plotter.scale is not None:
-                scale = self.plotter.scale
-            
-            # Apply scale to center for camera positioning
-            scaled_center = [
-                slice_center[0] * scale[0],
-                slice_center[1] * scale[1],
-                slice_center[2] * scale[2]
-            ]
-            
-            # Update camera to fit the slice
-            # Only reset camera on first load, axis change, or if explicitly requested (e.g. on slice move)
-            # The user requested that moving the slicer resets the camera to respect VE and fit the slice.
-            # So we effectively update it every time the slice bounds/position changes significantly or if we want to enforce the lock.
-            
-            # For now, we update it if not initialized OR if we want to force "Fit to View" behavior on slice change
-            # However, forceful reset on every scroll might be annoying if user zoomed in.
-            # User said: "when we are moving the slicer ... the camera doesnt respect the vertical exageration ... like it must repsect it"
-            # And "camera is still not properly position to the whole slice"
-            # This implies we SHOULD match the slice bounds.
-            
-            # Let's do it on every update for now to ensure "locking" behavior as requested ("lock the camera view to the slice").
-            self.update_camera_to_slice(scaled_center, bounds, scale)
-            
+            # Use the survey plane, not the volume's global X/Y bounds.
+            self.update_camera_to_slice()
+
             # Update grid annotations on every slice change to show current slice number
             self.update_grid_annotations()
-            
+
             # Update visibility of interpretation lines for the current slice
             self.update_interpretation_line_visibility()
-            
+
             # Update visibility of multipart horizons (efficient single-entity horizons)
             self.update_all_multipart_horizons_visibility()
-            
+
             # Update visibility of multipart faults
             self.update_all_multipart_faults_visibility()
 
+            # Update wells as slice-projected traces.
+            self.update_all_well_visibility()
 
         except Exception as e:
             self.print_terminal(f"Error updating slice: {e}")
-        
+            import traceback
+
+            self.print_terminal(traceback.format_exc())
+
         # Restore normal update rate and render once at the end
         # This prevents flickering by batching all visual updates
         self.plotter.render_window.SetDesiredUpdateRate(30)
@@ -914,39 +1472,44 @@ class ViewInterpretation(ViewMap):
     def update_grid_annotations(self):
         """Update grid rulers, title, and direction labels based on toggle states."""
         try:
+            seismic_metadata = get_seismic_metadata(self._get_current_source_vtk())
+            domain = seismic_metadata.get("vertical_domain")
+            units = seismic_metadata.get("vertical_units", "unknown units")
+            domain_name = {"twt": "TWT", "owt": "OWT", "depth": "Elevation"}.get(domain, "Z")
+            vertical_title = f"{domain_name} ({units}, positive up)" if domain in ("twt", "owt", "depth") else "Z (domain/units unknown)"
             # 1. Update Grid (Rulers)
             if self.slice_actor:
                 # Check toggle
-                if hasattr(self, 'chk_grid') and self.chk_grid.isChecked():
-                    # Determine labels based on axis
-                    xtitle, ytitle, ztitle = "", "", ""
-                    if self.current_axis == 'Inline':
-                         xtitle = "Crossline"
-                         ytitle = "Depth/Time"
-                    elif self.current_axis == 'Crossline':
-                         xtitle = "Inline"
-                         ytitle = "Depth/Time"
-                    elif self.current_axis == 'Z-slice':
-                         xtitle = "Inline"
-                         ytitle = "Crossline"
+                if hasattr(self, "chk_grid") and self.chk_grid.isChecked():
+                    # VTK bounds rulers use world coordinates, not line numbers.
+                    xy_units = seismic_metadata.get("xy_units", "unknown units")
+                    xtitle, ytitle, ztitle = f"X ({xy_units})", f"Y ({xy_units})", vertical_title
 
                     # Auto-scale large coordinates to keep labels short (e.g. 6.08e8 -> 6.08)
                     bounds = self.slice_actor.bounds
                     scaled_ranges = list(bounds)
-                    
+
                     def get_scale_and_title(min_v, max_v, title):
                         mean_v = (min_v + max_v) / 2.0
                         if abs(mean_v) > 0:
-                            power = math_floor(math_log10(abs(mean_v)))
+                            import math
+
+                            power = math.floor(math.log10(abs(mean_v)))
                             # Only scale if >= 10000 or <= 0.0001
                             if abs(power) >= 4:
                                 scale = 10**power
                                 return scale, f"{title} (x10^{power})"
                         return 1.0, title
 
-                    x_scale, x_title_scaled = get_scale_and_title(bounds[0], bounds[1], xtitle)
-                    y_scale, y_title_scaled = get_scale_and_title(bounds[2], bounds[3], ytitle)
-                    z_scale, z_title_scaled = get_scale_and_title(bounds[4], bounds[5], ztitle)
+                    x_scale, x_title_scaled = get_scale_and_title(
+                        bounds[0], bounds[1], xtitle
+                    )
+                    y_scale, y_title_scaled = get_scale_and_title(
+                        bounds[2], bounds[3], ytitle
+                    )
+                    z_scale, z_title_scaled = get_scale_and_title(
+                        bounds[4], bounds[5], ztitle
+                    )
 
                     scaled_ranges[0] /= x_scale
                     scaled_ranges[1] /= x_scale
@@ -958,8 +1521,8 @@ class ViewInterpretation(ViewMap):
                     self.plotter.show_grid(
                         mesh=self.slice_actor,
                         grid=False,
-                        location='outer',
-                        ticks='both',
+                        location="outer",
+                        ticks="both",
                         show_xaxis=True,
                         show_yaxis=True,
                         show_zaxis=True,
@@ -967,170 +1530,126 @@ class ViewInterpretation(ViewMap):
                         ylabel=y_title_scaled,
                         zlabel=z_title_scaled,
                         font_size=8,
-                        color='white',
+                        color="white",
                         bold=False,
                         n_xlabels=5,
                         n_ylabels=5,
-                        fmt='%.3g',
-                        axes_ranges=scaled_ranges
+                        fmt="%.3g",
+                        axes_ranges=scaled_ranges,
                     )
                 else:
-                    self.plotter.remove_bounds_axes() # Hides grid
+                    self.plotter.remove_bounds_axes()  # Hides grid
 
             # 2. Update Title (Top Center)
             # Remove existing title first
-            if hasattr(self, '_title_actor') and self._title_actor:
+            if hasattr(self, "_title_actor") and self._title_actor:
                 self.plotter.remove_actor(self._title_actor)
                 self._title_actor = None
-            
-            if hasattr(self, 'chk_title') and self.chk_title.isChecked():
+
+            if hasattr(self, "chk_title") and self.chk_title.isChecked():
                 title_text = f"{self.current_axis}: {self.current_slice_index}"
+                source = self._get_current_source_vtk()
+                field_name = {"Inline": "seismic_inline_numbers", "Crossline": "seismic_crossline_numbers"}.get(self.current_axis)
+                if source is not None and field_name:
+                    numbers = source.GetFieldData().GetArray(field_name)
+                    if numbers is not None and self.current_slice_index < numbers.GetNumberOfTuples():
+                        title_text = f"{self.current_axis}: {int(numbers.GetTuple1(self.current_slice_index))}"
+                if self.current_axis == "Z-slice" and source is not None:
+                    dimensions = [0, 0, 0]
+                    source.GetDimensions(dimensions)
+                    point_id = self.current_slice_index * dimensions[0] * dimensions[1]
+                    title_text = f"{vertical_title}: {source.GetPoint(point_id)[2]:g}"
+                elif domain:
+                    title_text += f" · {vertical_title}"
                 self._title_actor = self.plotter.add_text(
-                    title_text, 
-                    position='upper_edge', 
-                    font_size=14, 
-                    color='white',
-                    shadow=True
+                    title_text,
+                    position="upper_edge",
+                    font_size=14,
+                    color="white",
+                    shadow=True,
                 )
-            
+
             # 3. Direction Labels (N/S/E/W)
             # Clear old labels
-            if hasattr(self, '_direction_actors'):
+            if hasattr(self, "_direction_actors"):
                 for actor in self._direction_actors:
                     self.plotter.remove_actor(actor)
             self._direction_actors = []
-            
-            if hasattr(self, 'chk_dirs') and self.chk_dirs.isChecked():
-                # Logic for labels
+
+            if hasattr(self, "chk_dirs") and self.chk_dirs.isChecked():
                 left_label, right_label = "", ""
-                if self.current_axis == 'Inline':
-                    left_label = "S"
-                    right_label = "N"
-                elif self.current_axis == 'Crossline':
-                    left_label = "W"
-                    right_label = "E"
-                 
+                if self.current_axis in ("Inline", "Crossline"):
+                    right, _up = self._current_camera_label_basis()
+                    right = right / np.asarray(self.plotter.scale)
+                    bearing = np.degrees(np.arctan2(right[0], right[1])) % 360
+                    directions = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+                    direction_index = int(np.floor((bearing + 22.5) / 45)) % 8
+                    right_label = directions[direction_index]
+                    left_label = directions[(direction_index + 4) % 8]
+
                 if left_label and right_label:
-                    act_l = self.plotter.add_text(left_label, position='upper_left', font_size=16, color='yellow')
-                    act_r = self.plotter.add_text(right_label, position='upper_right', font_size=16, color='yellow')
+                    act_l = self.plotter.add_text(
+                        left_label, position="upper_left", font_size=16, color="yellow"
+                    )
+                    act_r = self.plotter.add_text(
+                        right_label,
+                        position="upper_right",
+                        font_size=16,
+                        color="yellow",
+                    )
                     self._direction_actors.extend([act_l, act_r])
 
         except Exception as e:
-             self.print_terminal(f"Error updating annotations: {e}")
+            self.print_terminal(f"Error updating annotations: {e}")
 
+    def update_camera_to_slice(self):
+        """Face and fit the actual survey slice with actor scaling applied."""
+        from ..helpers.seismic_coordinates import slice_camera_frame
 
-    def update_camera_to_slice(self, center, bounds, scale):
-        """
-        Enforce a 2D-like view locked to the current axis, fitted to the slice bounds,
-        respecting Vertical Exaggeration.
-        """
-        # Lock rotation by using Image style (Left=Pan, Right=Zoom)
+        if not getattr(self, "current_seismic_uid", None):
+            return
+        plane = self._get_slice_plane_from_affine(self.current_slice_index)
+        if plane is None:
+            return
+        center, _normal, row_vec, col_vec, dims = plane
+        row_axis, col_axis = self._slice_parameter_axes(self.current_axis)
+        row_span = row_vec * float(self._axis_parameter(row_axis, dims[row_axis] - 1))
+        col_span = col_vec * float(self._axis_parameter(col_axis, dims[col_axis] - 1))
+        # Vertical sections keep physical elevation increasing upwards, including
+        # legacy grids whose sample order runs from top to bottom.
+        if self.current_axis != "Z-slice" and col_span[2] < 0:
+            col_span = -col_span
+        win_w, win_h = self.plotter.window_size
+        vx0, vy0, vx1, vy1 = self.plotter.renderer.GetViewport()
+        aspect = max(win_w * (vx1 - vx0), 1) / max(win_h * (vy1 - vy0), 1)
+        frame = slice_camera_frame(
+            center, row_span, col_span, self.plotter.scale, aspect,
+            north_up=self.current_axis == "Z-slice",
+        )
+
         self.plotter.enable_image_style()
         self.plotter.enable_parallel_projection()
-
-        # Get camera reference - we'll set orientation manually without calling view methods
-        # to avoid the automatic reset_camera() that view_xy/xz/yz trigger
+        # Keep image-style interactions in the same frame as the displayed slice.
+        self.plotter.iren.style.SetImageOrientation(frame["right"], frame["view_up"])
         camera = self.plotter.camera
-
-        # Calculate fitting dimensions with Scale (VE) applied
-        # bounds is [xmin, xmax, ymin, ymax, zmin, zmax] (unscaled)
-        # scale is [sx, sy, sz]
-
-        # Determine width/height of the slice in WORLD (scaled) units
-        width = 0.0
-        height = 0.0
-
-        if self.current_axis == 'Inline':
-            # YZ plane - camera looks along +X axis (from negative X towards positive X)
-            width = abs(bounds[3] - bounds[2]) * scale[1]
-            height = abs(bounds[5] - bounds[4]) * scale[2]
-
-            # Position camera on NEGATIVE X side looking towards POSITIVE X (front view)
-            camera.position = (center[0] - max(width, height) * 2, center[1], center[2])
-            camera.focal_point = center
-            camera.view_up = (0, 0, 1)
-            
-        elif self.current_axis == 'Crossline':
-            # XZ plane - camera looks along +Y axis (from negative Y towards positive Y)
-            width = abs(bounds[1] - bounds[0]) * scale[0]
-            height = abs(bounds[5] - bounds[4]) * scale[2]
-            
-            # Position camera on NEGATIVE Y side looking towards POSITIVE Y (front view)
-            camera.position = (center[0], center[1] - max(width, height) * 2, center[2])
-            camera.focal_point = center
-            camera.view_up = (0, 0, 1)
-            
-        elif self.current_axis == 'Z-slice':
-            # XY plane
-            width = abs(bounds[1] - bounds[0]) * scale[0]
-            height = abs(bounds[3] - bounds[2]) * scale[1]
-            
-            # Position: Look down Z axis
-            camera.position = (center[0], center[1], center[2] + max(width, height) * 2)
-            camera.focal_point = center
-            camera.view_up = (0, 1, 0)
-            
-        # Refine Parallel Scale to FIT WHOLE SLICE
-        # parallel_scale is half the viewport height in world units.
-        # We need to consider the viewport aspect ratio.
-        
-        try:
-            # window_size is (width, height)
-            win_w, win_h = self.plotter.window_size
-            if win_h > 0:
-                view_aspect = win_w / win_h
-            else:
-                view_aspect = 1.0
-        except:
-            view_aspect = 1.0
-            
-        # Slice aspect ratio
-        slice_aspect = width / height if height > 0 else 1.0
-        
-        # If slice is "wider" than the view (relative to aspect), we fit to WIDTH
-        if slice_aspect > view_aspect:
-            # Fit width: 
-            # The view width must be at least 'width'.
-            # view_width = width
-            # view_height = view_width / view_aspect
-            # parallel_scale = view_height / 2
-            desired_height = width / view_aspect
-            padding = 1.05 # 5% padding
-            camera.parallel_scale = (desired_height / 2) * padding
-        else:
-            # Fit height:
-            # The view height must be at least 'height'
-            padding = 1.05
-            camera.parallel_scale = (height / 2) * padding
-            
+        camera.position = frame["position"]
+        camera.focal_point = frame["focal_point"]
+        camera.up = frame["view_up"]
+        camera.parallel_scale = frame["parallel_scale"]
         self.plotter.reset_camera_clipping_range()
         self._camera_initialized = True
-                    
 
-    
-    def get_seismic_colormap(self):
-        """Get the colormap for 'intensity' property from the legend manager, or default to gray."""
-        try:
-            if hasattr(self.parent, 'prop_legend_df') and self.parent.prop_legend_df is not None:
-                # Look for 'intensity' property colormap
-                row = self.parent.prop_legend_df[self.parent.prop_legend_df['property_name'] == 'intensity']
-                if not row.empty:
-                    return row['colormap'].iloc[0]
-        except:
-            pass
-        return 'gray'  # Default
-
-    def _get_geol_legend_color(self, uid, default=(1.0, 1.0, 1.0)):
-        """Return normalized RGB color for a geological entity from the legend table."""
-        try:
-            legend = self.parent.geol_coll.get_uid_legend(uid=uid)
-            return (
-                legend["color_R"] / 255.0,
-                legend["color_G"] / 255.0,
-                legend["color_B"] / 255.0,
-            )
-        except Exception:
-            return default
+    def get_seismic_colormap(self, property_name=None):
+        """Get the colormap for the active scalar property from the legend manager."""
+        property_name = (
+            property_name or getattr(self, "_cached_scalar_name", None) or "intensity"
+        )
+        settings = get_property_render_settings(
+            parent=self.parent, property_name=property_name
+        )
+        if settings.get("cmap"):
+            return settings["cmap"]
+        return "gray"  # Default
 
     def _sanitize_legend_value(self, value, fallback="undef"):
         """Normalize legend metadata values so they are always usable strings."""
@@ -1179,7 +1698,14 @@ class ViewInterpretation(ViewMap):
         """Attach the active seismic uid as parent metadata for generated interpretation entities."""
         if entity_dict is None:
             return
-        entity_dict["parent_uid"] = str(self.current_seismic_uid) if self.current_seismic_uid else ""
+        entity_dict["parent_uid"] = (
+            str(self.current_seismic_uid) if self.current_seismic_uid else ""
+        )
+        vtk_object = entity_dict.get("vtk_obj")
+        if vtk_object is not None:
+            metadata = get_seismic_metadata(self._get_current_source_vtk())
+            if metadata:
+                set_seismic_metadata(vtk_object, metadata)
 
     def _get_entity_parent_seismic_uid(self, uid):
         """Resolve the seismic parent uid stored on an interpretation entity."""
@@ -1202,6 +1728,51 @@ class ViewInterpretation(ViewMap):
                 return True
         return False
 
+    def _store_interpretation_kind_metadata(self, vtk_obj=None, kind=None):
+        """Persist a lightweight interpretation kind marker on generated polylines."""
+        if vtk_obj is None or not kind:
+            return
+        try:
+            from vtk import vtkStringArray
+
+            field_data = vtk_obj.GetFieldData()
+            if field_data is None:
+                return
+            kind_arr = vtkStringArray()
+            kind_arr.SetName("interpretation_kind")
+            kind_arr.SetNumberOfValues(1)
+            kind_arr.SetValue(0, str(kind))
+            if field_data.HasArray("interpretation_kind"):
+                field_data.RemoveArray("interpretation_kind")
+            field_data.AddArray(kind_arr)
+            vtk_obj.Modified()
+        except Exception:
+            pass
+
+    def _extract_interpretation_kind_metadata(self, uid=None, vtk_obj=None):
+        """Read the interpretation kind marker stored on generated polylines."""
+        if vtk_obj is None and uid is not None:
+            try:
+                vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            except Exception:
+                vtk_obj = None
+        if vtk_obj is None:
+            return None
+
+        try:
+            field_data = vtk_obj.GetFieldData()
+            if field_data is None or not field_data.HasArray("interpretation_kind"):
+                return None
+            kind_array = field_data.GetAbstractArray("interpretation_kind")
+            if kind_array is None or kind_array.GetNumberOfValues() <= 0:
+                return None
+            value = kind_array.GetValue(0)
+            if isinstance(value, str) and value.strip():
+                return value.strip().lower()
+        except Exception:
+            pass
+        return None
+
     def _register_multipart_interpretation_entity(
         self, uid, axis, slice_indices, slice_to_cell_index
     ):
@@ -1212,11 +1783,11 @@ class ViewInterpretation(ViewMap):
             self.multipart_faults = {}
 
         metadata = {
-            'seismic_uid': self._get_entity_parent_seismic_uid(uid),
-            'axis': axis,
-            'slice_indices': list(slice_indices),
-            'slice_to_cell_index': dict(slice_to_cell_index),
-            'seed_slice': slice_indices[0] if slice_indices else 0,
+            "seismic_uid": self._get_entity_parent_seismic_uid(uid),
+            "axis": axis,
+            "slice_indices": list(slice_indices),
+            "slice_to_cell_index": dict(slice_to_cell_index),
+            "seed_slice": slice_indices[0] if slice_indices else 0,
         }
 
         if self._is_fault_interpretation_entity(uid):
@@ -1236,6 +1807,7 @@ class ViewInterpretation(ViewMap):
             vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
             if vtk_obj is None:
                 return
+            from vtk import vtkIntArray, vtkStringArray
 
             field_data = vtk_obj.GetFieldData()
             if field_data is None:
@@ -1252,7 +1824,9 @@ class ViewInterpretation(ViewMap):
             slice_arr = vtkIntArray()
             slice_arr.SetName("single_slice_index")
             slice_arr.SetNumberOfComponents(1)
-            slice_arr.InsertNextValue(int(slice_info.get("slice_index", self.current_slice_index)))
+            slice_arr.InsertNextValue(
+                int(slice_info.get("slice_index", self.current_slice_index))
+            )
             if field_data.HasArray("single_slice_index"):
                 field_data.RemoveArray("single_slice_index")
             field_data.AddArray(slice_arr)
@@ -1274,12 +1848,19 @@ class ViewInterpretation(ViewMap):
             field_data = vtk_obj.GetFieldData()
             if field_data is None:
                 return None
-            if not (field_data.HasArray("single_slice_axis") and field_data.HasArray("single_slice_index")):
+            if not (
+                field_data.HasArray("single_slice_axis")
+                and field_data.HasArray("single_slice_index")
+            ):
                 return None
 
             axis_array = field_data.GetAbstractArray("single_slice_axis")
             slice_array = field_data.GetArray("single_slice_index")
-            if axis_array is None or slice_array is None or slice_array.GetNumberOfTuples() <= 0:
+            if (
+                axis_array is None
+                or slice_array is None
+                or slice_array.GetNumberOfTuples() <= 0
+            ):
                 return None
 
             axis = axis_array.GetValue(0)
@@ -1318,16 +1899,34 @@ class ViewInterpretation(ViewMap):
             cell_data = vtk_obj.GetCellData()
             if cell_data and cell_data.HasArray("slice_index"):
                 arr = cell_data.GetArray("slice_index")
-                for i in range(arr.GetNumberOfTuples()):
-                    v = int(arr.GetValue(i))
-                    if v >= 0:
-                        out.append(v)
-            elif vtk_obj.GetPointData() and vtk_obj.GetPointData().HasArray("slice_index"):
+                try:
+                    from vtkmodules.util.numpy_support import vtk_to_numpy
+
+                    values = vtk_to_numpy(arr).astype(np.int32, copy=False)
+                    values = values[values >= 0]
+                    if values.size:
+                        return np.unique(values).astype(int).tolist()
+                except Exception:
+                    for i in range(arr.GetNumberOfTuples()):
+                        v = int(arr.GetValue(i))
+                        if v >= 0:
+                            out.append(v)
+            elif vtk_obj.GetPointData() and vtk_obj.GetPointData().HasArray(
+                "slice_index"
+            ):
                 arr = vtk_obj.GetPointData().GetArray("slice_index")
-                for i in range(arr.GetNumberOfTuples()):
-                    v = int(arr.GetValue(i))
-                    if v >= 0:
-                        out.append(v)
+                try:
+                    from vtkmodules.util.numpy_support import vtk_to_numpy
+
+                    values = vtk_to_numpy(arr).astype(np.int32, copy=False)
+                    values = values[values >= 0]
+                    if values.size:
+                        return np.unique(values).astype(int).tolist()
+                except Exception:
+                    for i in range(arr.GetNumberOfTuples()):
+                        v = int(arr.GetValue(i))
+                        if v >= 0:
+                            out.append(v)
         except Exception:
             return []
         return sorted(set(out))
@@ -1343,18 +1942,35 @@ class ViewInterpretation(ViewMap):
             source = point_data.GetArray("slice_index")
             if source is None:
                 return
-            alias = vtkIntArray()
-            alias.SetName(prop_name)
-            alias.SetNumberOfComponents(1)
-            for i in range(source.GetNumberOfTuples()):
-                alias.InsertNextValue(int(source.GetValue(i)))
+            try:
+                from vtkmodules.util.numpy_support import numpy_to_vtk, vtk_to_numpy
+
+                alias = numpy_to_vtk(
+                    vtk_to_numpy(source).astype(np.int32, copy=False), deep=True
+                )
+                alias.SetName(prop_name)
+            except Exception:
+                from vtk import vtkIntArray
+
+                alias = vtkIntArray()
+                alias.SetName(prop_name)
+                alias.SetNumberOfComponents(1)
+                for i in range(source.GetNumberOfTuples()):
+                    alias.InsertNextValue(int(source.GetValue(i)))
             if point_data.HasArray(prop_name):
                 point_data.RemoveArray(prop_name)
             point_data.AddArray(alias)
         except Exception:
             pass
 
-    def _ensure_slice_index_property_metadata(self, entity_dict=None, uid=None, vtk_obj=None, slice_indices=None):
+    def _ensure_slice_index_property_metadata(
+        self,
+        entity_dict=None,
+        uid=None,
+        vtk_obj=None,
+        slice_indices=None,
+        emit_updates=True,
+    ):
         """
         Ensure `slice_index` appears in properties metadata when the geometry carries
         a point/cell `slice_index` array.
@@ -1374,7 +1990,9 @@ class ViewInterpretation(ViewMap):
             keep_names = []
             keep_comps = []
             for i, name in enumerate(prop_names):
-                if name == "slice_index" or (isinstance(name, str) and name.startswith("slices_")):
+                if name == "slice_index" or (
+                    isinstance(name, str) and name.startswith("slices_")
+                ):
                     continue
                 keep_names.append(name)
                 keep_comps.append(prop_comps[i] if i < len(prop_comps) else 1)
@@ -1390,8 +2008,12 @@ class ViewInterpretation(ViewMap):
 
         if uid is not None:
             try:
-                prop_names = list(self.parent.geol_coll.get_uid_properties_names(uid) or [])
-                prop_comps = list(self.parent.geol_coll.get_uid_properties_components(uid) or [])
+                prop_names = list(
+                    self.parent.geol_coll.get_uid_properties_names(uid) or []
+                )
+                prop_comps = list(
+                    self.parent.geol_coll.get_uid_properties_components(uid) or []
+                )
             except Exception:
                 return False
             while len(prop_comps) < len(prop_names):
@@ -1399,7 +2021,9 @@ class ViewInterpretation(ViewMap):
             keep_names = []
             keep_comps = []
             for i, name in enumerate(prop_names):
-                if name == "slice_index" or (isinstance(name, str) and name.startswith("slices_")):
+                if name == "slice_index" or (
+                    isinstance(name, str) and name.startswith("slices_")
+                ):
                     continue
                 keep_names.append(name)
                 keep_comps.append(prop_comps[i] if i < len(prop_comps) else 1)
@@ -1409,16 +2033,67 @@ class ViewInterpretation(ViewMap):
                 return False
             prop_names.append(prop_name)
             prop_comps.append(1)
-            self.parent.geol_coll.set_uid_properties_names(uid=uid, properties_names=prop_names)
-            self.parent.geol_coll.set_uid_properties_components(uid=uid, properties_components=prop_comps)
-            try:
-                self.parent.signals.data_keys_added.emit([uid], self.parent.geol_coll)
-            except Exception:
-                pass
-            self._refresh_properties_legend()
+            self.parent.geol_coll.set_uid_properties_names(
+                uid=uid, properties_names=prop_names
+            )
+            self.parent.geol_coll.set_uid_properties_components(
+                uid=uid, properties_components=prop_comps
+            )
+            if emit_updates:
+                try:
+                    self.parent.signals.data_keys_added.emit([uid], self.parent.geol_coll)
+                except Exception:
+                    pass
+                self._refresh_properties_legend()
             return True
 
         return False
+
+    def _extract_polyline_cells_numpy(self, vtk_obj=None):
+        """Return point coordinates and per-cell point ids for a PolyLine-like dataset."""
+        if vtk_obj is None or vtk_obj.GetNumberOfCells() <= 0 or vtk_obj.GetNumberOfPoints() <= 0:
+            return None, None, None
+
+        try:
+            from vtkmodules.util.numpy_support import vtk_to_numpy
+
+            vtk_points = vtk_obj.GetPoints()
+            if vtk_points is None or vtk_points.GetData() is None:
+                return None, None, None
+            points = vtk_to_numpy(vtk_points.GetData()).reshape(-1, 3)
+
+            cell_container = None
+            if hasattr(vtk_obj, "GetLines"):
+                lines = vtk_obj.GetLines()
+                if lines is not None and lines.GetNumberOfCells() > 0 and lines.GetData() is not None:
+                    cell_container = lines
+            if cell_container is None and hasattr(vtk_obj, "GetPolys"):
+                polys = vtk_obj.GetPolys()
+                if polys is not None and polys.GetNumberOfCells() > 0 and polys.GetData() is not None:
+                    cell_container = polys
+            if cell_container is None:
+                return points, None, None
+
+            flat = vtk_to_numpy(cell_container.GetData()).astype(np.int64, copy=False)
+            if flat.size == 0:
+                return points, None, None
+
+            starts = []
+            sizes = []
+            cursor = 0
+            flat_size = int(flat.size)
+            while cursor < flat_size:
+                cell_size = int(flat[cursor])
+                next_cursor = cursor + cell_size + 1
+                if cell_size <= 0 or next_cursor > flat_size:
+                    return points, None, None
+                starts.append(cursor + 1)
+                sizes.append(cell_size)
+                cursor = next_cursor
+
+            return points, flat, (np.asarray(starts, dtype=np.int64), np.asarray(sizes, dtype=np.int64))
+        except Exception:
+            return None, None, None
 
     def _get_visible_line_actor_for_uid(self, uid=None):
         """Return the currently visible actor used to display a line uid in this view."""
@@ -1528,7 +2203,9 @@ class ViewInterpretation(ViewMap):
             array_name = source_array.GetName() or ""
             if array_name in skip_names:
                 continue
-            if array_name and any(array_name.startswith(prefix) for prefix in skip_prefixes):
+            if array_name and any(
+                array_name.startswith(prefix) for prefix in skip_prefixes
+            ):
                 continue
 
             target_array = source_array.NewInstance()
@@ -1541,9 +2218,15 @@ class ViewInterpretation(ViewMap):
         """Append one tuple to each target numeric array."""
         for source_array, target_array in builders or []:
             tuple_idx = None
-            if source_idx is not None and 0 <= source_idx < source_array.GetNumberOfTuples():
+            if (
+                source_idx is not None
+                and 0 <= source_idx < source_array.GetNumberOfTuples()
+            ):
                 tuple_idx = source_idx
-            elif default_idx is not None and 0 <= default_idx < source_array.GetNumberOfTuples():
+            elif (
+                default_idx is not None
+                and 0 <= default_idx < source_array.GetNumberOfTuples()
+            ):
                 tuple_idx = default_idx
 
             if tuple_idx is None:
@@ -1585,17 +2268,19 @@ class ViewInterpretation(ViewMap):
         if affine is not None:
             origin, a0, a1, a2, _dims = affine
             if axis == "Inline":
-                base = origin + int(slice_idx) * a0
+                base = origin + self._axis_parameter(0, int(slice_idx)) * a0
                 basis = np.column_stack([a1, a2])
             elif axis == "Crossline":
-                base = origin + int(slice_idx) * a1
+                base = origin + self._axis_parameter(1, int(slice_idx)) * a1
                 basis = np.column_stack([a0, a2])
             else:
-                base = origin + int(slice_idx) * a2
+                base = origin + self._axis_parameter(2, int(slice_idx)) * a2
                 basis = np.column_stack([a0, a1])
             try:
                 uv, *_ = np.linalg.lstsq(basis, (pts - base).T, rcond=None)
-                return np.asarray(uv.T, dtype=float)
+                row_axis, col_axis = self._slice_parameter_axes(axis)
+                return np.column_stack((self._axis_parameter(row_axis, uv[0], inverse=True),
+                                        self._axis_parameter(col_axis, uv[1], inverse=True)))
             except Exception:
                 return None
 
@@ -1646,17 +2331,20 @@ class ViewInterpretation(ViewMap):
         if affine is not None:
             origin, a0, a1, a2, _dims = affine
             if axis == "Inline":
-                base = origin + int(slice_idx) * a0
+                base = origin + self._axis_parameter(0, int(slice_idx)) * a0
                 basis_row = a1
                 basis_col = a2
             elif axis == "Crossline":
-                base = origin + int(slice_idx) * a1
+                base = origin + self._axis_parameter(1, int(slice_idx)) * a1
                 basis_row = a0
                 basis_col = a2
             else:
-                base = origin + int(slice_idx) * a2
+                base = origin + self._axis_parameter(2, int(slice_idx)) * a2
                 basis_row = a0
                 basis_col = a1
+            row_axis, col_axis = self._slice_parameter_axes(axis)
+            uv = np.column_stack((self._axis_parameter(row_axis, uv[:, 0]),
+                                  self._axis_parameter(col_axis, uv[:, 1])))
             pts = (
                 base[None, :]
                 + uv[:, 0:1] * basis_row[None, :]
@@ -1698,6 +2386,1004 @@ class ViewInterpretation(ViewMap):
             pts[:, 1] = bounds[2] + uv[:, 1] * spacing[1]
             pts[:, 2] = target_coord
         return pts
+
+    def _get_slice_as_2d_array_for_index(self, slice_idx=None, axis=None):
+        """Extract a seismic slice by index without changing the visible slice state."""
+        if not hasattr(self, "_cached_seismic") or self._cached_seismic is None:
+            return None, None, None, None
+
+        dims = getattr(self, "_cached_dims", None)
+        bounds = getattr(self, "_cached_bounds", None)
+        if dims is None or bounds is None:
+            return None, None, None, None
+
+        data_3d, _scalar_name = self._get_cached_volume_data_3d()
+        if data_3d is None:
+            return None, None, None, None
+
+        axis = axis or self.current_axis
+        spacing = [
+            (bounds[1] - bounds[0]) / max(int(dims[0]) - 1, 1),
+            (bounds[3] - bounds[2]) / max(int(dims[1]) - 1, 1),
+            (bounds[5] - bounds[4]) / max(int(dims[2]) - 1, 1),
+        ]
+        axis_info = {
+            "axis": axis,
+            "slice_index": int(slice_idx),
+            "bounds": bounds,
+            "dims": dims,
+            "spacing": spacing,
+            "affine": self._get_seismic_axis_vectors(),
+        }
+
+        if axis == "Inline":
+            idx = int(np.clip(int(slice_idx), 0, int(dims[0]) - 1))
+            data_2d = data_3d[idx, :, :]
+            origin = (bounds[0] + idx * spacing[0], bounds[2], bounds[4])
+            axis_info["plane"] = "YZ"
+            axis_info["row_axis"] = "Y"
+            axis_info["col_axis"] = "Z"
+        elif axis == "Crossline":
+            idx = int(np.clip(int(slice_idx), 0, int(dims[1]) - 1))
+            data_2d = data_3d[:, idx, :]
+            origin = (bounds[0], bounds[2] + idx * spacing[1], bounds[4])
+            axis_info["plane"] = "XZ"
+            axis_info["row_axis"] = "X"
+            axis_info["col_axis"] = "Z"
+        else:
+            idx = int(np.clip(int(slice_idx), 0, int(dims[2]) - 1))
+            data_2d = data_3d[:, :, idx]
+            origin = (bounds[0], bounds[2], bounds[4] + idx * spacing[2])
+            axis_info["plane"] = "XY"
+            axis_info["row_axis"] = "X"
+            axis_info["col_axis"] = "Y"
+
+        return data_2d, origin, spacing, axis_info
+
+    def _get_multipart_slice_points(
+        self, vtk_obj=None, slice_idx=None, slice_to_cell_index=None
+    ):
+        """Return the line points for one slice cell of a multipart interpretation."""
+        if vtk_obj is None or slice_idx is None:
+            return None
+
+        cell_data = vtk_obj.GetCellData()
+        if cell_data is None or not cell_data.HasArray("slice_index"):
+            return None
+
+        slice_idx = int(slice_idx)
+        slice_array = cell_data.GetArray("slice_index")
+        preferred_cell_id = None
+        try:
+            if slice_to_cell_index and slice_idx in slice_to_cell_index:
+                preferred_cell_id = int(slice_to_cell_index[slice_idx])
+        except Exception:
+            preferred_cell_id = None
+
+        cell_ids = []
+        if preferred_cell_id is not None:
+            cell_ids.append(preferred_cell_id)
+        for cell_id in range(vtk_obj.GetNumberOfCells()):
+            if cell_id == preferred_cell_id:
+                continue
+            try:
+                if int(slice_array.GetValue(cell_id)) == slice_idx:
+                    cell_ids.append(cell_id)
+            except Exception:
+                continue
+
+        best_points = None
+        best_count = 0
+        for cell_id in cell_ids:
+            try:
+                if cell_id < 0 or cell_id >= vtk_obj.GetNumberOfCells():
+                    continue
+                cell = vtk_obj.GetCell(cell_id)
+                if cell is None:
+                    continue
+                n_pts = cell.GetNumberOfPoints()
+                if n_pts < 2:
+                    continue
+                points = np.asarray(
+                    [vtk_obj.GetPoint(cell.GetPointId(i)) for i in range(n_pts)],
+                    dtype=float,
+                )
+                if preferred_cell_id is not None and cell_id == preferred_cell_id:
+                    return points
+                if n_pts > best_count:
+                    best_points = points
+                    best_count = n_pts
+            except Exception:
+                continue
+
+        return best_points
+
+    def _dedupe_consecutive_points(self, points=None, tolerance=1.0e-9):
+        """Remove consecutive duplicate vertices while preserving polyline order."""
+        if points is None:
+            return None
+        pts = np.asarray(points, dtype=float)
+        if pts.ndim != 2 or pts.shape[0] == 0:
+            return pts
+        if pts.shape[0] == 1:
+            return pts
+
+        distances = np.linalg.norm(np.diff(pts, axis=0), axis=1)
+        keep = np.concatenate([[True], distances > float(tolerance)])
+        cleaned = pts[keep]
+        return cleaned if cleaned.shape[0] >= 2 else pts[: min(pts.shape[0], 2)]
+
+    def _dedupe_consecutive_uv(self, coords=None, tolerance=1.0e-8):
+        """Remove consecutive duplicate 2D slice coordinates."""
+        if coords is None:
+            return None
+        uv = np.asarray(coords, dtype=float)
+        if uv.ndim != 2 or uv.shape[1] != 2:
+            return None
+        if uv.shape[0] <= 1:
+            return uv
+        distances = np.linalg.norm(np.diff(uv, axis=0), axis=1)
+        keep = np.concatenate([[True], distances > float(tolerance)])
+        cleaned = uv[keep]
+        return cleaned if cleaned.shape[0] >= 2 else uv[: min(uv.shape[0], 2)]
+
+    def _uv_coords_changed(self, coords_a=None, coords_b=None, tolerance=1.0e-8):
+        """Return True when two 2D line coordinate arrays differ."""
+        if coords_a is None or coords_b is None:
+            return True
+        a = np.asarray(coords_a, dtype=float)
+        b = np.asarray(coords_b, dtype=float)
+        if a.shape != b.shape:
+            return True
+        if a.size == 0 and b.size == 0:
+            return False
+        return bool(np.linalg.norm(a - b) > float(tolerance))
+
+    def _extract_intersection_uv_points(self, geometry=None):
+        """Extract representative 2D points from a Shapely intersection geometry."""
+        if geometry is None or geometry.is_empty:
+            return []
+        gtype = geometry.geom_type
+        if gtype == "Point":
+            return [np.asarray(geometry.coords[0], dtype=float)]
+        if gtype == "MultiPoint":
+            return [np.asarray(point.coords[0], dtype=float) for point in geometry.geoms]
+        if gtype in ("LineString", "LinearRing"):
+            coords = list(geometry.coords)
+            return [
+                np.asarray(coords[0], dtype=float),
+                np.asarray(coords[-1], dtype=float),
+            ]
+        if gtype == "MultiLineString":
+            points = []
+            for line in geometry.geoms:
+                coords = list(line.coords)
+                if coords:
+                    points.append(np.asarray(coords[0], dtype=float))
+                    points.append(np.asarray(coords[-1], dtype=float))
+            return points
+        if hasattr(geometry, "geoms"):
+            points = []
+            for geom in geometry.geoms:
+                points.extend(self._extract_intersection_uv_points(geometry=geom))
+            return points
+        return []
+
+    def _insert_uv_point_on_line(self, line_uv=None, point=None, tolerance=1.0e-8):
+        """Insert a 2D point as a vertex if it lies on a line segment."""
+        uv = np.asarray(line_uv, dtype=float)
+        point = np.asarray(point, dtype=float).reshape(2)
+        for vertex in uv:
+            if np.linalg.norm(vertex - point) <= float(tolerance):
+                return uv
+
+        point_geom = shp_point(float(point[0]), float(point[1]))
+        for idx in range(len(uv) - 1):
+            segment = shp_linestring([uv[idx], uv[idx + 1]])
+            if segment.distance(point_geom) <= float(tolerance):
+                return np.concatenate(
+                    (uv[: idx + 1], point.reshape(1, 2), uv[idx + 1 :]),
+                    axis=0,
+                )
+        return uv
+
+    def _trim_uv_terminal_branch(self, line_uv=None, point=None, max_distance=0.0, tolerance=1.0e-8):
+        """Trim a short overshooting terminal branch back to an intersection point."""
+        uv = np.asarray(line_uv, dtype=float)
+        point = np.asarray(point, dtype=float).reshape(2)
+        if uv.shape[0] < 2:
+            return uv, False
+
+        out = self._insert_uv_point_on_line(uv, point, tolerance=tolerance)
+        out = self._dedupe_consecutive_uv(out, tolerance=tolerance)
+        if out is None or out.shape[0] < 2:
+            return uv, False
+
+        start_dist = float(np.linalg.norm(point - out[0]))
+        end_dist = float(np.linalg.norm(point - out[-1]))
+        if (
+            start_dist > float(max_distance) + float(tolerance)
+            and end_dist > float(max_distance) + float(tolerance)
+        ):
+            return out, self._uv_coords_changed(uv, out, tolerance=tolerance)
+
+        distances = np.linalg.norm(out - point, axis=1)
+        point_idx = int(distances.argmin())
+        if distances[point_idx] > float(tolerance):
+            return out, self._uv_coords_changed(uv, out, tolerance=tolerance)
+
+        if start_dist <= end_dist:
+            if point_idx == 0:
+                return out, self._uv_coords_changed(uv, out, tolerance=tolerance)
+            trimmed = out[point_idx:, :]
+        else:
+            if point_idx >= out.shape[0] - 1:
+                return out, self._uv_coords_changed(uv, out, tolerance=tolerance)
+            trimmed = out[: point_idx + 1, :]
+
+        trimmed = self._dedupe_consecutive_uv(trimmed, tolerance=tolerance)
+        if trimmed is None or trimmed.shape[0] < 2:
+            return out, self._uv_coords_changed(uv, out, tolerance=tolerance)
+        return trimmed, True
+
+    def _uv_endpoint_extension_candidates(self, line_uv=None, tolerance=1.0e-12):
+        """Return start/end ray candidates for endpoint snapping."""
+        uv = np.asarray(line_uv, dtype=float)
+        candidates = []
+        if uv.shape[0] < 2:
+            return candidates
+
+        end_anchor = uv[-1]
+        for idx in range(uv.shape[0] - 2, -1, -1):
+            vec = end_anchor - uv[idx]
+            vec_len = float(np.linalg.norm(vec))
+            if vec_len > float(tolerance):
+                candidates.append(("append", end_anchor, vec / vec_len))
+                break
+
+        start_anchor = uv[0]
+        for idx in range(1, uv.shape[0]):
+            vec = start_anchor - uv[idx]
+            vec_len = float(np.linalg.norm(vec))
+            if vec_len > float(tolerance):
+                candidates.append(("prepend", start_anchor, vec / vec_len))
+                break
+        return candidates
+
+    def _snap_two_uv_lines_to_intersection(
+        self, line_a_uv=None, line_b_uv=None, max_distance=10.0, tolerance=1.0e-8
+    ):
+        """
+        Snap two same-slice 2D polylines to exact shared intersection vertices.
+
+        Returns updated coordinates for both lines plus per-slice stats.
+        """
+        from ..helpers.multipart_snap import snap_two_uv_lines_to_intersection
+
+        return snap_two_uv_lines_to_intersection(
+            line_a_uv=line_a_uv,
+            line_b_uv=line_b_uv,
+            max_distance=max_distance,
+            tolerance=tolerance,
+        )
+
+        line_uv = {
+            "a": self._dedupe_consecutive_uv(line_a_uv, tolerance=tolerance),
+            "b": self._dedupe_consecutive_uv(line_b_uv, tolerance=tolerance),
+        }
+        if (
+            line_uv["a"] is None
+            or line_uv["b"] is None
+            or line_uv["a"].shape[0] < 2
+            or line_uv["b"].shape[0] < 2
+        ):
+            return line_a_uv, line_b_uv, {
+                "changed_a": False,
+                "changed_b": False,
+                "intersection_count": 0,
+                "trim_count": 0,
+                "endpoint_snap_count": 0,
+            }
+
+        changed = {"a": False, "b": False}
+        trim_count = 0
+        endpoint_snap_count = 0
+        intersection_count = 0
+
+        line_a = shp_linestring(line_uv["a"])
+        line_b = shp_linestring(line_uv["b"])
+        if line_a.intersects(line_b):
+            raw_points = self._extract_intersection_uv_points(line_a.intersection(line_b))
+            intersection_points = []
+            for point in raw_points:
+                if any(
+                    np.linalg.norm(point - saved) <= float(tolerance)
+                    for saved in intersection_points
+                ):
+                    continue
+                intersection_points.append(point)
+
+            for point in intersection_points:
+                intersection_count += 1
+                before_a = line_uv["a"]
+                before_b = line_uv["b"]
+                out_a = self._insert_uv_point_on_line(before_a, point, tolerance=tolerance)
+                out_a = self._dedupe_consecutive_uv(out_a, tolerance=tolerance)
+                out_b = self._insert_uv_point_on_line(before_b, point, tolerance=tolerance)
+                out_b = self._dedupe_consecutive_uv(out_b, tolerance=tolerance)
+                if self._uv_coords_changed(before_a, out_a, tolerance=tolerance):
+                    changed["a"] = True
+                if self._uv_coords_changed(before_b, out_b, tolerance=tolerance):
+                    changed["b"] = True
+                line_uv["a"] = out_a
+                line_uv["b"] = out_b
+
+                for key in ("a", "b"):
+                    before = line_uv[key]
+                    nearest_endpoint_dist = min(
+                        float(np.linalg.norm(point - before[0])),
+                        float(np.linalg.norm(point - before[-1])),
+                    )
+                    if nearest_endpoint_dist > float(max_distance) + float(tolerance):
+                        continue
+                    trimmed, did_trim = self._trim_uv_terminal_branch(
+                        before,
+                        point,
+                        max_distance=max_distance,
+                        tolerance=tolerance,
+                    )
+                    line_uv[key] = trimmed
+                    if did_trim:
+                        changed[key] = True
+                        trim_count += 1
+
+        # Extend endpoints that nearly meet the other line, then add the same node
+        # to the target line. This handles small interpretation gaps.
+        for key, target_key in (("a", "b"), ("b", "a")):
+            current_uv = line_uv[key]
+            if current_uv is None or current_uv.shape[0] < 2:
+                continue
+            for mode, anchor, direction in self._uv_endpoint_extension_candidates(
+                current_uv
+            ):
+                ray_end = anchor + direction * float(max_distance)
+                ray = shp_linestring([anchor, ray_end])
+                other_line = shp_linestring(line_uv[target_key])
+                candidates = self._extract_intersection_uv_points(ray.intersection(other_line))
+
+                best_point = None
+                best_dist = None
+                for candidate in candidates:
+                    vec = candidate - anchor
+                    proj = float(vec[0] * direction[0] + vec[1] * direction[1])
+                    if proj < -float(tolerance) or proj > float(max_distance) + float(tolerance):
+                        continue
+                    if best_dist is None or proj < best_dist:
+                        best_dist = proj
+                        best_point = candidate
+
+                if best_point is None or best_dist is None:
+                    continue
+
+                active_before = line_uv[key]
+                if mode == "append":
+                    if best_dist > float(tolerance) and np.linalg.norm(best_point - active_before[-1]) > float(tolerance):
+                        active_after = np.concatenate(
+                            (active_before, best_point.reshape(1, 2)), axis=0
+                        )
+                        line_uv[key] = self._dedupe_consecutive_uv(
+                            active_after, tolerance=tolerance
+                        )
+                        changed[key] = True
+                        endpoint_snap_count += 1
+                else:
+                    if best_dist > float(tolerance) and np.linalg.norm(best_point - active_before[0]) > float(tolerance):
+                        active_after = np.concatenate(
+                            (best_point.reshape(1, 2), active_before), axis=0
+                        )
+                        line_uv[key] = self._dedupe_consecutive_uv(
+                            active_after, tolerance=tolerance
+                        )
+                        changed[key] = True
+                        endpoint_snap_count += 1
+
+                target_before = line_uv[target_key]
+                target_after = self._insert_uv_point_on_line(
+                    target_before, best_point, tolerance=tolerance
+                )
+                target_after = self._dedupe_consecutive_uv(
+                    target_after, tolerance=tolerance
+                )
+                if self._uv_coords_changed(
+                    target_before, target_after, tolerance=tolerance
+                ):
+                    line_uv[target_key] = target_after
+                    changed[target_key] = True
+
+        return line_uv["a"], line_uv["b"], {
+            "changed_a": bool(changed["a"]),
+            "changed_b": bool(changed["b"]),
+            "intersection_count": int(intersection_count),
+            "trim_count": int(trim_count),
+            "endpoint_snap_count": int(endpoint_snap_count),
+        }
+
+    def _polyline_points_and_fractions(self, points=None):
+        """Return cleaned points and normalized cumulative arclength fractions."""
+        pts = self._dedupe_consecutive_points(points)
+        if pts is None or pts.ndim != 2 or pts.shape[0] == 0:
+            return None, None
+        if pts.shape[0] == 1:
+            return pts, np.asarray([0.0], dtype=float)
+
+        seg_lengths = np.linalg.norm(np.diff(pts, axis=0), axis=1)
+        cumulative = np.concatenate([[0.0], np.cumsum(seg_lengths)])
+        total = float(cumulative[-1])
+        if total <= 1.0e-12:
+            fractions = np.linspace(0.0, 1.0, pts.shape[0])
+        else:
+            fractions = cumulative / total
+        return pts, fractions
+
+    def _sample_polyline_by_fraction(self, points=None, fractions=None):
+        """Sample a 2D or 3D polyline at normalized arclength fractions."""
+        pts, point_fractions = self._polyline_points_and_fractions(points)
+        if pts is None or point_fractions is None or pts.shape[0] == 0:
+            return None
+
+        sample_fractions = np.asarray(fractions, dtype=float)
+        if sample_fractions.ndim == 0:
+            sample_fractions = sample_fractions.reshape(1)
+        sample_fractions = np.clip(sample_fractions, 0.0, 1.0)
+
+        if pts.shape[0] == 1:
+            return np.repeat(pts, sample_fractions.shape[0], axis=0)
+
+        sampled = np.column_stack(
+            [
+                np.interp(sample_fractions, point_fractions, pts[:, comp])
+                for comp in range(pts.shape[1])
+            ]
+        )
+        return sampled
+
+    def _polyline_prefix_to_fraction(self, points=None, fraction=0.0):
+        """Return original polyline geometry from the start through a fraction."""
+        pts, point_fractions = self._polyline_points_and_fractions(points)
+        if pts is None or point_fractions is None or pts.shape[0] < 2:
+            return None
+
+        fraction = float(np.clip(fraction, 0.0, 1.0))
+        if fraction <= 0.0:
+            return self._sample_polyline_by_fraction(pts, [0.0])
+        if fraction >= 1.0:
+            return pts
+
+        boundary = self._sample_polyline_by_fraction(pts, [fraction])
+        keep = pts[point_fractions < fraction]
+        if keep.size == 0:
+            return boundary
+        return self._dedupe_consecutive_points(np.vstack([keep, boundary]))
+
+    def _polyline_suffix_from_fraction(self, points=None, fraction=1.0):
+        """Return original polyline geometry from a fraction through the end."""
+        pts, point_fractions = self._polyline_points_and_fractions(points)
+        if pts is None or point_fractions is None or pts.shape[0] < 2:
+            return None
+
+        fraction = float(np.clip(fraction, 0.0, 1.0))
+        if fraction <= 0.0:
+            return pts
+        if fraction >= 1.0:
+            return self._sample_polyline_by_fraction(pts, [1.0])
+
+        boundary = self._sample_polyline_by_fraction(pts, [fraction])
+        keep = pts[point_fractions > fraction]
+        if keep.size == 0:
+            return boundary
+        return self._dedupe_consecutive_points(np.vstack([boundary, keep]))
+
+    def _detect_multipart_edit_interval(
+        self, original_points=None, edited_points=None, slice_idx=None, axis=None, affine=None
+    ):
+        """
+        Infer the arclength interval changed by the editor.
+
+        The editor returns a complete line. Comparing both lines in slice sample
+        coordinates lets us preserve each target slice outside the changed interval.
+        """
+        if original_points is None or edited_points is None:
+            return 0.0, 1.0, False
+
+        axis = axis or self.current_axis
+        original_uv = self._world_points_to_slice_uv(
+            points=original_points,
+            slice_idx=slice_idx,
+            axis=axis,
+            affine=affine,
+        )
+        edited_uv = self._world_points_to_slice_uv(
+            points=edited_points,
+            slice_idx=slice_idx,
+            axis=axis,
+            affine=affine,
+        )
+        if original_uv is None or edited_uv is None:
+            return 0.0, 1.0, True
+
+        sample_count = int(
+            np.clip(max(len(original_uv), len(edited_uv)) * 4, 80, 400)
+        )
+        fractions = np.linspace(0.0, 1.0, sample_count)
+        original_sampled = self._sample_polyline_by_fraction(original_uv, fractions)
+        edited_sampled = self._sample_polyline_by_fraction(edited_uv, fractions)
+        if original_sampled is None or edited_sampled is None:
+            return 0.0, 1.0, True
+
+        deltas = np.linalg.norm(edited_sampled - original_sampled, axis=1)
+        finite = np.isfinite(deltas)
+        if not np.any(finite):
+            return 0.0, 1.0, True
+        deltas = deltas[finite]
+        finite_fractions = fractions[finite]
+
+        baseline = float(np.percentile(deltas, 20))
+        mad = float(np.median(np.abs(deltas - np.median(deltas))))
+        threshold = max(0.5, baseline + 6.0 * mad)
+        changed = deltas > threshold
+
+        if not np.any(changed):
+            max_delta = float(np.max(deltas))
+            if max_delta <= 0.15:
+                return 0.0, 1.0, False
+            changed = deltas >= max(0.15, max_delta * 0.5)
+
+        changed_idx = np.flatnonzero(changed)
+        if changed_idx.size == 0:
+            return 0.0, 1.0, False
+
+        pad = max(2, sample_count // 50)
+        start_idx = max(0, int(changed_idx[0]) - pad)
+        end_idx = min(len(finite_fractions) - 1, int(changed_idx[-1]) + pad)
+        t0 = float(finite_fractions[start_idx])
+        t1 = float(finite_fractions[end_idx])
+
+        if t1 - t0 < 0.02:
+            center = 0.5 * (t0 + t1)
+            t0 = max(0.0, center - 0.01)
+            t1 = min(1.0, center + 0.01)
+        if t0 < 0.04:
+            t0 = 0.0
+        if t1 > 0.96:
+            t1 = 1.0
+
+        return t0, t1, True
+
+    def _locally_snap_rc_to_cost_min(self, cost_map=None, rc=None, radius=3):
+        """Move a row/col point to the lowest cost pixel in a small neighborhood."""
+        if cost_map is None or rc is None:
+            return rc
+
+        rows, cols = cost_map.shape
+        row = int(np.clip(int(rc[0]), 0, rows - 1))
+        col = int(np.clip(int(rc[1]), 0, cols - 1))
+        radius = max(0, int(radius))
+        if radius <= 0:
+            return row, col
+
+        r0 = max(0, row - radius)
+        r1 = min(rows - 1, row + radius)
+        c0 = max(0, col - radius)
+        c1 = min(cols - 1, col + radius)
+        window = cost_map[r0 : r1 + 1, c0 : c1 + 1]
+        if window.size == 0:
+            return row, col
+
+        try:
+            local_idx = np.unravel_index(int(np.nanargmin(window)), window.shape)
+        except Exception:
+            return row, col
+
+        return int(r0 + local_idx[0]), int(c0 + local_idx[1])
+
+    def _trace_polyline_to_edges_on_slice(
+        self,
+        points=None,
+        slice_idx=None,
+        axis=None,
+        entity_kind="horizon",
+        lock_first=False,
+        lock_last=False,
+    ):
+        """Trace a replacement segment onto nearby seismic edges on a specific slice."""
+        pts = self._dedupe_consecutive_points(points)
+        if pts is None or pts.ndim != 2 or pts.shape[0] < 2:
+            return points
+
+        axis = axis or self.current_axis
+        slice_idx = int(slice_idx)
+        slice_data, origin, spacing, axis_info = self._get_slice_as_2d_array_for_index(
+            slice_idx=slice_idx,
+            axis=axis,
+        )
+        if slice_data is None or axis_info is None:
+            return pts
+
+        try:
+            cost_map = (
+                self.compute_fault_edge_cost_map(slice_data)
+                if entity_kind == "fault"
+                else self.compute_edge_cost_map(slice_data)
+            )
+        except Exception:
+            return pts
+
+        affine = axis_info.get("affine")
+        rc_points = []
+        rows, cols = cost_map.shape
+        for idx, point in enumerate(pts):
+            rc = self._world_to_slice_rc(
+                point,
+                slice_idx=slice_idx,
+                affine=affine,
+                axis=axis,
+            )
+            if rc is None:
+                rc = self._world_to_slice_rc_unclipped(
+                    point,
+                    slice_idx=slice_idx,
+                    affine=affine,
+                    axis=axis,
+                )
+            if rc is None:
+                return pts
+            rc = (
+                int(np.clip(int(round(rc[0])), 0, rows - 1)),
+                int(np.clip(int(round(rc[1])), 0, cols - 1)),
+            )
+            if not ((idx == 0 and lock_first) or (idx == len(pts) - 1 and lock_last)):
+                rc = self._locally_snap_rc_to_cost_min(cost_map, rc, radius=3)
+            rc_points.append(rc)
+
+        max_edge_trace_anchors = 32
+        if len(rc_points) > max_edge_trace_anchors:
+            anchor_ids = np.unique(
+                np.round(
+                    np.linspace(0, len(rc_points) - 1, max_edge_trace_anchors)
+                ).astype(int)
+            )
+            anchors = [rc_points[int(i)] for i in anchor_ids]
+        else:
+            anchors = rc_points
+
+        traced_rc = []
+        for seg_idx in range(len(anchors) - 1):
+            start = anchors[seg_idx]
+            end = anchors[seg_idx + 1]
+            if start == end:
+                path = [start]
+            elif entity_kind == "fault":
+                horizontal_diff = abs(start[0] - end[0])
+                corridor = min(8, max(2, horizontal_diff // 3 + 2))
+                path = self.astar_pathfind_fault(
+                    cost_map, start, end, corridor_width=corridor
+                )
+            else:
+                vertical_diff = abs(start[1] - end[1])
+                corridor = min(6, max(2, vertical_diff // 3 + 2))
+                path = self.astar_pathfind(cost_map, start, end, corridor_width=corridor)
+
+            if path is None:
+                path = [start, end]
+            if seg_idx > 0 and path:
+                path = path[1:]
+            traced_rc.extend(path)
+
+        if not traced_rc:
+            traced_rc = anchors
+
+        traced_points = []
+        for row, col in traced_rc:
+            world_point = self._slice_rc_to_world(
+                slice_idx=slice_idx,
+                row=int(row),
+                col=int(col),
+                affine=affine,
+                axis=axis,
+            )
+            if world_point is None:
+                world_point = self._slice_rc_to_world_float(
+                    slice_idx=slice_idx,
+                    row=float(row),
+                    col=float(col),
+                    affine=affine,
+                    axis=axis,
+                )
+            if world_point is not None:
+                traced_points.append(world_point)
+
+        if len(traced_points) < 2:
+            return pts
+
+        traced_points = np.asarray(traced_points, dtype=float)
+        if traced_points.shape[0] > 1200:
+            step = max(1, traced_points.shape[0] // 1200)
+            sampled = traced_points[::step]
+            if not np.allclose(sampled[-1], traced_points[-1]):
+                sampled = np.vstack([sampled, traced_points[-1]])
+            traced_points = sampled
+
+        if lock_first:
+            traced_points[0] = pts[0]
+        if lock_last:
+            traced_points[-1] = pts[-1]
+
+        return self._dedupe_consecutive_points(traced_points)
+
+    def _merge_polyline_fraction_interval(
+        self, original_points=None, replacement_points=None, t0=0.0, t1=1.0
+    ):
+        """Merge a replacement segment into an original polyline arclength interval."""
+        replacement = self._dedupe_consecutive_points(replacement_points)
+        if replacement is None or replacement.shape[0] < 2:
+            return original_points
+
+        t0 = float(np.clip(t0, 0.0, 1.0))
+        t1 = float(np.clip(t1, 0.0, 1.0))
+        if t0 > t1:
+            t0, t1 = t1, t0
+
+        if t0 <= 0.0 and t1 >= 1.0:
+            return replacement
+
+        pieces = []
+        if t0 > 0.0:
+            prefix = self._polyline_prefix_to_fraction(original_points, t0)
+            if prefix is not None and prefix.shape[0] > 0:
+                pieces.append(prefix)
+
+        pieces.append(replacement)
+
+        if t1 < 1.0:
+            suffix = self._polyline_suffix_from_fraction(original_points, t1)
+            if suffix is not None and suffix.shape[0] > 0:
+                pieces.append(suffix)
+
+        merged = np.vstack(pieces)
+        return self._dedupe_consecutive_points(merged)
+
+    def _build_partial_multipart_edit_for_slice(
+        self,
+        original_current_points=None,
+        edited_current_points=None,
+        target_original_points=None,
+        target_slice_idx=None,
+        axis=None,
+        entity_kind="horizon",
+        edit_interval=None,
+        affine=None,
+    ):
+        """Apply the current-slice edit interval to another slice without replacing unchanged parts."""
+        if (
+            original_current_points is None
+            or edited_current_points is None
+            or target_original_points is None
+            or edit_interval is None
+        ):
+            return None
+
+        axis = axis or self.current_axis
+        t0, t1 = edit_interval
+        target_slice_idx = int(target_slice_idx)
+
+        current_slice_idx = int(self.current_slice_index)
+        original_current_uv = self._world_points_to_slice_uv(
+            points=original_current_points,
+            slice_idx=current_slice_idx,
+            axis=axis,
+            affine=affine,
+        )
+        edited_current_uv = self._world_points_to_slice_uv(
+            points=edited_current_points,
+            slice_idx=current_slice_idx,
+            axis=axis,
+            affine=affine,
+        )
+        target_original_uv = self._world_points_to_slice_uv(
+            points=target_original_points,
+            slice_idx=target_slice_idx,
+            axis=axis,
+            affine=affine,
+        )
+        if (
+            original_current_uv is None
+            or edited_current_uv is None
+            or target_original_uv is None
+        ):
+            return None
+
+        _edited_pts, edited_fractions = self._polyline_points_and_fractions(
+            edited_current_uv
+        )
+        interval_fraction_count = max(
+            2,
+            int(
+                np.ceil(
+                    max(len(edited_current_uv), len(target_original_uv))
+                    * max(float(t1) - float(t0), 0.02)
+                )
+            )
+            + 2,
+        )
+        interval_fraction_count = min(interval_fraction_count, 300)
+        fractions = np.linspace(float(t0), float(t1), interval_fraction_count)
+        if edited_fractions is not None:
+            interior = edited_fractions[
+                (edited_fractions > float(t0)) & (edited_fractions < float(t1))
+            ]
+            if interior.size > 0:
+                fractions = np.unique(np.concatenate([fractions, interior]))
+        fractions = np.clip(np.sort(fractions), 0.0, 1.0)
+
+        original_current_sampled = self._sample_polyline_by_fraction(
+            original_current_uv, fractions
+        )
+        edited_current_sampled = self._sample_polyline_by_fraction(
+            edited_current_uv, fractions
+        )
+        target_original_sampled = self._sample_polyline_by_fraction(
+            target_original_uv, fractions
+        )
+        if (
+            original_current_sampled is None
+            or edited_current_sampled is None
+            or target_original_sampled is None
+        ):
+            return None
+
+        replacement_uv = target_original_sampled + (
+            edited_current_sampled - original_current_sampled
+        )
+        replacement_points = self._slice_uv_to_world_points(
+            slice_uv=replacement_uv,
+            slice_idx=target_slice_idx,
+            axis=axis,
+            affine=affine,
+        )
+        if replacement_points is None:
+            return None
+
+        if float(t0) > 0.0:
+            start_anchor = self._sample_polyline_by_fraction(
+                target_original_points, [float(t0)]
+            )
+            if start_anchor is not None and len(start_anchor) > 0:
+                replacement_points[0] = start_anchor[0]
+        if float(t1) < 1.0:
+            end_anchor = self._sample_polyline_by_fraction(
+                target_original_points, [float(t1)]
+            )
+            if end_anchor is not None and len(end_anchor) > 0:
+                replacement_points[-1] = end_anchor[0]
+
+        replacement_points = self._trace_polyline_to_edges_on_slice(
+            points=replacement_points,
+            slice_idx=target_slice_idx,
+            axis=axis,
+            entity_kind=entity_kind,
+            lock_first=float(t0) > 0.0,
+            lock_last=float(t1) < 1.0,
+        )
+
+        return self._merge_polyline_fraction_interval(
+            original_points=target_original_points,
+            replacement_points=replacement_points,
+            t0=t0,
+            t1=t1,
+        )
+
+    def _build_partial_multipart_edit_replacements(
+        self,
+        vtk_obj=None,
+        selection=None,
+        edited_points=None,
+        target_slices=None,
+    ):
+        """Build per-slice replacements for a multipart edit while preserving unchanged geometry."""
+        if vtk_obj is None or selection is None or edited_points is None:
+            return {}, {}
+
+        entity_kind = selection.get("entity_kind", "horizon")
+        entity_info = selection.get("entity_info", {})
+        axis = entity_info.get("axis", self.current_axis)
+        slice_to_cell_index = entity_info.get("slice_to_cell_index", {})
+        current_slice_idx = int(self.current_slice_index)
+        affine = self._get_seismic_axis_vectors()
+
+        original_current_points = self._get_multipart_slice_points(
+            vtk_obj=vtk_obj,
+            slice_idx=current_slice_idx,
+            slice_to_cell_index=slice_to_cell_index,
+        )
+        if original_current_points is None:
+            traced_current = self._trace_polyline_to_edges_on_slice(
+                points=edited_points,
+                slice_idx=current_slice_idx,
+                axis=axis,
+                entity_kind=entity_kind,
+            )
+            return {current_slice_idx: traced_current}, {
+                "mode": "full",
+                "has_changes": True,
+                "interval": (0.0, 1.0),
+            }
+
+        t0, t1, has_changes = self._detect_multipart_edit_interval(
+            original_points=original_current_points,
+            edited_points=edited_points,
+            slice_idx=current_slice_idx,
+            axis=axis,
+            affine=affine,
+        )
+        if not has_changes:
+            traced_current = self._trace_polyline_to_edges_on_slice(
+                points=edited_points,
+                slice_idx=current_slice_idx,
+                axis=axis,
+                entity_kind=entity_kind,
+            )
+            return {current_slice_idx: traced_current}, {
+                "mode": "edge_snap_only",
+                "has_changes": False,
+                "interval": (0.0, 1.0),
+            }
+
+        all_target_slices = sorted(
+            {current_slice_idx}
+            | {int(slice_idx) for slice_idx in (target_slices or [])}
+        )
+        replacements = {}
+        skipped_slices = []
+        for target_slice_idx in all_target_slices:
+            target_original_points = self._get_multipart_slice_points(
+                vtk_obj=vtk_obj,
+                slice_idx=target_slice_idx,
+                slice_to_cell_index=slice_to_cell_index,
+            )
+            if target_original_points is None:
+                skipped_slices.append(target_slice_idx)
+                continue
+
+            merged_points = self._build_partial_multipart_edit_for_slice(
+                original_current_points=original_current_points,
+                edited_current_points=edited_points,
+                target_original_points=target_original_points,
+                target_slice_idx=target_slice_idx,
+                axis=axis,
+                entity_kind=entity_kind,
+                edit_interval=(t0, t1),
+                affine=affine,
+            )
+            if merged_points is None or len(merged_points) < 2:
+                skipped_slices.append(target_slice_idx)
+                continue
+            replacements[int(target_slice_idx)] = merged_points
+
+        if current_slice_idx not in replacements:
+            traced_current = self._trace_polyline_to_edges_on_slice(
+                points=edited_points,
+                slice_idx=current_slice_idx,
+                axis=axis,
+                entity_kind=entity_kind,
+            )
+            replacements[current_slice_idx] = traced_current
+
+        return replacements, {
+            "mode": "partial",
+            "has_changes": True,
+            "interval": (float(t0), float(t1)),
+            "skipped_slices": skipped_slices,
+        }
 
     def _build_multipart_vtk_with_replaced_slices(
         self, vtk_obj=None, edited_points_by_slice=None
@@ -1781,7 +3467,9 @@ class ViewInterpretation(ViewMap):
                 reference_point_id = reference_ids.get("point_id")
                 start_idx = new_points.GetNumberOfPoints()
                 for point in edited_points:
-                    new_points.InsertNextPoint(float(point[0]), float(point[1]), float(point[2]))
+                    new_points.InsertNextPoint(
+                        float(point[0]), float(point[1]), float(point[2])
+                    )
                     point_slice_values.append(old_slice_idx)
                     self._append_numeric_tuple(
                         builders=point_builders,
@@ -1790,7 +3478,9 @@ class ViewInterpretation(ViewMap):
                     )
 
                 new_lines.InsertNextCell(int(edited_points.shape[0]))
-                for point_id in range(start_idx, start_idx + int(edited_points.shape[0])):
+                for point_id in range(
+                    start_idx, start_idx + int(edited_points.shape[0])
+                ):
                     new_lines.InsertCellPoint(point_id)
 
                 cell_slice_values.append(old_slice_idx)
@@ -1814,9 +3504,13 @@ class ViewInterpretation(ViewMap):
             for point_idx in range(n_pts):
                 old_point_id = cell.GetPointId(point_idx)
                 point = vtk_obj.GetPoint(old_point_id)
-                new_points.InsertNextPoint(float(point[0]), float(point[1]), float(point[2]))
+                new_points.InsertNextPoint(
+                    float(point[0]), float(point[1]), float(point[2])
+                )
                 if point_slice_array is not None:
-                    point_slice_values.append(int(point_slice_array.GetValue(old_point_id)))
+                    point_slice_values.append(
+                        int(point_slice_array.GetValue(old_point_id))
+                    )
                 else:
                     point_slice_values.append(old_slice_idx)
                 self._append_numeric_tuple(
@@ -1870,7 +3564,9 @@ class ViewInterpretation(ViewMap):
             cell_slice_out.InsertNextValue(int(value))
         rebuilt_line.GetCellData().AddArray(cell_slice_out)
 
-        slice_indices = sorted({int(value) for value in cell_slice_values if int(value) >= 0})
+        slice_indices = sorted(
+            {int(value) for value in cell_slice_values if int(value) >= 0}
+        )
         slice_to_cell_index = {}
         for new_cell_idx, value in enumerate(cell_slice_values):
             value = int(value)
@@ -1883,15 +3579,6 @@ class ViewInterpretation(ViewMap):
         )
         rebuilt_line.Modified()
         return rebuilt_line, slice_indices, slice_to_cell_index
-
-    def _build_multipart_vtk_with_replaced_slice(
-        self, vtk_obj=None, slice_idx=None, edited_points=None
-    ):
-        """Return a multipart PolyLine where one slice is replaced with edited geometry."""
-        return self._build_multipart_vtk_with_replaced_slices(
-            vtk_obj=vtk_obj,
-            edited_points_by_slice={slice_idx: edited_points},
-        )
 
     def _prompt_multipart_edit_propagation_slices(self, selection=None, current_slice_idx=None):
         """Ask whether the current edit should be copied to additional slices and return matching targets."""
@@ -1963,11 +3650,15 @@ class ViewInterpretation(ViewMap):
             return
 
         points = np.array(traced_pld.GetPoints().GetData(), dtype=float)
-        snapped_points = self.snap_points_to_slice(points, points_are_display_coords=True)
+        snapped_points = self.snap_points_to_slice(
+            points, points_are_display_coords=True
+        )
 
         vtk_obj = PolyLine()
         vtk_obj.points = snapped_points
         vtk_obj.auto_cells()
+        old_object = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        self._copy_field_data_arrays(old_object, vtk_obj)
 
         self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
 
@@ -2003,7 +3694,11 @@ class ViewInterpretation(ViewMap):
         except Exception:
             pass
 
-        if traced_pld is None or traced_pld.GetNumberOfPoints() < 2 or selection is None:
+        if (
+            traced_pld is None
+            or traced_pld.GetNumberOfPoints() < 2
+            or selection is None
+        ):
             self.clear_selection()
             freeze_gui_off(self)
             return
@@ -2014,44 +3709,31 @@ class ViewInterpretation(ViewMap):
         slice_idx = int(self.current_slice_index)
 
         points = np.array(traced_pld.GetPoints().GetData(), dtype=float)
-        snapped_points = self.snap_points_to_slice(points, points_are_display_coords=True)
+        snapped_points = self.snap_points_to_slice(
+            points, points_are_display_coords=True
+        )
         current_vtk = self.parent.geol_coll.get_uid_vtk_obj(uid)
-        replacement_points_by_slice = {slice_idx: snapped_points}
 
         target_slices = self._prompt_multipart_edit_propagation_slices(
             selection=selection,
             current_slice_idx=slice_idx,
         )
         target_slices = sorted({int(idx) for idx in target_slices})
-        if target_slices:
-            affine = self._get_seismic_axis_vectors()
-            template_uv = self._world_points_to_slice_uv(
-                points=snapped_points,
-                slice_idx=slice_idx,
-                axis=entity_info.get("axis", self.current_axis),
-                affine=affine,
+        replacement_points_by_slice, edit_stats = (
+            self._build_partial_multipart_edit_replacements(
+                vtk_obj=current_vtk,
+                selection=selection,
+                edited_points=snapped_points,
+                target_slices=target_slices,
             )
-            if template_uv is None:
-                message_dialog(
-                    title="Edit line",
-                    message=(
-                        "The edited line was saved on the current slice, but it could not be "
-                        "projected to the requested slice range."
-                    ),
-                )
-            else:
-                for target_slice_idx in target_slices:
-                    if target_slice_idx == slice_idx:
-                        continue
-                    target_points = self._slice_uv_to_world_points(
-                        slice_uv=template_uv,
-                        slice_idx=target_slice_idx,
-                        axis=entity_info.get("axis", self.current_axis),
-                        affine=affine,
-                    )
-                    if target_points is None:
-                        continue
-                    replacement_points_by_slice[int(target_slice_idx)] = target_points
+        )
+        if not replacement_points_by_slice:
+            replacement_points_by_slice = {slice_idx: snapped_points}
+            edit_stats = {
+                "mode": "full",
+                "has_changes": True,
+                "interval": (0.0, 1.0),
+            }
 
         new_vtk, slice_indices, _slice_to_cell_index = self._build_multipart_vtk_with_replaced_slices(
             vtk_obj=current_vtk,
@@ -2073,7 +3755,10 @@ class ViewInterpretation(ViewMap):
         self.scan_and_index_single_horizon(uid)
 
         seed_slice = entity_info.get("seed_slice")
-        if uid in getattr(self, "multipart_horizons", {}) and seed_slice in slice_indices:
+        if (
+            uid in getattr(self, "multipart_horizons", {})
+            and seed_slice in slice_indices
+        ):
             self.multipart_horizons[uid]["seed_slice"] = int(seed_slice)
         if uid in getattr(self, "multipart_faults", {}) and seed_slice in slice_indices:
             self.multipart_faults[uid]["seed_slice"] = int(seed_slice)
@@ -2089,11 +3774,35 @@ class ViewInterpretation(ViewMap):
             f"Edited multipart {entity_kind} {uid[:8]}... on slice {slice_idx}: "
             f"{len(points)} control points updated."
         )
+        try:
+            interval = edit_stats.get("interval", (0.0, 1.0))
+            mode = edit_stats.get("mode", "partial")
+            if mode == "partial":
+                self.print_terminal(
+                    "Preserved unchanged propagated geometry outside edited interval "
+                    f"{interval[0]:.2f}-{interval[1]:.2f} and snapped the replacement to nearby edges."
+                )
+            elif mode == "edge_snap_only":
+                self.print_terminal(
+                    "No clear edited interval was detected; snapped the current line to nearby edges only."
+                )
+        except Exception:
+            pass
         if len(replacement_points_by_slice) > 1:
             propagated_slices = sorted(replacement_points_by_slice.keys())
             self.print_terminal(
-                f"Applied the same edit to slices {propagated_slices[0]}-{propagated_slices[-1]} "
+                f"Applied the edited interval to slices {propagated_slices[0]}-{propagated_slices[-1]} "
                 f"({len(propagated_slices)} slices total)."
+            )
+        skipped_slices = []
+        try:
+            skipped_slices = list(edit_stats.get("skipped_slices", []))
+        except Exception:
+            skipped_slices = []
+        if skipped_slices:
+            self.print_terminal(
+                "Skipped slices that could not be partially matched: "
+                + ", ".join(str(int(idx)) for idx in skipped_slices)
             )
         self.clear_selection()
         freeze_gui_off(self)
@@ -2120,7 +3829,10 @@ class ViewInterpretation(ViewMap):
 
         if selection is not None:
             entity_info = selection["entity_info"]
-            if entity_info.get("seismic_uid") != self.current_seismic_uid or entity_info.get("axis") != self.current_axis:
+            if (
+                entity_info.get("seismic_uid") != self.current_seismic_uid
+                or entity_info.get("axis") != self.current_axis
+            ):
                 message_dialog(
                     title="Edit line",
                     message="Show the propagated line on its matching seismic and axis before editing it.",
@@ -2170,7 +3882,9 @@ class ViewInterpretation(ViewMap):
 
         actor = self._get_visible_line_actor_for_uid(sel_uid)
         if actor is None:
-            self.print_terminal(" -- Selected line is not visible in the current interpretation slice -- ")
+            self.print_terminal(
+                " -- Selected line is not visible in the current interpretation slice -- "
+            )
             freeze_gui_off(self)
             return
 
@@ -2209,14 +3923,20 @@ class ViewInterpretation(ViewMap):
             clean = []
 
         if isinstance(base_name, str):
-            base_name = re_sub(r"\s*\(\d+\s*-\s*\d+\)\s*$", "", base_name).strip()
+            import re
+
+            base_name = re.sub(r"\s*\(\d+\s*-\s*\d+\)\s*$", "", base_name).strip()
 
         if not clean:
             return base_name
         return f"{base_name} ({clean[0]}-{clean[-1]})"
 
     def _build_multipart_entity_dict_from_source(
-        self, source_uid=None, vtk_obj=None, slice_indices=None, fallback_name="multipart"
+        self,
+        source_uid=None,
+        vtk_obj=None,
+        slice_indices=None,
+        fallback_name="multipart",
     ):
         """Clone multipart entity metadata from an existing geology uid."""
         if not source_uid or vtk_obj is None:
@@ -2238,7 +3958,9 @@ class ViewInterpretation(ViewMap):
             ("parent_uid", "get_uid_x_section", ""),
         ):
             try:
-                entity_dict[key] = getattr(self.parent.geol_coll, getter_name)(source_uid)
+                entity_dict[key] = getattr(self.parent.geol_coll, getter_name)(
+                    source_uid
+                )
             except Exception:
                 entity_dict[key] = default
 
@@ -2264,7 +3986,12 @@ class ViewInterpretation(ViewMap):
         return entity_dict
 
     def _copy_selected_numeric_arrays(
-        self, source_data, target_data, selected_ids, skip_names=None, skip_prefixes=None
+        self,
+        source_data,
+        target_data,
+        selected_ids,
+        skip_names=None,
+        skip_prefixes=None,
     ):
         """Copy numeric data arrays for a subset of tuples."""
         if source_data is None or target_data is None:
@@ -2278,7 +4005,9 @@ class ViewInterpretation(ViewMap):
             array_name = source_array.GetName() or ""
             if array_name in skip_names:
                 continue
-            if array_name and any(array_name.startswith(prefix) for prefix in skip_prefixes):
+            if array_name and any(
+                array_name.startswith(prefix) for prefix in skip_prefixes
+            ):
                 continue
             copied_array = source_array.NewInstance()
             copied_array.SetName(array_name)
@@ -2304,6 +4033,8 @@ class ViewInterpretation(ViewMap):
         """Create a new multipart PolyLine keeping only the requested cells."""
         if vtk_obj is None or not kept_cell_ids:
             return None, [], {}
+
+        from vtk import vtkCellArray, vtkIntArray, vtkPoints
 
         source_cell_data = vtk_obj.GetCellData()
         cell_slice_array = (
@@ -2336,7 +4067,9 @@ class ViewInterpretation(ViewMap):
             for point_idx in range(n_pts):
                 old_point_id = cell.GetPointId(point_idx)
                 if old_point_id not in point_map:
-                    new_point_id = new_points.InsertNextPoint(vtk_obj.GetPoint(old_point_id))
+                    new_point_id = new_points.InsertNextPoint(
+                        vtk_obj.GetPoint(old_point_id)
+                    )
                     point_map[old_point_id] = new_point_id
                     kept_point_ids.append(old_point_id)
                     point_slice_values.append(slice_idx)
@@ -2387,7 +4120,9 @@ class ViewInterpretation(ViewMap):
             cell_slice_out.InsertNextValue(int(slice_idx))
         subset_line.GetCellData().AddArray(cell_slice_out)
 
-        remaining_slices = sorted({int(idx) for idx in kept_slice_values if int(idx) >= 0})
+        remaining_slices = sorted(
+            {int(idx) for idx in kept_slice_values if int(idx) >= 0}
+        )
         slice_to_cell_index = {}
         for new_cell_idx, slice_idx in enumerate(kept_slice_values):
             slice_idx = int(slice_idx)
@@ -2432,7 +4167,8 @@ class ViewInterpretation(ViewMap):
                 continue
 
             points = np.array(
-                [vtk_obj.GetPoint(cell.GetPointId(i)) for i in range(n_pts)], dtype=float
+                [vtk_obj.GetPoint(cell.GetPointId(i)) for i in range(n_pts)],
+                dtype=float,
             )
             centroid_3d = points.mean(axis=0)
             centroid_2d = centroid_3d[list(in_plane_axes)]
@@ -2516,7 +4252,9 @@ class ViewInterpretation(ViewMap):
             fallback_name=fallback_name,
         )
         if branch_count > 1:
-            base_name = re_sub(r"\s+part\s+\d+\s*$", "", base_name, flags=re_IGNORECASE)
+            import re
+
+            base_name = re.sub(r"\s+part\s+\d+\s*$", "", base_name, flags=re.IGNORECASE)
             base_name = f"{base_name} part {int(branch_index)}"
 
         clean = sorted({int(idx) for idx in (slice_indices or [])})
@@ -2569,7 +4307,9 @@ class ViewInterpretation(ViewMap):
             matched_branch_ids = set()
 
             if eligible_branch_ids and current_segments:
-                branch_rows = [branch_map[branch_id] for branch_id in eligible_branch_ids]
+                branch_rows = [
+                    branch_map[branch_id] for branch_id in eligible_branch_ids
+                ]
                 cost_matrix = np.full(
                     (len(branch_rows), len(current_segments)),
                     fill_value=1.0e9,
@@ -2585,18 +4325,23 @@ class ViewInterpretation(ViewMap):
                             )
                         )
                         order_delta = abs(
-                            float(segment["order_value"]) - float(branch["last_order_value"])
+                            float(segment["order_value"])
+                            - float(branch["last_order_value"])
                         )
-                        slice_gap = max(0, int(slice_idx - branch["last_slice_idx"] - 1))
+                        slice_gap = max(
+                            0, int(slice_idx - branch["last_slice_idx"] - 1)
+                        )
                         gap_penalty = slice_gap * max(match_distance, 1.0)
                         raw_center_deltas[(row_idx, col_idx)] = center_delta
-                        cost_matrix[row_idx, col_idx] = center_delta + 0.35 * order_delta + gap_penalty
+                        cost_matrix[row_idx, col_idx] = (
+                            center_delta + 0.35 * order_delta + gap_penalty
+                        )
 
                 row_ids, col_ids = linear_sum_assignment(cost_matrix)
                 for row_idx, col_idx in zip(row_ids, col_ids):
                     center_delta = raw_center_deltas[(row_idx, col_idx)]
-                    allow_match = (
-                        match_distance <= 0.0 or center_delta <= float(match_distance)
+                    allow_match = match_distance <= 0.0 or center_delta <= float(
+                        match_distance
                     )
                     if not allow_match:
                         continue
@@ -2620,7 +4365,9 @@ class ViewInterpretation(ViewMap):
                         "branch_id": next_branch_id,
                         "segments": [segment],
                         "last_slice_idx": int(slice_idx),
-                        "last_centroid_2d": np.asarray(segment["centroid_2d"], dtype=float),
+                        "last_centroid_2d": np.asarray(
+                            segment["centroid_2d"], dtype=float
+                        ),
                         "last_order_value": float(segment["order_value"]),
                     }
                 )
@@ -2636,7 +4383,10 @@ class ViewInterpretation(ViewMap):
                 {int(segment["slice_idx"]) for segment in branch["segments"]}
             )
             centroid_stack = np.vstack(
-                [np.asarray(segment["centroid_2d"], dtype=float) for segment in branch["segments"]]
+                [
+                    np.asarray(segment["centroid_2d"], dtype=float)
+                    for segment in branch["segments"]
+                ]
             )
             branch_payloads.append(
                 {
@@ -2674,7 +4424,11 @@ class ViewInterpretation(ViewMap):
                 len(slice_segments) for slice_segments in segments_by_slice.values()
             ),
             "multi_part_slice_count": int(
-                sum(1 for slice_segments in segments_by_slice.values() if len(slice_segments) > 1)
+                sum(
+                    1
+                    for slice_segments in segments_by_slice.values()
+                    if len(slice_segments) > 1
+                )
             ),
             "branch_count": len(branch_payloads),
         }
@@ -2820,7 +4574,8 @@ class ViewInterpretation(ViewMap):
 
         point_slice_array = (
             source_point_data.GetArray("slice_index")
-            if source_point_data is not None and source_point_data.HasArray("slice_index")
+            if source_point_data is not None
+            and source_point_data.HasArray("slice_index")
             else None
         )
         cell_slice_array = (
@@ -2868,12 +4623,16 @@ class ViewInterpretation(ViewMap):
 
             start_idx = new_points.GetNumberOfPoints()
             for local_idx, point in enumerate(simplified_points):
-                new_points.InsertNextPoint(float(point[0]), float(point[1]), float(point[2]))
+                new_points.InsertNextPoint(
+                    float(point[0]), float(point[1]), float(point[2])
+                )
                 source_point_id = int(clean_point_ids[source_indices[local_idx]])
                 selected_point_ids.append(source_point_id)
 
                 if point_slice_array is not None:
-                    point_slice_values.append(int(point_slice_array.GetValue(source_point_id)))
+                    point_slice_values.append(
+                        int(point_slice_array.GetValue(source_point_id))
+                    )
                 elif cell_slice_array is not None:
                     point_slice_values.append(int(cell_slice_array.GetValue(cell_idx)))
 
@@ -3031,7 +4790,11 @@ class ViewInterpretation(ViewMap):
             if reference_stack is not None and row_idx < len(reference_stack):
                 try:
                     target_coord = float(
-                        np.mean(np.asarray(reference_stack[row_idx], dtype=float)[:, normal_axis])
+                        np.mean(
+                            np.asarray(reference_stack[row_idx], dtype=float)[
+                                :, normal_axis
+                            ]
+                        )
                     )
                     stack[row_idx, :, normal_axis] = target_coord
                 except Exception:
@@ -3070,7 +4833,9 @@ class ViewInterpretation(ViewMap):
         # more consistent correspondences before any surface interpolation.
         for col_idx in range(col_count):
             column_curve = gridded_stack[:, col_idx, :]
-            clean_points, source_s, _keep_mask = self._prepare_polyline_sampling(column_curve)
+            clean_points, source_s, _keep_mask = self._prepare_polyline_sampling(
+                column_curve
+            )
             if clean_points is None or source_s is None:
                 continue
 
@@ -3194,7 +4959,11 @@ class ViewInterpretation(ViewMap):
         return grid_line
 
     def _build_grid_entity_dict_from_source(
-        self, source_uid=None, vtk_obj=None, slice_indices=None, fallback_name="multipart"
+        self,
+        source_uid=None,
+        vtk_obj=None,
+        slice_indices=None,
+        fallback_name="multipart",
     ):
         """Clone source metadata for a non-slice-filtered gridded PolyLine entity."""
         if not source_uid or vtk_obj is None:
@@ -3235,7 +5004,9 @@ class ViewInterpretation(ViewMap):
             ("parent_uid", "get_uid_x_section", ""),
         ):
             try:
-                entity_dict[key] = getattr(self.parent.geol_coll, getter_name)(source_uid)
+                entity_dict[key] = getattr(self.parent.geol_coll, getter_name)(
+                    source_uid
+                )
             except Exception:
                 entity_dict[key] = default
 
@@ -3262,11 +5033,6 @@ class ViewInterpretation(ViewMap):
         primary_axis = self._get_multipart_sampling_primary_axis(
             axis=axis, entity_kind=entity_kind
         )
-        _, in_plane_axes = self._get_slice_plane_axes(axis=axis)
-        secondary_axes = [coord_idx for coord_idx in in_plane_axes if coord_idx != primary_axis]
-        if not secondary_axes:
-            secondary_axes = [coord_idx for coord_idx in range(3) if coord_idx != primary_axis]
-        secondary_axis = secondary_axes[0]
 
         merged_points = []
         for segment in slice_segments:
@@ -3283,11 +5049,12 @@ class ViewInterpretation(ViewMap):
         order = np.argsort(merged_points[:, primary_axis], kind="mergesort")
         sorted_points = merged_points[order]
         primary_values = sorted_points[:, primary_axis]
-        secondary_values = sorted_points[:, secondary_axis]
 
         diffs = np.diff(primary_values)
         positive_diffs = np.abs(diffs[np.abs(diffs) > 1.0e-9])
-        merge_tolerance = float(np.median(positive_diffs) * 0.35) if positive_diffs.size else 0.0
+        merge_tolerance = (
+            float(np.median(positive_diffs) * 0.35) if positive_diffs.size else 0.0
+        )
         merge_tolerance = max(merge_tolerance, 1.0e-6)
 
         grouped_points = []
@@ -3295,7 +5062,10 @@ class ViewInterpretation(ViewMap):
         for point_idx in range(1, len(sorted_points) + 1):
             at_end = point_idx == len(sorted_points)
             if not at_end:
-                same_group = abs(primary_values[point_idx] - primary_values[point_idx - 1]) <= merge_tolerance
+                same_group = (
+                    abs(primary_values[point_idx] - primary_values[point_idx - 1])
+                    <= merge_tolerance
+                )
             else:
                 same_group = False
             if same_group:
@@ -3359,14 +5129,16 @@ class ViewInterpretation(ViewMap):
                 forward_cost = np.linalg.norm(curr_2d[0] - prev_2d[0]) + np.linalg.norm(
                     curr_2d[-1] - prev_2d[-1]
                 )
-                reverse_cost = np.linalg.norm(curr_2d[-1] - prev_2d[0]) + np.linalg.norm(
-                    curr_2d[0] - prev_2d[-1]
-                )
+                reverse_cost = np.linalg.norm(
+                    curr_2d[-1] - prev_2d[0]
+                ) + np.linalg.norm(curr_2d[0] - prev_2d[-1])
                 if reverse_cost + 1.0e-9 < forward_cost:
                     raw_points = raw_points[::-1]
                     point_ids = point_ids[::-1]
 
-            clean_points, source_s, keep_mask = self._prepare_polyline_sampling(raw_points)
+            clean_points, source_s, keep_mask = self._prepare_polyline_sampling(
+                raw_points
+            )
             if clean_points is None:
                 continue
 
@@ -3533,7 +5305,9 @@ class ViewInterpretation(ViewMap):
             start_idx = new_points.GetNumberOfPoints()
             sampled_points = smoothed_stack[row_idx]
             for point_idx, point in enumerate(sampled_points):
-                new_points.InsertNextPoint(float(point[0]), float(point[1]), float(point[2]))
+                new_points.InsertNextPoint(
+                    float(point[0]), float(point[1]), float(point[2])
+                )
                 point_slice_values.append(cell["slice_idx"])
 
             new_lines.InsertNextCell(target_point_count)
@@ -3576,7 +5350,8 @@ class ViewInterpretation(ViewMap):
 
         regularized_slices = [cell["slice_idx"] for cell in cells]
         slice_to_cell_index = {
-            int(slice_idx): cell_idx for cell_idx, slice_idx in enumerate(regularized_slices)
+            int(slice_idx): cell_idx
+            for cell_idx, slice_idx in enumerate(regularized_slices)
         }
         self._ensure_slice_index_property_metadata(
             vtk_obj=regularized_line, slice_indices=regularized_slices
@@ -3593,8 +5368,12 @@ class ViewInterpretation(ViewMap):
             "slice_count": len(cells),
             "old_total_points": int(sum(old_point_counts)),
             "new_total_points": int(len(cells) * target_point_count),
-            "old_median_points": float(np.median(old_point_counts)) if old_point_counts else 0.0,
-            "old_median_spacing": float(np.median(old_spacings)) if old_spacings else 0.0,
+            "old_median_points": (
+                float(np.median(old_point_counts)) if old_point_counts else 0.0
+            ),
+            "old_median_spacing": (
+                float(np.median(old_spacings)) if old_spacings else 0.0
+            ),
             "new_points_per_slice": int(target_point_count),
             "smooth_sigma": smooth_sigma,
             "gridded_resampling": bool(gridded_resampling),
@@ -3605,9 +5384,17 @@ class ViewInterpretation(ViewMap):
         grid_vtk = None
         if gridded_resampling:
             grid_vtk = self._build_grid_polyline_from_stack(point_stack=smoothed_stack)
-        return regularized_line, regularized_slices, slice_to_cell_index, stats, grid_vtk
+        return (
+            regularized_line,
+            regularized_slices,
+            slice_to_cell_index,
+            stats,
+            grid_vtk,
+        )
 
-    def _get_selected_multipart_entities_for_edit(self, action_title="Edit Multipart Slices"):
+    def _get_selected_multipart_entities_for_edit(
+        self, action_title="Edit Multipart Slices"
+    ):
         """Resolve all selected propagated multipart horizons/faults and validate their slice metadata."""
         geol_uids = set(self.parent.geol_coll.get_uids)
         selected_uids = [
@@ -3674,6 +5461,602 @@ class ViewInterpretation(ViewMap):
             return f"{entity_kind}: {entity_name}"
         return f"{entity_kind}: {uid[:8]}..." if uid else entity_kind
 
+    def _replace_multipart_entity_geometry(
+        self, selection=None, edited_points_by_slice=None
+    ):
+        """Replace slices on one multipart entity and refresh interpretation state."""
+        if selection is None or not edited_points_by_slice:
+            return False, 0
+
+        uid = selection["uid"]
+        entity_info = selection["entity_info"]
+        axis = entity_info.get("axis", self.current_axis)
+        seed_slice = entity_info.get("seed_slice")
+
+        new_vtk, slice_indices, slice_to_cell_index = (
+            self._build_multipart_vtk_with_replaced_slices(
+                vtk_obj=selection["vtk_obj"],
+                edited_points_by_slice=edited_points_by_slice,
+            )
+        )
+        if new_vtk is None or not slice_indices:
+            return False, 0
+
+        self._remove_filtered_actor(f"multipart_slice_{uid}")
+        self._remove_filtered_actor(f"multipart_fault_slice_{uid}")
+        self._remove_raw_actor_for_uid(uid)
+
+        self._register_multipart_interpretation_entity(
+            uid=uid,
+            axis=axis,
+            slice_indices=slice_indices,
+            slice_to_cell_index=slice_to_cell_index,
+        )
+        if uid in getattr(self, "multipart_horizons", {}):
+            self.multipart_horizons[uid]["seed_slice"] = (
+                int(seed_slice) if seed_slice in slice_indices else slice_indices[0]
+            )
+        if uid in getattr(self, "multipart_faults", {}):
+            self.multipart_faults[uid]["seed_slice"] = (
+                int(seed_slice) if seed_slice in slice_indices else slice_indices[0]
+            )
+
+        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=new_vtk)
+        return True, len(edited_points_by_slice)
+
+    def _build_multipart_vtk_from_slice_parts(
+        self, source_vtk=None, parts_by_slice=None
+    ):
+        """Build a multipart PolyLine from one or more replacement parts per slice."""
+        if source_vtk is None or not parts_by_slice:
+            return None, [], {}
+
+        from vtk import vtkCellArray, vtkIntArray, vtkPoints
+
+        source_cell_data = source_vtk.GetCellData()
+        source_point_data = source_vtk.GetPointData()
+        source_field_data = source_vtk.GetFieldData()
+        source_slice_array = (
+            source_cell_data.GetArray("slice_index")
+            if source_cell_data is not None and source_cell_data.HasArray("slice_index")
+            else None
+        )
+
+        reference_by_slice = {}
+        if source_slice_array is not None:
+            for cell_id in range(source_vtk.GetNumberOfCells()):
+                slice_idx = int(source_slice_array.GetValue(cell_id))
+                if slice_idx in reference_by_slice:
+                    continue
+                cell = source_vtk.GetCell(cell_id)
+                point_id = cell.GetPointId(0) if cell is not None and cell.GetNumberOfPoints() else None
+                reference_by_slice[slice_idx] = {
+                    "cell_id": int(cell_id),
+                    "point_id": point_id,
+                }
+
+        point_builders = self._prepare_numeric_array_builders(
+            source_data=source_point_data,
+            skip_names={"slice_index"},
+            skip_prefixes=("slices_",),
+        )
+        cell_builders = self._prepare_numeric_array_builders(
+            source_data=source_cell_data,
+            skip_names={"slice_index"},
+            skip_prefixes=("slices_",),
+        )
+
+        new_points = vtkPoints()
+        new_lines = vtkCellArray()
+        point_slice_values = []
+        cell_slice_values = []
+
+        for raw_slice_idx in sorted(parts_by_slice.keys()):
+            try:
+                slice_idx = int(raw_slice_idx)
+            except Exception:
+                continue
+            reference = reference_by_slice.get(slice_idx, {})
+            reference_point_id = reference.get("point_id")
+            reference_cell_id = reference.get("cell_id")
+
+            for raw_points in parts_by_slice.get(raw_slice_idx, []):
+                points = np.asarray(raw_points, dtype=float)
+                if points.ndim != 2 or points.shape[0] < 2 or points.shape[1] != 3:
+                    continue
+
+                start_idx = new_points.GetNumberOfPoints()
+                for point in points:
+                    new_points.InsertNextPoint(
+                        float(point[0]), float(point[1]), float(point[2])
+                    )
+                    point_slice_values.append(slice_idx)
+                    self._append_numeric_tuple(
+                        builders=point_builders,
+                        source_idx=None,
+                        default_idx=reference_point_id,
+                    )
+
+                new_lines.InsertNextCell(int(points.shape[0]))
+                for point_id in range(start_idx, start_idx + int(points.shape[0])):
+                    new_lines.InsertCellPoint(point_id)
+
+                cell_slice_values.append(slice_idx)
+                self._append_numeric_tuple(
+                    builders=cell_builders,
+                    source_idx=None,
+                    default_idx=reference_cell_id,
+                )
+
+        if new_points.GetNumberOfPoints() == 0 or new_lines.GetNumberOfCells() == 0:
+            return None, [], {}
+
+        out_vtk = PolyLine()
+        out_vtk.SetPoints(new_points)
+        out_vtk.SetLines(new_lines)
+
+        for _source_array, target_array in point_builders:
+            out_vtk.GetPointData().AddArray(target_array)
+        for _source_array, target_array in cell_builders:
+            out_vtk.GetCellData().AddArray(target_array)
+        self._copy_field_data_arrays(
+            source_data=source_field_data,
+            target_data=out_vtk.GetFieldData(),
+        )
+
+        point_slice_out = vtkIntArray()
+        point_slice_out.SetName("slice_index")
+        point_slice_out.SetNumberOfComponents(1)
+        for value in point_slice_values:
+            point_slice_out.InsertNextValue(int(value))
+        out_vtk.GetPointData().AddArray(point_slice_out)
+
+        cell_slice_out = vtkIntArray()
+        cell_slice_out.SetName("slice_index")
+        cell_slice_out.SetNumberOfComponents(1)
+        for value in cell_slice_values:
+            cell_slice_out.InsertNextValue(int(value))
+        out_vtk.GetCellData().AddArray(cell_slice_out)
+
+        slice_indices = sorted({int(value) for value in cell_slice_values if int(value) >= 0})
+        slice_to_cell_index = {}
+        for cell_idx, slice_idx in enumerate(cell_slice_values):
+            slice_idx = int(slice_idx)
+            if slice_idx not in slice_to_cell_index:
+                slice_to_cell_index[slice_idx] = cell_idx
+
+        self._ensure_slice_index_property_metadata(
+            vtk_obj=out_vtk,
+            slice_indices=slice_indices,
+        )
+        out_vtk.Modified()
+        return out_vtk, slice_indices, slice_to_cell_index
+
+    def split_multipart_line_by_line(self):
+        """
+        Split selected multipart horizons/faults with the last selected multipart line.
+
+        This mirrors the map-view Split line-line workflow: select the paper line(s)
+        first and the scissors/splitter line last.
+        """
+        action_title = "Split line"
+        selections = self._get_selected_multipart_entities_for_edit(
+            action_title=action_title
+        )
+        if not selections:
+            return
+        if len(selections) < 2:
+            message_dialog(
+                title=action_title,
+                message="Select at least two propagated multipart horizons or faults. Select the splitter line last.",
+            )
+            return
+
+        from ..helpers.multipart_snap import split_uv_line_by_line
+
+        scissor = selections[-1]
+        paper_selections = selections[:-1]
+        scissor_info = scissor["entity_info"]
+        scissor_axis = scissor_info.get("axis", self.current_axis)
+        scissor_seismic = scissor_info.get("seismic_uid")
+        affine = self._get_seismic_axis_vectors()
+
+        split_paper_count = 0
+        created_count = 0
+        changed_slice_count = 0
+        skipped_count = 0
+        replaced_uids = []
+        new_uids = []
+
+        for paper in paper_selections:
+            paper_info = paper["entity_info"]
+            paper_axis = paper_info.get("axis", self.current_axis)
+            paper_seismic = paper_info.get("seismic_uid")
+
+            if paper_axis != scissor_axis or (
+                paper_seismic and scissor_seismic and paper_seismic != scissor_seismic
+            ):
+                skipped_count += 1
+                continue
+
+            common_slices = sorted(
+                set(int(idx) for idx in paper["available_slices"])
+                & set(int(idx) for idx in scissor["available_slices"])
+            )
+            if not common_slices:
+                skipped_count += 1
+                continue
+
+            primary_replacements = {}
+            extra_parts_by_slice = {}
+
+            for slice_idx in common_slices:
+                paper_points = self._get_multipart_slice_points(
+                    vtk_obj=paper["vtk_obj"],
+                    slice_idx=slice_idx,
+                    slice_to_cell_index=paper_info.get("slice_to_cell_index", {}),
+                )
+                scissor_points = self._get_multipart_slice_points(
+                    vtk_obj=scissor["vtk_obj"],
+                    slice_idx=slice_idx,
+                    slice_to_cell_index=scissor_info.get("slice_to_cell_index", {}),
+                )
+                if paper_points is None or scissor_points is None:
+                    continue
+
+                paper_uv = self._world_points_to_slice_uv(
+                    points=paper_points,
+                    slice_idx=slice_idx,
+                    axis=paper_axis,
+                    affine=affine,
+                )
+                scissor_uv = self._world_points_to_slice_uv(
+                    points=scissor_points,
+                    slice_idx=slice_idx,
+                    axis=paper_axis,
+                    affine=affine,
+                )
+                pieces_uv = split_uv_line_by_line(
+                    paper_uv=paper_uv,
+                    scissors_uv=scissor_uv,
+                )
+                if len(pieces_uv) < 2:
+                    continue
+
+                primary_world = self._slice_uv_to_world_points(
+                    slice_uv=pieces_uv[0],
+                    slice_idx=slice_idx,
+                    axis=paper_axis,
+                    affine=affine,
+                )
+                if primary_world is None or len(primary_world) < 2:
+                    continue
+
+                extra_world_parts = []
+                for piece_uv in pieces_uv[1:]:
+                    piece_world = self._slice_uv_to_world_points(
+                        slice_uv=piece_uv,
+                        slice_idx=slice_idx,
+                        axis=paper_axis,
+                        affine=affine,
+                    )
+                    if piece_world is not None and len(piece_world) >= 2:
+                        extra_world_parts.append(piece_world)
+
+                if not extra_world_parts:
+                    continue
+
+                primary_replacements[int(slice_idx)] = primary_world
+                extra_parts_by_slice[int(slice_idx)] = extra_world_parts
+
+            if not primary_replacements:
+                continue
+
+            ok, _slice_count = self._replace_multipart_entity_geometry(
+                selection=paper,
+                edited_points_by_slice=primary_replacements,
+            )
+            if not ok:
+                skipped_count += 1
+                continue
+
+            extra_vtk, extra_slices, extra_map = self._build_multipart_vtk_from_slice_parts(
+                source_vtk=paper["vtk_obj"],
+                parts_by_slice=extra_parts_by_slice,
+            )
+            if extra_vtk is None or not extra_slices:
+                skipped_count += 1
+                continue
+
+            fallback_name = "fault" if paper["entity_kind"] == "fault" else "multipart"
+            new_entity_dict = self._build_multipart_entity_dict_from_source(
+                source_uid=paper["uid"],
+                vtk_obj=extra_vtk,
+                slice_indices=extra_slices,
+                fallback_name=fallback_name,
+            )
+            if new_entity_dict is None:
+                skipped_count += 1
+                continue
+            try:
+                base_name = str(self.parent.geol_coll.get_uid_name(paper["uid"]))
+            except Exception:
+                base_name = fallback_name
+            new_entity_dict["name"] = f"{base_name} split"
+
+            new_uid = self.parent.geol_coll.add_entity_from_dict(new_entity_dict)
+            self._register_multipart_interpretation_entity(
+                uid=new_uid,
+                axis=paper_axis,
+                slice_indices=extra_slices,
+                slice_to_cell_index=extra_map,
+            )
+            seed_slice = paper_info.get("seed_slice")
+            if new_uid in getattr(self, "multipart_horizons", {}):
+                self.multipart_horizons[new_uid]["seed_slice"] = (
+                    int(seed_slice) if seed_slice in extra_slices else extra_slices[0]
+                )
+            if new_uid in getattr(self, "multipart_faults", {}):
+                self.multipart_faults[new_uid]["seed_slice"] = (
+                    int(seed_slice) if seed_slice in extra_slices else extra_slices[0]
+                )
+
+            replaced_uids.append(paper["uid"])
+            new_uids.append(new_uid)
+            split_paper_count += 1
+            created_count += 1
+            changed_slice_count += len(primary_replacements)
+
+        if not replaced_uids:
+            self.print_terminal(
+                "Split line completed: no selected multipart paper line was split by the selected splitter."
+            )
+            self.clear_selection()
+            return
+
+        self._mark_slice_visibility_dirty()
+        for uid in replaced_uids + new_uids:
+            if uid in getattr(self, "multipart_horizons", {}):
+                self.update_multipart_horizon_visibility(uid)
+            if uid in getattr(self, "multipart_faults", {}):
+                self.update_multipart_fault_visibility(uid)
+
+        try:
+            self.parent.signals.metadata_modified.emit(
+                replaced_uids + new_uids,
+                self.parent.geol_coll,
+            )
+        except Exception:
+            pass
+
+        self.plotter.render()
+        skipped_suffix = f", skipped {skipped_count}" if skipped_count else ""
+        self.print_terminal(
+            "Split line completed: split "
+            f"{split_paper_count} multipart line(s), changed {changed_slice_count} "
+            f"slice(s), created {created_count} split multipart line(s)"
+            f"{skipped_suffix}."
+        )
+        self.clear_selection()
+
+    def snap_multipart_to_intersection(self):
+        """
+        Snap two selected multipart horizons/faults at their same-slice intersections.
+
+        The operation inserts exact shared intersection nodes, trims short terminal
+        overshoots, and extends close endpoints to the opposite line per slice.
+        """
+        action_title = "Snap to Intersection"
+        selections = self._get_selected_multipart_entities_for_edit(
+            action_title=action_title
+        )
+        if not selections:
+            return
+        if len(selections) != 2:
+            message_dialog(
+                title=action_title,
+                message="Select exactly two propagated multipart horizons or faults.",
+            )
+            return
+
+        sel_a, sel_b = selections
+        info_a = sel_a["entity_info"]
+        info_b = sel_b["entity_info"]
+        axis_a = info_a.get("axis", self.current_axis)
+        axis_b = info_b.get("axis", self.current_axis)
+        seismic_a = info_a.get("seismic_uid")
+        seismic_b = info_b.get("seismic_uid")
+
+        if axis_a != axis_b:
+            message_dialog(
+                title=action_title,
+                message="The selected multipart entities must use the same interpretation axis.",
+            )
+            return
+        if seismic_a and seismic_b and seismic_a != seismic_b:
+            message_dialog(
+                title=action_title,
+                message="The selected multipart entities must belong to the same seismic volume.",
+            )
+            return
+
+        common_slices = sorted(
+            set(int(idx) for idx in sel_a["available_slices"])
+            & set(int(idx) for idx in sel_b["available_slices"])
+        )
+        if not common_slices:
+            message_dialog(
+                title=action_title,
+                message="The selected multipart entities do not share any slice indices.",
+            )
+            return
+
+        tolerance = input_one_value_dialog(
+            parent=self,
+            title="Snap max extension distance",
+            label="Insert max extension distance in slice samples",
+            default_value=10,
+        )
+        if tolerance is None:
+            self.print_terminal(" -- Snap to intersection cancelled by user -- ")
+            return
+        try:
+            max_distance = float(tolerance)
+        except Exception:
+            message_dialog(
+                title=action_title,
+                message="Max extension distance must be a positive number.",
+            )
+            return
+        if max_distance <= 0:
+            message_dialog(
+                title=action_title,
+                message="Max extension distance must be greater than zero.",
+            )
+            return
+
+        affine = self._get_seismic_axis_vectors()
+        replacements = {sel_a["uid"]: {}, sel_b["uid"]: {}}
+        stats = {
+            "processed_slices": 0,
+            "changed_slices": 0,
+            "intersection_count": 0,
+            "trim_count": 0,
+            "endpoint_snap_count": 0,
+            "skipped_slices": 0,
+        }
+
+        for slice_idx in common_slices:
+            points_a = self._get_multipart_slice_points(
+                vtk_obj=sel_a["vtk_obj"],
+                slice_idx=slice_idx,
+                slice_to_cell_index=info_a.get("slice_to_cell_index", {}),
+            )
+            points_b = self._get_multipart_slice_points(
+                vtk_obj=sel_b["vtk_obj"],
+                slice_idx=slice_idx,
+                slice_to_cell_index=info_b.get("slice_to_cell_index", {}),
+            )
+            if points_a is None or points_b is None:
+                stats["skipped_slices"] += 1
+                continue
+
+            uv_a = self._world_points_to_slice_uv(
+                points=points_a,
+                slice_idx=slice_idx,
+                axis=axis_a,
+                affine=affine,
+            )
+            uv_b = self._world_points_to_slice_uv(
+                points=points_b,
+                slice_idx=slice_idx,
+                axis=axis_a,
+                affine=affine,
+            )
+            if uv_a is None or uv_b is None or len(uv_a) < 2 or len(uv_b) < 2:
+                stats["skipped_slices"] += 1
+                continue
+
+            out_a_uv, out_b_uv, slice_stats = self._snap_two_uv_lines_to_intersection(
+                line_a_uv=uv_a,
+                line_b_uv=uv_b,
+                max_distance=max_distance,
+            )
+            stats["processed_slices"] += 1
+            stats["intersection_count"] += slice_stats["intersection_count"]
+            stats["trim_count"] += slice_stats["trim_count"]
+            stats["endpoint_snap_count"] += slice_stats["endpoint_snap_count"]
+
+            changed_a = bool(slice_stats["changed_a"])
+            changed_b = bool(slice_stats["changed_b"])
+            if not changed_a and not changed_b:
+                continue
+
+            if changed_a:
+                out_a_world = self._slice_uv_to_world_points(
+                    slice_uv=out_a_uv,
+                    slice_idx=slice_idx,
+                    axis=axis_a,
+                    affine=affine,
+                )
+                if out_a_world is not None and len(out_a_world) >= 2:
+                    replacements[sel_a["uid"]][slice_idx] = out_a_world
+            if changed_b:
+                out_b_world = self._slice_uv_to_world_points(
+                    slice_uv=out_b_uv,
+                    slice_idx=slice_idx,
+                    axis=axis_a,
+                    affine=affine,
+                )
+                if out_b_world is not None and len(out_b_world) >= 2:
+                    replacements[sel_b["uid"]][slice_idx] = out_b_world
+
+            if (
+                (changed_a and slice_idx in replacements[sel_a["uid"]])
+                or (changed_b and slice_idx in replacements[sel_b["uid"]])
+            ):
+                stats["changed_slices"] += 1
+
+        if not replacements[sel_a["uid"]] and not replacements[sel_b["uid"]]:
+            self.print_terminal(
+                "Snap to intersection completed: no multipart slice intersections or endpoint snaps found within distance."
+            )
+            self.clear_selection()
+            return
+
+        replaced_uids = []
+        failed_uids = []
+        for selection in (sel_a, sel_b):
+            uid = selection["uid"]
+            if not replacements[uid]:
+                continue
+            ok, _slice_count = self._replace_multipart_entity_geometry(
+                selection=selection,
+                edited_points_by_slice=replacements[uid],
+            )
+            if ok:
+                replaced_uids.append(uid)
+            else:
+                failed_uids.append(uid)
+
+        if failed_uids:
+            message_dialog(
+                title=action_title,
+                message=(
+                    "Could not rewrite one or more multipart entities after snapping: "
+                    + ", ".join(uid[:8] + "..." for uid in failed_uids)
+                ),
+            )
+
+        if replaced_uids:
+            self._mark_slice_visibility_dirty()
+            for uid in replaced_uids:
+                if uid in getattr(self, "multipart_horizons", {}):
+                    self.update_multipart_horizon_visibility(uid)
+                if uid in getattr(self, "multipart_faults", {}):
+                    self.update_multipart_fault_visibility(uid)
+            try:
+                self.parent.signals.metadata_modified.emit(
+                    replaced_uids, self.parent.geol_coll
+                )
+            except Exception:
+                pass
+            self.plotter.render()
+
+        skipped_suffix = (
+            f", skipped slices {stats['skipped_slices']}"
+            if stats["skipped_slices"]
+            else ""
+        )
+        self.print_terminal(
+            "Snap to intersection completed: updated "
+            f"{len(replaced_uids)} multipart line(s), changed {stats['changed_slices']} "
+            f"slice-pair(s), intersections {stats['intersection_count']}, "
+            f"trimmed branches {stats['trim_count']}, endpoint snaps {stats['endpoint_snap_count']}"
+            f"{skipped_suffix}."
+        )
+        self.clear_selection()
+
     def _regularize_single_multipart_entity(
         self, selection=None, action_title="Regularize Multipart Sampling"
     ):
@@ -3729,7 +6112,9 @@ class ViewInterpretation(ViewMap):
         try:
             points_per_slice = max(2, int(settings["points_per_slice"]))
             smooth_sigma = max(0.0, float(settings["smooth_sigma"]))
-            preserve_seed_slice = str(settings["preserve_seed_slice"]).strip().lower() != "no"
+            preserve_seed_slice = (
+                str(settings["preserve_seed_slice"]).strip().lower() != "no"
+            )
             gridded_resampling = (
                 str(settings.get("gridded_resampling", "No")).strip().lower() == "yes"
             )
@@ -3745,14 +6130,16 @@ class ViewInterpretation(ViewMap):
         if preserve_seed_slice and seed_slice in available_slices:
             preserve_slice_indices.append(int(seed_slice))
 
-        new_vtk, new_slices, slice_to_cell_index, stats, grid_vtk = self._build_regularized_multipart_vtk(
-            vtk_obj=vtk_obj,
-            axis=axis,
-            entity_kind=entity_kind,
-            target_point_count=points_per_slice,
-            smooth_sigma=smooth_sigma,
-            preserve_slice_indices=preserve_slice_indices,
-            gridded_resampling=gridded_resampling,
+        new_vtk, new_slices, slice_to_cell_index, stats, grid_vtk = (
+            self._build_regularized_multipart_vtk(
+                vtk_obj=vtk_obj,
+                axis=axis,
+                entity_kind=entity_kind,
+                target_point_count=points_per_slice,
+                smooth_sigma=smooth_sigma,
+                preserve_slice_indices=preserve_slice_indices,
+                gridded_resampling=gridded_resampling,
+            )
         )
         if new_vtk is None or not new_slices:
             message_dialog(
@@ -3811,8 +6198,8 @@ class ViewInterpretation(ViewMap):
                 slice_indices=[],
                 fallback_name=fallback_name,
             )
-            base_name = re_sub(
-                r"\s+regularized\s*$", "", base_name, flags=re_IGNORECASE
+            base_name = re.sub(
+                r"\s+regularized\s*$", "", base_name, flags=re.IGNORECASE
             )
             if new_slices:
                 new_entity_dict["name"] = (
@@ -4099,7 +6486,9 @@ class ViewInterpretation(ViewMap):
             "available_slices": available_slices,
         }
 
-    def _get_selected_multipart_entity_for_edit(self, action_title="Edit Multipart Slices"):
+    def _get_selected_multipart_entity_for_edit(
+        self, action_title="Edit Multipart Slices"
+    ):
         """Resolve the selected propagated multipart entity and validate its slice metadata."""
         selected_uids = [
             uid
@@ -4175,9 +6564,11 @@ class ViewInterpretation(ViewMap):
             )
             return
 
-        new_vtk, remaining_slices, slice_to_cell_index = self._build_multipart_subset_vtk(
-            vtk_obj=vtk_obj,
-            kept_cell_ids=kept_cell_ids,
+        new_vtk, remaining_slices, slice_to_cell_index = (
+            self._build_multipart_subset_vtk(
+                vtk_obj=vtk_obj,
+                kept_cell_ids=kept_cell_ids,
+            )
         )
         if new_vtk is None or new_vtk.GetNumberOfCells() == 0:
             self.parent.geol_coll.remove_entity(uid=uid)
@@ -4272,13 +6663,17 @@ class ViewInterpretation(ViewMap):
             )
             return
 
-        extracted_vtk, extracted_slices, extracted_map = self._build_multipart_subset_vtk(
-            vtk_obj=vtk_obj,
-            kept_cell_ids=extracted_cell_ids,
+        extracted_vtk, extracted_slices, extracted_map = (
+            self._build_multipart_subset_vtk(
+                vtk_obj=vtk_obj,
+                kept_cell_ids=extracted_cell_ids,
+            )
         )
-        remaining_vtk, remaining_slices, remaining_map = self._build_multipart_subset_vtk(
-            vtk_obj=vtk_obj,
-            kept_cell_ids=remaining_cell_ids,
+        remaining_vtk, remaining_slices, remaining_map = (
+            self._build_multipart_subset_vtk(
+                vtk_obj=vtk_obj,
+                kept_cell_ids=remaining_cell_ids,
+            )
         )
         if (
             extracted_vtk is None
@@ -4500,7 +6895,9 @@ class ViewInterpretation(ViewMap):
                 if seed_slice in primary_payload["slice_indices"]
                 else primary_payload["slice_indices"][0]
             )
-        self.parent.geol_coll.replace_vtk(uid=uid, vtk_object=primary_payload["vtk_obj"])
+        self.parent.geol_coll.replace_vtk(
+            uid=uid, vtk_object=primary_payload["vtk_obj"]
+        )
         self.parent.geol_coll.set_uid_name(uid=uid, name=primary_name)
 
         new_uids = []
@@ -4529,9 +6926,13 @@ class ViewInterpretation(ViewMap):
                 slice_to_cell_index=payload["slice_to_cell_index"],
             )
             if new_uid in getattr(self, "multipart_horizons", {}):
-                self.multipart_horizons[new_uid]["seed_slice"] = payload["slice_indices"][0]
+                self.multipart_horizons[new_uid]["seed_slice"] = payload[
+                    "slice_indices"
+                ][0]
             if new_uid in getattr(self, "multipart_faults", {}):
-                self.multipart_faults[new_uid]["seed_slice"] = payload["slice_indices"][0]
+                self.multipart_faults[new_uid]["seed_slice"] = payload["slice_indices"][
+                    0
+                ]
             new_uids.append(new_uid)
 
         try:
@@ -4563,18 +6964,30 @@ class ViewInterpretation(ViewMap):
 
     def update_slice_colormap(self):
         """Update the slice colormap when legend changes - called by prop_legend_cmap_modified signal."""
-        if self.slice_actor is not None:
-            cmap = self.get_seismic_colormap()
-            # Force full redraw with new colormap
-            self._camera_initialized = True  # Keep camera position
-            # Note: Do NOT reset scalar_range here - we want to keep using the full volume range
-            # for consistent colormap across all slices. The _cached_scalar_range will be used.
-            old_slice_actor = self.slice_actor
-            self.slice_actor = None  # Force full update
-            self.update_slice()
+        if not self.current_seismic_uid:
+            return
+
+        # Keep the current camera/framing, but refresh the full-volume style cache.
+        self._camera_initialized = True
+        if hasattr(self, "_cached_seismic") and self._cached_seismic is not None:
+            self._refresh_cached_scalar_style()
+            self.scalar_range = self._cached_scalar_range
+
+        slice_actor_name = "seismic_slice_actor"
+        try:
+            if self.slice_actor is not None:
+                self.plotter.remove_actor(self.slice_actor)
+            elif slice_actor_name in self.plotter.renderer.actors:
+                self.plotter.remove_actor(slice_actor_name)
+        except Exception:
+            pass
+
+        self.slice_actor = None
+        self.update_slice()
 
     def draw_interpretation_line(self):
         """Draw a line on the current seismic slice. The line will be snapped to the slice plane."""
+
         def end_digitize(event, input_dict):
             # Signal called to end the digitization of a trace. It returns a new polydata
             self.plotter.untrack_click_position()
@@ -4584,54 +6997,69 @@ class ViewInterpretation(ViewMap):
             if traced_pld.GetNumberOfPoints() > 0:
                 # Copy the traced polydata to our vtk object first (like standard draw_line)
                 input_dict["vtk_obj"].ShallowCopy(traced_pld)
-                
+
                 # Debug: Print original points before snapping
                 points = np.array(input_dict["vtk_obj"].GetPoints().GetData())
-                self.print_terminal(f"Original traced points (first 3): {points[:min(3, len(points))]}")
-                self.print_terminal(f"Current axis: {self.current_axis}, slice position: {self.current_slice_position}")
-                
+                self.print_terminal(
+                    f"Original traced points (first 3): {points[:min(3, len(points))]}"
+                )
+                self.print_terminal(
+                    f"Current axis: {self.current_axis}, slice position: {self.current_slice_position}"
+                )
+
                 # Now snap the points to the current slice plane
                 snapped_points = self.snap_points_to_slice(points)
-                self.print_terminal(f"Snapped points (first 3): {snapped_points[:min(3, len(snapped_points))]}")
-                
+                self.print_terminal(
+                    f"Snapped points (first 3): {snapped_points[:min(3, len(snapped_points))]}"
+                )
+
                 input_dict["vtk_obj"].points = snapped_points
-                
+
                 # Store the slice info for this line (capture current values from outer scope)
                 slice_info = {
-                    'seismic_uid': self.current_seismic_uid,
-                    'axis': self.current_axis,
-                    'slice_index': self.current_slice_index
+                    "seismic_uid": self.current_seismic_uid,
+                    "axis": self.current_axis,
+                    "slice_index": self.current_slice_index,
                 }
-                
+
                 # Add to geological collection - this emits signals that other views listen to
                 new_uid = self.parent.geol_coll.add_entity_from_dict(input_dict)
-                self.print_terminal(f"Created interpretation line with {len(snapped_points)} points, uid: {new_uid}")
-                
+                self.print_terminal(
+                    f"Created interpretation line with {len(snapped_points)} points, uid: {new_uid}"
+                )
+
                 # Track this interpretation line with its slice info
                 # Track this interpretation line with its slice info
                 self.register_interpretation_line(new_uid, slice_info)
-                self.print_terminal(f"Registered interpretation line {new_uid} for {slice_info['axis']} slice {slice_info['slice_index']}")
-            
+                self.print_terminal(
+                    f"Registered interpretation line {new_uid} for {slice_info['axis']} slice {slice_info['slice_index']}"
+                )
+
             # Restore pickability state of all actors
-            if hasattr(self, '_saved_pickable_state'):
+            if hasattr(self, "_saved_pickable_state"):
                 for name, pickable in self._saved_pickable_state.items():
                     try:
                         if name in self.plotter.renderer.actors:
                             self.plotter.renderer.actors[name].SetPickable(pickable)
                     except:
                         pass
-                delattr(self, '_saved_pickable_state')
-                    
+                delattr(self, "_saved_pickable_state")
+            try:
+                if "picking_plane" in self.plotter.renderer.actors:
+                    self.plotter.remove_actor("picking_plane")
+            except Exception:
+                pass
+
             tracer.EnabledOff()
             self.enable_actions()
 
         self.disable_actions()
-        
+
         if not self.current_seismic_uid:
-            self.print_terminal("Please select a seismic volume first!")
+            self.print_terminal("Please select a structured volume first!")
             self.enable_actions()
             return
-        
+
         # Create deepcopy of the geological entity dictionary.
         line_dict = deepcopy(self.parent.geol_coll.entity_dict)
         feature_choices = self._sanitize_legend_choices(
@@ -4667,54 +7095,74 @@ class ViewInterpretation(ViewMap):
         for key in line_dict_updt:
             line_dict[key] = line_dict_updt[key]
         line_dict["role"] = self._sanitize_legend_value(line_dict.get("role"), "undef")
-        line_dict["feature"] = self._sanitize_legend_value(line_dict.get("feature"), "undef")
-        line_dict["scenario"] = self._sanitize_legend_value(line_dict.get("scenario"), "undef")
-        
+        line_dict["feature"] = self._sanitize_legend_value(
+            line_dict.get("feature"), "undef"
+        )
+        line_dict["scenario"] = self._sanitize_legend_value(
+            line_dict.get("scenario"), "undef"
+        )
+
         line_dict["topology"] = "PolyLine"
         line_dict["x_section"] = ""
         line_dict["vtk_obj"] = PolyLine()
         self._set_entity_parent_to_current_seismic(line_dict)
-        
-        # Store pickability state of all actors, then make only the slice pickable
+
+        # Store pickability state of all actors, then make only a lightweight picking
+        # plane pickable. Picking directly on dense VTI slice geometry is much slower.
         self._saved_pickable_state = {}
         for name, actor in self.plotter.renderer.actors.items():
             try:
                 self._saved_pickable_state[name] = actor.GetPickable()
-                if name != "seismic_slice_actor":
-                    actor.SetPickable(False)
+                actor.SetPickable(False)
             except:
                 pass
-        
-        # Ensure the slice actor is pickable
-        if self.slice_actor:
-            try:
+
+        self.add_picking_plane()
+        try:
+            if "picking_plane" in self.plotter.renderer.actors:
+                self.plotter.renderer.actors["picking_plane"].SetPickable(True)
+                self.print_terminal(
+                    "Picking plane is now the only pickable object for tracing"
+                )
+            elif self.slice_actor:
                 self.slice_actor.SetPickable(True)
-                self.print_terminal("Slice actor is now the only pickable object for tracing")
-            except Exception as e:
-                self.print_terminal(f"Could not set slice pickable: {e}")
-        
+                self.print_terminal(
+                    "Falling back to slice actor picking because the picking plane was not created"
+                )
+        except Exception as e:
+            self.print_terminal(f"Could not configure tracing picker: {e}")
+
         tracer = Tracer(self)
         tracer.EnabledOn()
         self.plotter.track_click_position(
             side="right", callback=lambda event: end_digitize(event, line_dict)
         )
-    
-    def add_picking_plane(self):
+
+    def add_picking_plane(self, expansion_factor=1.0):
         """Add a transparent plane at the current slice position for picking during line drawing."""
         # Remove any existing picking plane first
-        if 'picking_plane' in self.plotter.renderer.actors:
-            self.plotter.remove_actor('picking_plane')
+        if "picking_plane" in self.plotter.renderer.actors:
+            self.plotter.remove_actor("picking_plane")
             self.print_terminal("Removed old picking plane")
-        
-        if not hasattr(self, 'current_slice_bounds') or self.current_slice_bounds is None:
+
+        if (
+            not hasattr(self, "current_slice_bounds")
+            or self.current_slice_bounds is None
+        ):
             self.print_terminal("No slice bounds available for picking plane")
             return
-            
+
         bounds = self.current_slice_bounds
-        
-        self.print_terminal(f"DEBUG: Creating picking plane at slice position {self.current_slice_position} for {self.current_axis} index {self.current_slice_index}")
+        try:
+            expansion_factor = max(float(expansion_factor), 1.0)
+        except Exception:
+            expansion_factor = 1.0
+
+        self.print_terminal(
+            f"DEBUG: Creating picking plane at slice position {self.current_slice_position} for {self.current_axis} index {self.current_slice_index}"
+        )
         self.print_terminal(f"DEBUG: Bounds: {bounds}")
-        
+
         # Get vertical exaggeration to position plane in display space
         v_exag = 1.0
         try:
@@ -4725,7 +7173,7 @@ class ViewInterpretation(ViewMap):
                     v_exag = 1.0
         except:
             pass
-        
+
         # Create a plane mesh for picking.
         # It must be in DISPLAY coordinates (with VE applied) because the tracer picks in rendered space.
         plane = None
@@ -4738,16 +7186,18 @@ class ViewInterpretation(ViewMap):
             )
             if plane_info is not None:
                 plane_center, plane_normal, row_vec, col_vec, dims = plane_info
-                disp_center, disp_normal, i_size, j_size = self._get_display_plane_from_affine(
-                    plane_center, plane_normal, row_vec, col_vec, dims, v_exag
+                disp_center, disp_normal, i_size, j_size = (
+                    self._get_display_plane_from_affine(
+                        plane_center, plane_normal, row_vec, col_vec, dims, v_exag
+                    )
                 )
                 plane = pv.Plane(
                     center=disp_center,
                     direction=disp_normal,
-                    i_size=i_size,
-                    j_size=j_size,
+                    i_size=i_size * expansion_factor,
+                    j_size=j_size * expansion_factor,
                     i_resolution=1,
-                    j_resolution=1
+                    j_resolution=1,
                 )
                 self.print_terminal(
                     f"DEBUG: Affine picking plane center: {disp_center}, normal: {disp_normal}"
@@ -4755,54 +7205,78 @@ class ViewInterpretation(ViewMap):
 
         if plane is None:
             # Fallback to axis-aligned planes
-            if self.current_axis == 'Inline':
+            if self.current_axis == "Inline":
                 # YZ plane at current X position
-                plane_center = (self.current_slice_position, (bounds[2]+bounds[3])/2, (bounds[4]+bounds[5])/2 * v_exag)
+                plane_center = (
+                    self.current_slice_position,
+                    (bounds[2] + bounds[3]) / 2,
+                    (bounds[4] + bounds[5]) / 2 * v_exag,
+                )
                 plane = pv.Plane(
                     center=plane_center,
                     direction=(1, 0, 0),  # Normal along X
-                    i_size=bounds[3] - bounds[2],  # Y extent
-                    j_size=abs(bounds[5] - bounds[4]) * v_exag,  # Z extent with VE
+                    i_size=(bounds[3] - bounds[2]) * expansion_factor,  # Y extent
+                    j_size=abs(bounds[5] - bounds[4])
+                    * v_exag
+                    * expansion_factor,  # Z extent with VE
                     i_resolution=1,
-                    j_resolution=1
+                    j_resolution=1,
                 )
-                self.print_terminal(f"DEBUG: Inline picking plane center: {plane_center}")
-            elif self.current_axis == 'Crossline':
+                self.print_terminal(
+                    f"DEBUG: Inline picking plane center: {plane_center}"
+                )
+            elif self.current_axis == "Crossline":
                 # XZ plane at current Y position
-                plane_center = ((bounds[0]+bounds[1])/2, self.current_slice_position, (bounds[4]+bounds[5])/2 * v_exag)
+                plane_center = (
+                    (bounds[0] + bounds[1]) / 2,
+                    self.current_slice_position,
+                    (bounds[4] + bounds[5]) / 2 * v_exag,
+                )
                 plane = pv.Plane(
                     center=plane_center,
                     direction=(0, 1, 0),  # Normal along Y
-                    i_size=bounds[1] - bounds[0],  # X extent
-                    j_size=abs(bounds[5] - bounds[4]) * v_exag,  # Z extent with VE
+                    i_size=(bounds[1] - bounds[0]) * expansion_factor,  # X extent
+                    j_size=abs(bounds[5] - bounds[4])
+                    * v_exag
+                    * expansion_factor,  # Z extent with VE
                     i_resolution=1,
-                    j_resolution=1
+                    j_resolution=1,
                 )
-                self.print_terminal(f"DEBUG: Crossline picking plane center: {plane_center}")
-            elif self.current_axis == 'Z-slice':
+                self.print_terminal(
+                    f"DEBUG: Crossline picking plane center: {plane_center}"
+                )
+            elif self.current_axis == "Z-slice":
                 # XY plane at current Z position (scaled)
-                plane_center = ((bounds[0]+bounds[1])/2, (bounds[2]+bounds[3])/2, self.current_slice_position * v_exag)
+                plane_center = (
+                    (bounds[0] + bounds[1]) / 2,
+                    (bounds[2] + bounds[3]) / 2,
+                    self.current_slice_position * v_exag,
+                )
                 plane = pv.Plane(
                     center=plane_center,
                     direction=(0, 0, 1),  # Normal along Z
-                    i_size=bounds[1] - bounds[0],  # X extent
-                    j_size=bounds[3] - bounds[2],  # Y extent
+                    i_size=(bounds[1] - bounds[0]) * expansion_factor,  # X extent
+                    j_size=(bounds[3] - bounds[2]) * expansion_factor,  # Y extent
                     i_resolution=1,
-                    j_resolution=1
+                    j_resolution=1,
                 )
-                self.print_terminal(f"DEBUG: Z-slice picking plane center: {plane_center}")
-        
+                self.print_terminal(
+                    f"DEBUG: Z-slice picking plane center: {plane_center}"
+                )
+
         # Add the plane with very low opacity so it's invisible but pickable
         self.plotter.add_mesh(
             plane,
-            name='picking_plane',
-            color='white',
+            name="picking_plane",
+            color="white",
             opacity=0.01,  # Nearly invisible
             pickable=True,
-            reset_camera=False
+            reset_camera=False,
         )
-        self.print_terminal(f"Added picking plane at {self.current_axis} position {self.current_slice_position} (VE={v_exag})")
-        
+        self.print_terminal(
+            f"Added picking plane at {self.current_axis} position {self.current_slice_position} (VE={v_exag})"
+        )
+
         # Debug: print plane bounds to verify it's at the right position
         self.print_terminal(f"Picking plane bounds: {plane.bounds}")
 
@@ -4811,7 +7285,7 @@ class ViewInterpretation(ViewMap):
         Points from the tracer are typically in display coordinates (with VE applied), so
         convert them back to real world coordinates before storing when requested."""
         snapped = points.copy()
-        
+
         # Get the current vertical exaggeration from the plotter scale
         v_exag = 1.0
         try:
@@ -4822,45 +7296,51 @@ class ViewInterpretation(ViewMap):
                     v_exag = 1.0
         except:
             pass
-        
-        self.print_terminal(f"Snapping with v_exag={v_exag}, axis={self.current_axis}, slice_pos={self.current_slice_position}")
-        
+
+        self.print_terminal(
+            f"Snapping with v_exag={v_exag}, axis={self.current_axis}, slice_pos={self.current_slice_position}"
+        )
+
         # Only Z coordinates need to be unscaled when the picked points come from
         # display-space interactions such as traced contours on the rendered slice.
         if points_are_display_coords and v_exag != 1.0:
             snapped[:, 2] = snapped[:, 2] / v_exag
             self.print_terminal(f"Unscaled Z by factor {v_exag}")
-        
+
         # Snap to the true slice plane if available (rotated/skewed grids)
         plane_center = getattr(self, "current_slice_plane_center", None)
         plane_normal = getattr(self, "current_slice_plane_normal", None)
         if plane_center is not None and plane_normal is not None:
             try:
-                snapped = self._project_points_to_plane(snapped, plane_center, plane_normal)
+                snapped = self._project_points_to_plane(
+                    snapped, plane_center, plane_normal
+                )
             except Exception:
                 pass
         else:
             # Fallback to axis-aligned snapping
-            if self.current_axis == 'Inline':
+            if self.current_axis == "Inline":
                 # For inline view (YZ plane), X must be constant
                 snapped[:, 0] = self.current_slice_position
                 self.print_terminal(f"Snapped X to {self.current_slice_position}")
-            elif self.current_axis == 'Crossline':
+            elif self.current_axis == "Crossline":
                 # For crossline view (XZ plane), Y must be constant
                 snapped[:, 1] = self.current_slice_position
                 self.print_terminal(f"Snapped Y to {self.current_slice_position}")
-            elif self.current_axis == 'Z-slice':
+            elif self.current_axis == "Z-slice":
                 # For Z-slice view (XY plane), Z must be constant
                 snapped[:, 2] = self.current_slice_position
                 self.print_terminal(f"Snapped Z to {self.current_slice_position}")
-        
-        self.print_terminal(f"Final snapped points range: X=[{snapped[:, 0].min():.2f}, {snapped[:, 0].max():.2f}], Y=[{snapped[:, 1].min():.2f}, {snapped[:, 1].max():.2f}], Z=[{snapped[:, 2].min():.2f}, {snapped[:, 2].max():.2f}]")
-        
+
+        self.print_terminal(
+            f"Final snapped points range: X=[{snapped[:, 0].min():.2f}, {snapped[:, 0].max():.2f}], Y=[{snapped[:, 1].min():.2f}, {snapped[:, 1].max():.2f}], Z=[{snapped[:, 2].min():.2f}, {snapped[:, 2].max():.2f}]"
+        )
+
         return snapped
 
     def update_interpretation_line_visibility(self):
         """Update visibility of interpretation lines based on current slice.
-        
+
         OPTIMIZED: Uses spatial hash map (interpretation_lines_by_slice) for O(1) lookup
         instead of iterating through all lines.
         """
@@ -4868,156 +7348,490 @@ class ViewInterpretation(ViewMap):
         if not self.current_seismic_uid:
             return
 
-        cache_key = (self.current_seismic_uid, self.current_axis, self.current_slice_index)
-        
+        cache_key = (
+            self.current_seismic_uid,
+            self.current_axis,
+            self.current_slice_index,
+        )
+
         # Avoid redundant updates if nothing changed
-        if hasattr(self, '_last_visibility_key') and self._last_visibility_key == cache_key:
+        if (
+            hasattr(self, "_last_visibility_key")
+            and self._last_visibility_key == cache_key
+        ):
             # Check if any new lines were added that invalidated the clean state
-            if not getattr(self, '_visibility_dirty', False):
+            if not getattr(self, "_visibility_dirty", False):
                 return
-        
+
         self._last_visibility_key = cache_key
         self._visibility_dirty = False
-        
+
         try:
             # 1. Get the set of UIDs that SHOULD be visible on this slice
             target_uids = set(self.interpretation_lines_by_slice.get(cache_key, set()))
             target_uids = {
                 uid for uid in target_uids if self._is_uid_enabled_in_tree(uid)
             }
-            
+
             # 2. Track currently visible lines to minimize VTK calls
-            if not hasattr(self, 'vis_lines_on_display'):
+            if not hasattr(self, "vis_lines_on_display"):
                 self.vis_lines_on_display = set()
-            
-            # If we don't track what's currently visible properly, we might just assume 
+
+            # If we don't track what's currently visible properly, we might just assume
             # we need to hide everything that is NOT in target_uids but IS in interpretation_lines
             # However, iterating self.interpretation_lines is O(N).
             # Better approach:
             # - Hide everything in self.vis_lines_on_display that is NOT in target_uids
             # - Show everything in target_uids that is NOT in self.vis_lines_on_display
-            
+
             to_hide = self.vis_lines_on_display - target_uids
             to_show = target_uids - self.vis_lines_on_display
-            
+
             # Batch apply changes
-            
+
             # HIDE
             for uid in to_hide:
                 self.set_actor_visibility(uid, False)
-                
+
             # SHOW
             for uid in to_show:
+                self._ensure_geology_actor_realized(uid=uid, visible=True)
                 self.set_actor_visibility(uid, True)
-            
+
             # Update state
             self.vis_lines_on_display = target_uids.copy()
-                        
+
         except Exception as e:
             self.print_terminal(f"Error updating interpretation line visibility: {e}")
-            self.print_terminal(traceback_format_exc())
+            import traceback
+
+            self.print_terminal(traceback.format_exc())
 
     def set_actor_visibility(self, uid, visible):
         """Helper to safely set actor visibility with caching."""
-        if not hasattr(self, '_actor_cache'):
+        if not hasattr(self, "_actor_cache"):
             self._actor_cache = {}
-            
+
         actor = self._actor_cache.get(uid)
-        
+
         if actor is None:
             # Try direct UID lookup first (most common)
             if uid in self.plotter.renderer.actors:
                 actor = self.plotter.renderer.actors[uid]
             else:
                 # Try prefixed names
-                for prefix in ['geol_coll_', 'geo_']:
+                for prefix in ["geol_coll_", "geo_"]:
                     actor_name = f"{prefix}{uid}"
                     if actor_name in self.plotter.renderer.actors:
                         actor = self.plotter.renderer.actors[actor_name]
                         break
-            
+
             if actor:
                 self._actor_cache[uid] = actor
-        
+
         if actor:
             actor.SetVisibility(visible)
+
+    def _ensure_geology_actor_realized(self, uid=None, visible=None):
+        """Create a deferred geology actor on demand and keep actors_df in sync."""
+        if not uid:
+            return None
+
+        actors = getattr(self.plotter.renderer, "actors", {})
+        for actor_name in (uid, f"geol_coll_{uid}", f"geo_{uid}"):
+            actor = actors.get(actor_name)
+            if actor is not None:
+                if visible is not None:
+                    actor.SetVisibility(visible)
+                if not hasattr(self, "_actor_cache"):
+                    self._actor_cache = {}
+                self._actor_cache[uid] = actor
+                return actor
+
+        actor_row = self._actors_df_row_safe(uid=uid)
+        if actor_row.empty:
+            return None
+        if actor_row["collection"].to_list()[0] != "geol_coll":
+            return None
+
+        show_property = actor_row["show_property"].to_list()[0]
+        if show_property == "none":
+            show_property = None
+        actor = self.show_actor_with_property(
+            uid=uid,
+            coll_name="geol_coll",
+            show_property=show_property,
+            visible=visible if visible is not None else self._is_uid_enabled_in_tree(uid),
+        )
+        self.actors_df.loc[self.actors_df["uid"] == uid, "actor"] = actor
+        if hasattr(self, "_deferred_geol_polyline_actor_uids"):
+            self._deferred_geol_polyline_actor_uids.discard(uid)
+        self._invalidate_actor_cache(uid)
+        return actor
+
+    def _schedule_deferred_geology_actor_realization(self):
+        """Realize deferred non-slice-filtered geology actors in small batches."""
+        pending_uids = [
+            uid
+            for uid in list(getattr(self, "_deferred_geol_polyline_actor_uids", set()))
+            if uid not in getattr(self, "interpretation_lines", {})
+            and uid not in getattr(self, "multipart_horizons", {})
+            and uid not in getattr(self, "multipart_faults", {})
+            and self._is_uid_enabled_in_tree(uid)
+        ]
+        self._pending_deferred_geol_realization = pending_uids
+        if not pending_uids:
+            return
+        if getattr(self, "_deferred_geol_realization_active", False):
+            return
+        self._deferred_geol_realization_active = True
+        QTimer.singleShot(0, self._realize_deferred_geology_actor_batch)
+
+    def _realize_deferred_geology_actor_batch(self, batch_size=50):
+        """Create a small batch of deferred geology polyline actors."""
+        pending_uids = list(getattr(self, "_pending_deferred_geol_realization", []))
+        if not pending_uids:
+            self._deferred_geol_realization_active = False
+            return
+
+        batch = pending_uids[:batch_size]
+        self._pending_deferred_geol_realization = pending_uids[batch_size:]
+
+        for uid in batch:
+            if uid in getattr(self, "interpretation_lines", {}):
+                continue
+            if uid in getattr(self, "multipart_horizons", {}):
+                continue
+            if uid in getattr(self, "multipart_faults", {}):
+                continue
+            if not self._is_uid_enabled_in_tree(uid):
+                continue
+            self._ensure_geology_actor_realized(uid=uid, visible=True)
+
+        if self.plotter is not None:
+            try:
+                self.plotter.render()
+            except Exception:
+                pass
+
+        if self._pending_deferred_geol_realization:
+            QTimer.singleShot(0, self._realize_deferred_geology_actor_batch)
+        else:
+            self._deferred_geol_realization_active = False
+
+    def _cancel_pending_horizon_scan(self):
+        """Invalidate any queued horizon scan batches for a previous source."""
+        self._horizon_scan_generation += 1
+        self._pending_horizon_scan_items = []
+        self._pending_horizon_scan_index = 0
+        self._pending_horizon_scan_processed_count = 0
+        self._pending_horizon_scan_started_at = None
+        self._pending_slice_metadata_uids = set()
+        self._pending_horizon_scan_stats = {}
+
+    def _prepare_horizon_scan_items(self):
+        """Collect candidate geology polylines for slice-aware indexing."""
+        geol_df = self.parent.geol_coll.df
+        if "topology" in geol_df.columns:
+            candidate_df = geol_df.loc[geol_df["topology"] == "PolyLine", ["uid", "vtk_obj"]]
+        else:
+            candidate_df = geol_df.loc[:, ["uid", "vtk_obj"]]
+        if candidate_df.empty:
+            return []
+        candidate_uids = candidate_df["uid"].to_numpy(copy=False)
+        candidate_vtks = candidate_df["vtk_obj"].to_numpy(copy=False)
+        return list(zip(candidate_uids.tolist(), candidate_vtks.tolist()))
+
+    def _scan_and_index_horizon_batch_items(self, batch_items):
+        """Classify one batch of geology polylines for the active interpretation source."""
+        count = 0
+        bounds_uids = []
+        bounds_list = []
+        fallback_items = []
+        stats = getattr(self, "_pending_horizon_scan_stats", {})
+        stats.setdefault("explicit_count", 0)
+        stats.setdefault("explicit_time", 0.0)
+        stats.setdefault("slice_index_count", 0)
+        stats.setdefault("slice_index_time", 0.0)
+        stats.setdefault("bounds_count", 0)
+        stats.setdefault("bounds_time", 0.0)
+        stats.setdefault("fallback_count", 0)
+        stats.setdefault("fallback_time", 0.0)
+
+        for uid, vtk_obj in batch_items:
+            if uid in self.interpretation_lines:
+                continue
+            if vtk_obj is None or vtk_obj.GetNumberOfPoints() == 0:
+                continue
+
+            t0 = perf_counter()
+            if vtk_obj.GetNumberOfPolys() > 0:
+                return
+            explicit_slice_info = self._extract_single_slice_interpretation_metadata(
+                uid=uid, vtk_obj=vtk_obj
+            )
+            stats["explicit_time"] += perf_counter() - t0
+            if explicit_slice_info is not None:
+                stats["explicit_count"] += 1
+                self.register_interpretation_line(uid, explicit_slice_info)
+                self.set_actor_visibility(uid, False)
+                count += 1
+                continue
+
+            t0 = perf_counter()
+            slice_index_registered = self._register_multipart_from_slice_index(
+                uid=uid, vtk_obj=vtk_obj, emit_updates=False
+            )
+            stats["slice_index_time"] += perf_counter() - t0
+            if slice_index_registered:
+                stats["slice_index_count"] += 1
+                count += 1
+                continue
+
+            try:
+                bounds = vtk_obj.GetBounds()
+            except Exception:
+                continue
+
+            bounds_uids.append(uid)
+            bounds_list.append(bounds)
+            fallback_items.append((uid, vtk_obj))
+            count += 1
+
+        registered_from_bounds = set()
+        if bounds_list:
+            t0 = perf_counter()
+            registered_from_bounds = self._register_single_slice_lines_from_bounds(
+                uids=bounds_uids,
+                bounds_array=np.asarray(bounds_list, dtype=float),
+            )
+            stats["bounds_time"] += perf_counter() - t0
+            stats["bounds_count"] += len(registered_from_bounds)
+
+        for uid, vtk_obj in fallback_items:
+            if uid in registered_from_bounds:
+                continue
+            t0 = perf_counter()
+            if self._try_register_multipart_from_geometry(
+                uid=uid,
+                vtk_obj=vtk_obj,
+                seismic_bounds=self._cached_bounds,
+                seismic_dims=self._cached_dims,
+            ):
+                stats["fallback_time"] += perf_counter() - t0
+                stats["fallback_count"] += 1
+                if self._ensure_slice_index_property_metadata(
+                    uid=uid, vtk_obj=vtk_obj, emit_updates=False
+                ):
+                    self._pending_slice_metadata_uids.add(uid)
+            else:
+                stats["fallback_time"] += perf_counter() - t0
+
+        return count
+
+    def _finish_pending_horizon_scan(self, generation):
+        """Finalize a completed incremental horizon scan."""
+        if generation != self._horizon_scan_generation:
+            return
+
+        elapsed = 0.0
+        if self._pending_horizon_scan_started_at is not None:
+            elapsed = perf_counter() - self._pending_horizon_scan_started_at
+
+        self._lines_indexed = True
+        pending_metadata_uids = sorted(self._pending_slice_metadata_uids)
+        if pending_metadata_uids:
+            try:
+                self.parent.signals.data_keys_added.emit(
+                    pending_metadata_uids, self.parent.geol_coll
+                )
+            except Exception:
+                pass
+            self._refresh_properties_legend()
+            self._pending_slice_metadata_uids.clear()
+        stats = getattr(self, "_pending_horizon_scan_stats", {})
+        self.print_terminal(
+            "Indexing complete. "
+            f"Processed {self._pending_horizon_scan_processed_count} potential horizons in {elapsed:.2f}s."
+        )
+        if stats:
+            self.print_terminal(
+                "Indexing stats: "
+                f"explicit={stats.get('explicit_count', 0)} in {stats.get('explicit_time', 0.0):.2f}s, "
+                f"slice_index={stats.get('slice_index_count', 0)} in {stats.get('slice_index_time', 0.0):.2f}s, "
+                f"bounds={stats.get('bounds_count', 0)} in {stats.get('bounds_time', 0.0):.2f}s, "
+                f"fallback={stats.get('fallback_count', 0)} in {stats.get('fallback_time', 0.0):.2f}s"
+            )
+
+        self.update_interpretation_line_visibility()
+        self.update_all_multipart_horizons_visibility()
+        self.update_all_multipart_faults_visibility()
+        self._suppress_full_multipart_actors()
+        self._schedule_deferred_geology_actor_realization()
+
+        try:
+            self.plotter.render()
+        except Exception:
+            pass
+
+    def _run_pending_horizon_scan_batch(self, generation, batch_size=250):
+        """Process one non-blocking horizon scan batch and reschedule the next one."""
+        if generation != self._horizon_scan_generation:
+            return
+        if self.current_seismic_uid is None:
+            return
+
+        items = self._pending_horizon_scan_items
+        start = self._pending_horizon_scan_index
+        if start >= len(items):
+            self._finish_pending_horizon_scan(generation)
+            return
+
+        stop = min(start + batch_size, len(items))
+        batch_items = items[start:stop]
+        self._pending_horizon_scan_index = stop
+        self._pending_horizon_scan_processed_count += self._scan_and_index_horizon_batch_items(
+            batch_items
+        )
+
+        if stop >= len(items):
+            self._finish_pending_horizon_scan(generation)
+            return
+
+        if (
+            self._pending_horizon_scan_processed_count > 0
+            and self._pending_horizon_scan_processed_count % (batch_size * 4) == 0
+        ):
+            self.update_interpretation_line_visibility()
+            self.update_all_multipart_horizons_visibility()
+            self.update_all_multipart_faults_visibility()
+            try:
+                self.plotter.render()
+            except Exception:
+                pass
+
+        QTimer.singleShot(
+            0,
+            lambda gen=generation: self._run_pending_horizon_scan_batch(
+                gen, batch_size=batch_size
+            ),
+        )
 
     def register_interpretation_line(self, uid, slice_info):
         """Register a line in both the main dict and the spatial index."""
         self.interpretation_lines[uid] = slice_info
         self._store_single_slice_interpretation_metadata(uid=uid, slice_info=slice_info)
-        
-        key = (slice_info['seismic_uid'], slice_info['axis'], slice_info['slice_index'])
+        # Registering a line does not establish or transform its coordinate
+        # domain. New creation and explicit legacy migration attach that metadata.
+
+        key = (slice_info["seismic_uid"], slice_info["axis"], slice_info["slice_index"])
         if key not in self.interpretation_lines_by_slice:
             self.interpretation_lines_by_slice[key] = set()
         self.interpretation_lines_by_slice[key].add(uid)
-        
+
         # Enforce visibility immediately to ensure sync with new actors
         # This fixes the issue where newly propagated lines (shown by default in on_entities_added)
         # stay visible because the optimized visibility update loop doesn't know about them yet.
-        
+
         # Skip visual update if propagating (batch mode)
-        if hasattr(self, '_is_propagating') and self._is_propagating:
+        if hasattr(self, "_is_propagating") and self._is_propagating:
             return
 
         matches_current = (
-            slice_info['seismic_uid'] == self.current_seismic_uid and
-            slice_info['axis'] == self.current_axis and
-            slice_info['slice_index'] == self.current_slice_index and
-            self._is_uid_enabled_in_tree(uid)
+            slice_info["seismic_uid"] == self.current_seismic_uid
+            and slice_info["axis"] == self.current_axis
+            and slice_info["slice_index"] == self.current_slice_index
+            and self._is_uid_enabled_in_tree(uid)
         )
-        
+
+        if matches_current:
+            self._ensure_geology_actor_realized(uid=uid, visible=True)
         self.set_actor_visibility(uid, matches_current)
-        
+        self._apply_coplanar_interpretation_offset(uid=uid)
+
         # Keep the visibility tracking set in sync
-        if hasattr(self, 'vis_lines_on_display'):
+        if hasattr(self, "vis_lines_on_display"):
             if matches_current:
                 self.vis_lines_on_display.add(uid)
             elif uid in self.vis_lines_on_display:
                 self.vis_lines_on_display.remove(uid)
-        
+
         # Mark visibility as dirty just in case
         self._visibility_dirty = True
-        
+
     def unregister_interpretation_line(self, uid):
         """Remove a line from tracking."""
         if uid in self.interpretation_lines:
             slice_info = self.interpretation_lines[uid]
-            key = (slice_info['seismic_uid'], slice_info['axis'], slice_info['slice_index'])
-            
+            key = (
+                slice_info["seismic_uid"],
+                slice_info["axis"],
+                slice_info["slice_index"],
+            )
+
             if key in self.interpretation_lines_by_slice:
                 if uid in self.interpretation_lines_by_slice[key]:
                     self.interpretation_lines_by_slice[key].remove(uid)
                     # Clean up empty sets to save memory
                     if not self.interpretation_lines_by_slice[key]:
                         del self.interpretation_lines_by_slice[key]
-            
+
             del self.interpretation_lines[uid]
             self._visibility_dirty = True
+
+    def _refresh_single_slice_interpretation_metadata(
+        self, updated_uids=None, collection=None
+    ):
+        """Refresh cached single-slice interpretation metadata after parent_uid edits."""
+        try:
+            if collection is not self.parent.geol_coll:
+                return
+        except Exception:
+            return
+
+        try:
+            changed = set(updated_uids or [])
+        except Exception:
+            changed = set()
+
+        if not changed or not hasattr(self, "interpretation_lines"):
+            return
+
+        line_uids = changed & set(self.interpretation_lines.keys())
+        for uid in line_uids:
+            slice_info = self._extract_single_slice_interpretation_metadata(uid=uid)
+            if not slice_info:
+                slice_info = dict(self.interpretation_lines.get(uid) or {})
+                if not slice_info:
+                    continue
+                slice_info["seismic_uid"] = self._get_entity_parent_seismic_uid(uid)
+
+            self.unregister_interpretation_line(uid)
+            self.register_interpretation_line(uid, slice_info)
 
     def update_multipart_horizon_visibility(self, uid=None):
         """
         Update visibility of multipart horizon lines by extracting only the cells
         that match the current slice and creating a filtered actor.
-        
+
         Args:
             uid: Specific horizon UID to update, or None to update all multipart horizons
         """
-        if not hasattr(self, 'multipart_horizons'):
+        if not hasattr(self, "multipart_horizons"):
             return
-        
+
         if not self.multipart_horizons:
             return
-        
+
         uids_to_update = [uid] if uid else list(self.multipart_horizons.keys())
-        
+
         for horizon_uid in uids_to_update:
             if horizon_uid not in self.multipart_horizons:
                 continue
-                
+
             horizon_info = self.multipart_horizons[horizon_uid]
             actor_name = f"multipart_slice_{horizon_uid}"
-            
+
             # ALWAYS remove the old filtered actor first to prevent accumulation
             # Try multiple methods to ensure it's removed
             try:
@@ -5030,20 +7844,22 @@ class ViewInterpretation(ViewMap):
             if not self._is_uid_enabled_in_tree(horizon_uid):
                 self.set_actor_visibility(horizon_uid, False)
                 continue
-            
+
             # Check if this horizon matches current view context
-            if (horizon_info['seismic_uid'] != self.current_seismic_uid or 
-                horizon_info['axis'] != self.current_axis):
+            if (
+                horizon_info["seismic_uid"] != self.current_seismic_uid
+                or horizon_info["axis"] != self.current_axis
+            ):
                 # Hide completely if not matching seismic/axis
                 self.set_actor_visibility(horizon_uid, False)
                 continue
-            
+
             # Check if current slice is in this horizon's range
-            if self.current_slice_index not in horizon_info['slice_indices']:
+            if self.current_slice_index not in horizon_info["slice_indices"]:
                 # Hide if current slice is not in this horizon
                 self.set_actor_visibility(horizon_uid, False)
                 continue
-            
+
             # Get the VTK object
             try:
                 vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(horizon_uid)
@@ -5051,26 +7867,34 @@ class ViewInterpretation(ViewMap):
                     continue
             except Exception:
                 continue
-            
+
             # Extract only cells matching current slice using direct cell iteration
             try:
                 # Check if slice_index array exists
                 if not vtk_obj.GetCellData().HasArray("slice_index"):
-                    self.print_terminal(f"  Warning: No slice_index array in {horizon_uid}")
+                    self.print_terminal(
+                        f"  Warning: No slice_index array in {horizon_uid}"
+                    )
                     # No slice data - show the full horizon for this slice
                     self.set_actor_visibility(horizon_uid, True)
                     continue
-                
+
                 slice_array = vtk_obj.GetCellData().GetArray("slice_index")
-                n_cells = vtk_obj.GetNumberOfCells()
-                
-                # Find cells that match the current slice index
-                matching_cell_ids = []
-                for i in range(n_cells):
-                    cell_slice_idx = int(slice_array.GetValue(i))
-                    if cell_slice_idx == self.current_slice_index:
-                        matching_cell_ids.append(i)
-                
+                try:
+                    from vtkmodules.util.numpy_support import vtk_to_numpy
+
+                    slice_values = vtk_to_numpy(slice_array)
+                    matching_cell_ids = np.flatnonzero(
+                        slice_values == self.current_slice_index
+                    ).astype(int).tolist()
+                except Exception:
+                    n_cells = vtk_obj.GetNumberOfCells()
+                    matching_cell_ids = []
+                    for i in range(n_cells):
+                        cell_slice_idx = int(slice_array.GetValue(i))
+                        if cell_slice_idx == self.current_slice_index:
+                            matching_cell_ids.append(i)
+
                 if len(matching_cell_ids) == 0:
                     self.set_actor_visibility(horizon_uid, False)
                     continue
@@ -5082,16 +7906,19 @@ class ViewInterpretation(ViewMap):
                 if filtered_polydata is None:
                     self.set_actor_visibility(horizon_uid, False)
                     continue
+                filtered_polydata = self._align_polydata_to_current_slice(
+                    filtered_polydata
+                )
 
                 n_filtered_cells = filtered_polydata.GetNumberOfCells()
                 n_filtered_points = filtered_polydata.GetNumberOfPoints()
-                
+
                 if n_filtered_cells > 0 and n_filtered_points > 0:
                     # Use standard geological legend style (same behavior as other views).
                     style = self._get_geol_legend_style(horizon_uid)
-                    
+
                     # Add new filtered actor
-                    self.plotter.add_mesh(
+                    filtered_actor = self.plotter.add_mesh(
                         pv.wrap(filtered_polydata),
                         name=actor_name,
                         color=style["color"],
@@ -5099,26 +7926,31 @@ class ViewInterpretation(ViewMap):
                         opacity=style["opacity"],
                         render_lines_as_tubes=True,
                         pickable=True,
-                        reset_camera=False
+                        reset_camera=False,
                     )
-                    
+                    self._apply_coplanar_interpretation_offset(actor=filtered_actor)
+
                     # Hide the full multipart actor (we're showing the filtered version)
                     self.set_actor_visibility(horizon_uid, False)
                 else:
                     # No cells match - just hide (actor already removed above)
                     self.set_actor_visibility(horizon_uid, False)
-                    
+
             except Exception as e:
-                self.print_terminal(f"Error filtering multipart horizon {horizon_uid}: {e}")
-                self.print_terminal(traceback_format_exc())
+                self.print_terminal(
+                    f"Error filtering multipart horizon {horizon_uid}: {e}"
+                )
+                import traceback
+
+                self.print_terminal(traceback.format_exc())
                 # Fall back to showing full horizon
                 self.set_actor_visibility(horizon_uid, True)
 
     def update_all_multipart_horizons_visibility(self):
         """Update visibility for all multipart horizons based on current slice."""
-        if not hasattr(self, 'multipart_horizons'):
+        if not hasattr(self, "multipart_horizons"):
             return
-        
+
         for uid in list(self.multipart_horizons.keys()):
             self.update_multipart_horizon_visibility(uid)
 
@@ -5126,49 +7958,55 @@ class ViewInterpretation(ViewMap):
         """
         Update visibility of multipart fault lines by extracting only the cells
         that match the current slice and creating a filtered actor.
-        
+
         Args:
             uid: Specific fault UID to update, or None to update all multipart faults
         """
-        
-        if not hasattr(self, 'multipart_faults'):
+        if not hasattr(self, "multipart_faults"):
             return
-        
+
         if not self.multipart_faults:
             return
-        
+
         uids_to_update = [uid] if uid else list(self.multipart_faults.keys())
-        
+
         for fault_uid in uids_to_update:
             if fault_uid not in self.multipart_faults:
                 continue
-            
+
             fault_info = self.multipart_faults[fault_uid]
             actor_name = f"multipart_fault_slice_{fault_uid}"
-            
+
             # ALWAYS remove the old filtered actor first to prevent accumulation
             # Try multiple methods to ensure it's removed
             try:
                 self._remove_filtered_actor(actor_name)
             except Exception:
                 pass
+            # Multipart faults must never leak their full actor into the slice view.
+            self._remove_raw_actor_for_uid(fault_uid)
 
             if not self._is_uid_enabled_in_tree(fault_uid):
                 self.set_actor_visibility(fault_uid, False)
                 continue
-            
+
             # Check if this fault matches current view context
-            if (fault_info['seismic_uid'] != self.current_seismic_uid or
-                fault_info['axis'] != self.current_axis):
+            if (
+                fault_info["seismic_uid"] != self.current_seismic_uid
+                or fault_info["axis"] != self.current_axis
+            ):
                 # Hide completely if not matching seismic/axis
                 self.set_actor_visibility(fault_uid, False)
                 continue
-            
+
             # Check if current slice is in this fault's range
-            if 'slice_indices' in fault_info and self.current_slice_index not in fault_info['slice_indices']:
+            if (
+                "slice_indices" in fault_info
+                and self.current_slice_index not in fault_info["slice_indices"]
+            ):
                 self.set_actor_visibility(fault_uid, False)
                 continue
-            
+
             # Get the original VTK object
             try:
                 vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(fault_uid)
@@ -5176,69 +8014,54 @@ class ViewInterpretation(ViewMap):
                     continue
             except:
                 continue
-            
+
             # Check if slice_index array exists
             if not vtk_obj.GetCellData().HasArray("slice_index"):
                 # No slice data, show entire fault
                 self.set_actor_visibility(fault_uid, True)
                 continue
-            
+
             # Hide the original full actor
             self.set_actor_visibility(fault_uid, False)
-            
+
             # Extract cells matching current slice using direct iteration
             slice_array = vtk_obj.GetCellData().GetArray("slice_index")
-            n_cells = vtk_obj.GetNumberOfCells()
-            
-            # Find cells that match the current slice index
-            matching_cell_ids = []
-            for i in range(n_cells):
-                cell_slice_idx = int(slice_array.GetValue(i))
-                if cell_slice_idx == self.current_slice_index:
-                    matching_cell_ids.append(i)
-            
+            try:
+                from vtkmodules.util.numpy_support import vtk_to_numpy
+
+                slice_values = vtk_to_numpy(slice_array)
+                matching_cell_ids = np.flatnonzero(
+                    slice_values == self.current_slice_index
+                ).astype(int).tolist()
+            except Exception:
+                n_cells = vtk_obj.GetNumberOfCells()
+                matching_cell_ids = []
+                for i in range(n_cells):
+                    cell_slice_idx = int(slice_array.GetValue(i))
+                    if cell_slice_idx == self.current_slice_index:
+                        matching_cell_ids.append(i)
+
             if len(matching_cell_ids) == 0:
+                self.set_actor_visibility(fault_uid, False)
                 continue
-            
-            # Extract the matching cells manually
-            new_points = vtkPoints()
-            new_lines = vtkCellArray()
-            point_map = {}  # old_id -> new_id
-            
-            for cell_id in matching_cell_ids:
-                cell = vtk_obj.GetCell(cell_id)
-                n_pts = cell.GetNumberOfPoints()
-                
-                new_line_pts = []
-                for j in range(n_pts):
-                    old_pt_id = cell.GetPointId(j)
-                    
-                    if old_pt_id not in point_map:
-                        pt = vtk_obj.GetPoint(old_pt_id)
-                        new_pt_id = new_points.InsertNextPoint(pt)
-                        point_map[old_pt_id] = new_pt_id
-                    
-                    new_line_pts.append(point_map[old_pt_id])
-                
-                # Add the line cell
-                new_lines.InsertNextCell(len(new_line_pts))
-                for pt_id in new_line_pts:
-                    new_lines.InsertCellPoint(pt_id)
-            
-            # Create filtered polydata
-            filtered_polydata = vtkPolyData()
-            filtered_polydata.SetPoints(new_points)
-            filtered_polydata.SetLines(new_lines)
-            
+            filtered_polydata, _, _ = self._build_multipart_subset_vtk(
+                vtk_obj=vtk_obj,
+                kept_cell_ids=matching_cell_ids,
+            )
+            if filtered_polydata is None:
+                self.set_actor_visibility(fault_uid, False)
+                continue
+            filtered_polydata = self._align_polydata_to_current_slice(filtered_polydata)
+
             n_filtered_cells = filtered_polydata.GetNumberOfCells()
             n_filtered_points = filtered_polydata.GetNumberOfPoints()
-            
+
             if n_filtered_cells > 0 and n_filtered_points > 0:
                 # Use standard geological legend style (same behavior as other views).
                 style = self._get_geol_legend_style(fault_uid)
-                
+
                 # Add filtered actor
-                self.plotter.add_mesh(
+                filtered_actor = self.plotter.add_mesh(
                     pv.wrap(filtered_polydata),
                     name=actor_name,
                     color=style["color"],
@@ -5246,60 +8069,1330 @@ class ViewInterpretation(ViewMap):
                     opacity=style["opacity"],
                     render_lines_as_tubes=True,
                     pickable=True,
-                    reset_camera=False
+                    reset_camera=False,
                 )
+                self._apply_coplanar_interpretation_offset(actor=filtered_actor)
+            else:
+                self.set_actor_visibility(fault_uid, False)
 
     def update_all_multipart_faults_visibility(self):
         """Update visibility for all multipart faults based on current slice."""
-        if not hasattr(self, 'multipart_faults'):
+        if not hasattr(self, "multipart_faults"):
             return
-        
+
         for uid in list(self.multipart_faults.keys()):
             self.update_multipart_fault_visibility(uid)
-    
+
+    def _remove_slice_well_actor(self, uid=None):
+        """Remove slice-specific well trace, marker, and label actors."""
+        if not uid:
+            return
+        actor_names = [
+            f"well_slice_halo_{uid}",
+            f"well_slice_{uid}",
+            f"well_slice_label_{uid}",
+            f"well_slice_marker_leaders_{uid}",
+            f"{uid}_prop",
+            f"well_coll_{uid}",
+            f"well_{uid}",
+            uid,
+        ]
+        prefixes = (
+            f"well_slice_marker_points_{uid}",
+            f"well_slice_marker_labels_{uid}",
+            f"well_slice_marker_leaders_{uid}",
+        )
+        try:
+            actors = getattr(self.plotter.renderer, "actors", {})
+            for actor_name in list(actors.keys()):
+                if any(str(actor_name).startswith(prefix) for prefix in prefixes):
+                    actor_names.append(actor_name)
+        except Exception:
+            pass
+
+        for actor_name in actor_names:
+            try:
+                self.plotter.remove_actor(actor_name)
+            except Exception:
+                pass
+        try:
+            self.slice_well_halo_actors.pop(uid, None)
+        except Exception:
+            pass
+        try:
+            self.slice_well_actors.pop(uid, None)
+        except Exception:
+            pass
+        try:
+            self.slice_well_label_actors.pop(uid, None)
+        except Exception:
+            pass
+        try:
+            self.slice_well_marker_actors.pop(uid, None)
+        except Exception:
+            pass
+        try:
+            self.slice_well_marker_label_actors.pop(uid, None)
+        except Exception:
+            pass
+        try:
+            self.slice_well_marker_leader_actors.pop(uid, None)
+        except Exception:
+            pass
+        self._invalidate_actor_cache(uid)
+
+    def _well_control_checked(self, attr_name, default=True):
+        """Return a well-control checkbox state with a safe default."""
+        widget = getattr(self, attr_name, None)
+        if widget is None:
+            return bool(default)
+        try:
+            return bool(widget.isChecked())
+        except Exception:
+            return bool(default)
+
+    def _well_label_font_size(self):
+        try:
+            return int(self.spin_well_label_size.value())
+        except Exception:
+            return 10
+
+    def _well_marker_filter_text(self):
+        try:
+            value = str(self.combo_well_marker_filter.currentText()).strip()
+        except Exception:
+            value = ""
+        if not value or value in {"All markers", "All markers for well"}:
+            return None
+        return value
+
+    def _selected_well_uid_for_display(self):
+        """Return the active well uid selected in the interpretation well dropdown."""
+        combo = getattr(self, "combo_well_filter", None)
+        if combo is None:
+            return None
+        try:
+            data = combo.currentData()
+        except Exception:
+            data = None
+        if data in (None, ""):
+            return None
+        return str(data)
+
+    def _well_name_for_uid(self, uid=None):
+        """Return a readable well name for a uid."""
+        try:
+            return str(self.parent.well_coll.get_uid_well_name(uid))
+        except Exception:
+            return str(uid)[:8] if uid else ""
+
+    def _well_uid_is_selected_for_display(self, uid=None):
+        """Return True when a well should be drawn by the selected-well filter."""
+        selected_uid = self._selected_well_uid_for_display()
+        if selected_uid == "__none__":
+            return False
+        if selected_uid is None:
+            return True
+        return str(uid) == selected_uid
+
+    def _get_well_slice_tolerance(self):
+        """Return a practical slice-plane tolerance for deciding well visibility."""
+        try:
+            corridor_factor = float(self.spin_well_corridor.value())
+        except Exception:
+            corridor_factor = 3.0
+        corridor_factor = max(corridor_factor, 0.1)
+
+        try:
+            affine = self._get_seismic_axis_vectors()
+            if affine is not None:
+                _origin, a0, a1, a2, _dims = affine
+                axis_vec = {
+                    "Inline": a0,
+                    "Crossline": a1,
+                    "Z-slice": a2,
+                }.get(self.current_axis)
+                if axis_vec is not None:
+                    spacing = float(np.linalg.norm(axis_vec))
+                    if spacing > 0:
+                        return max(spacing * corridor_factor, 1e-9)
+        except Exception:
+            pass
+
+        try:
+            spacing = abs(float(self._get_axis_spacing(axis=self.current_axis)))
+            if spacing > 0:
+                return max(spacing * corridor_factor, 1e-9)
+        except Exception:
+            pass
+        return 1.0
+
+    @staticmethod
+    def _normalise_marker_label(value):
+        """Convert marker labels from VTK/numpy values to compact display text."""
+        try:
+            if isinstance(value, bytes):
+                value = value.decode(errors="ignore")
+        except Exception:
+            pass
+        text = str(value).strip()
+        if text.startswith("marker_"):
+            text = text[len("marker_") :]
+        if text in {"", "nan", "None", "undef"}:
+            return ""
+        return text
+
+    @staticmethod
+    def _vtk_points_to_numpy(vtk_obj=None):
+        """Return points from a VTK/PyVista object as an Nx3 array."""
+        if vtk_obj is None:
+            return None
+        try:
+            points = np.asarray(vtk_obj.points, dtype=np.float64)
+        except Exception:
+            try:
+                n_points = int(vtk_obj.GetNumberOfPoints())
+                points = np.array(
+                    [vtk_obj.GetPoint(i) for i in range(n_points)],
+                    dtype=np.float64,
+                )
+            except Exception:
+                return None
+        if points.ndim == 1:
+            if points.size != 3:
+                return None
+            points = points.reshape(1, 3)
+        if points.ndim != 2 or points.shape[1] != 3 or points.shape[0] <= 0:
+            return None
+        return points
+
+    def _is_well_child_marker_uid(self, uid=None):
+        """Return True for imported well marker entities stored in geology collection."""
+        if not uid or not hasattr(self.parent, "geol_coll") or not hasattr(self.parent, "well_coll"):
+            return False
+        try:
+            df = self.parent.geol_coll.df
+            row = df.loc[df["uid"] == uid]
+            if row.empty:
+                return False
+            row = row.iloc[0]
+            parent_uid = str(row.get("parent_uid", "") or "")
+            if parent_uid not in set(map(str, self.parent.well_coll.get_uids)):
+                return False
+            if str(row.get("topology", "")) != "VertexSet":
+                return False
+            name = str(row.get("name", "") or "")
+            role = str(row.get("role", "") or "")
+            return name.startswith("marker_") or role == "top"
+        except Exception:
+            return False
+
+    def _get_well_child_marker_parent_uid(self, uid=None):
+        """Return the parent well uid for a geology marker entity."""
+        try:
+            row = self.parent.geol_coll.df.loc[
+                self.parent.geol_coll.df["uid"] == uid
+            ].iloc[0]
+            parent_uid = str(row.get("parent_uid", "") or "")
+            if parent_uid:
+                return parent_uid
+        except Exception:
+            pass
+        return None
+
+    def _get_geology_marker_color(self, uid=None):
+        """Return geology legend color for a marker uid as RGB floats."""
+        try:
+            style = self.parent.geol_coll.get_uid_legend(uid=uid)
+            return (
+                float(style["color_R"]) / 255.0,
+                float(style["color_G"]) / 255.0,
+                float(style["color_B"]) / 255.0,
+            )
+        except Exception:
+            return (0.95, 0.75, 0.10)
+
+    def _get_well_marker_records(self, well_uid=None, vtk_obj=None):
+        """Collect imported marker records for a well."""
+        if not well_uid:
+            return []
+
+        records = []
+        try:
+            df = self.parent.geol_coll.df
+            marker_rows = df.loc[df["parent_uid"].astype(str) == str(well_uid)]
+        except Exception:
+            marker_rows = []
+
+        for _, row in getattr(marker_rows, "iterrows", lambda: [])():
+            try:
+                if str(row.get("topology", "")) != "VertexSet":
+                    continue
+                marker_uid = row.get("uid")
+                marker_obj = row.get("vtk_obj")
+                points = self._vtk_points_to_numpy(marker_obj)
+                if points is None:
+                    continue
+                marker_name = self._normalise_marker_label(row.get("feature", ""))
+                if not marker_name:
+                    marker_name = self._normalise_marker_label(row.get("name", ""))
+                if not marker_name:
+                    continue
+                color = self._get_geology_marker_color(uid=marker_uid)
+                try:
+                    point_size = float(
+                        self.parent.geol_coll.get_uid_legend(uid=marker_uid).get(
+                            "point_size", 10.0
+                        )
+                    )
+                except Exception:
+                    point_size = 10.0
+                for point in points:
+                    records.append(
+                        {
+                            "name": marker_name,
+                            "label": marker_name,
+                            "point": np.asarray(point, dtype=np.float64),
+                            "color": color,
+                            "point_size": max(point_size, 8.0),
+                            "source_uid": marker_uid,
+                        }
+                    )
+            except Exception:
+                continue
+
+        # Support true marker field-data stored directly on WellTrace for other imports.
+        # Do not call WellTrace.get_marker_names()/plot_markers() here: that also
+        # treats pORIGINAL_MD, pTWT_s, etc. as marker-like fields in some imports.
+        if vtk_obj is not None:
+            try:
+                field_keys = list(vtk_obj.get_field_data_keys())
+            except Exception:
+                field_keys = []
+
+            marker_groups = []
+            for key in field_keys:
+                if not str(key).startswith("pmarker_"):
+                    continue
+                marker_group = str(key).split("_", 1)[1]
+                if f"marker_{marker_group}" in field_keys:
+                    marker_groups.append(marker_group)
+
+            for marker_group in marker_groups:
+                try:
+                    points = vtk_obj.get_field_data(f"pmarker_{marker_group}")
+                    labels = vtk_obj.get_field_data(f"marker_{marker_group}")
+                except Exception:
+                    continue
+                if points is None or labels is None:
+                    continue
+                points = np.asarray(points, dtype=np.float64).reshape(-1, 3)
+                labels = np.asarray(labels).reshape(-1)
+                for point, label in zip(points, labels):
+                    marker_name = self._normalise_marker_label(label)
+                    if not marker_name:
+                        marker_name = self._normalise_marker_label(marker_group)
+                    if not marker_name:
+                        continue
+                    records.append(
+                        {
+                            "name": marker_name,
+                            "label": marker_name,
+                            "point": np.asarray(point, dtype=np.float64),
+                            "color": (0.95, 0.75, 0.10),
+                            "point_size": 10.0,
+                            "source_uid": None,
+                        }
+                    )
+        return records
+
+    def _refresh_well_marker_filter_options(self, force=False):
+        """Populate the marker filter combo from the selected visible well."""
+        if not force and not getattr(self, "_well_marker_filter_dirty", True):
+            return
+        combo = getattr(self, "combo_well_marker_filter", None)
+        if combo is None:
+            return
+
+        names = set()
+        selected_well_uid = self._selected_well_uid_for_display()
+        if selected_well_uid and selected_well_uid != "__none__":
+            try:
+                vtk_obj = self.parent.well_coll.get_uid_vtk_obj(selected_well_uid)
+            except Exception:
+                vtk_obj = None
+            for record in self._get_well_marker_records(
+                well_uid=selected_well_uid, vtk_obj=vtk_obj
+            ):
+                marker_name = self._normalise_marker_label(record.get("name", ""))
+                if marker_name:
+                    names.add(marker_name)
+
+        try:
+            current = combo.currentText()
+            combo.blockSignals(True)
+            combo.clear()
+            combo.addItem("All markers for well")
+            for name in sorted(names):
+                combo.addItem(name)
+            idx = combo.findText(current)
+            combo.setCurrentIndex(idx if idx >= 0 else 0)
+        finally:
+            try:
+                combo.blockSignals(False)
+            except Exception:
+                pass
+        self._well_marker_filter_dirty = False
+
+    def _refresh_visible_well_filter_options(self, uid_list=None):
+        """Populate the active-well combo with wells visible on the current slice."""
+        combo = getattr(self, "combo_well_filter", None)
+        if combo is None:
+            return
+
+        try:
+            uid_list = list(uid_list or self.parent.well_coll.get_uids)
+        except Exception:
+            uid_list = []
+
+        current_uid = self._selected_well_uid_for_display()
+        visible_uids = []
+        if getattr(self, "current_seismic_uid", None):
+            for uid in uid_list:
+                try:
+                    if not self._is_uid_enabled_in_tree(uid):
+                        continue
+                    vtk_obj = self.parent.well_coll.get_uid_vtk_obj(uid)
+                    slice_polydata, _label_point = self._extract_well_slice_polydata(
+                        vtk_obj
+                    )
+                    if (
+                        slice_polydata is not None
+                        and slice_polydata.GetNumberOfPoints() > 0
+                    ):
+                        visible_uids.append(str(uid))
+                except Exception:
+                    continue
+
+        self._visible_slice_well_uids = visible_uids
+
+        try:
+            combo.blockSignals(True)
+            combo.clear()
+            if not visible_uids:
+                combo.addItem("No well on slice", "__none__")
+                combo.setCurrentIndex(0)
+                return
+
+            for uid in visible_uids:
+                combo.addItem(self._well_name_for_uid(uid), uid)
+
+            idx = -1
+            if current_uid not in (None, "__none__"):
+                for item_idx in range(combo.count()):
+                    if str(combo.itemData(item_idx)) == str(current_uid):
+                        idx = item_idx
+                        break
+            combo.setCurrentIndex(idx if idx >= 0 else 0)
+        finally:
+            try:
+                combo.blockSignals(False)
+            except Exception:
+                pass
+
+    def _suppress_well_child_marker_actors(self, well_uid=None):
+        """Remove raw geology actors for markers that are rendered by well overlays."""
+        try:
+            df = self.parent.geol_coll.df
+            if well_uid is not None:
+                df = df.loc[df["parent_uid"].astype(str) == str(well_uid)]
+            marker_uids = list(df["uid"].to_list())
+        except Exception:
+            marker_uids = []
+        for marker_uid in marker_uids:
+            try:
+                if self._is_well_child_marker_uid(marker_uid):
+                    self._remove_raw_actor_for_uid(marker_uid)
+            except Exception:
+                continue
+
+    def _current_vertical_exaggeration(self):
+        """Return the active z scale used for vertical exaggeration."""
+        try:
+            _sx, _sy, sz = self._get_plotter_scale_factors()
+            return float(sz) if float(sz) != 0.0 else 1.0
+        except Exception:
+            return 1.0
+
+    def _points_for_unscaled_label_actor(self, points):
+        """Return display-space anchors for 2D label actors under plotter scaling."""
+        label_points = np.asarray(points, dtype=np.float64).copy()
+        if label_points.ndim == 1:
+            label_points = label_points.reshape(1, 3)
+        if label_points.ndim != 2 or label_points.shape[1] != 3:
+            return label_points
+
+        sx, sy, sz = self._get_plotter_scale_factors()
+        label_points[:, 0] *= sx
+        label_points[:, 1] *= sy
+        label_points[:, 2] *= sz
+        return label_points
+
+    def _current_slice_display_bounds(self):
+        """Return current seismic slice bounds used to clip well overlays."""
+        bounds = getattr(self, "current_slice_bounds", None)
+        if bounds is None and getattr(self, "slice_actor", None) is not None:
+            try:
+                bounds = self.slice_actor.bounds
+            except Exception:
+                bounds = None
+        if bounds is None:
+            return None
+        try:
+            return tuple(float(value) for value in bounds)
+        except Exception:
+            return None
+
+    def _point_in_current_slice_bounds(self, point):
+        """Return True when a projected point is inside the visible seismic slice."""
+        bounds = self._current_slice_display_bounds()
+        if bounds is None:
+            return True
+        point = np.asarray(point, dtype=np.float64)
+        eps = 1.0e-6
+        for axis, bounds_idx in enumerate(((0, 1), (2, 3), (4, 5))):
+            low = float(bounds[bounds_idx[0]])
+            high = float(bounds[bounds_idx[1]])
+            if high < low:
+                low, high = high, low
+            if abs(high - low) <= eps:
+                # The normal axis of a slice can be degenerate; the well point
+                # has already been projected onto that plane.
+                continue
+            if point[axis] < low - eps or point[axis] > high + eps:
+                return False
+        return True
+
+    def _clip_segment_fractions_to_current_slice_bounds(
+        self, point_a, point_b, start_fraction=0.0, end_fraction=1.0
+    ):
+        """Clip a projected segment fraction interval to visible slice bounds."""
+        bounds = self._current_slice_display_bounds()
+        if bounds is None:
+            return float(start_fraction), float(end_fraction)
+
+        p0 = np.asarray(point_a, dtype=np.float64)
+        p1 = np.asarray(point_b, dtype=np.float64)
+        delta = p1 - p0
+        t0 = float(start_fraction)
+        t1 = float(end_fraction)
+        eps = 1.0e-12
+
+        for axis, bounds_idx in enumerate(((0, 1), (2, 3), (4, 5))):
+            low = float(bounds[bounds_idx[0]])
+            high = float(bounds[bounds_idx[1]])
+            if high < low:
+                low, high = high, low
+            if abs(high - low) <= 1.0e-6:
+                continue
+
+            d_axis = float(delta[axis])
+            p_axis = float(p0[axis])
+            if abs(d_axis) <= eps:
+                if p_axis < low or p_axis > high:
+                    return None
+                continue
+
+            ta = (low - p_axis) / d_axis
+            tb = (high - p_axis) / d_axis
+            enter = min(ta, tb)
+            exit_ = max(ta, tb)
+            t0 = max(t0, enter)
+            t1 = min(t1, exit_)
+            if t0 > t1:
+                return None
+
+        return t0, t1
+
+    def _project_points_to_current_well_slice(self, points):
+        """Project candidate points onto the current slice and return mask within tolerance."""
+        points = np.asarray(points, dtype=np.float64)
+        if points.ndim != 2 or points.shape[1] != 3:
+            return None, None
+
+        plane_center = getattr(self, "current_slice_plane_center", None)
+        plane_normal = getattr(self, "current_slice_plane_normal", None)
+        tolerance = self._get_well_slice_tolerance()
+
+        if plane_center is not None and plane_normal is not None:
+            center = np.asarray(plane_center, dtype=np.float64)
+            normal = np.asarray(plane_normal, dtype=np.float64)
+            normal_norm = float(np.linalg.norm(normal))
+            if normal_norm <= 0:
+                return None, None
+            normal = normal / normal_norm
+            signed_dist = np.dot(points - center[None, :], normal)
+            projected = points - signed_dist[:, None] * normal[None, :]
+            plane_mask = np.abs(signed_dist) <= tolerance
+            bounds_mask = np.array(
+                [self._point_in_current_slice_bounds(point) for point in projected],
+                dtype=bool,
+            )
+            return projected, plane_mask & bounds_mask
+
+        coord_idx = {"Inline": 0, "Crossline": 1, "Z-slice": 2}.get(
+            self.current_axis
+        )
+        if coord_idx is None:
+            return None, None
+        signed_dist = points[:, coord_idx] - float(self.current_slice_position)
+        projected = points.copy()
+        projected[:, coord_idx] = float(self.current_slice_position)
+        plane_mask = np.abs(signed_dist) <= tolerance
+        bounds_mask = np.array(
+            [self._point_in_current_slice_bounds(point) for point in projected],
+            dtype=bool,
+        )
+        return projected, plane_mask & bounds_mask
+
+    def _slice_project_marker_records(self, records):
+        """Filter and project marker records for the active slice."""
+        if not records:
+            return []
+        marker_filter = self._well_marker_filter_text()
+        filtered = [
+            record
+            for record in records
+            if marker_filter is None or record.get("name") == marker_filter
+        ]
+        if not filtered:
+            return []
+
+        points = np.vstack([record["point"] for record in filtered])
+        projected, mask = self._project_points_to_current_well_slice(points)
+        if projected is None or mask is None:
+            return []
+
+        out = []
+        for record, point, is_visible in zip(filtered, projected, mask):
+            if not bool(is_visible):
+                continue
+            projected_record = dict(record)
+            projected_record["projected_point"] = np.asarray(point, dtype=np.float64)
+            out.append(projected_record)
+        return out
+
+    def _current_camera_label_basis(self):
+        """Return approximate screen-right and screen-up vectors in world coordinates."""
+        try:
+            camera = self.plotter.camera
+            view_up = np.asarray(camera.GetViewUp(), dtype=np.float64)
+            direction = np.asarray(camera.GetDirectionOfProjection(), dtype=np.float64)
+        except Exception:
+            view_up = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+            direction = np.array([0.0, 0.0, -1.0], dtype=np.float64)
+
+        up_norm = float(np.linalg.norm(view_up))
+        if up_norm <= 0:
+            view_up = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+        else:
+            view_up = view_up / up_norm
+
+        right = np.cross(direction, view_up)
+        right_norm = float(np.linalg.norm(right))
+        if right_norm <= 0:
+            right = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+        else:
+            right = right / right_norm
+        return right, view_up
+
+    def _well_label_world_offset(self):
+        """Return a stable world-space label offset based on the current slice size."""
+        bounds = self._current_slice_display_bounds()
+        if bounds is None:
+            return 1.0
+        try:
+            v_exag = abs(self._current_vertical_exaggeration()) or 1.0
+            extents = [
+                abs(float(bounds[1]) - float(bounds[0])),
+                abs(float(bounds[3]) - float(bounds[2])),
+                abs(float(bounds[5]) - float(bounds[4])) * v_exag,
+            ]
+            extent = max([value for value in extents if value > 0] or [1.0])
+        except Exception:
+            extent = 1.0
+        return max(extent * 0.012, 1.0)
+
+    def _prepare_marker_label_records(self, records):
+        """Place marker label anchors beside the true marker depth."""
+        if not records:
+            return []
+        right, _up = self._current_camera_label_basis()
+        offset = self._well_label_world_offset()
+        bounds = self._current_slice_display_bounds()
+        z_low = z_high = z_margin = None
+        if bounds is not None:
+            z_extent = max(abs(float(bounds[5]) - float(bounds[4])), 1.0)
+            z_low = min(float(bounds[4]), float(bounds[5]))
+            z_high = max(float(bounds[4]), float(bounds[5]))
+            z_margin = z_extent * 0.01
+
+        prepared = []
+        for record in records:
+            out = dict(record)
+            marker_point = np.asarray(record["projected_point"], dtype=np.float64)
+            label_point = marker_point + right * offset
+            # Keep label and leader anchors at the exact marker depth. Any vertical
+            # separation here reads as a bad well tie when viewing seismic sections.
+            label_point[2] = marker_point[2]
+            if z_low is not None and z_high is not None:
+                label_point[2] = float(
+                    np.clip(label_point[2], z_low + z_margin, z_high - z_margin)
+                )
+            out["label_point"] = label_point
+            prepared.append(out)
+
+        return prepared
+
+    @staticmethod
+    def _build_segment_polydata(point_pairs):
+        """Build a PolyData containing independent line segments."""
+        if not point_pairs:
+            return None
+        points = []
+        lines = []
+        for point_a, point_b in point_pairs:
+            start_idx = len(points)
+            points.append(np.asarray(point_a, dtype=np.float64))
+            points.append(np.asarray(point_b, dtype=np.float64))
+            lines.extend([2, start_idx, start_idx + 1])
+        polydata = pv.PolyData(np.asarray(points, dtype=np.float64))
+        polydata.lines = np.asarray(lines)
+        return polydata
+
+    @staticmethod
+    def _marker_color_key(color):
+        return tuple(round(float(component), 4) for component in color)
+
+    @staticmethod
+    def _text_color_for_background(color):
+        r, g, b = [float(component) for component in color[:3]]
+        luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        return "black" if luminance > 0.55 else "white"
+
+    def _add_well_marker_overlays(self, uid=None, vtk_obj=None):
+        """Draw marker points, leaders, and optional boxed labels for a slice well."""
+        if not uid or not self._well_control_checked("chk_well_markers", True):
+            return
+
+        records = self._slice_project_marker_records(
+            self._get_well_marker_records(well_uid=uid, vtk_obj=vtk_obj)
+        )
+        if not records:
+            return
+
+        grouped = {}
+        for record in records:
+            grouped.setdefault(self._marker_color_key(record["color"]), []).append(record)
+
+        point_actors = []
+        for idx, (color_key, group) in enumerate(grouped.items()):
+            points = np.vstack([record["projected_point"] for record in group])
+            point_size = max(float(record.get("point_size", 10.0)) for record in group)
+            try:
+                actor = self.plotter.add_mesh(
+                    pv.PolyData(points),
+                    name=f"well_slice_marker_points_{uid}_{idx}",
+                    color=color_key,
+                    style="points",
+                    point_size=max(point_size, 9.0),
+                    render_points_as_spheres=True,
+                    pickable=False,
+                    reset_camera=False,
+                    lighting=False,
+                )
+                self._apply_coplanar_interpretation_offset(actor=actor)
+                point_actors.append(actor)
+            except Exception:
+                continue
+        self.slice_well_marker_actors[uid] = point_actors
+
+        if not self._well_control_checked("chk_well_marker_labels", False):
+            return
+
+        label_records = self._prepare_marker_label_records(records)
+        point_pairs = [
+            (record["projected_point"], record["label_point"])
+            for record in label_records
+        ]
+        leader_polydata = self._build_segment_polydata(point_pairs)
+        if leader_polydata is not None:
+            try:
+                leader_actor = self.plotter.add_mesh(
+                    leader_polydata,
+                    name=f"well_slice_marker_leaders_{uid}",
+                    color=(0.92, 0.92, 0.92),
+                    line_width=1.5,
+                    opacity=0.85,
+                    pickable=False,
+                    reset_camera=False,
+                    lighting=False,
+                )
+                self._apply_coplanar_interpretation_offset(actor=leader_actor)
+                self.slice_well_marker_leader_actors[uid] = leader_actor
+            except Exception:
+                pass
+
+        label_groups = {}
+        for record in label_records:
+            label_groups.setdefault(self._marker_color_key(record["color"]), []).append(
+                record
+            )
+
+        label_actors = []
+        for idx, (color_key, group) in enumerate(label_groups.items()):
+            try:
+                label_actor = self.plotter.add_point_labels(
+                    self._points_for_unscaled_label_actor(
+                        np.vstack([record["label_point"] for record in group])
+                    ),
+                    [record["label"] for record in group],
+                    name=f"well_slice_marker_labels_{uid}_{idx}",
+                    font_size=self._well_label_font_size(),
+                    text_color=self._text_color_for_background(color_key),
+                    point_color=color_key,
+                    point_size=0,
+                    show_points=False,
+                    shape="rect",
+                    shape_color=color_key,
+                    shape_opacity=0.78,
+                    margin=4,
+                    always_visible=False,
+                    justification_horizontal="left",
+                    justification_vertical="center",
+                    pickable=False,
+                    reset_camera=False,
+                )
+                label_actors.append(label_actor)
+            except Exception:
+                continue
+        self.slice_well_marker_label_actors[uid] = label_actors
+
+    def _extract_well_slice_polydata(self, vtk_obj=None):
+        """Build a projected well trace for the current seismic slice."""
+        if vtk_obj is None or vtk_obj.GetNumberOfPoints() < 1:
+            return None, None
+
+        try:
+            points = np.asarray(vtk_obj.points, dtype=np.float64)
+        except Exception:
+            try:
+                points = np.array(
+                    [vtk_obj.GetPoint(i) for i in range(vtk_obj.GetNumberOfPoints())],
+                    dtype=np.float64,
+                )
+            except Exception:
+                return None, None
+
+        if points.ndim != 2 or points.shape[1] != 3 or points.shape[0] < 1:
+            return None, None
+
+        plane_center = getattr(self, "current_slice_plane_center", None)
+        plane_normal = getattr(self, "current_slice_plane_normal", None)
+        tolerance = self._get_well_slice_tolerance()
+
+        if plane_center is not None and plane_normal is not None:
+            center = np.asarray(plane_center, dtype=np.float64)
+            normal = np.asarray(plane_normal, dtype=np.float64)
+            normal_norm = float(np.linalg.norm(normal))
+            if normal_norm <= 0:
+                return None, None
+            normal = normal / normal_norm
+            signed_dist = np.dot(points - center[None, :], normal)
+            on_slice = np.abs(signed_dist) <= tolerance
+            projected = points - signed_dist[:, None] * normal[None, :]
+        else:
+            coord_idx = {"Inline": 0, "Crossline": 1, "Z-slice": 2}.get(
+                self.current_axis
+            )
+            if coord_idx is None:
+                return None, None
+            signed_dist = points[:, coord_idx] - float(self.current_slice_position)
+            on_slice = np.abs(signed_dist) <= tolerance
+            projected = points.copy()
+            projected[:, coord_idx] = float(self.current_slice_position)
+
+        from vtk import vtkCellArray, vtkLine, vtkPoints, vtkPolyData, vtkVertex
+
+        vtk_points = vtkPoints()
+        vtk_lines = vtkCellArray()
+        vtk_verts = vtkCellArray()
+
+        def add_point(point):
+            pid = vtk_points.InsertNextPoint(float(point[0]), float(point[1]), float(point[2]))
+            return pid
+
+        def add_vertex(point):
+            pid = add_point(point)
+            vertex = vtkVertex()
+            vertex.GetPointIds().SetId(0, pid)
+            vtk_verts.InsertNextCell(vertex)
+
+        def add_line(point_a, point_b):
+            if np.linalg.norm(np.asarray(point_b) - np.asarray(point_a)) <= 1e-9:
+                add_vertex(point_a)
+                return
+            pid0 = add_point(point_a)
+            pid1 = add_point(point_b)
+            line = vtkLine()
+            line.GetPointIds().SetId(0, pid0)
+            line.GetPointIds().SetId(1, pid1)
+            vtk_lines.InsertNextCell(line)
+
+        def projected_at(idx_a, idx_b, fraction):
+            return projected[idx_a] + fraction * (projected[idx_b] - projected[idx_a])
+
+        def clipped_fractions(d0, d1):
+            """Return the segment fraction inside the well display corridor."""
+            delta = d1 - d0
+            if abs(delta) <= 1e-12:
+                if abs(d0) <= tolerance:
+                    return 0.0, 1.0
+                return None
+
+            cuts = [0.0, 1.0]
+            for boundary in (-tolerance, tolerance):
+                t = (boundary - d0) / delta
+                if 0.0 < t < 1.0:
+                    cuts.append(float(t))
+
+            inside_ranges = []
+            cuts = sorted(cuts)
+            for start, end in zip(cuts[:-1], cuts[1:]):
+                mid = d0 + delta * ((start + end) * 0.5)
+                if abs(mid) <= tolerance:
+                    inside_ranges.append((start, end))
+
+            if inside_ranges:
+                return inside_ranges[0][0], inside_ranges[-1][1]
+
+            if abs(d0) <= tolerance:
+                return 0.0, 0.0
+            if abs(d1) <= tolerance:
+                return 1.0, 1.0
+            return None
+
+        # Build clipped projected segments wherever the well passes through the
+        # section display corridor. This keeps sparse deviated wells as lines,
+        # instead of isolated station dots.
+        for idx in range(points.shape[0] - 1):
+            clipped = clipped_fractions(
+                float(signed_dist[idx]), float(signed_dist[idx + 1])
+            )
+            if clipped is None:
+                continue
+            f0, f1 = clipped
+            bounds_clipped = self._clip_segment_fractions_to_current_slice_bounds(
+                projected[idx], projected[idx + 1], f0, f1
+            )
+            if bounds_clipped is None:
+                continue
+            f0, f1 = bounds_clipped
+            add_line(projected_at(idx, idx + 1, f0), projected_at(idx, idx + 1, f1))
+
+        # Keep standalone stations only when no line segment could be drawn.
+        if vtk_lines.GetNumberOfCells() == 0:
+            for idx, is_on in enumerate(on_slice):
+                if is_on and self._point_in_current_slice_bounds(projected[idx]):
+                    add_vertex(projected[idx])
+
+        # If a deviated well crosses the exact plane between samples, keep the
+        # crossing marker visible even when the clipped segment is very short.
+        for idx in range(points.shape[0] - 1):
+            d0 = float(signed_dist[idx])
+            d1 = float(signed_dist[idx + 1])
+            if d0 == 0.0 or d1 == 0.0 or d0 * d1 >= 0.0:
+                continue
+            denom = d0 - d1
+            if abs(denom) <= 0:
+                continue
+            t = d0 / denom
+            if 0.0 <= t <= 1.0:
+                p = points[idx] + t * (points[idx + 1] - points[idx])
+                if plane_center is not None and plane_normal is not None:
+                    p = p - np.dot(p - center, normal) * normal
+                else:
+                    p = p.copy()
+                    p[coord_idx] = float(self.current_slice_position)
+                if self._point_in_current_slice_bounds(p):
+                    add_vertex(p)
+
+        if vtk_points.GetNumberOfPoints() <= 0:
+            return None, None
+
+        out = vtkPolyData()
+        out.SetPoints(vtk_points)
+        if vtk_lines.GetNumberOfCells() > 0:
+            out.SetLines(vtk_lines)
+        if vtk_verts.GetNumberOfCells() > 0:
+            out.SetVerts(vtk_verts)
+        out.Modified()
+        label_point = np.array(out.GetPoint(0), dtype=float)
+        return out, label_point
+
+    def update_well_visibility(self, uid=None, visible=None):
+        """Show a well only when it intersects or lies near the current seismic slice."""
+        if not uid or not hasattr(self.parent, "well_coll"):
+            return
+
+        self._remove_slice_well_actor(uid)
+        self._suppress_well_child_marker_actors(well_uid=uid)
+
+        if visible is False:
+            return
+        if not self._well_control_checked("chk_wells", True):
+            return
+        if not getattr(self, "current_seismic_uid", None):
+            return
+        if not self._is_uid_enabled_in_tree(uid):
+            return
+        if not self._well_uid_is_selected_for_display(uid):
+            return
+
+        try:
+            vtk_obj = self.parent.well_coll.get_uid_vtk_obj(uid)
+        except Exception:
+            return
+        if vtk_obj is None:
+            return
+
+        source_metadata = get_seismic_metadata(self._get_current_source_vtk())
+        if source_metadata.get("vertical_domain") in ("twt", "owt"):
+            well_metadata = get_seismic_metadata(vtk_obj)
+            required = ("vertical_domain", "vertical_units", "vertical_datum", "z_positive", "crs")
+            if any(well_metadata.get(key) != source_metadata.get(key) for key in required):
+                notice_key = (self.current_seismic_uid, uid)
+                notices = getattr(self, "_well_domain_notices", set())
+                if notice_key not in notices:
+                    self.print_terminal(
+                        "Well overlay hidden: this seismic is in time. A well transformed to "
+                        "the same time domain, units and datum is required."
+                    )
+                    notices.add(notice_key)
+                    self._well_domain_notices = notices
+                return
+
+        try:
+            slice_polydata, label_point = self._extract_well_slice_polydata(vtk_obj)
+        except Exception:
+            slice_polydata, label_point = None, None
+        if slice_polydata is None or slice_polydata.GetNumberOfPoints() <= 0:
+            return
+
+        try:
+            style = self.parent.well_coll.get_uid_legend(uid=uid)
+            color = [
+                style["color_R"] / 255.0,
+                style["color_G"] / 255.0,
+                style["color_B"] / 255.0,
+            ]
+            line_width = max(float(style.get("line_thick", 2.0)) * 1.8, 3.0)
+            opacity = float(style.get("opacity", 100.0)) / 100.0
+        except Exception:
+            color = [1.0, 0.85, 0.2]
+            line_width = 4.0
+            opacity = 1.0
+
+        actor_name = f"well_slice_{uid}"
+        try:
+            halo_actor = self.plotter.add_mesh(
+                pv.wrap(slice_polydata),
+                name=f"well_slice_halo_{uid}",
+                color=(0.0, 0.0, 0.0),
+                line_width=line_width + 3.0,
+                point_size=13,
+                render_lines_as_tubes=True,
+                render_points_as_spheres=True,
+                opacity=min(max(opacity, 0.35), 0.70),
+                pickable=False,
+                reset_camera=False,
+                lighting=False,
+            )
+            self._apply_coplanar_interpretation_offset(actor=halo_actor)
+            self.slice_well_halo_actors[uid] = halo_actor
+
+            actor = self.plotter.add_mesh(
+                pv.wrap(slice_polydata),
+                name=actor_name,
+                color=color,
+                line_width=line_width,
+                point_size=10,
+                render_lines_as_tubes=True,
+                render_points_as_spheres=True,
+                opacity=opacity,
+                pickable=True,
+                reset_camera=False,
+                lighting=False,
+            )
+            self._apply_coplanar_interpretation_offset(actor=actor)
+            self.slice_well_actors[uid] = actor
+        except Exception:
+            return
+
+        if label_point is not None and self._well_control_checked(
+            "chk_well_names", True
+        ):
+            try:
+                well_name = self.parent.well_coll.get_uid_well_name(uid)
+            except Exception:
+                well_name = str(uid)[:8]
+            try:
+                label_actor = self.plotter.add_point_labels(
+                    self._points_for_unscaled_label_actor(
+                        np.asarray([label_point], dtype=float)
+                    ),
+                    [well_name],
+                    name=f"well_slice_label_{uid}",
+                    font_size=10,
+                    text_color="white",
+                    point_color=color,
+                    point_size=0,
+                    shape_opacity=0.35,
+                    always_visible=False,
+                    pickable=False,
+                    reset_camera=False,
+                )
+                self.slice_well_label_actors[uid] = label_actor
+            except Exception:
+                pass
+
+        self._add_well_marker_overlays(uid=uid, vtk_obj=vtk_obj)
+
+    def update_all_well_visibility(self):
+        """Refresh all wells for the current slice."""
+        if not hasattr(self.parent, "well_coll"):
+            return
+        try:
+            uid_list = list(self.parent.well_coll.get_uids)
+        except Exception:
+            uid_list = []
+
+        self._refresh_visible_well_filter_options(uid_list=uid_list)
+        self._well_marker_filter_dirty = True
+        self._refresh_well_marker_filter_options()
+        self._suppress_well_child_marker_actors()
+
+        active = set(uid_list)
+        for uid in list(getattr(self, "slice_well_actors", {}).keys()):
+            if uid not in active:
+                self._remove_slice_well_actor(uid)
+        for uid in uid_list:
+            self.update_well_visibility(uid=uid)
+
+    def _register_multipart_from_slice_index(self, uid=None, vtk_obj=None, emit_updates=True):
+        """Fast path for multipart lines already carrying `slice_index` cell data."""
+        if uid is None or vtk_obj is None or vtk_obj.GetNumberOfPolys() > 0:
+            return False
+
+        try:
+            cell_data = vtk_obj.GetCellData()
+            if cell_data is None or not cell_data.HasArray("slice_index"):
+                return False
+
+            slice_array = cell_data.GetArray("slice_index")
+            if slice_array is None or slice_array.GetNumberOfTuples() <= 0:
+                return False
+
+            try:
+                from vtkmodules.util.numpy_support import vtk_to_numpy
+
+                slice_values = vtk_to_numpy(slice_array).astype(np.int32, copy=False)
+            except Exception:
+                slice_values = np.array(
+                    [int(slice_array.GetValue(i)) for i in range(slice_array.GetNumberOfTuples())],
+                    dtype=np.int32,
+                )
+
+            valid_mask = slice_values >= 0
+            if not np.any(valid_mask):
+                return False
+
+            valid_indices = np.flatnonzero(valid_mask)
+            valid_slices = slice_values[valid_mask]
+            unique_slices, first_positions = np.unique(valid_slices, return_index=True)
+            first_cell_ids = valid_indices[first_positions]
+            order = np.argsort(first_cell_ids)
+            ordered_slices = unique_slices[order]
+            ordered_cells = first_cell_ids[order]
+
+            axis = None
+            field_data = vtk_obj.GetFieldData()
+            if field_data and field_data.HasArray("slice_axis"):
+                axis_array = field_data.GetAbstractArray("slice_axis")
+                if axis_array and axis_array.GetNumberOfValues() > 0:
+                    axis = axis_array.GetValue(0)
+
+            if axis is None and vtk_obj.GetNumberOfCells() > 0:
+                first_cell = vtk_obj.GetCell(0)
+                if first_cell is not None:
+                    pts = first_cell.GetPoints()
+                    if pts is not None:
+                        sample_count = min(pts.GetNumberOfPoints(), 50)
+                        if sample_count > 0:
+                            sample = np.array(
+                                [pts.GetPoint(i) for i in range(sample_count)], dtype=float
+                            )
+                            spreads = np.ptp(sample, axis=0)
+                            total_spread = float(np.sum(spreads))
+                            smallest_idx = int(np.argmin(spreads))
+                            sorted_idx = np.argsort(spreads)
+                            second_spread = (
+                                spreads[sorted_idx[1]] if len(sorted_idx) > 1 else np.inf
+                            )
+                            if total_spread <= 0:
+                                axis = self.current_axis
+                            elif (
+                                spreads[smallest_idx] < 0.01 * total_spread
+                                or spreads[smallest_idx] < second_spread * 0.1
+                            ):
+                                axis = ("Inline", "Crossline", "Z-slice")[smallest_idx]
+                            else:
+                                axis = self.current_axis
+
+            if axis is None:
+                axis = self.current_axis
+
+            if self._ensure_slice_index_property_metadata(
+                uid=uid, vtk_obj=vtk_obj, emit_updates=emit_updates
+            ) and not emit_updates:
+                self._pending_slice_metadata_uids.add(uid)
+            self._register_multipart_interpretation_entity(
+                uid=uid,
+                axis=axis,
+                slice_indices=ordered_slices.astype(int).tolist(),
+                slice_to_cell_index={
+                    int(slice_idx): int(cell_id)
+                    for slice_idx, cell_id in zip(ordered_slices, ordered_cells)
+                },
+            )
+            self.set_actor_visibility(uid, False)
+            try:
+                if uid in self.plotter.renderer.actors:
+                    self.plotter.remove_actor(uid)
+            except Exception:
+                pass
+            return True
+        except Exception:
+            return False
+
+    def _register_single_slice_lines_from_bounds(self, uids=None, bounds_array=None):
+        """Vectorized single-slice classification using per-line bounds."""
+        if not uids or bounds_array is None or len(bounds_array) == 0:
+            return set()
+        if not hasattr(self, "_cached_bounds") or not self._cached_bounds:
+            return set()
+
+        seismic_bounds = np.asarray(self._cached_bounds, dtype=float)
+        seismic_dims = np.asarray(self._cached_dims, dtype=int)
+        spacing = np.array(
+            [
+                (seismic_bounds[1] - seismic_bounds[0]) / max(seismic_dims[0] - 1, 1),
+                (seismic_bounds[3] - seismic_bounds[2]) / max(seismic_dims[1] - 1, 1),
+                (seismic_bounds[5] - seismic_bounds[4]) / max(seismic_dims[2] - 1, 1),
+            ],
+            dtype=float,
+        )
+        tol = np.maximum(np.abs(spacing) * 0.35, 1e-3)
+        mins = bounds_array[:, [0, 2, 4]]
+        maxs = bounds_array[:, [1, 3, 5]]
+        centers = 0.5 * (mins + maxs)
+        spans = np.abs(maxs - mins)
+        available = np.ones(len(uids), dtype=bool)
+        registered = set()
+        min_span_guard = 1e-9
+
+        axis_defs = (
+            ("Inline", 0, seismic_bounds[0], spacing[0], int(seismic_dims[0]), (1, 2)),
+            ("Crossline", 1, seismic_bounds[2], spacing[1], int(seismic_dims[1]), (0, 2)),
+            ("Z-slice", 2, seismic_bounds[4], spacing[2], int(seismic_dims[2]), (0, 1)),
+        )
+
+        for axis_name, axis_idx, origin, axis_spacing, dim_n, other_axes in axis_defs:
+            if axis_spacing <= 0 or dim_n <= 0:
+                continue
+            dominant_span = np.maximum(
+                np.maximum(spans[:, other_axes[0]], spans[:, other_axes[1]]),
+                min_span_guard,
+            )
+            flat_mask = (
+                available
+                & (spans[:, axis_idx] < tol[axis_idx])
+                & (spans[:, axis_idx] < 0.1 * dominant_span)
+            )
+            if not np.any(flat_mask):
+                continue
+
+            flat_indices = np.flatnonzero(flat_mask)
+            idx_float = (centers[flat_indices, axis_idx] - origin) / axis_spacing
+            idx_round = np.rint(idx_float).astype(np.int32)
+            valid_mask = (
+                (np.abs(idx_float - idx_round) < 0.1)
+                & (idx_round >= 0)
+                & (idx_round < dim_n)
+            )
+            if not np.any(valid_mask):
+                continue
+
+            valid_indices = flat_indices[valid_mask]
+            valid_round = idx_round[valid_mask]
+            for arr_idx, slice_idx in zip(valid_indices, valid_round):
+                uid = uids[arr_idx]
+                self.register_interpretation_line(
+                    uid,
+                    {
+                        "seismic_uid": self.current_seismic_uid,
+                        "axis": axis_name,
+                        "slice_index": int(slice_idx),
+                    },
+                )
+                self.set_actor_visibility(uid, False)
+                registered.add(uid)
+            available[valid_indices] = False
+
+        return registered
+
     def scan_and_index_existing_horizons(self):
         """
         Scan all PolyLines in the project. If they align spatially with the current seismic volume,
         index them so they are only shown on the correct slice.
         O(N) operation runs once per volume load.
         """
-        if getattr(self, '_lines_indexed', False):
+        if getattr(self, "_lines_indexed", False):
             return
 
-        self.print_terminal("Scanning existing horizons to index for efficient slicing...")
-        
-        count = 0
+        self.print_terminal(
+            "Scanning existing horizons to index for efficient slicing..."
+        )
         try:
-            # Get all geological entities
-            all_uids = self.parent.geol_coll.get_uids
-            
-            # We will batch-hide everything first to ensure clean state? 
-            # Or just let update_interpretation_line_visibility handle it.
-            # Only process PolyLines
-            
-            for uid in all_uids:
-                if uid in self.interpretation_lines:
-                    continue
-                
-                # Check topology
-                if self.parent.geol_coll.get_uid_topology(uid) != 'PolyLine':
-                    continue
-                
-                self.scan_and_index_single_horizon(uid)
-                count += 1
-                
+            scan_items = self._prepare_horizon_scan_items()
+            if not scan_items:
+                self._lines_indexed = True
+                return
+            self._cancel_pending_horizon_scan()
+            generation = self._horizon_scan_generation
+            self._pending_horizon_scan_items = scan_items
+            self._pending_horizon_scan_index = 0
+            self._pending_horizon_scan_processed_count = 0
+            self._pending_horizon_scan_started_at = perf_counter()
+            QTimer.singleShot(
+                0, lambda gen=generation: self._run_pending_horizon_scan_batch(gen)
+            )
         except Exception as e:
             self.print_terminal(f"Error scanning horizons: {e}")
-            self.print_terminal(traceback_format_exc())
-            
-        self._lines_indexed = True
-        self.print_terminal(f"Indexing complete. Processed {count} potential horizons.")
-        
-        # Update visibility for both regular interpretation lines and multipart horizons/faults
-        self.update_interpretation_line_visibility()
-        self.update_all_multipart_horizons_visibility()
-        self.update_all_multipart_faults_visibility()
-    
+            import traceback
+
+            self.print_terminal(traceback.format_exc())
+
     def scan_and_index_single_horizon(self, uid):
         """Check if a single horizon fits the current seismic grid and index it."""
         try:
@@ -5307,6 +9400,8 @@ class ViewInterpretation(ViewMap):
             if not vtk_obj or vtk_obj.GetNumberOfPoints() == 0:
                 return
 
+            if vtk_obj.GetNumberOfPolys() > 0:
+                return
             explicit_slice_info = self._extract_single_slice_interpretation_metadata(
                 uid=uid, vtk_obj=vtk_obj
             )
@@ -5317,105 +9412,17 @@ class ViewInterpretation(ViewMap):
 
             # First check if this is a multipart horizon (has slice_index cell data)
             # This is more efficient than checking geometry, and handles propagated horizons
-            cell_data = vtk_obj.GetCellData()
-            if cell_data and cell_data.HasArray("slice_index"):
-                self._ensure_slice_index_property_metadata(uid=uid, vtk_obj=vtk_obj)
-                # This is a multipart horizon! Reconstruct its metadata
-                slice_array = cell_data.GetArray("slice_index")
-                n_cells = vtk_obj.GetNumberOfCells()
-                
-                # Extract unique slice indices and build mapping
-                slice_indices = []
-                slice_to_cell_index = {}
-                for i in range(n_cells):
-                    slice_idx = int(slice_array.GetValue(i))
-                    if slice_idx not in slice_to_cell_index:
-                        slice_indices.append(slice_idx)
-                        slice_to_cell_index[slice_idx] = i
-                
-                # First, try to get the axis from stored field data (preferred method)
-                axis = None
-                field_data = vtk_obj.GetFieldData()
-                if field_data and field_data.HasArray("slice_axis"):
-                    axis_array = field_data.GetAbstractArray("slice_axis")
-                    if axis_array and axis_array.GetNumberOfValues() > 0:
-                        axis = axis_array.GetValue(0)
-                        self.print_terminal(f"  Recovered axis from field data: {axis}")
-                
-                # Fall back to geometry detection if no stored axis
-                if axis is None:
-                    # Determine axis by checking the geometry of the first cell's points
-                    # Get first cell points to detect which plane it lies in
-                    first_cell = vtk_obj.GetCell(0)
-                    n_pts = first_cell.GetNumberOfPoints()
-                    if n_pts > 0:
-                        # Sample more points for better accuracy
-                        pts = [first_cell.GetPoints().GetPoint(i) for i in range(min(n_pts, 50))]
-                        xs = [p[0] for p in pts]
-                        ys = [p[1] for p in pts]
-                        zs = [p[2] for p in pts]
-                        
-                        x_range = max(xs) - min(xs)
-                        y_range = max(ys) - min(ys)
-                        z_range = max(zs) - min(zs)
-                        
-                        # Determine which axis has minimal variation (that's the slice axis)
-                        # Use a more robust comparison: check which dimension has the smallest range
-                        # relative to the total span, or is essentially zero
-                        ranges = [('Inline', x_range), ('Crossline', y_range), ('Z-slice', z_range)]
-                        
-                        # Sort by range to find the smallest
-                        ranges.sort(key=lambda r: r[1])
-                        smallest_axis, smallest_range = ranges[0]
-                        second_axis, second_range = ranges[1]
-                        
-                        # The axis with smallest range is the slice axis, but only if it's
-                        # significantly smaller than the others (at least 10x smaller, or near zero)
-                        total_range = x_range + y_range + z_range
-                        if total_range > 0:
-                            if smallest_range < 0.01 * total_range or smallest_range < second_range * 0.1:
-                                axis = smallest_axis
-                            else:
-                                # Default to current axis if detection is ambiguous
-                                axis = self.current_axis
-                        else:
-                            axis = self.current_axis
-                        
-                        self.print_terminal(f"  Detected axis from geometry: {axis} (ranges: X={x_range:.2f}, Y={y_range:.2f}, Z={z_range:.2f})")
-                
-                # If axis is still None (no field data and geometry detection failed), default to current axis
-                if axis is None:
-                    axis = self.current_axis
-                    self.print_terminal(f"  Using current axis as fallback: {axis}")
-                    
-                entity_kind = self._register_multipart_interpretation_entity(
-                    uid=uid,
-                    axis=axis,
-                    slice_indices=slice_indices,
-                    slice_to_cell_index=slice_to_cell_index,
-                )
-                
-                self.print_terminal(
-                    f"Registered multipart {entity_kind} {uid}: {len(slice_indices)} slices on {axis}"
-                )
-                # IMPORTANT: Hide the full horizon actor - we will only show filtered slices
-                self.set_actor_visibility(uid, False)
-                # Also try to remove it from renderer completely to prevent it showing
-                try:
-                    if uid in self.plotter.renderer.actors:
-                        self.plotter.remove_actor(uid)
-                except:
-                    pass
+            if self._register_multipart_from_slice_index(uid=uid, vtk_obj=vtk_obj):
                 return
-            
+
             # Not a multipart horizon - check if it's a single-slice interpretation line
-            bounds = vtk_obj.GetBounds() # (xmin, xmax, ymin, ymax, zmin, zmax)
-            
+            bounds = vtk_obj.GetBounds()  # (xmin, xmax, ymin, ymax, zmin, zmax)
+
             # Get metadata about current seismic
-            # We need the real internal spatial reference (origin/spacing) 
+            # We need the real internal spatial reference (origin/spacing)
             # which we cache in get_slice_as_2d_array logic or need to access again.
-            
-            if not hasattr(self, '_cached_bounds') or not self._cached_bounds:
+
+            if not hasattr(self, "_cached_bounds") or not self._cached_bounds:
                 return
 
             seismic_bounds = self._cached_bounds
@@ -5431,83 +9438,19 @@ class ViewInterpretation(ViewMap):
             ):
                 self._ensure_slice_index_property_metadata(uid=uid, vtk_obj=vtk_obj)
                 return
-            
-            # Calculate spacing on the fly (assuming regular grid)
-            dx = (seismic_bounds[1] - seismic_bounds[0]) / max(seismic_dims[0] - 1, 1)
-            dy = (seismic_bounds[3] - seismic_bounds[2]) / max(seismic_dims[1] - 1, 1)
-            dz = (seismic_bounds[5] - seismic_bounds[4]) / max(seismic_dims[2] - 1, 1)
 
-            # Spacing-aware tolerance for "flatness" to handle operations introducing
-            # small numerical offsets along the nominal slice axis.
-            tol_x = max(abs(dx) * 0.35, 1e-3)
-            tol_y = max(abs(dy) * 0.35, 1e-3)
-            tol_z = max(abs(dz) * 0.35, 1e-3)
-            x_range = abs(bounds[1] - bounds[0])
-            y_range = abs(bounds[3] - bounds[2])
-            z_range = abs(bounds[5] - bounds[4])
-            min_span_guard = 1e-9
-
-            # Check for Inline (YZ plane, X is constant)
-            if x_range < tol_x and x_range < 0.1 * max(y_range, z_range, min_span_guard):
-                # Calculate which slice index this corresponds to
-                # x = bounds[0] (or center)
-                x_pos = (bounds[0] + bounds[1]) / 2.0
-                
-                # Inverse mapping: index = (pos - origin) / spacing
-                # Should match world_to_slice_coords logic
-                if dx > 0:
-                    idx_float = (x_pos - seismic_bounds[0]) / dx
-                    idx = int(round(idx_float))
-                    
-                    # Verify it's actually close to an integer index
-                    if abs(idx_float - idx) < 0.1:
-                        if 0 <= idx < seismic_dims[0]:
-                            self.register_interpretation_line(uid, {
-                                'seismic_uid': self.current_seismic_uid,
-                                'axis': 'Inline',
-                                'slice_index': idx
-                            })
-                            # Initially hide it (visibility update will show it if it matches current)
-                            self.set_actor_visibility(uid, False)
-                            return
-
-            # Check for Crossline (XZ plane, Y is constant)
-            if y_range < tol_y and y_range < 0.1 * max(x_range, z_range, min_span_guard):
-                y_pos = (bounds[2] + bounds[3]) / 2.0
-                if dy > 0:
-                    idx_float = (y_pos - seismic_bounds[2]) / dy
-                    idx = int(round(idx_float))
-                    if abs(idx_float - idx) < 0.1:
-                        if 0 <= idx < seismic_dims[1]:
-                            self.register_interpretation_line(uid, {
-                                'seismic_uid': self.current_seismic_uid,
-                                'axis': 'Crossline',
-                                'slice_index': idx
-                            })
-                            self.set_actor_visibility(uid, False)
-                            return
-
-            # Check for Z-slice (XY plane, Z is constant)
-            if z_range < tol_z and z_range < 0.1 * max(x_range, y_range, min_span_guard):
-                z_pos = (bounds[4] + bounds[5]) / 2.0
-                if dz > 0:
-                    idx_float = (z_pos - seismic_bounds[4]) / dz
-                    idx = int(round(idx_float))
-                    if abs(idx_float - idx) < 0.1:
-                         if 0 <= idx < seismic_dims[2]:
-                            self.register_interpretation_line(uid, {
-                                'seismic_uid': self.current_seismic_uid,
-                                'axis': 'Z-slice',
-                                'slice_index': idx
-                            })
-                            self.set_actor_visibility(uid, False)
-                            return
+            if uid in self._register_single_slice_lines_from_bounds(
+                uids=[uid], bounds_array=np.asarray([bounds], dtype=float)
+            ):
+                return
 
         except Exception as e:
             # self.print_terminal(f"Debug: failed to scan {uid}: {e}")
             pass
 
-    def _try_register_multipart_from_geometry(self, uid, vtk_obj, seismic_bounds, seismic_dims):
+    def _try_register_multipart_from_geometry(
+        self, uid, vtk_obj, seismic_bounds, seismic_dims
+    ):
         """
         Infer per-cell slice indices from geometry for polylines missing slice_index arrays.
         This is used to preserve slice-aware visibility after generic merge/split operations.
@@ -5515,6 +9458,13 @@ class ViewInterpretation(ViewMap):
         try:
             n_cells = vtk_obj.GetNumberOfCells()
             if n_cells < 2:
+                return False
+
+            points, cell_flat, cell_meta = self._extract_polyline_cells_numpy(vtk_obj)
+            if points is None or cell_flat is None or cell_meta is None:
+                return False
+            cell_starts, cell_sizes = cell_meta
+            if cell_starts.size < 2:
                 return False
 
             dx = (seismic_bounds[1] - seismic_bounds[0]) / max(seismic_dims[0] - 1, 1)
@@ -5531,21 +9481,17 @@ class ViewInterpretation(ViewMap):
                 if abs(spacing) <= 0:
                     continue
 
-                per_cell = {}
+                per_cell = np.full(cell_starts.size, -1, dtype=np.int32)
                 spreads = []
                 frac_err = []
-                for cell_id in range(n_cells):
-                    cell = vtk_obj.GetCell(cell_id)
-                    pts = cell.GetPoints() if cell is not None else None
-                    if pts is None:
-                        continue
-                    n_pts = pts.GetNumberOfPoints()
-                    if n_pts < 2:
+                for cell_id, (start, cell_size) in enumerate(zip(cell_starts, cell_sizes)):
+                    if cell_size < 2:
                         continue
 
-                    coords = [pts.GetPoint(i)[coord_idx] for i in range(n_pts)]
-                    c_min = min(coords)
-                    c_max = max(coords)
+                    point_ids = cell_flat[start : start + cell_size]
+                    coords = points[point_ids, coord_idx]
+                    c_min = float(coords.min())
+                    c_max = float(coords.max())
                     c_avg = (c_min + c_max) * 0.5
                     idx_float = (c_avg - origin) / spacing
                     idx_round = int(round(idx_float))
@@ -5556,10 +9502,11 @@ class ViewInterpretation(ViewMap):
                     spreads.append(abs(c_max - c_min) / max(abs(spacing), 1e-12))
                     frac_err.append(abs(idx_float - idx_round))
 
-                if not per_cell:
+                valid_mask = per_cell >= 0
+                if not np.any(valid_mask):
                     continue
 
-                unique_slices = sorted(set(per_cell.values()))
+                unique_slices = np.unique(per_cell[valid_mask]).astype(np.int32)
                 if len(unique_slices) < 2:
                     continue
 
@@ -5584,34 +9531,29 @@ class ViewInterpretation(ViewMap):
 
             axis_name, per_cell, unique_slices, _ = best
 
+            from vtk import vtkStringArray
+            from vtkmodules.util.numpy_support import numpy_to_vtk
 
-            # Build cell-level slice_index array.
-            cell_slice_arr = vtkIntArray()
+            cell_slice_arr = numpy_to_vtk(per_cell.astype(np.int32, copy=False), deep=True)
             cell_slice_arr.SetName("slice_index")
-            cell_slice_arr.SetNumberOfComponents(1)
-            for cell_id in range(n_cells):
-                cell_slice_arr.InsertNextValue(int(per_cell.get(cell_id, -1)))
             cell_data = vtk_obj.GetCellData()
             if cell_data and cell_data.HasArray("slice_index"):
                 cell_data.RemoveArray("slice_index")
             vtk_obj.GetCellData().AddArray(cell_slice_arr)
 
-            # Build point-level slice_index array (best effort from first owning cell).
             n_points = vtk_obj.GetNumberOfPoints()
-            point_slice = [-1] * n_points
-            for cell_id, sidx in per_cell.items():
-                cell = vtk_obj.GetCell(cell_id)
-                if cell is None:
-                    continue
-                for j in range(cell.GetNumberOfPoints()):
-                    pid = cell.GetPointId(j)
-                    if 0 <= pid < n_points and point_slice[pid] < 0:
-                        point_slice[pid] = int(sidx)
-            point_slice_arr = vtkIntArray()
+            point_slice = np.full(n_points, -1, dtype=np.int32)
+            valid_cell_ids = np.flatnonzero(per_cell >= 0)
+            for cell_id in valid_cell_ids:
+                point_ids = cell_flat[
+                    cell_starts[cell_id] : cell_starts[cell_id] + cell_sizes[cell_id]
+                ]
+                unassigned = point_slice[point_ids] < 0
+                if np.any(unassigned):
+                    point_slice[point_ids[unassigned]] = per_cell[cell_id]
+
+            point_slice_arr = numpy_to_vtk(point_slice, deep=True)
             point_slice_arr.SetName("slice_index")
-            point_slice_arr.SetNumberOfComponents(1)
-            for sidx in point_slice:
-                point_slice_arr.InsertNextValue(int(sidx))
             point_data = vtk_obj.GetPointData()
             if point_data and point_data.HasArray("slice_index"):
                 point_data.RemoveArray("slice_index")
@@ -5628,24 +9570,26 @@ class ViewInterpretation(ViewMap):
             vtk_obj.GetFieldData().AddArray(axis_arr)
             vtk_obj.Modified()
 
+            slice_to_cell_index = {}
+            for cell_id in valid_cell_ids:
+                slice_idx = int(per_cell[cell_id])
+                if slice_idx not in slice_to_cell_index:
+                    slice_to_cell_index[slice_idx] = int(cell_id)
+
             self._register_multipart_interpretation_entity(
                 uid=uid,
                 axis=axis_name,
-                slice_indices=unique_slices,
-                slice_to_cell_index={sidx: cid for cid, sidx in per_cell.items()},
-            )
-
-            self.print_terminal(
-                f"Recovered multipart slice metadata for {uid[:8]}... ({axis_name}, {len(unique_slices)} slices)"
+                slice_indices=unique_slices.tolist(),
+                slice_to_cell_index=slice_to_cell_index,
             )
             self.set_actor_visibility(uid, False)
             return True
         except Exception:
             return False
-    
+
     def _invalidate_actor_cache(self, uid=None):
         """Invalidate actor cache when entities are added/removed."""
-        if not hasattr(self, '_actor_cache'):
+        if not hasattr(self, "_actor_cache"):
             return
         if uid is None:
             self._actor_cache.clear()
@@ -5669,7 +9613,7 @@ class ViewInterpretation(ViewMap):
         for uid in list(getattr(self, "multipart_faults", {}).keys()):
             self._remove_raw_actor_for_uid(uid)
         # Also invalidate the visibility key to force update
-        if hasattr(self, '_last_visibility_key'):
+        if hasattr(self, "_last_visibility_key"):
             del self._last_visibility_key
 
     def _remove_filtered_actor(self, actor_name):
@@ -5688,6 +9632,40 @@ class ViewInterpretation(ViewMap):
                 del actors[actor_name]
         except Exception:
             pass
+
+    def _align_polydata_to_current_slice(self, vtk_obj=None):
+        """Snap a temporary interpretation polyline to the active slice plane."""
+        if vtk_obj is None or vtk_obj.GetNumberOfPoints() == 0:
+            return vtk_obj
+
+        try:
+            aligned_points = np.asarray(vtk_obj.points, dtype=np.float64).copy()
+        except Exception:
+            return vtk_obj
+
+        plane_center = getattr(self, "current_slice_plane_center", None)
+        plane_normal = getattr(self, "current_slice_plane_normal", None)
+
+        if plane_center is not None and plane_normal is not None:
+            try:
+                aligned_points = self._project_points_to_plane(
+                    aligned_points, plane_center, plane_normal
+                )
+            except Exception:
+                pass
+        else:
+            if self.current_axis == "Inline":
+                aligned_points[:, 0] = self.current_slice_position
+            elif self.current_axis == "Crossline":
+                aligned_points[:, 1] = self.current_slice_position
+            elif self.current_axis == "Z-slice":
+                aligned_points[:, 2] = self.current_slice_position
+
+        try:
+            vtk_obj.points = aligned_points
+        except Exception:
+            pass
+        return vtk_obj
 
     def _is_uid_enabled_in_tree(self, uid=None):
         """Return the current checkbox-driven visibility state for a uid."""
@@ -5733,9 +9711,10 @@ class ViewInterpretation(ViewMap):
         except Exception:
             pass
 
-        return self._extract_single_slice_interpretation_metadata(
-            uid=uid, vtk_obj=vtk_obj
-        ) is not None
+        return (
+            self._extract_single_slice_interpretation_metadata(uid=uid, vtk_obj=vtk_obj)
+            is not None
+        )
 
     def _mark_slice_visibility_dirty(self):
         """Force the next slice-aware visibility refresh to recompute state."""
@@ -5761,11 +9740,17 @@ class ViewInterpretation(ViewMap):
             if actor_row.empty:
                 continue
             self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = True
+            collection = actor_row["collection"].to_list()[0]
+            if collection == "well_coll":
+                self.update_well_visibility(uid=uid, visible=True)
+                continue
             if self._is_slice_filtered_uid(uid):
                 slice_filtered_uids.add(uid)
                 self.scan_and_index_single_horizon(uid)
                 self.set_actor_visibility(uid, False)
                 continue
+            if collection == "geol_coll":
+                self._ensure_geology_actor_realized(uid=uid, visible=True)
             self.set_actor_visible(uid=uid, visible=True)
 
         for uid in turn_off_uids:
@@ -5773,6 +9758,10 @@ class ViewInterpretation(ViewMap):
             if actor_row.empty:
                 continue
             self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
+            collection = actor_row["collection"].to_list()[0]
+            if collection == "well_coll":
+                self.update_well_visibility(uid=uid, visible=False)
+                continue
             if self._is_slice_filtered_uid(uid):
                 slice_filtered_uids.add(uid)
                 self.set_actor_visibility(uid, False)
@@ -5781,7 +9770,10 @@ class ViewInterpretation(ViewMap):
                 if hasattr(self, "vis_lines_on_display"):
                     self.vis_lines_on_display.discard(uid)
                 continue
-            self.set_actor_visible(uid=uid, visible=False)
+            try:
+                self.set_actor_visible(uid=uid, visible=False)
+            except Exception:
+                pass
 
         if not slice_filtered_uids:
             return
@@ -5796,44 +9788,52 @@ class ViewInterpretation(ViewMap):
         self.plotter.render()
 
     # ==================== Semi-Auto Tracking Methods ====================
-    
+
     def compute_edge_cost_map(self, slice_data):
         """
         Compute edge detection cost map using Sobel filter.
         High edge strength = low cost (path prefers to follow horizons).
-        
+
         Args:
             slice_data: 2D numpy array of seismic amplitudes
-            
+
         Returns:
             cost_map: 2D numpy array where low values indicate strong edges (horizons)
         """
         # Normalize data to 0-1 range
+        invalid = ~np.isfinite(slice_data)
+        if invalid.all():
+            return np.full(slice_data.shape, np.inf)
+        if invalid.any():
+            # Nearest valid samples avoid artificial Sobel edges around holes.
+            nearest = ndimage.distance_transform_edt(invalid, return_distances=False, return_indices=True)
+            slice_data = np.asarray(slice_data)[tuple(nearest)]
         data_min = np.nanmin(slice_data)
         data_max = np.nanmax(slice_data)
         if data_max - data_min > 0:
             normalized = (slice_data - data_min) / (data_max - data_min)
         else:
             normalized = slice_data.copy()
-        
+
         # Apply Sobel filter for edge detection
         # We use the vertical gradient (changes in amplitude along Z/time axis)
         # For seismic, horizons are typically horizontal features
         sobel_x = ndimage.sobel(normalized, axis=0)  # Horizontal edges
         sobel_y = ndimage.sobel(normalized, axis=1)  # Vertical edges
-        
+
         # Combine gradients - magnitude of gradient
         edge_magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
-        
+
         # Normalize edge magnitude
         edge_max = np.nanmax(edge_magnitude)
         if edge_max > 0:
             edge_magnitude = edge_magnitude / edge_max
-        
+
         # Invert: high edge strength = low cost
         # Add small epsilon to avoid zero costs
         cost_map = 1.0 - edge_magnitude + 0.01
-        
+
+        cost_map[invalid] = np.inf
         return cost_map
 
     def compute_fault_edge_cost_map(self, slice_data):
@@ -5846,6 +9846,13 @@ class ViewInterpretation(ViewMap):
         Returns:
             cost_map: 2D numpy array where low values indicate likely fault pixels
         """
+        invalid = ~np.isfinite(slice_data)
+        if invalid.all():
+            return np.full(slice_data.shape, np.inf)
+        if invalid.any():
+            # Nearest valid samples avoid artificial Sobel edges around holes.
+            nearest = ndimage.distance_transform_edt(invalid, return_distances=False, return_indices=True)
+            slice_data = np.asarray(slice_data)[tuple(nearest)]
         data_min = np.nanmin(slice_data)
         data_max = np.nanmax(slice_data)
         if data_max - data_min > 0:
@@ -5862,108 +9869,128 @@ class ViewInterpretation(ViewMap):
             edge_strength = edge_strength / edge_max
 
         # Invert: strong vertical edge => low cost
-        return 1.0 - edge_strength + 0.01
-    
+        cost_map = 1.0 - edge_strength + 0.01
+        cost_map[invalid] = np.inf
+        return cost_map
+
     def add_existing_lines_to_cost_map(self, cost_map, axis_info, spacing, v_exag):
         """
         Add high-cost zones around existing interpretation lines on the current slice.
         This prevents new paths from jumping to or crossing existing horizons.
-        
+
         Args:
             cost_map: 2D numpy array of costs (will be modified in place)
             axis_info: dict with bounds and axis info
             spacing: (dx, dy, dz) spacing
             v_exag: vertical exaggeration
-            
+
         Returns:
             modified cost_map with existing lines marked as high cost
         """
-        if not hasattr(self, 'interpretation_lines') or not self.interpretation_lines:
+        if not hasattr(self, "interpretation_lines") or not self.interpretation_lines:
             return cost_map
-        
+
         # Get existing lines on the current slice using spatial index (O(1))
         existing_line_uids = []
-        cache_key = (self.current_seismic_uid, self.current_axis, self.current_slice_index)
+        cache_key = (
+            self.current_seismic_uid,
+            self.current_axis,
+            self.current_slice_index,
+        )
         if cache_key in self.interpretation_lines_by_slice:
             existing_line_uids = list(self.interpretation_lines_by_slice[cache_key])
-        
+
         if not existing_line_uids:
             self.print_terminal("No existing lines on current slice to avoid")
             return cost_map
-        
+
         self.print_terminal(f"Found {len(existing_line_uids)} existing lines to avoid")
-        
+
         # High cost value for forbidden zones
         FORBIDDEN_COST = 100.0
         # Radius around existing lines to mark as forbidden (in pixels)
         FORBIDDEN_RADIUS = 5
-        
+
         for uid in existing_line_uids:
             try:
                 # Get the VTK object for this line
                 vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
                 if vtk_obj is None:
                     continue
-                
+
                 # Get points from the line
                 points = np.array(vtk_obj.GetPoints().GetData())
                 if len(points) == 0:
                     continue
-                
+
                 # Convert each point to slice coordinates and mark forbidden zone
                 for point in points:
                     # Points are stored in REAL coordinates, need to convert to slice indices
                     # But we need to handle the coordinate system correctly
-                    world_point = (point[0], point[1], point[2] * v_exag)  # Apply VE for display coords
-                    slice_coord = self.world_to_slice_coords(world_point, axis_info, spacing, v_exag)
-                    
+                    world_point = (
+                        point[0],
+                        point[1],
+                        point[2] * v_exag,
+                    )  # Apply VE for display coords
+                    slice_coord = self.world_to_slice_coords(
+                        world_point, axis_info, spacing, v_exag
+                    )
+
                     row, col = int(slice_coord[0]), int(slice_coord[1])
-                    
+
                     # Mark a zone around this point as high cost
                     for dr in range(-FORBIDDEN_RADIUS, FORBIDDEN_RADIUS + 1):
                         for dc in range(-FORBIDDEN_RADIUS, FORBIDDEN_RADIUS + 1):
                             r, c = row + dr, col + dc
-                            if 0 <= r < cost_map.shape[0] and 0 <= c < cost_map.shape[1]:
+                            if (
+                                0 <= r < cost_map.shape[0]
+                                and 0 <= c < cost_map.shape[1]
+                            ):
                                 # Use distance-based cost: closer = higher cost
                                 dist = np.sqrt(dr**2 + dc**2)
                                 if dist <= FORBIDDEN_RADIUS:
                                     # Exponential falloff from center
-                                    penalty = FORBIDDEN_COST * (1 - dist / (FORBIDDEN_RADIUS + 1))
+                                    penalty = FORBIDDEN_COST * (
+                                        1 - dist / (FORBIDDEN_RADIUS + 1)
+                                    )
                                     cost_map[r, c] = max(cost_map[r, c], penalty)
-                
+
                 self.print_terminal(f"Marked forbidden zone for line {uid[:8]}...")
-                
+
             except Exception as e:
                 self.print_terminal(f"Error processing existing line {uid}: {e}")
                 continue
-        
+
         return cost_map
-    
+
     def astar_pathfind(self, cost_map, start, end, corridor_width=None):
         """
         A* pathfinding algorithm to find optimal path between two points.
         CRITICAL: For seismic horizons, we constrain the VERTICAL (col/Z) axis
         to interpolate between start and end Z values, preventing jumps to other reflectors.
-        
+
         Args:
             cost_map: 2D numpy array of costs (lower = preferred)
             start: (row, col) starting point - row is horizontal, col is vertical (Z/time)
             end: (row, col) ending point
             corridor_width: Maximum allowed vertical deviation from the interpolated Z value
-            
+
         Returns:
             path: List of (row, col) points from start to end, or None if no path found
         """
         rows, cols = cost_map.shape
-        
+
         # Validate start and end points
-        start = (int(np.clip(start[0], 0, rows-1)), int(np.clip(start[1], 0, cols-1)))
-        end = (int(np.clip(end[0], 0, rows-1)), int(np.clip(end[1], 0, cols-1)))
-        
+        start = (
+            int(np.clip(start[0], 0, rows - 1)),
+            int(np.clip(start[1], 0, cols - 1)),
+        )
+        end = (int(np.clip(end[0], 0, rows - 1)), int(np.clip(end[1], 0, cols - 1)))
+
         # Heuristic: Euclidean distance
         def heuristic(a, b):
-            return np.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
-        
+            return np.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
+
         # CRITICAL: For seismic horizons, constrain VERTICAL (col) position
         # The expected col (Z/time) at any row should interpolate between start and end
         def get_expected_col(row):
@@ -5973,7 +10000,7 @@ class ViewInterpretation(ViewMap):
             # Linear interpolation of col based on row position
             t = (row - start[0]) / (end[0] - start[0])
             return start[1] + t * (end[1] - start[1])
-        
+
         def is_in_vertical_corridor(point):
             """Check if point's col (Z) is within corridor of expected value."""
             if corridor_width is None:
@@ -5982,24 +10009,32 @@ class ViewInterpretation(ViewMap):
             expected_col = get_expected_col(row)
             deviation = abs(col - expected_col)
             return deviation <= corridor_width
-        
+
         # 8-connected neighbors (including diagonals for smoother paths)
-        neighbors = [(-1, 0), (1, 0), (0, -1), (0, 1),
-                     (-1, -1), (-1, 1), (1, -1), (1, 1)]
-        
+        neighbors = [
+            (-1, 0),
+            (1, 0),
+            (0, -1),
+            (0, 1),
+            (-1, -1),
+            (-1, 1),
+            (1, -1),
+            (1, 1),
+        ]
+
         # Priority queue: (f_score, counter, node)
         counter = 0
         open_set = [(0, counter, start)]
         came_from = {}
-        
+
         g_score = {start: 0}
         f_score = {start: heuristic(start, end)}
-        
+
         visited = set()
-        
+
         while open_set:
             current = heapq.heappop(open_set)[2]
-            
+
             if current == end:
                 # Reconstruct path
                 path = [current]
@@ -6008,46 +10043,54 @@ class ViewInterpretation(ViewMap):
                     path.append(current)
                 path.reverse()
                 return path
-            
+
             if current in visited:
                 continue
             visited.add(current)
-            
+
             for dr, dc in neighbors:
                 neighbor = (current[0] + dr, current[1] + dc)
-                
+
                 # Check bounds
                 if not (0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols):
                     continue
-                
+
+                if not np.isfinite(cost_map[neighbor]):
+                    continue
                 if neighbor in visited:
                     continue
-                
+
                 # CRITICAL: Check vertical corridor constraint
                 if not is_in_vertical_corridor(neighbor):
                     continue
-                
+
                 # Cost to move to neighbor
                 move_cost = np.sqrt(2) if (dr != 0 and dc != 0) else 1.0
-                
+
                 # VERY STRONG penalty for vertical deviation from expected path
                 if corridor_width is not None and corridor_width > 0:
                     expected_col = get_expected_col(neighbor[0])
                     vertical_deviation = abs(neighbor[1] - expected_col)
                     # Cubic penalty - strongly discourages vertical deviation
-                    deviation_penalty = (vertical_deviation / max(corridor_width, 1)) ** 3 * 50.0
+                    deviation_penalty = (
+                        vertical_deviation / max(corridor_width, 1)
+                    ) ** 3 * 50.0
                 else:
                     deviation_penalty = 0
-                
-                tentative_g = g_score[current] + cost_map[neighbor[0], neighbor[1]] * move_cost + deviation_penalty
-                
+
+                tentative_g = (
+                    g_score[current]
+                    + cost_map[neighbor[0], neighbor[1]] * move_cost
+                    + deviation_penalty
+                )
+
                 if neighbor not in g_score or tentative_g < g_score[neighbor]:
                     came_from[neighbor] = current
                     g_score[neighbor] = tentative_g
                     f_score[neighbor] = tentative_g + heuristic(neighbor, end)
                     counter += 1
                     heapq.heappush(open_set, (f_score[neighbor], counter, neighbor))
-        
+
         # No path found
         return None
 
@@ -6060,7 +10103,10 @@ class ViewInterpretation(ViewMap):
         """
         rows, cols = cost_map.shape
 
-        start = (int(np.clip(start[0], 0, rows - 1)), int(np.clip(start[1], 0, cols - 1)))
+        start = (
+            int(np.clip(start[0], 0, rows - 1)),
+            int(np.clip(start[1], 0, cols - 1)),
+        )
         end = (int(np.clip(end[0], 0, rows - 1)), int(np.clip(end[1], 0, cols - 1)))
 
         def heuristic(a, b):
@@ -6081,8 +10127,14 @@ class ViewInterpretation(ViewMap):
             return abs(row - expected_row) <= corridor_width
 
         neighbors = [
-            (-1, 0), (1, 0), (0, -1), (0, 1),
-            (-1, -1), (-1, 1), (1, -1), (1, 1),
+            (-1, 0),
+            (1, 0),
+            (0, -1),
+            (0, 1),
+            (-1, -1),
+            (-1, 1),
+            (1, -1),
+            (1, 1),
         ]
 
         counter = 0
@@ -6113,6 +10165,8 @@ class ViewInterpretation(ViewMap):
                 neighbor = (current[0] + dr, current[1] + dc)
                 if not (0 <= neighbor[0] < rows and 0 <= neighbor[1] < cols):
                     continue
+                if not np.isfinite(cost_map[neighbor]):
+                    continue
                 if neighbor in visited:
                     continue
                 if not is_in_horizontal_corridor(neighbor):
@@ -6123,7 +10177,9 @@ class ViewInterpretation(ViewMap):
                 if corridor_width is not None and corridor_width > 0:
                     expected_row = get_expected_row(neighbor[1])
                     horizontal_deviation = abs(neighbor[0] - expected_row)
-                    deviation_penalty = (horizontal_deviation / max(corridor_width, 1)) ** 3 * 50.0
+                    deviation_penalty = (
+                        horizontal_deviation / max(corridor_width, 1)
+                    ) ** 3 * 50.0
                 else:
                     deviation_penalty = 0.0
 
@@ -6152,7 +10208,7 @@ class ViewInterpretation(ViewMap):
         self.disable_actions()
 
         if not self.current_seismic_uid:
-            self.print_terminal("Please select a seismic volume first!")
+            self.print_terminal("Please select a structured volume first!")
             self.enable_actions()
             return
 
@@ -6177,7 +10233,9 @@ class ViewInterpretation(ViewMap):
             self.print_terminal("Computing edge detection cost map...")
             cost_map = self.compute_edge_cost_map(slice_data)
 
-        self.print_terminal(f"Cost map range: {cost_map.min():.3f} to {cost_map.max():.3f}")
+        self.print_terminal(
+            f"Cost map range: {cost_map.min():.3f} to {cost_map.max():.3f}"
+        )
 
         v_exag = 1.0
         try:
@@ -6190,19 +10248,35 @@ class ViewInterpretation(ViewMap):
         self.print_terminal(f"Vertical exaggeration: {v_exag}")
 
         # Avoid crossing existing lines (still useful for faults to avoid snapping to horizons)
-        cost_map = self.add_existing_lines_to_cost_map(cost_map, axis_info, spacing, v_exag)
-        self.print_terminal(f"Cost map range after forbidden zones: {cost_map.min():.3f} to {cost_map.max():.3f}")
+        cost_map = self.add_existing_lines_to_cost_map(
+            cost_map, axis_info, spacing, v_exag
+        )
+        self.print_terminal(
+            f"Cost map range after forbidden zones: {cost_map.min():.3f} to {cost_map.max():.3f}"
+        )
 
-        # Make only the seismic slice pickable
+        # Make only a lightweight picking plane pickable. Dense VTI slices are slow
+        # to pick directly during waypoint placement.
         self._saved_pickable_states = {}
         for name, actor in self.plotter.renderer.actors.items():
             try:
                 self._saved_pickable_states[name] = actor.GetPickable()
-                actor.SetPickable(name == "seismic_slice_actor")
-                if name == "seismic_slice_actor":
-                    self.print_terminal(f"Made {name} PICKABLE")
+                actor.SetPickable(False)
             except Exception:
                 pass
+
+        self.add_picking_plane()
+        try:
+            if "picking_plane" in self.plotter.renderer.actors:
+                self.plotter.renderer.actors["picking_plane"].SetPickable(True)
+                self.print_terminal("Made picking_plane PICKABLE")
+            elif self.slice_actor is not None:
+                self.slice_actor.SetPickable(True)
+                self.print_terminal(
+                    "Picking plane unavailable, falling back to seismic_slice_actor picking"
+                )
+        except Exception as e:
+            self.print_terminal(f"Could not configure semi-auto picker: {e}")
 
         # Store for callbacks
         self._autotrack_cost_map = cost_map
@@ -6246,9 +10320,15 @@ class ViewInterpretation(ViewMap):
             line_dict[key] = line_dict_updt[key]
         role_fallback = "fault" if mode == "fault" else "top"
         feature_fallback = "auto_fault" if mode == "fault" else "auto_horizon"
-        line_dict["role"] = self._sanitize_legend_value(line_dict.get("role"), role_fallback)
-        line_dict["feature"] = self._sanitize_legend_value(line_dict.get("feature"), feature_fallback)
-        line_dict["scenario"] = self._sanitize_legend_value(line_dict.get("scenario"), "undef")
+        line_dict["role"] = self._sanitize_legend_value(
+            line_dict.get("role"), role_fallback
+        )
+        line_dict["feature"] = self._sanitize_legend_value(
+            line_dict.get("feature"), feature_fallback
+        )
+        line_dict["scenario"] = self._sanitize_legend_value(
+            line_dict.get("scenario"), "undef"
+        )
 
         line_dict["topology"] = "PolyLine"
         line_dict["x_section"] = ""
@@ -6259,14 +10339,16 @@ class ViewInterpretation(ViewMap):
 
         self.print_terminal(f"=== {title} ===")
         if mode == "fault":
-            self.print_terminal("LEFT-CLICK: Add waypoint on the fault (near-vertical edge)")
+            self.print_terminal(
+                "LEFT-CLICK: Add waypoint on the fault (near-vertical edge)"
+            )
         else:
             self.print_terminal("LEFT-CLICK: Add waypoint on the horizon")
         self.print_terminal("RIGHT-CLICK: Finish and create the tracked line")
         self.print_terminal("Add at least 2 waypoints, then right-click to finish.")
 
         # Calculate marker size based on slice bounds (more reliable than spacing)
-        bounds = axis_info['bounds']
+        bounds = axis_info["bounds"]
         extent_x = abs(bounds[1] - bounds[0])
         extent_y = abs(bounds[3] - bounds[2])
         extent_z = abs(bounds[5] - bounds[4]) * v_exag  # Account for VE in display
@@ -6290,38 +10372,48 @@ class ViewInterpretation(ViewMap):
                 plane_center = getattr(self, "current_slice_plane_center", None)
                 plane_normal = getattr(self, "current_slice_plane_normal", None)
                 if plane_center is not None and plane_normal is not None:
-                    z_real = float(point[2]) / v_exag if v_exag != 0 else float(point[2])
-                    p_real = np.array([float(point[0]), float(point[1]), z_real], dtype=float)
-                    p_proj = self._project_points_to_plane(p_real[None, :], plane_center, plane_normal)[0]
+                    z_real = (
+                        float(point[2]) / v_exag if v_exag != 0 else float(point[2])
+                    )
+                    p_real = np.array(
+                        [float(point[0]), float(point[1]), z_real], dtype=float
+                    )
+                    p_proj = self._project_points_to_plane(
+                        p_real[None, :], plane_center, plane_normal
+                    )[0]
                     point[0] = float(p_proj[0])
                     point[1] = float(p_proj[1])
                     point[2] = float(p_proj[2] * v_exag)
                 else:
                     # Fallback to axis-aligned snapping
-                    if self.current_axis == 'Inline':
+                    if self.current_axis == "Inline":
                         point[0] = self.current_slice_position
-                    elif self.current_axis == 'Crossline':
+                    elif self.current_axis == "Crossline":
                         point[1] = self.current_slice_position
-                    elif self.current_axis == 'Z-slice':
+                    elif self.current_axis == "Z-slice":
                         point[2] = self.current_slice_position
             except Exception:
-                if self.current_axis == 'Inline':
+                if self.current_axis == "Inline":
                     point[0] = self.current_slice_position
-                elif self.current_axis == 'Crossline':
+                elif self.current_axis == "Crossline":
                     point[1] = self.current_slice_position
-                elif self.current_axis == 'Z-slice':
+                elif self.current_axis == "Z-slice":
                     point[2] = self.current_slice_position
 
             self.print_terminal(f"DEBUG: Snapped to slice position: {point}")
 
-            test_slice_coord = self.world_to_slice_coords(point, axis_info, spacing, v_exag)
+            test_slice_coord = self.world_to_slice_coords(
+                point, axis_info, spacing, v_exag
+            )
             self.print_terminal(
                 f"DEBUG: Slice coords = row:{test_slice_coord[0]}, col(Z):{test_slice_coord[1]}"
             )
 
             if len(self._autotrack_points) > 0:
                 prev_point = self._autotrack_points[-1]
-                prev_slice_coord = self.world_to_slice_coords(prev_point, axis_info, spacing, v_exag)
+                prev_slice_coord = self.world_to_slice_coords(
+                    prev_point, axis_info, spacing, v_exag
+                )
 
                 if mode == "fault":
                     jump = abs(test_slice_coord[0] - prev_slice_coord[0])
@@ -6355,15 +10447,15 @@ class ViewInterpretation(ViewMap):
                     self._autotrack_points[-1],
                 )
 
-            marker_name = f'autotrack_marker_{len(self._autotrack_points)}'
+            marker_name = f"autotrack_marker_{len(self._autotrack_points)}"
             marker_point = list(point)
             small_offset = self._autotrack_marker_size * 0.5
 
-            if self.current_axis == 'Inline':
+            if self.current_axis == "Inline":
                 marker_point[0] -= small_offset
-            elif self.current_axis == 'Crossline':
+            elif self.current_axis == "Crossline":
                 marker_point[1] -= small_offset
-            elif self.current_axis == 'Z-slice':
+            elif self.current_axis == "Z-slice":
                 marker_point[2] += small_offset
 
             waypoint_num = len(self._autotrack_points)
@@ -6372,13 +10464,13 @@ class ViewInterpretation(ViewMap):
                 [f"  {waypoint_num}"],
                 name=marker_name,
                 show_points=False,
-                text_color='red',
+                text_color="red",
                 font_size=14,
                 bold=True,
                 shape=None,
                 always_visible=True,
                 pickable=False,
-                reset_camera=False
+                reset_camera=False,
             )
             self._autotrack_markers.append(marker_name)
 
@@ -6388,146 +10480,150 @@ class ViewInterpretation(ViewMap):
 
         def on_finish(_point):
             if len(self._autotrack_points) < 2:
-                self.print_terminal("Need at least 2 waypoints! Add more points or press ESC to cancel.")
+                self.print_terminal(
+                    "Need at least 2 waypoints! Add more points or press ESC to cancel."
+                )
                 return
 
-            self.print_terminal(f"Finishing with {len(self._autotrack_points)} waypoints...")
+            self.print_terminal(
+                f"Finishing with {len(self._autotrack_points)} waypoints..."
+            )
             self.plotter.untrack_click_position(side="left")
             self.plotter.untrack_click_position(side="right")
             self._run_autotrack_pathfinding_multi()
 
         self.plotter.track_click_position(side="left", callback=on_point_picked)
         self.plotter.track_click_position(side="right", callback=on_finish)
-    
+
     def get_slice_as_2d_array(self):
         """
         Extract the current seismic slice as a 2D numpy array.
-        
+
         Returns:
             data_2d: 2D numpy array of seismic values
             origin: (x, y, z) origin of the slice in world coordinates
             spacing: (dx, dy, dz) spacing of the slice
             axis_info: dict with axis mapping info for coordinate conversion
         """
-        if not hasattr(self, '_cached_seismic') or self._cached_seismic is None:
+        if not hasattr(self, "_cached_seismic") or self._cached_seismic is None:
             return None, None, None, None
-        
-        seismic = self._cached_seismic
+
         dims = self._cached_dims
         bounds = self._cached_bounds
-        
-        # Get the intensity/amplitude data
-        if 'intensity' in seismic.array_names:
-            data = seismic['intensity']
-        elif seismic.array_names:
-            data = seismic[seismic.array_names[0]]
-        else:
+
+        data_3d, _scalar_name = self._get_cached_volume_data_3d()
+        if data_3d is None:
             return None, None, None, None
-        
-        # Reshape to 3D grid
-        data_3d = data.reshape(dims, order='F')  # Fortran order for VTK
-        
+
         # Calculate spacing
         spacing = [
             (bounds[1] - bounds[0]) / max(dims[0] - 1, 1),
             (bounds[3] - bounds[2]) / max(dims[1] - 1, 1),
-            (bounds[5] - bounds[4]) / max(dims[2] - 1, 1)
+            (bounds[5] - bounds[4]) / max(dims[2] - 1, 1),
         ]
         affine = self._get_seismic_axis_vectors()
-        #affine = self._get_seismic_axis_vectors()
-        #affine = self._get_seismic_axis_vectors()
-        #affine = self._get_seismic_axis_vectors()
-        
+        # affine = self._get_seismic_axis_vectors()
+        # affine = self._get_seismic_axis_vectors()
+        # affine = self._get_seismic_axis_vectors()
+
         # Extract the 2D slice based on current axis
         axis_info = {
-            'axis': self.current_axis,
-            'slice_index': self.current_slice_index,
-            'bounds': bounds,
-            'dims': dims,
-            'spacing': spacing,
-            'affine': self._get_seismic_axis_vectors()
+            "axis": self.current_axis,
+            "slice_index": self.current_slice_index,
+            "bounds": bounds,
+            "dims": dims,
+            "spacing": spacing,
+            "affine": self._get_seismic_axis_vectors(),
         }
-        
-        if self.current_axis == 'Inline':
+
+        if self.current_axis == "Inline":
             # YZ plane at X index
             idx = min(self.current_slice_index, dims[0] - 1)
             data_2d = data_3d[idx, :, :]  # Shape: (ny, nz)
             origin = (bounds[0] + idx * spacing[0], bounds[2], bounds[4])
-            axis_info['plane'] = 'YZ'
-            axis_info['row_axis'] = 'Y'  # rows in 2D array correspond to Y
-            axis_info['col_axis'] = 'Z'  # cols in 2D array correspond to Z
-            
-        elif self.current_axis == 'Crossline':
+            axis_info["plane"] = "YZ"
+            axis_info["row_axis"] = "Y"  # rows in 2D array correspond to Y
+            axis_info["col_axis"] = "Z"  # cols in 2D array correspond to Z
+
+        elif self.current_axis == "Crossline":
             # XZ plane at Y index
             idx = min(self.current_slice_index, dims[1] - 1)
             data_2d = data_3d[:, idx, :]  # Shape: (nx, nz)
             origin = (bounds[0], bounds[2] + idx * spacing[1], bounds[4])
-            axis_info['plane'] = 'XZ'
-            axis_info['row_axis'] = 'X'
-            axis_info['col_axis'] = 'Z'
-            
-        elif self.current_axis == 'Z-slice':
+            axis_info["plane"] = "XZ"
+            axis_info["row_axis"] = "X"
+            axis_info["col_axis"] = "Z"
+
+        elif self.current_axis == "Z-slice":
             # XY plane at Z index
             idx = min(self.current_slice_index, dims[2] - 1)
             data_2d = data_3d[:, :, idx]  # Shape: (nx, ny)
             origin = (bounds[0], bounds[2], bounds[4] + idx * spacing[2])
-            axis_info['plane'] = 'XY'
-            axis_info['row_axis'] = 'X'
-            axis_info['col_axis'] = 'Y'
-        
+            axis_info["plane"] = "XY"
+            axis_info["row_axis"] = "X"
+            axis_info["col_axis"] = "Y"
+
         return data_2d, origin, spacing, axis_info
-    
+
     def world_to_slice_coords(self, world_point, axis_info, spacing, v_exag=1.0):
         """Convert world coordinates to slice 2D array indices.
-        
+
         Args:
             world_point: (x, y, z) in DISPLAY coordinates (with VE applied to Z)
             axis_info: dict with bounds and axis info
             spacing: (dx, dy, dz) spacing in REAL coordinates
             v_exag: vertical exaggeration factor applied to display
         """
-        bounds = axis_info['bounds']
-        affine = axis_info.get('affine')
-        
+        bounds = axis_info["bounds"]
+        affine = axis_info.get("affine")
+
         # The picked point Z is in display coords (scaled by VE)
         # Convert Z back to real coordinates for slice indexing
         real_z = world_point[2] / v_exag if v_exag != 0 else world_point[2]
-        
+
         if affine is not None:
             real_pt = (float(world_point[0]), float(world_point[1]), float(real_z))
             rc = self._world_to_slice_rc(
                 real_pt,
-                slice_idx=int(axis_info.get('slice_index', self.current_slice_index)),
+                slice_idx=int(axis_info.get("slice_index", self.current_slice_index)),
                 affine=affine,
                 axis=self.current_axis,
             )
             if rc is not None:
                 return rc
 
-        if self.current_axis == 'Inline':
+        if self.current_axis == "Inline":
             # YZ plane - world (x, y, z) -> slice (row=y, col=z)
-            row = int((world_point[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+            row = (
+                int((world_point[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+            )
             col = int((real_z - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
-        elif self.current_axis == 'Crossline':
+        elif self.current_axis == "Crossline":
             # XZ plane - world (x, y, z) -> slice (row=x, col=z)
-            row = int((world_point[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+            row = (
+                int((world_point[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+            )
             col = int((real_z - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
-        elif self.current_axis == 'Z-slice':
+        elif self.current_axis == "Z-slice":
             # XY plane - world (x, y, z) -> slice (row=x, col=y)
-            row = int((world_point[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
-            col = int((world_point[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
-        
+            row = (
+                int((world_point[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
+            )
+            col = (
+                int((world_point[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+            )
+
         return (row, col)
-    
+
     def slice_coords_to_world(self, slice_point, axis_info, spacing, origin):
         """Convert slice 2D array indices to world coordinates."""
-        bounds = axis_info['bounds']
-        affine = axis_info.get('affine')
+        bounds = axis_info["bounds"]
+        affine = axis_info.get("affine")
         row, col = slice_point
 
         if affine is not None:
             wp = self._slice_rc_to_world(
-                slice_idx=int(axis_info.get('slice_index', self.current_slice_index)),
+                slice_idx=int(axis_info.get("slice_index", self.current_slice_index)),
                 row=int(row),
                 col=int(col),
                 affine=affine,
@@ -6535,24 +10631,37 @@ class ViewInterpretation(ViewMap):
             )
             if wp is not None:
                 return wp
-        
-        if self.current_axis == 'Inline':
+
+        if self.current_axis == "Inline":
             # YZ plane - slice (row=y_idx, col=z_idx) -> world (x, y, z)
             x = self.current_slice_position
             y = bounds[2] + row * spacing[1]
             z = bounds[4] + col * spacing[2]
-        elif self.current_axis == 'Crossline':
+        elif self.current_axis == "Crossline":
             # XZ plane
             x = bounds[0] + row * spacing[0]
             y = self.current_slice_position
             z = bounds[4] + col * spacing[2]
-        elif self.current_axis == 'Z-slice':
+        elif self.current_axis == "Z-slice":
             # XY plane
             x = bounds[0] + row * spacing[0]
             y = bounds[2] + col * spacing[1]
             z = self.current_slice_position
-        
+
         return (x, y, z)
+
+    def _axis_parameter(self, axis, value, inverse=False):
+        """Convert indices using imported physical axes (including uneven decimation)."""
+        from ..helpers.seismic_coordinates import axis_coordinate
+        from vtkmodules.util.numpy_support import vtk_to_numpy
+        source = self._get_current_source_vtk()
+        array = source.GetFieldData().GetArray(f"seismic_axis_{axis}") if source is not None else None
+        values = vtk_to_numpy(array) if array is not None else None
+        return axis_coordinate(values, value, inverse=inverse)
+
+    @staticmethod
+    def _slice_parameter_axes(axis):
+        return {"Inline": (1, 2), "Crossline": (0, 2), "Z-slice": (0, 1)}[axis]
 
     def _get_seismic_axis_vectors(self):
         """Return affine axis vectors derived from the current seismic StructuredGrid."""
@@ -6560,27 +10669,46 @@ class ViewInterpretation(ViewMap):
             if getattr(self, "_cached_affine_uid", None) == self.current_seismic_uid:
                 return getattr(self, "_cached_affine", None)
 
-            seismic_vtk = self.parent.image_coll.get_uid_vtk_obj(self.current_seismic_uid)
+            seismic_vtk = self._get_current_source_vtk()
             if seismic_vtk is None:
                 return None
-            dims = seismic_vtk.GetDimensions()
+            dims = [0, 0, 0]
+            seismic_vtk.GetDimensions(dims)
             nx, ny, nz = int(dims[0]), int(dims[1]), int(dims[2])
-            origin = np.array(seismic_vtk.GetPoint(0), dtype=float)
-            a0 = (
-                np.array(seismic_vtk.GetPoint(1), dtype=float) - origin
-                if nx > 1
-                else np.array([1.0, 0.0, 0.0], dtype=float)
-            )
-            a1 = (
-                np.array(seismic_vtk.GetPoint(nx), dtype=float) - origin
-                if ny > 1
-                else np.array([0.0, 1.0, 0.0], dtype=float)
-            )
-            a2 = (
-                np.array(seismic_vtk.GetPoint(nx * ny), dtype=float) - origin
-                if nz > 1
-                else np.array([0.0, 0.0, 1.0], dtype=float)
-            )
+            if hasattr(seismic_vtk, "GetOrigin") and hasattr(seismic_vtk, "GetSpacing"):
+                origin = np.array(seismic_vtk.GetOrigin(), dtype=float)
+                spacing = np.array(seismic_vtk.GetSpacing(), dtype=float)
+                direction = np.eye(3, dtype=float)
+                if hasattr(seismic_vtk, "GetDirectionMatrix"):
+                    dmat = seismic_vtk.GetDirectionMatrix()
+                    if dmat is not None:
+                        direction = np.array(
+                            [
+                                [dmat.GetElement(r, c) for c in range(3)]
+                                for r in range(3)
+                            ],
+                            dtype=float,
+                        )
+                a0 = direction[:, 0] * (spacing[0] if nx > 1 else 1.0)
+                a1 = direction[:, 1] * (spacing[1] if ny > 1 else 1.0)
+                a2 = direction[:, 2] * (spacing[2] if nz > 1 else 1.0)
+            else:
+                origin = np.array(seismic_vtk.GetPoint(0), dtype=float)
+                a0 = (
+                    np.array(seismic_vtk.GetPoint(1), dtype=float) - origin
+                    if nx > 1
+                    else np.array([1.0, 0.0, 0.0], dtype=float)
+                )
+                a1 = (
+                    np.array(seismic_vtk.GetPoint(nx), dtype=float) - origin
+                    if ny > 1
+                    else np.array([0.0, 1.0, 0.0], dtype=float)
+                )
+                a2 = (
+                    np.array(seismic_vtk.GetPoint(nx * ny), dtype=float) - origin
+                    if nz > 1
+                    else np.array([0.0, 0.0, 1.0], dtype=float)
+                )
             affine = (origin, a0, a1, a2, (nx, ny, nz))
             self._cached_affine = affine
             self._cached_affine_uid = self.current_seismic_uid
@@ -6601,20 +10729,20 @@ class ViewInterpretation(ViewMap):
         i = int(slice_idx)
 
         if axis == "Inline":
-            base = origin + i * a0
+            base = origin + self._axis_parameter(0, i) * a0
             row_vec = a1
             col_vec = a2
-            center = base + (ny - 1) * 0.5 * row_vec + (nz - 1) * 0.5 * col_vec
+            center = base + self._axis_parameter(1, ny - 1) * 0.5 * row_vec + self._axis_parameter(2, nz - 1) * 0.5 * col_vec
         elif axis == "Crossline":
-            base = origin + i * a1
+            base = origin + self._axis_parameter(1, i) * a1
             row_vec = a0
             col_vec = a2
-            center = base + (nx - 1) * 0.5 * row_vec + (nz - 1) * 0.5 * col_vec
+            center = base + self._axis_parameter(0, nx - 1) * 0.5 * row_vec + self._axis_parameter(2, nz - 1) * 0.5 * col_vec
         else:  # Z-slice
-            base = origin + i * a2
+            base = origin + self._axis_parameter(2, i) * a2
             row_vec = a0
             col_vec = a1
-            center = base + (nx - 1) * 0.5 * row_vec + (ny - 1) * 0.5 * col_vec
+            center = base + self._axis_parameter(0, nx - 1) * 0.5 * row_vec + self._axis_parameter(1, ny - 1) * 0.5 * col_vec
 
         normal = np.cross(row_vec, col_vec)
         n_norm = float(np.linalg.norm(normal))
@@ -6622,7 +10750,9 @@ class ViewInterpretation(ViewMap):
             normal = normal / n_norm
         return (center, normal, row_vec, col_vec, dims)
 
-    def _get_display_plane_from_affine(self, center, normal, row_vec, col_vec, dims, v_exag):
+    def _get_display_plane_from_affine(
+        self, center, normal, row_vec, col_vec, dims, v_exag
+    ):
         """Convert a real-space slice plane to display-space parameters (VE applied)."""
         center_disp = (float(center[0]), float(center[1]), float(center[2]) * v_exag)
         normal_disp = np.array([normal[0], normal[1], normal[2] / v_exag], dtype=float)
@@ -6638,14 +10768,14 @@ class ViewInterpretation(ViewMap):
         nx, ny, nz = dims
 
         if self.current_axis == "Inline":
-            i_size = max(row_len * max(ny - 1, 1), 1.0)
-            j_size = max(col_len * max(nz - 1, 1), 1.0)
+            i_size = max(row_len * max(float(self._axis_parameter(1, ny - 1)), 1), 1.0)
+            j_size = max(col_len * max(float(self._axis_parameter(2, nz - 1)), 1), 1.0)
         elif self.current_axis == "Crossline":
-            i_size = max(row_len * max(nx - 1, 1), 1.0)
-            j_size = max(col_len * max(nz - 1, 1), 1.0)
+            i_size = max(row_len * max(float(self._axis_parameter(0, nx - 1)), 1), 1.0)
+            j_size = max(col_len * max(float(self._axis_parameter(2, nz - 1)), 1), 1.0)
         else:  # Z-slice
-            i_size = max(row_len * max(nx - 1, 1), 1.0)
-            j_size = max(col_len * max(ny - 1, 1), 1.0)
+            i_size = max(row_len * max(float(self._axis_parameter(0, nx - 1)), 1), 1.0)
+            j_size = max(col_len * max(float(self._axis_parameter(1, ny - 1)), 1), 1.0)
 
         return center_disp, normal_disp.tolist(), i_size, j_size
 
@@ -6661,7 +10791,9 @@ class ViewInterpretation(ViewMap):
         d = np.dot(pts - c, n)
         return pts - d[:, None] * n[None, :]
 
-    def _slice_rc_to_world(self, slice_idx: int, row: int, col: int, affine=None, axis=None):
+    def _slice_rc_to_world(
+        self, slice_idx: int, row: int, col: int, affine=None, axis=None
+    ):
         """Convert (slice_idx, row, col) to world coordinates using affine axis vectors."""
         axis = axis or self.current_axis
         if affine is None:
@@ -6673,11 +10805,11 @@ class ViewInterpretation(ViewMap):
         r = float(row)
         c = float(col)
         if axis == "Inline":
-            p = origin + i * a0 + r * a1 + c * a2
+            p = origin + self._axis_parameter(0, i) * a0 + self._axis_parameter(1, r) * a1 + self._axis_parameter(2, c) * a2
         elif axis == "Crossline":
-            p = origin + r * a0 + i * a1 + c * a2
+            p = origin + self._axis_parameter(0, r) * a0 + self._axis_parameter(1, i) * a1 + self._axis_parameter(2, c) * a2
         else:  # "Z-slice"
-            p = origin + r * a0 + c * a1 + i * a2
+            p = origin + self._axis_parameter(0, r) * a0 + self._axis_parameter(1, c) * a1 + self._axis_parameter(2, i) * a2
         return (float(p[0]), float(p[1]), float(p[2]))
 
     def _world_to_slice_rc(self, world_point, slice_idx: int, affine=None, axis=None):
@@ -6692,27 +10824,784 @@ class ViewInterpretation(ViewMap):
         i = int(slice_idx)
 
         if axis == "Inline":
-            base = origin + i * a0
+            base = origin + self._axis_parameter(0, i) * a0
             A = np.column_stack([a1, a2])
             size_row, size_col = dims[1], dims[2]
         elif axis == "Crossline":
-            base = origin + i * a1
+            base = origin + self._axis_parameter(1, i) * a1
             A = np.column_stack([a0, a2])
             size_row, size_col = dims[0], dims[2]
         else:  # "Z-slice"
-            base = origin + i * a2
+            base = origin + self._axis_parameter(2, i) * a2
             A = np.column_stack([a0, a1])
             size_row, size_col = dims[0], dims[1]
 
         b = p - base
         try:
             rc, *_ = np.linalg.lstsq(A, b, rcond=None)
+            row_axis, col_axis = self._slice_parameter_axes(axis)
+            rc = (self._axis_parameter(row_axis, rc[0], inverse=True),
+                  self._axis_parameter(col_axis, rc[1], inverse=True))
             row = int(np.clip(np.round(rc[0]), 0, max(size_row - 1, 0)))
             col = int(np.clip(np.round(rc[1]), 0, max(size_col - 1, 0)))
             return (row, col)
         except Exception:
             return None
-    
+
+    def _world_to_slice_rc_unclipped(
+        self, world_point, slice_idx: int, affine=None, axis=None
+    ):
+        """Convert world coordinates to float slice coordinates without clipping to seismic bounds."""
+        axis = axis or self.current_axis
+        if affine is None:
+            affine = self._get_seismic_axis_vectors()
+
+        if affine is not None:
+            try:
+                origin, a0, a1, a2, _dims = affine
+                p = np.array(world_point, dtype=float)
+                i = int(slice_idx)
+
+                if axis == "Inline":
+                    base = origin + self._axis_parameter(0, i) * a0
+                    A = np.column_stack([a1, a2])
+                elif axis == "Crossline":
+                    base = origin + self._axis_parameter(1, i) * a1
+                    A = np.column_stack([a0, a2])
+                else:  # "Z-slice"
+                    base = origin + self._axis_parameter(2, i) * a2
+                    A = np.column_stack([a0, a1])
+
+                rc, *_ = np.linalg.lstsq(A, p - base, rcond=None)
+                row_axis, col_axis = self._slice_parameter_axes(axis)
+                return (float(self._axis_parameter(row_axis, rc[0], inverse=True)),
+                        float(self._axis_parameter(col_axis, rc[1], inverse=True)))
+            except Exception:
+                pass
+
+        try:
+            bounds = self._cached_bounds
+            dims = self._cached_dims
+            spacing = [
+                (bounds[1] - bounds[0]) / max(dims[0] - 1, 1),
+                (bounds[3] - bounds[2]) / max(dims[1] - 1, 1),
+                (bounds[5] - bounds[4]) / max(dims[2] - 1, 1),
+            ]
+            x, y, z = [float(v) for v in world_point[:3]]
+            if axis == "Inline":
+                row = (y - bounds[2]) / spacing[1] if spacing[1] != 0 else 0.0
+                col = (z - bounds[4]) / spacing[2] if spacing[2] != 0 else 0.0
+            elif axis == "Crossline":
+                row = (x - bounds[0]) / spacing[0] if spacing[0] != 0 else 0.0
+                col = (z - bounds[4]) / spacing[2] if spacing[2] != 0 else 0.0
+            else:
+                row = (x - bounds[0]) / spacing[0] if spacing[0] != 0 else 0.0
+                col = (y - bounds[2]) / spacing[1] if spacing[1] != 0 else 0.0
+            return (float(row), float(col))
+        except Exception:
+            return None
+
+    def _slice_rc_to_world_float(
+        self, slice_idx: int, row: float, col: float, affine=None, axis=None
+    ):
+        """Convert float slice coordinates to world coordinates, allowing picks outside the volume."""
+        axis = axis or self.current_axis
+        if affine is None:
+            affine = self._get_seismic_axis_vectors()
+
+        if affine is not None:
+            try:
+                origin, a0, a1, a2, _dims = affine
+                i = float(slice_idx)
+                r = float(row)
+                c = float(col)
+                if axis == "Inline":
+                    p = origin + self._axis_parameter(0, i) * a0 + self._axis_parameter(1, r) * a1 + self._axis_parameter(2, c) * a2
+                elif axis == "Crossline":
+                    p = origin + self._axis_parameter(0, r) * a0 + self._axis_parameter(1, i) * a1 + self._axis_parameter(2, c) * a2
+                else:
+                    p = origin + self._axis_parameter(0, r) * a0 + self._axis_parameter(1, c) * a1 + self._axis_parameter(2, i) * a2
+                return (float(p[0]), float(p[1]), float(p[2]))
+            except Exception:
+                pass
+
+        try:
+            bounds = self._cached_bounds
+            dims = self._cached_dims
+            spacing = [
+                (bounds[1] - bounds[0]) / max(dims[0] - 1, 1),
+                (bounds[3] - bounds[2]) / max(dims[1] - 1, 1),
+                (bounds[5] - bounds[4]) / max(dims[2] - 1, 1),
+            ]
+            if axis == "Inline":
+                x = bounds[0] + float(slice_idx) * spacing[0]
+                y = bounds[2] + float(row) * spacing[1]
+                z = bounds[4] + float(col) * spacing[2]
+            elif axis == "Crossline":
+                x = bounds[0] + float(row) * spacing[0]
+                y = bounds[2] + float(slice_idx) * spacing[1]
+                z = bounds[4] + float(col) * spacing[2]
+            else:
+                x = bounds[0] + float(row) * spacing[0]
+                y = bounds[2] + float(col) * spacing[1]
+                z = bounds[4] + float(slice_idx) * spacing[2]
+            return (float(x), float(y), float(z))
+        except Exception:
+            return None
+
+    def _display_point_to_real_slice_point(self, picked_point, v_exag=1.0):
+        """Convert a picked display-space point to real coordinates on the active slice plane."""
+        point = list(picked_point)
+        if v_exag == 0:
+            v_exag = 1.0
+        point[2] = float(point[2]) / float(v_exag)
+
+        plane_center = getattr(self, "current_slice_plane_center", None)
+        plane_normal = getattr(self, "current_slice_plane_normal", None)
+        if plane_center is not None and plane_normal is not None:
+            try:
+                projected = self._project_points_to_plane(
+                    np.array([point], dtype=np.float64), plane_center, plane_normal
+                )[0]
+                return (float(projected[0]), float(projected[1]), float(projected[2]))
+            except Exception:
+                pass
+
+        if self.current_axis == "Inline":
+            point[0] = self.current_slice_position
+        elif self.current_axis == "Crossline":
+            point[1] = self.current_slice_position
+        elif self.current_axis == "Z-slice":
+            point[2] = self.current_slice_position
+        return (float(point[0]), float(point[1]), float(point[2]))
+
+    def _get_axis_slice_limit(self, axis=None):
+        """Return the number of slices available for an interpretation axis."""
+        axis = axis or self.current_axis
+        dims = getattr(self, "_cached_dims", None)
+        if dims is None:
+            return 0
+        if axis == "Inline":
+            return int(dims[0])
+        if axis == "Crossline":
+            return int(dims[1])
+        return int(dims[2])
+
+    def _build_directional_slice_list(self, seed_slice_idx, direction, num_slices):
+        """Build the same forward/backward/both slice list used by propagation tools."""
+        max_slices = self._get_axis_slice_limit(self.current_axis)
+        if max_slices <= 0:
+            return []
+
+        seed_slice_idx = int(seed_slice_idx)
+        num_slices = max(1, int(num_slices))
+        if direction == 0:
+            return list(
+                range(
+                    seed_slice_idx + 1,
+                    min(seed_slice_idx + num_slices + 1, max_slices),
+                )
+            )
+        if direction == 1:
+            return list(
+                range(seed_slice_idx - 1, max(seed_slice_idx - num_slices - 1, -1), -1)
+            )
+
+        forward = list(
+            range(seed_slice_idx + 1, min(seed_slice_idx + num_slices + 1, max_slices))
+        )
+        backward = list(
+            range(seed_slice_idx - 1, max(seed_slice_idx - num_slices - 1, -1), -1)
+        )
+        return backward[::-1] + forward
+
+    def _is_connector_seed_line(self, uid):
+        """Return True for single-slice lines created or named as connector seeds."""
+        if self._extract_interpretation_kind_metadata(uid=uid) == "connector":
+            return True
+
+        for getter_name in ("get_uid_name", "get_uid_feature", "get_uid_role"):
+            try:
+                value = getattr(self.parent.geol_coll, getter_name)(uid)
+            except Exception:
+                value = None
+            if isinstance(value, str) and "connector" in value.strip().lower():
+                return True
+        return False
+
+    def _show_connector_preview(self, point_a, point_b):
+        """Show a straight preview segment for connector picking."""
+        try:
+            line = pv.Line(point_a, point_b)
+            preview_name = f"connector_preview_{len(self._connector_preview_actors)}"
+            actor = self.plotter.add_mesh(
+                line,
+                color="yellow",
+                line_width=5,
+                name=preview_name,
+                pickable=False,
+                reset_camera=False,
+                lighting=False,
+                render_lines_as_tubes=True,
+            )
+            self._apply_coplanar_interpretation_offset(actor=actor)
+            self._connector_preview_actors.append(preview_name)
+            self.plotter.render()
+        except Exception as e:
+            self.print_terminal(f"Connector preview error: {e}")
+
+    def _cleanup_connector_pick(self):
+        """Clean up temporary connector picking state and restore actor pickability."""
+        for name in list(getattr(self, "_connector_marker_actors", [])):
+            try:
+                if name in self.plotter.renderer.actors:
+                    self.plotter.remove_actor(name)
+            except Exception:
+                pass
+        self._connector_marker_actors = []
+
+        for name in list(getattr(self, "_connector_preview_actors", [])):
+            try:
+                if name in self.plotter.renderer.actors:
+                    self.plotter.remove_actor(name)
+            except Exception:
+                pass
+        self._connector_preview_actors = []
+
+        try:
+            if "picking_plane" in self.plotter.renderer.actors:
+                self.plotter.remove_actor("picking_plane")
+        except Exception:
+            pass
+
+        if hasattr(self, "_connector_saved_pickable_states"):
+            for name, was_pickable in self._connector_saved_pickable_states.items():
+                try:
+                    if name in self.plotter.renderer.actors:
+                        self.plotter.renderer.actors[name].SetPickable(was_pickable)
+                except Exception:
+                    pass
+            del self._connector_saved_pickable_states
+
+        for attr_name in (
+            "_connector_points",
+            "_connector_line_dict",
+            "_connector_v_exag",
+            "_connector_marker_size",
+        ):
+            if hasattr(self, attr_name):
+                delattr(self, attr_name)
+
+        try:
+            self.plotter.untrack_click_position(side="left")
+            self.plotter.untrack_click_position(side="right")
+        except Exception:
+            pass
+
+        self.plotter.render()
+
+    def draw_connector_line(self):
+        """Create a straight waypoint connector that may be picked outside the seismic bounds."""
+        self.disable_actions()
+
+        if not self.current_seismic_uid:
+            self.print_terminal("Please select a structured volume first!")
+            self.enable_actions()
+            return
+
+        line_dict = deepcopy(self.parent.geol_coll.entity_dict)
+        feature_choices = self._sanitize_legend_choices(
+            self.parent.geol_coll.legend_df["feature"].tolist(), fallback="connector"
+        )
+        if "connector" not in feature_choices:
+            feature_choices.insert(0, "connector")
+        scenario_choices = self._sanitize_legend_choices(
+            self.parent.geol_coll.legend_df["scenario"].tolist(), fallback="undef"
+        )
+        line_dict_in = {
+            "name": ["PolyLine name: ", "connector"],
+            "role": ["Role: ", self.parent.geol_coll.valid_roles],
+            "feature": ["Feature: ", feature_choices],
+            "scenario": ["Scenario: ", scenario_choices],
+        }
+        line_dict_updt = multiple_input_dialog(
+            title="Create Connector", input_dict=line_dict_in
+        )
+        if line_dict_updt is None:
+            self.enable_actions()
+            return
+
+        for key in line_dict_updt:
+            line_dict[key] = line_dict_updt[key]
+        line_dict["role"] = self._sanitize_legend_value(line_dict.get("role"), "top")
+        line_dict["feature"] = self._sanitize_legend_value(
+            line_dict.get("feature"), "connector"
+        )
+        line_dict["scenario"] = self._sanitize_legend_value(
+            line_dict.get("scenario"), "undef"
+        )
+        line_dict["topology"] = "PolyLine"
+        line_dict["x_section"] = ""
+        line_dict["vtk_obj"] = PolyLine()
+        self._set_entity_parent_to_current_seismic(line_dict)
+        self._connector_line_dict = line_dict
+
+        v_exag = 1.0
+        try:
+            if self.plotter.scale is not None and len(self.plotter.scale) >= 3:
+                v_exag = float(self.plotter.scale[2]) or 1.0
+        except Exception:
+            pass
+        self._connector_v_exag = v_exag
+        self._connector_points = []
+        self._connector_marker_actors = []
+        self._connector_preview_actors = []
+
+        self._connector_saved_pickable_states = {}
+        for name, actor in self.plotter.renderer.actors.items():
+            try:
+                self._connector_saved_pickable_states[name] = actor.GetPickable()
+                actor.SetPickable(False)
+            except Exception:
+                pass
+
+        self.add_picking_plane(expansion_factor=4.0)
+        try:
+            if "picking_plane" in self.plotter.renderer.actors:
+                self.plotter.renderer.actors["picking_plane"].SetPickable(True)
+            elif self.slice_actor is not None:
+                self.slice_actor.SetPickable(True)
+        except Exception as e:
+            self.print_terminal(f"Could not configure connector picker: {e}")
+
+        bounds = getattr(self, "current_slice_bounds", None)
+        if bounds is not None:
+            extent = max(
+                abs(bounds[1] - bounds[0]),
+                abs(bounds[3] - bounds[2]),
+                abs(bounds[5] - bounds[4]) * v_exag,
+            )
+        else:
+            extent = 100.0
+        self._connector_marker_size = max(extent * 0.01, 1.0e-6)
+
+        self.print_terminal("=== Create Connector ===")
+        self.print_terminal("LEFT-CLICK: Add connector points on or outside the slice")
+        self.print_terminal("RIGHT-CLICK: Finish and create the connector")
+
+        def on_point_picked(picked_point):
+            if picked_point is None:
+                return
+            point = self._display_point_to_real_slice_point(
+                picked_point, getattr(self, "_connector_v_exag", 1.0)
+            )
+
+            if self._connector_points:
+                self._show_connector_preview(self._connector_points[-1], point)
+            self._connector_points.append(point)
+
+            marker_name = f"connector_marker_{len(self._connector_points)}"
+            marker_point = list(point)
+            offset = getattr(self, "_connector_marker_size", 1.0) * 0.5
+            if self.current_axis == "Inline":
+                marker_point[0] -= offset
+            elif self.current_axis == "Crossline":
+                marker_point[1] -= offset
+            else:
+                marker_point[2] += offset
+            try:
+                self.plotter.add_point_labels(
+                    [marker_point],
+                    [f"  {len(self._connector_points)}"],
+                    name=marker_name,
+                    show_points=False,
+                    text_color="yellow",
+                    font_size=14,
+                    bold=True,
+                    shape=None,
+                    always_visible=True,
+                    pickable=False,
+                    reset_camera=False,
+                )
+                self._connector_marker_actors.append(marker_name)
+            except Exception:
+                pass
+
+            self.print_terminal(
+                f"Connector point {len(self._connector_points)} added at {point}"
+            )
+            self.plotter.render()
+
+        def on_finish(_point):
+            try:
+                if len(self._connector_points) < 2:
+                    self.print_terminal("Need at least 2 connector points.")
+                    return
+
+                points_array = np.array(self._connector_points, dtype=np.float64)
+                points_array = self.snap_points_to_slice(
+                    points_array, points_are_display_coords=False
+                )
+                n_points = len(points_array)
+                polydata = pv.PolyData(points_array)
+                polydata.lines = np.hstack([[n_points], np.arange(n_points)])
+
+                line_dict = self._connector_line_dict
+                line_dict["vtk_obj"].ShallowCopy(polydata)
+                self._store_interpretation_kind_metadata(
+                    vtk_obj=line_dict["vtk_obj"], kind="connector"
+                )
+
+                slice_info = {
+                    "seismic_uid": self.current_seismic_uid,
+                    "axis": self.current_axis,
+                    "slice_index": self.current_slice_index,
+                }
+                new_uid = str(uuid4())
+                line_dict["uid"] = new_uid
+                self._pending_fast_added_entities[new_uid] = {
+                    "kind": "single_line",
+                    "slice_info": slice_info,
+                }
+                new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
+                self.print_terminal(
+                    f"Created connector with {n_points} points, uid: {new_uid}"
+                )
+            except Exception as e:
+                self.print_terminal(f"Error creating connector: {e}")
+                import traceback
+
+                self.print_terminal(traceback.format_exc())
+            finally:
+                self._cleanup_connector_pick()
+                self.enable_actions()
+
+        self.plotter.track_click_position(side="left", callback=on_point_picked)
+        self.plotter.track_click_position(side="right", callback=on_finish)
+
+    def propagate_connector(self):
+        """Copy a connector seed to adjacent slices without seismic attribute tracking."""
+        self.disable_actions()
+
+        if not self.current_seismic_uid:
+            self.print_terminal("No structured volume loaded!")
+            self.enable_actions()
+            return
+
+        def uid_exists(uid):
+            try:
+                return (self.parent.geol_coll.df["uid"] == uid).any()
+            except Exception:
+                return False
+
+        for uid in list(getattr(self, "interpretation_lines", {}).keys()):
+            if not uid_exists(uid):
+                self.unregister_interpretation_line(uid)
+
+        connector_lines = []
+        for uid, slice_info in getattr(self, "interpretation_lines", {}).items():
+            if (
+                slice_info.get("seismic_uid") == self.current_seismic_uid
+                and slice_info.get("axis") == self.current_axis
+                and self._is_connector_seed_line(uid)
+                and uid_exists(uid)
+            ):
+                try:
+                    name = self.parent.geol_coll.get_uid_name(uid)
+                except Exception:
+                    name = f"Connector_{uid[:8]}"
+                connector_lines.append(
+                    (uid, name, int(slice_info.get("slice_index", -1)))
+                )
+
+        if not connector_lines:
+            self.print_terminal("No connector seed lines found!")
+            self.print_terminal("First use 'Create Connector' on this axis.")
+            self.enable_actions()
+            return
+
+        connector_lines.sort(key=lambda row: (row[2], row[1]))
+
+        from PySide6.QtWidgets import (
+            QButtonGroup,
+            QComboBox,
+            QDialog,
+            QFormLayout,
+            QGroupBox,
+            QHBoxLayout,
+            QLabel,
+            QPushButton,
+            QRadioButton,
+            QSpinBox,
+            QVBoxLayout,
+        )
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Propagate Connector")
+        dialog.setMinimumWidth(420)
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(8)
+
+        seed_layout = QHBoxLayout()
+        seed_layout.addWidget(QLabel("Connector seed:"))
+        combo_seed = QComboBox()
+        for uid, name, slice_idx in connector_lines:
+            combo_seed.addItem(f"{name} [Slice {slice_idx}]", uid)
+        seed_layout.addWidget(combo_seed, 1)
+        layout.addLayout(seed_layout)
+
+        options_layout = QHBoxLayout()
+        dir_group = QGroupBox("Direction")
+        dir_layout = QVBoxLayout(dir_group)
+        direction_group = QButtonGroup(dialog)
+        radio_forward = QRadioButton("Forward")
+        radio_backward = QRadioButton("Backward")
+        radio_both = QRadioButton("Both")
+        radio_forward.setChecked(True)
+        direction_group.addButton(radio_forward, 0)
+        direction_group.addButton(radio_backward, 1)
+        direction_group.addButton(radio_both, 2)
+        dir_layout.addWidget(radio_forward)
+        dir_layout.addWidget(radio_backward)
+        dir_layout.addWidget(radio_both)
+        options_layout.addWidget(dir_group)
+
+        params_group = QGroupBox("Parameters")
+        params_form = QFormLayout(params_group)
+        spin_slices = QSpinBox()
+        spin_slices.setRange(1, 500)
+        spin_slices.setValue(20)
+        self._apply_control_tooltip(
+            spin_slices,
+            "How many adjacent slices receive a copied connector.",
+            low_text="Shorter connector fill.",
+            high_text="Longer constant-position fill across the missing seismic interval.",
+        )
+        params_form.addRow(
+            self._make_control_label(
+                "Slices:",
+                "How many adjacent slices receive a copied connector.",
+                low_text="Shorter connector fill.",
+                high_text="Longer constant-position fill across the missing seismic interval.",
+            ),
+            spin_slices,
+        )
+        options_layout.addWidget(params_group, 1)
+        layout.addLayout(options_layout)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_ok = QPushButton("Propagate Connector")
+        btn_cancel = QPushButton("Cancel")
+        btn_ok.clicked.connect(dialog.accept)
+        btn_cancel.clicked.connect(dialog.reject)
+        btn_layout.addWidget(btn_ok)
+        btn_layout.addWidget(btn_cancel)
+        layout.addLayout(btn_layout)
+
+        if dialog.exec() != QDialog.Accepted:
+            self.enable_actions()
+            return
+
+        selected_idx = combo_seed.currentIndex()
+        seed_uid = combo_seed.currentData()
+        seed_name = connector_lines[selected_idx][1]
+        seed_slice_idx = connector_lines[selected_idx][2]
+        if seed_slice_idx < 0:
+            seed_slice_idx = self.current_slice_index
+
+        direction = direction_group.checkedId()
+        num_slices = spin_slices.value()
+
+        self.print_terminal("=== Propagating Connector ===")
+        self.print_terminal(f"Seed connector: {seed_name} (slice {seed_slice_idx})")
+        self.print_terminal(f"Direction: {['Forward', 'Backward', 'Both'][direction]}")
+
+        try:
+            self._run_connector_propagation(
+                seed_uid=seed_uid,
+                direction=direction,
+                num_slices=num_slices,
+                seed_slice_index=seed_slice_idx,
+            )
+        except Exception as e:
+            self.print_terminal(f"Error during connector propagation: {e}")
+            import traceback
+
+            self.print_terminal(traceback.format_exc())
+
+        self.enable_actions()
+
+    def _copy_connector_points_to_slice(
+        self, seed_points, seed_slice_idx, target_slice_idx, affine=None
+    ):
+        """Copy seed points to another slice by preserving float in-plane coordinates."""
+        copied = []
+        for point in seed_points:
+            rc = self._world_to_slice_rc_unclipped(
+                point,
+                slice_idx=seed_slice_idx,
+                affine=affine,
+                axis=self.current_axis,
+            )
+            if rc is None:
+                continue
+            world_point = self._slice_rc_to_world_float(
+                slice_idx=target_slice_idx,
+                row=rc[0],
+                col=rc[1],
+                affine=affine,
+                axis=self.current_axis,
+            )
+            if world_point is not None:
+                copied.append(world_point)
+        return copied
+
+    def _run_connector_propagation(
+        self, seed_uid, direction, num_slices, seed_slice_index=None
+    ):
+        """Create a multipart connector by copying the seed polyline to neighboring slices."""
+        from vtk import vtkCellArray, vtkIntArray, vtkPoints, vtkStringArray
+
+        if not hasattr(self, "_cached_seismic") or self._cached_seismic is None:
+            self.print_terminal("No cached seismic data!")
+            return
+
+        seed_vtk = self.parent.geol_coll.get_uid_vtk_obj(seed_uid)
+        if seed_vtk is None or seed_vtk.GetNumberOfPoints() < 2:
+            self.print_terminal("Connector seed has no usable points!")
+            return
+
+        seed_points = np.array(seed_vtk.GetPoints().GetData(), dtype=np.float64)
+        current_idx = (
+            int(seed_slice_index)
+            if seed_slice_index is not None
+            else int(self.current_slice_index)
+        )
+        slices_to_copy = self._build_directional_slice_list(
+            current_idx, direction, num_slices
+        )
+        if not slices_to_copy:
+            self.print_terminal("No slices to copy connector to!")
+            return
+
+        affine = self._get_seismic_axis_vectors()
+        all_points = []
+        all_lines = []
+        point_slice_indices = []
+        cell_slice_indices = []
+        slice_to_cell_index = {}
+        point_offset = 0
+
+        for slice_idx in slices_to_copy:
+            copied_points = self._copy_connector_points_to_slice(
+                seed_points=seed_points,
+                seed_slice_idx=current_idx,
+                target_slice_idx=slice_idx,
+                affine=affine,
+            )
+            if len(copied_points) < 2:
+                continue
+
+            start_idx = point_offset
+            n_points = len(copied_points)
+            all_points.extend(copied_points)
+            point_slice_indices.extend([slice_idx] * n_points)
+            all_lines.append(n_points)
+            all_lines.extend(list(range(start_idx, start_idx + n_points)))
+            slice_to_cell_index[int(slice_idx)] = len(cell_slice_indices)
+            cell_slice_indices.append(int(slice_idx))
+            point_offset += n_points
+
+        if len(all_points) < 2 or not cell_slice_indices:
+            self.print_terminal("No valid connector copies were created!")
+            return
+
+        vtk_points = vtkPoints()
+        for pt in all_points:
+            vtk_points.InsertNextPoint(float(pt[0]), float(pt[1]), float(pt[2]))
+
+        vtk_lines = vtkCellArray()
+        i = 0
+        while i < len(all_lines):
+            n_points = all_lines[i]
+            vtk_lines.InsertNextCell(n_points)
+            for j in range(n_points):
+                vtk_lines.InsertCellPoint(all_lines[i + 1 + j])
+            i += n_points + 1
+
+        multipart_connector = PolyLine()
+        multipart_connector.SetPoints(vtk_points)
+        multipart_connector.SetLines(vtk_lines)
+
+        point_slice_array = vtkIntArray()
+        point_slice_array.SetName("slice_index")
+        point_slice_array.SetNumberOfComponents(1)
+        for idx in point_slice_indices:
+            point_slice_array.InsertNextValue(int(idx))
+        multipart_connector.GetPointData().AddArray(point_slice_array)
+
+        cell_slice_array = vtkIntArray()
+        cell_slice_array.SetName("slice_index")
+        cell_slice_array.SetNumberOfComponents(1)
+        for idx in cell_slice_indices:
+            cell_slice_array.InsertNextValue(int(idx))
+        multipart_connector.GetCellData().AddArray(cell_slice_array)
+
+        axis_array = vtkStringArray()
+        axis_array.SetName("slice_axis")
+        axis_array.SetNumberOfValues(1)
+        axis_array.SetValue(0, self.current_axis)
+        multipart_connector.GetFieldData().AddArray(axis_array)
+        self._store_interpretation_kind_metadata(
+            vtk_obj=multipart_connector, kind="connector"
+        )
+
+        line_dict = deepcopy(self.parent.geol_coll.entity_dict)
+        line_dict["name"] = self._build_propagated_entity_name(
+            seed_uid=seed_uid,
+            slice_indices=cell_slice_indices,
+            fallback_name="connector",
+        )
+        line_dict["topology"] = "PolyLine"
+        line_dict["x_section"] = ""
+        line_dict["vtk_obj"] = multipart_connector
+        self._set_entity_parent_to_current_seismic(line_dict)
+        self._ensure_slice_index_property_metadata(
+            entity_dict=line_dict,
+            vtk_obj=multipart_connector,
+            slice_indices=cell_slice_indices,
+        )
+        line_dict["role"] = self._sanitize_legend_value(
+            self.parent.geol_coll.get_uid_role(seed_uid), "top"
+        )
+        line_dict["feature"] = self._sanitize_legend_value(
+            self.parent.geol_coll.get_uid_feature(seed_uid), "connector"
+        )
+        line_dict["scenario"] = self._sanitize_legend_value(
+            self.parent.geol_coll.get_uid_scenario(seed_uid), "undef"
+        )
+
+        new_uid = str(uuid4())
+        line_dict["uid"] = new_uid
+        self._pending_fast_added_entities[new_uid] = {
+            "kind": "multipart_horizon",
+            "axis": self.current_axis,
+            "slice_indices": list(cell_slice_indices),
+            "slice_to_cell_index": slice_to_cell_index,
+            "seed_slice": current_idx,
+        }
+        new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
+
+        self.print_terminal("=== Connector Propagation Complete ===")
+        self.print_terminal(f"Created multipart connector: {line_dict['name']}")
+        self.print_terminal(
+            f"Contains {len(cell_slice_indices)} copied segments across slices"
+        )
+        self.print_terminal(
+            f"Slice range: {min(cell_slice_indices)} to {max(cell_slice_indices)}"
+        )
+
     def draw_semi_auto_line(self):
         """
         Semi-automatic horizon tracking using edge detection and A* pathfinding.
@@ -6727,7 +11616,7 @@ class ViewInterpretation(ViewMap):
         User clicks multiple waypoints along the fault, then right-clicks to finish.
         """
         self._start_semi_auto_tracking(mode="fault")
-    
+
     def _show_path_preview(self, point_a, point_b):
         """Show a preview line between two display-space points."""
         try:
@@ -6743,22 +11632,24 @@ class ViewInterpretation(ViewMap):
 
             # Create a simple line between the two points for visual feedback
             line = pv.Line(p0, p1)
-            preview_name = f'autotrack_preview_{len(self._autotrack_preview_actors)}'
-            self.plotter.add_mesh(
+            preview_name = f"autotrack_preview_{len(self._autotrack_preview_actors)}"
+            preview_actor = self.plotter.add_mesh(
                 line,
-                color='red',
+                color="red",
                 line_width=6,
                 name=preview_name,
                 pickable=False,
                 reset_camera=False,
                 lighting=False,
+                render_lines_as_tubes=True,
             )
+            self._apply_coplanar_interpretation_offset(actor=preview_actor)
             self._autotrack_preview_actors.append(preview_name)
             self.plotter.update()
             self.plotter.render()
         except Exception as e:
             self.print_terminal(f"Preview error: {e}")
-    
+
     def _run_autotrack_pathfinding_multi(self):
         """Execute A* pathfinding between all consecutive waypoints."""
         try:
@@ -6770,9 +11661,11 @@ class ViewInterpretation(ViewMap):
             v_exag = self._autotrack_v_exag
             line_dict = self._autotrack_line_dict
             mode = getattr(self, "_autotrack_mode", "horizon")
-            
-            self.print_terminal(f"Running pathfinding between {len(waypoints)} waypoints...")
-            
+
+            self.print_terminal(
+                f"Running pathfinding between {len(waypoints)} waypoints..."
+            )
+
             # Corridor is used to prevent jumping to unrelated features.
             # Horizons: constrain col(Z) as a function of row(X).
             # Faults: constrain row(X) as a function of col(Z).
@@ -6782,76 +11675,86 @@ class ViewInterpretation(ViewMap):
             else:
                 MAX_CORRIDOR = 2
                 MIN_CORRIDOR = 1
-            
-            self.print_terminal(f"Using VERY TIGHT corridor: {MIN_CORRIDOR}-{MAX_CORRIDOR} pixels max")
-            
+
+            self.print_terminal(
+                f"Using VERY TIGHT corridor: {MIN_CORRIDOR}-{MAX_CORRIDOR} pixels max"
+            )
+
             # Collect all path segments
             all_world_points = []
-            
+
             for i in range(len(waypoints) - 1):
                 point_a = waypoints[i]  # In display coords
                 point_b = waypoints[i + 1]  # In display coords
-                
+
                 # Convert display coordinates to slice indices
                 start = self.world_to_slice_coords(point_a, axis_info, spacing, v_exag)
                 end = self.world_to_slice_coords(point_b, axis_info, spacing, v_exag)
-                
+
                 self.print_terminal(f"Segment {i+1}: slice coords {start} -> {end}")
-                
+
                 # Clamp to valid range
                 start = (
                     int(np.clip(start[0], 0, cost_map.shape[0] - 1)),
-                    int(np.clip(start[1], 0, cost_map.shape[1] - 1))
+                    int(np.clip(start[1], 0, cost_map.shape[1] - 1)),
                 )
                 end = (
                     int(np.clip(end[0], 0, cost_map.shape[0] - 1)),
-                    int(np.clip(end[1], 0, cost_map.shape[1] - 1))
+                    int(np.clip(end[1], 0, cost_map.shape[1] - 1)),
                 )
-                
+
                 if mode == "fault":
                     horizontal_diff = abs(start[0] - end[0])
                     segment_corridor = min(
                         MAX_CORRIDOR,
-                        max(MIN_CORRIDOR, horizontal_diff // 3 + MIN_CORRIDOR)
+                        max(MIN_CORRIDOR, horizontal_diff // 3 + MIN_CORRIDOR),
                     )
                     self.print_terminal(
                         f"Segment {i+1}: horizontal diff={horizontal_diff}, corridor={segment_corridor}"
                     )
-                    path = self.astar_pathfind_fault(cost_map, start, end, corridor_width=segment_corridor)
+                    path = self.astar_pathfind_fault(
+                        cost_map, start, end, corridor_width=segment_corridor
+                    )
                 else:
                     vertical_diff = abs(start[1] - end[1])
                     segment_corridor = min(
                         MAX_CORRIDOR,
-                        max(MIN_CORRIDOR, vertical_diff // 3 + MIN_CORRIDOR)
+                        max(MIN_CORRIDOR, vertical_diff // 3 + MIN_CORRIDOR),
                     )
                     self.print_terminal(
                         f"Segment {i+1}: vertical diff={vertical_diff}, corridor={segment_corridor}"
                     )
-                    path = self.astar_pathfind(cost_map, start, end, corridor_width=segment_corridor)
-                
+                    path = self.astar_pathfind(
+                        cost_map, start, end, corridor_width=segment_corridor
+                    )
+
                 if path is None:
-                    self.print_terminal(f"No path found for segment {i+1}! Using straight line.")
+                    self.print_terminal(
+                        f"No path found for segment {i+1}! Using straight line."
+                    )
                     # Fallback: use straight line
                     path = [start, end]
-                
+
                 self.print_terminal(f"Segment {i+1}: found {len(path)} points")
-                
+
                 # Convert path to world coordinates (REAL coords, not display)
                 for j, slice_point in enumerate(path):
                     # Skip first point of subsequent segments to avoid duplicates
                     if i > 0 and j == 0:
                         continue
-                    world_point = self.slice_coords_to_world(slice_point, axis_info, spacing, origin)
+                    world_point = self.slice_coords_to_world(
+                        slice_point, axis_info, spacing, origin
+                    )
                     all_world_points.append(world_point)
-            
+
             if len(all_world_points) < 2:
                 self.print_terminal("Not enough points for a line!")
                 self._cleanup_autotrack()
                 self.enable_actions()
                 return
-            
+
             self.print_terminal(f"Total path: {len(all_world_points)} points")
-            
+
             # Subsample if too many points
             if len(all_world_points) > 1000:
                 step = len(all_world_points) // 1000
@@ -6861,10 +11764,10 @@ class ViewInterpretation(ViewMap):
                     subsampled.append(all_world_points[-1])
                 all_world_points = subsampled
                 self.print_terminal(f"Subsampled to {len(all_world_points)} points")
-            
+
             # Create numpy array of points (in REAL coordinates)
             points_array = np.array(all_world_points, dtype=np.float64)
-            
+
             # Snap to slice:
             # - Inline/Crossline: project to the fitted slice plane (supports rotated surveys)
             # - Z-slice: enforce constant Z
@@ -6873,60 +11776,69 @@ class ViewInterpretation(ViewMap):
                 plane_normal = getattr(self, "current_slice_plane_normal", None)
                 if plane_center is not None and plane_normal is not None:
                     try:
-                        points_array = self._project_points_to_plane(points_array, plane_center, plane_normal)
+                        points_array = self._project_points_to_plane(
+                            points_array, plane_center, plane_normal
+                        )
                     except Exception:
                         pass
                 else:
-                    offset = 1.0
-                    if self.current_axis == 'Inline':
-                        points_array[:, 0] = self.current_slice_position - offset
+                    if self.current_axis == "Inline":
+                        points_array[:, 0] = self.current_slice_position
                     else:
-                        points_array[:, 1] = self.current_slice_position - offset
-            elif self.current_axis == 'Z-slice':
+                        points_array[:, 1] = self.current_slice_position
+            elif self.current_axis == "Z-slice":
                 points_array[:, 2] = self.current_slice_position
-            
+
             # Create proper VTK PolyLine
             n_points = len(points_array)
-            
+
             # Create the polydata with points
             polydata = pv.PolyData(points_array)
-            
+
             # Create line connectivity: for a polyline, we need [n, 0, 1, 2, ..., n-1]
             lines = np.hstack([[n_points], np.arange(n_points)])
             polydata.lines = lines
-            
+
             # Copy to our VTK object
             line_dict["vtk_obj"].ShallowCopy(polydata)
-            
+
             # Store slice info
             slice_info = {
-                'seismic_uid': self.current_seismic_uid,
-                'axis': self.current_axis,
-                'slice_index': self.current_slice_index
+                "seismic_uid": self.current_seismic_uid,
+                "axis": self.current_axis,
+                "slice_index": self.current_slice_index,
             }
-            
+
+            new_uid = str(uuid4())
+            line_dict["uid"] = new_uid
+            self._pending_fast_added_entities[new_uid] = {
+                "kind": "single_line",
+                "slice_info": slice_info,
+            }
+
             # Add to geological collection
             new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
-            self.print_terminal(f"Created auto-tracked horizon with {n_points} points, uid: {new_uid}")
-            
-            # Track this interpretation line
-            # Track this interpretation line
-            self.register_interpretation_line(new_uid, slice_info)
-            self.print_terminal(f"Registered auto-tracked line {new_uid} for {slice_info['axis']} slice {slice_info['slice_index']}")
-            self.print_terminal(f"Registered auto-tracked line {new_uid} for {slice_info['axis']} slice {slice_info['slice_index']}")
-            
+            self.print_terminal(
+                f"Created auto-tracked horizon with {n_points} points, uid: {new_uid}"
+            )
+            self.print_terminal(
+                f"Registered auto-tracked line {new_uid} for {slice_info['axis']} slice {slice_info['slice_index']}"
+            )
+
         except Exception as e:
             self.print_terminal(f"Error in auto-tracking: {e}")
-            self.print_terminal(traceback_format_exc())
-        
+            import traceback
+
+            self.print_terminal(traceback.format_exc())
+
         finally:
             self._cleanup_autotrack()
             self.enable_actions()
-    
+
     def _cleanup_autotrack(self):
         """Clean up temporary auto-tracking state and markers."""
         # Remove visual markers
-        if hasattr(self, '_autotrack_markers'):
+        if hasattr(self, "_autotrack_markers"):
             for marker_name in self._autotrack_markers:
                 try:
                     if marker_name in self.plotter.renderer.actors:
@@ -6934,9 +11846,9 @@ class ViewInterpretation(ViewMap):
                 except:
                     pass
             self._autotrack_markers = []
-        
+
         # Remove preview lines
-        if hasattr(self, '_autotrack_preview_actors'):
+        if hasattr(self, "_autotrack_preview_actors"):
             for preview_name in self._autotrack_preview_actors:
                 try:
                     if preview_name in self.plotter.renderer.actors:
@@ -6944,9 +11856,15 @@ class ViewInterpretation(ViewMap):
                 except:
                     pass
             self._autotrack_preview_actors = []
-        
+
+        try:
+            if "picking_plane" in self.plotter.renderer.actors:
+                self.plotter.remove_actor("picking_plane")
+        except Exception:
+            pass
+
         # Restore pickable states for all actors
-        if hasattr(self, '_saved_pickable_states'):
+        if hasattr(self, "_saved_pickable_states"):
             for name, was_pickable in self._saved_pickable_states.items():
                 try:
                     if name in self.plotter.renderer.actors:
@@ -6955,100 +11873,124 @@ class ViewInterpretation(ViewMap):
                     pass
             del self._saved_pickable_states
             self.print_terminal("Restored pickable states for all actors")
-        
+
         # Clear state
-        if hasattr(self, '_autotrack_cost_map'):
+        if hasattr(self, "_autotrack_cost_map"):
             del self._autotrack_cost_map
-        if hasattr(self, '_autotrack_axis_info'):
+        if hasattr(self, "_autotrack_axis_info"):
             del self._autotrack_axis_info
-        if hasattr(self, '_autotrack_spacing'):
+        if hasattr(self, "_autotrack_spacing"):
             del self._autotrack_spacing
-        if hasattr(self, '_autotrack_origin'):
+        if hasattr(self, "_autotrack_origin"):
             del self._autotrack_origin
-        if hasattr(self, '_autotrack_points'):
+        if hasattr(self, "_autotrack_points"):
             del self._autotrack_points
-        if hasattr(self, '_autotrack_line_dict'):
+        if hasattr(self, "_autotrack_line_dict"):
             del self._autotrack_line_dict
-        if hasattr(self, '_autotrack_v_exag'):
+        if hasattr(self, "_autotrack_v_exag"):
             del self._autotrack_v_exag
-        if hasattr(self, '_autotrack_marker_size'):
+        if hasattr(self, "_autotrack_marker_size"):
             del self._autotrack_marker_size
-        
+
         self.plotter.render()
 
     # ==================== End Semi-Auto Tracking Methods ====================
-    
+
     # ==================== Auto Propagation Methods ====================
-    
+
     def propagate_horizon(self):
         """
         Propagate a selected horizon through adjacent slices using template matching.
         Uses cross-correlation to find the best matching position on each slice.
         """
         self.disable_actions()
-        
-        # Check if we have a seismic volume
+
+        # Check if we have an active structured volume
         if not self.current_seismic_uid:
-            self.print_terminal("No seismic volume loaded!")
+            self.print_terminal("No structured volume loaded!")
             self.enable_actions()
             return
-        
+
         # Helper function to check if UID exists in geol_coll
         def uid_exists(uid):
             try:
                 return (self.parent.geol_coll.df["uid"] == uid).any()
             except:
                 return False
-        
+
         # Clean up interpretation_lines - remove any UIDs that no longer exist in geol_coll
         uids_to_remove = []
         for uid in list(self.interpretation_lines.keys()):
             if not uid_exists(uid):
                 uids_to_remove.append(uid)
-        
+
         if uids_to_remove:
             for uid in uids_to_remove:
                 self.unregister_interpretation_line(uid)
-                self.print_terminal(f"Removed deleted horizon {uid[:8]}... from tracking list")
-        
+                self.print_terminal(
+                    f"Removed deleted horizon {uid[:8]}... from tracking list"
+                )
+
         # Get list of semi-auto tracked horizons ONLY (from interpretation_lines)
         # This excludes manually drawn lines and other entities
         all_lines = []
         for uid, slice_info in self.interpretation_lines.items():
-            if slice_info['seismic_uid'] == self.current_seismic_uid and slice_info['axis'] == self.current_axis:
+            if (
+                slice_info["seismic_uid"] == self.current_seismic_uid
+                and slice_info["axis"] == self.current_axis
+            ):
                 # Verify the entity still exists and get its name
                 if uid_exists(uid):
                     try:
                         name = self.parent.geol_coll.get_uid_name(uid)
-                        slice_idx = slice_info['slice_index']
+                        slice_idx = slice_info["slice_index"]
                         all_lines.append((uid, name, slice_idx))
                     except:
                         pass
-        
+
         if not all_lines:
             self.print_terminal("No semi-auto tracked horizons found!")
-            self.print_terminal("First use 'Semi-Auto Track Horizon' to create a seed horizon on this axis.")
+            self.print_terminal(
+                "First use 'Semi-Auto Track Horizon' to create a seed horizon on this axis."
+            )
             self.enable_actions()
             return
-        
+
         # Sort by slice index, then by name
         all_lines.sort(key=lambda x: (x[2], x[1]))
-        
-        # Create selection dialog
 
-        
+        # Create selection dialog
+        from PySide6.QtWidgets import (
+            QDialog,
+            QVBoxLayout,
+            QHBoxLayout,
+            QComboBox,
+            QSpinBox,
+            QDoubleSpinBox,
+            QLabel,
+            QPushButton,
+            QRadioButton,
+            QButtonGroup,
+            QGroupBox,
+            QCheckBox,
+            QGridLayout,
+            QFormLayout,
+        )
+
         dialog = QDialog(self)
         dialog.setWindowTitle("Propagate Horizon")
         dialog.setMinimumWidth(500)
         layout = QVBoxLayout(dialog)
         layout.setSpacing(8)
-        
+
         # === TOP ROW: Horizon selection ===
         horizon_layout = QHBoxLayout()
         horizon_layout.addWidget(QLabel("Seed horizon:"))
         combo_horizon = QComboBox()
         for uid, name, slice_idx in all_lines:
-            display_text = f"{name} [Slice {slice_idx}]" if slice_idx >= 0 else f"{name} [Current]"
+            display_text = (
+                f"{name} [Slice {slice_idx}]" if slice_idx >= 0 else f"{name} [Current]"
+            )
             combo_horizon.addItem(display_text, uid)
         combo_horizon.setMinimumWidth(250)
         horizon_layout.addWidget(combo_horizon, 1)
@@ -7060,13 +12002,13 @@ class ViewInterpretation(ViewMap):
         tooltip_hint.setStyleSheet("color: gray;")
         tooltip_hint.setWordWrap(True)
         layout.addWidget(tooltip_hint)
-        
+
         # === TWO COLUMN LAYOUT ===
         columns_layout = QHBoxLayout()
-        
+
         # --- LEFT COLUMN ---
         left_widget = QVBoxLayout()
-        
+
         # Direction (compact)
         dir_group = QGroupBox("Direction")
         dir_layout = QVBoxLayout(dir_group)
@@ -7083,7 +12025,7 @@ class ViewInterpretation(ViewMap):
         dir_layout.addWidget(radio_backward)
         dir_layout.addWidget(radio_both)
         left_widget.addWidget(dir_group)
-        
+
         # Tracking Attributes (compact checkboxes)
         attr_group = QGroupBox("Attributes")
         attr_layout = QVBoxLayout(attr_group)
@@ -7093,7 +12035,9 @@ class ViewInterpretation(ViewMap):
         check_edge = QCheckBox("Edge")
         check_edge.setChecked(True)
         check_phase = QCheckBox("Phase")
+        check_phase.setChecked(True)
         check_similarity = QCheckBox("Similarity")
+        check_similarity.setChecked(True)
         check_dip = QCheckBox("Dip")
         self._apply_control_tooltip(
             check_amplitude,
@@ -7109,7 +12053,7 @@ class ViewInterpretation(ViewMap):
         )
         self._apply_control_tooltip(
             check_similarity,
-            "Favor lateral coherence from trace to trace. Helps reject noisy or isolated picks.",
+            "Favor local waveform correlation and lateral coherence. Helps keep the pick on the same seismic event.",
         )
         self._apply_control_tooltip(
             check_dip,
@@ -7121,18 +12065,18 @@ class ViewInterpretation(ViewMap):
         attr_layout.addWidget(check_similarity)
         attr_layout.addWidget(check_dip)
         left_widget.addWidget(attr_group)
-        
+
         left_widget.addStretch()
         columns_layout.addLayout(left_widget)
-        
+
         # --- RIGHT COLUMN ---
         right_widget = QVBoxLayout()
-        
+
         # Parameters (using form layout for compactness)
         params_group = QGroupBox("Parameters")
         params_form = QFormLayout(params_group)
         params_form.setSpacing(4)
-        
+
         spin_slices = QSpinBox()
         spin_slices.setRange(1, 500)
         spin_slices.setValue(50)
@@ -7151,7 +12095,7 @@ class ViewInterpretation(ViewMap):
             ),
             spin_slices,
         )
-        
+
         spin_search = QSpinBox()
         spin_search.setRange(5, 50)
         spin_search.setValue(15)
@@ -7170,7 +12114,7 @@ class ViewInterpretation(ViewMap):
             ),
             spin_search,
         )
-        
+
         spin_smooth = QDoubleSpinBox()
         spin_smooth.setRange(0.0, 10.0)
         spin_smooth.setValue(2.0)
@@ -7190,7 +12134,7 @@ class ViewInterpretation(ViewMap):
             ),
             spin_smooth,
         )
-        
+
         spin_max_jump = QSpinBox()
         spin_max_jump.setRange(1, 20)
         spin_max_jump.setValue(3)
@@ -7209,7 +12153,7 @@ class ViewInterpretation(ViewMap):
             ),
             spin_max_jump,
         )
-        
+
         right_widget.addWidget(params_group)
 
         fault_group = QGroupBox("Fault Attachment")
@@ -7313,14 +12257,14 @@ class ViewInterpretation(ViewMap):
         )
 
         right_widget.addWidget(fault_group)
-        
+
         # Advanced Weights (collapsible, compact grid)
         weights_group = QGroupBox("Advanced Weights")
         weights_group.setCheckable(True)
         weights_group.setChecked(False)
         weights_grid = QGridLayout(weights_group)
         weights_grid.setSpacing(4)
-        
+
         spin_smooth_weight = QDoubleSpinBox()
         spin_smooth_weight.setRange(0.0, 1.0)
         spin_smooth_weight.setValue(0.3)
@@ -7342,7 +12286,7 @@ class ViewInterpretation(ViewMap):
             0,
         )
         weights_grid.addWidget(spin_smooth_weight, 0, 1)
-        
+
         spin_amp_weight = QDoubleSpinBox()
         spin_amp_weight.setRange(0.0, 1.0)
         spin_amp_weight.setValue(0.3)
@@ -7364,7 +12308,7 @@ class ViewInterpretation(ViewMap):
             2,
         )
         weights_grid.addWidget(spin_amp_weight, 0, 3)
-        
+
         spin_edge_weight = QDoubleSpinBox()
         spin_edge_weight.setRange(0.0, 1.0)
         spin_edge_weight.setValue(0.2)
@@ -7386,10 +12330,10 @@ class ViewInterpretation(ViewMap):
             0,
         )
         weights_grid.addWidget(spin_edge_weight, 1, 1)
-        
+
         spin_phase_weight = QDoubleSpinBox()
         spin_phase_weight.setRange(0.0, 1.0)
-        spin_phase_weight.setValue(0.2)
+        spin_phase_weight.setValue(0.25)
         spin_phase_weight.setSingleStep(0.1)
         self._apply_control_tooltip(
             spin_phase_weight,
@@ -7408,10 +12352,10 @@ class ViewInterpretation(ViewMap):
             2,
         )
         weights_grid.addWidget(spin_phase_weight, 1, 3)
-        
+
         spin_sim_weight = QDoubleSpinBox()
         spin_sim_weight.setRange(0.0, 1.0)
-        spin_sim_weight.setValue(0.15)
+        spin_sim_weight.setValue(0.25)
         spin_sim_weight.setSingleStep(0.05)
         self._apply_control_tooltip(
             spin_sim_weight,
@@ -7430,7 +12374,7 @@ class ViewInterpretation(ViewMap):
             0,
         )
         weights_grid.addWidget(spin_sim_weight, 2, 1)
-        
+
         spin_dip_weight = QDoubleSpinBox()
         spin_dip_weight.setRange(0.0, 1.0)
         spin_dip_weight.setValue(0.15)
@@ -7452,13 +12396,13 @@ class ViewInterpretation(ViewMap):
             2,
         )
         weights_grid.addWidget(spin_dip_weight, 2, 3)
-        
+
         right_widget.addWidget(weights_group)
         right_widget.addStretch()
         columns_layout.addLayout(right_widget)
-        
+
         layout.addLayout(columns_layout)
-        
+
         # === BUTTONS ===
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
@@ -7469,42 +12413,44 @@ class ViewInterpretation(ViewMap):
         btn_layout.addWidget(btn_ok)
         btn_layout.addWidget(btn_cancel)
         layout.addLayout(btn_layout)
-        
+
         if dialog.exec() != QDialog.Accepted:
             self.enable_actions()
             return
-        
+
         # Get parameters
         selected_idx = combo_horizon.currentIndex()
         seed_uid = combo_horizon.currentData()
         seed_name = all_lines[selected_idx][1]
         seed_slice_idx = all_lines[selected_idx][2]
-        
+
         # If slice index unknown, use current slice
         if seed_slice_idx < 0:
             seed_slice_idx = self.current_slice_index
-            self.print_terminal(f"Using current slice {seed_slice_idx} as seed position")
-        
+            self.print_terminal(
+                f"Using current slice {seed_slice_idx} as seed position"
+            )
+
         direction = direction_group.checkedId()  # 0=forward, 1=backward, 2=both
         num_slices = spin_slices.value()
-        
+
         # Build list of selected attributes
         selected_attributes = []
         if check_amplitude.isChecked():
-            selected_attributes.append('amplitude')
+            selected_attributes.append("amplitude")
         if check_edge.isChecked():
-            selected_attributes.append('edge')
+            selected_attributes.append("edge")
         if check_phase.isChecked():
-            selected_attributes.append('phase')
+            selected_attributes.append("phase")
         if check_similarity.isChecked():
-            selected_attributes.append('similarity')
+            selected_attributes.append("similarity")
         if check_dip.isChecked():
-            selected_attributes.append('dip')
-        
-        # Default to amplitude+edge if nothing selected
+            selected_attributes.append("dip")
+
+        # Default to event identity constraints if nothing selected
         if not selected_attributes:
-            selected_attributes = ['amplitude', 'edge']
-        
+            selected_attributes = ["amplitude", "edge", "phase", "similarity", "waveform"]
+
         # Get tracking parameters
         search_window = spin_search.value()
         smooth_sigma = spin_smooth.value()
@@ -7514,7 +12460,7 @@ class ViewInterpretation(ViewMap):
         fault_attach_apply_row_tolerance = spin_fault_attach_row_tol.value()
         fault_attach_apply_col_tolerance = spin_fault_attach_col_tol.value()
         fault_attach_blend_rows = spin_fault_attach_blend.value()
-        
+
         # Get weights (use defaults if not expanded)
         if weights_group.isChecked():
             smoothness_weight = spin_smooth_weight.value()
@@ -7527,23 +12473,25 @@ class ViewInterpretation(ViewMap):
             smoothness_weight = 0.3
             amplitude_weight = 0.3
             edge_weight = 0.2
-            phase_weight = 0.2
-            similarity_weight = 0.15
+            phase_weight = 0.25
+            similarity_weight = 0.25
             dip_weight = 0.15
-        
+
         self.print_terminal(f"=== Propagating Horizon ===")
         self.print_terminal(f"Seed horizon: {seed_name} (slice {seed_slice_idx})")
         self.print_terminal(f"Direction: {['Forward', 'Backward', 'Both'][direction]}")
         self.print_terminal(f"Attributes: {', '.join(selected_attributes)}")
-        self.print_terminal(f"Search: ±{search_window}, Smooth: {smooth_sigma}, MaxJump: {max_jump}")
-        
+        self.print_terminal(
+            f"Search: ±{search_window}, Smooth: {smooth_sigma}, MaxJump: {max_jump}"
+        )
+
         self.print_terminal(
             "Fault attach: "
             f"snap={fault_snap_weight}, depth_tol={fault_attach_depth_tolerance}, "
             f"row_tol={fault_attach_apply_row_tolerance}, col_tol={fault_attach_apply_col_tolerance}, "
             f"blend={fault_attach_blend_rows}"
         )
-        
+
         # Run propagation
         try:
             self._run_horizon_propagation(
@@ -7565,14 +12513,16 @@ class ViewInterpretation(ViewMap):
                 fault_attach_apply_row_tolerance=fault_attach_apply_row_tolerance,
                 fault_attach_apply_col_tolerance=fault_attach_apply_col_tolerance,
                 fault_attach_blend_rows=fault_attach_blend_rows,
-                seed_slice_index=seed_slice_idx
+                seed_slice_index=seed_slice_idx,
             )
         except Exception as e:
             self.print_terminal(f"Error during propagation: {e}")
-            self.print_terminal(traceback_format_exc())
-        
+            import traceback
+
+            self.print_terminal(traceback.format_exc())
+
         self.enable_actions()
-    
+
     def _run_horizon_propagation(
         self,
         seed_uid,
@@ -7585,25 +12535,25 @@ class ViewInterpretation(ViewMap):
         smoothness_weight=0.3,
         amplitude_weight=0.3,
         edge_weight=0.2,
-        phase_weight=0.2,
-        similarity_weight=0.15,
+        phase_weight=0.25,
+        similarity_weight=0.25,
         dip_weight=0.15,
         fault_snap_weight=2.0,
         fault_attach_depth_tolerance=2,
         fault_attach_apply_row_tolerance=8,
         fault_attach_apply_col_tolerance=4,
         fault_attach_blend_rows=3,
-        seed_slice_index=None
+        seed_slice_index=None,
     ):
         """
         Execute the horizon propagation using attribute-guided tracking.
         Creates a SINGLE multipart PolyLine entity containing all propagated segments.
-        
+
         Args:
             seed_uid: UID of the seed horizon line
             direction: 0=forward, 1=backward, 2=both
             num_slices: Number of slices to propagate
-            attributes: List of attributes to use ['amplitude', 'edge', 'phase', 'similarity', 'dip']
+            attributes: List of attributes to use ['amplitude', 'edge', 'phase', 'similarity', 'dip', 'waveform']
             search_window: Search window size (samples)
             smooth_sigma: Gaussian smoothing sigma (0=no smoothing)
             max_jump: Maximum allowed jump between slices (samples)
@@ -7621,36 +12571,32 @@ class ViewInterpretation(ViewMap):
             seed_slice_index: Index of the seed slice
         """
         if attributes is None:
-            attributes = ['amplitude', 'edge']
+            attributes = ["amplitude", "edge", "phase", "similarity", "waveform"]
+        from vtk import vtkPoints, vtkCellArray, vtkIntArray
+        from ..helpers.autotracker import propagate_horizon
 
-        
         # Get the seismic data
-        if not hasattr(self, '_cached_seismic') or self._cached_seismic is None:
+        if not hasattr(self, "_cached_seismic") or self._cached_seismic is None:
             self.print_terminal("No cached seismic data!")
             return
-        
+
         seismic = self._cached_seismic
         dims = self._cached_dims
         bounds = self._cached_bounds
-        
+
         # Get the 3D data array
-        if 'intensity' in seismic.array_names:
-            data = seismic['intensity']
-        elif seismic.array_names:
-            data = seismic[seismic.array_names[0]]
-        else:
+        data_3d, _scalar_name = self._get_cached_volume_data_3d(cast_dtype=np.float32)
+        if data_3d is None:
             self.print_terminal("No data arrays in seismic!")
             return
-        
-        data_3d = data.reshape(dims, order='F').astype(np.float32)
-        
+
         # Calculate spacing
         spacing = [
             (bounds[1] - bounds[0]) / max(dims[0] - 1, 1),
             (bounds[3] - bounds[2]) / max(dims[1] - 1, 1),
-            (bounds[5] - bounds[4]) / max(dims[2] - 1, 1)
+            (bounds[5] - bounds[4]) / max(dims[2] - 1, 1),
         ]
-        
+
         # Get the seed horizon points using the proper method
         seed_vtk = None
         try:
@@ -7658,47 +12604,59 @@ class ViewInterpretation(ViewMap):
             seed_vtk = self.parent.geol_coll.get_uid_vtk_obj(seed_uid)
         except Exception as e:
             self.print_terminal(f"Could not get seed horizon vtk object: {e}")
-        
+
         if seed_vtk is None:
             self.print_terminal(f"Could not get seed horizon! UID: {seed_uid}")
             return
-        
+
         seed_points = np.array(seed_vtk.GetPoints().GetData())
         if len(seed_points) == 0:
             self.print_terminal("Seed horizon has no points!")
             return
-        
+
         self.print_terminal(f"Seed horizon has {len(seed_points)} points")
-        
+
         # Get the seed slice index - use provided value or fall back to current slice
         if seed_slice_index is not None:
             current_idx = seed_slice_index
         else:
             current_idx = self.current_slice_index
-        
+
         self.print_terminal(f"Starting propagation from slice {current_idx}")
-        
+
         # Determine slice limits based on axis
-        if self.current_axis == 'Inline':
+        if self.current_axis == "Inline":
             max_slice = dims[0] - 1
-        elif self.current_axis == 'Crossline':
+        elif self.current_axis == "Crossline":
             max_slice = dims[1] - 1
         else:
             max_slice = dims[2] - 1
-        
+
         # Determine which slices to propagate to
         slices_to_track = []
+        backward_slices = []
+        forward_slices = []
         if direction == 0:  # Forward
-            slices_to_track = list(range(current_idx + 1, min(current_idx + num_slices + 1, max_slice + 1)))
+            forward_slices = list(
+                range(current_idx + 1, min(current_idx + num_slices + 1, max_slice + 1))
+            )
+            slices_to_track = forward_slices
         elif direction == 1:  # Backward
-            slices_to_track = list(range(current_idx - 1, max(current_idx - num_slices - 1, -1), -1))
+            backward_slices = list(
+                range(current_idx - 1, max(current_idx - num_slices - 1, -1), -1)
+            )
+            slices_to_track = backward_slices
         else:  # Both
-            forward = list(range(current_idx + 1, min(current_idx + num_slices + 1, max_slice + 1)))
-            backward = list(range(current_idx - 1, max(current_idx - num_slices - 1, -1), -1))
-            slices_to_track = backward[::-1] + forward  # Process in order
-        
+            forward_slices = list(
+                range(current_idx + 1, min(current_idx + num_slices + 1, max_slice + 1))
+            )
+            backward_slices = list(
+                range(current_idx - 1, max(current_idx - num_slices - 1, -1), -1)
+            )
+            slices_to_track = backward_slices + forward_slices
+
         self.print_terminal(f"Will propagate to {len(slices_to_track)} slices")
-        
+
         if len(slices_to_track) == 0:
             self.print_terminal("No slices to propagate to!")
             return
@@ -7708,12 +12666,14 @@ class ViewInterpretation(ViewMap):
         for pt in seed_points:
             rc = None
             if affine is not None:
-                rc = self._world_to_slice_rc(pt, slice_idx=current_idx, affine=affine, axis=self.current_axis)
+                rc = self._world_to_slice_rc(
+                    pt, slice_idx=current_idx, affine=affine, axis=self.current_axis
+                )
             if rc is None:
-                if self.current_axis == 'Inline':
+                if self.current_axis == "Inline":
                     row = int((pt[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
                     col = int((pt[2] - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
-                elif self.current_axis == 'Crossline':
+                elif self.current_axis == "Crossline":
                     row = int((pt[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
                     col = int((pt[2] - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
                 else:  # Z-slice
@@ -7721,17 +12681,17 @@ class ViewInterpretation(ViewMap):
                     col = int((pt[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
                 rc = (row, col)
             seed_indices.append(rc)
-        
+
         # Subsample if too many points (for speed)
         if len(seed_indices) > 200:
             step = len(seed_indices) // 200
             seed_indices = seed_indices[::step]
             self.print_terminal(f"Subsampled seed to {len(seed_indices)} points")
-        
+
         # Progress callback
         def progress_callback(msg, pct=None):
             self.print_terminal(f"Tracking: {msg}")
-        
+
         # Run attribute-guided tracking
         self._is_propagating = True
         try:
@@ -7742,10 +12702,12 @@ class ViewInterpretation(ViewMap):
                 wanted_slices = set([current_idx] + list(slices_to_track))
                 fault_traces_by_slice = {}
 
-                if hasattr(self, 'multipart_faults') and self.multipart_faults:
+                if hasattr(self, "multipart_faults") and self.multipart_faults:
                     for fault_uid, info in list(self.multipart_faults.items()):
-                        if (info.get('seismic_uid') != self.current_seismic_uid or
-                            info.get('axis') != self.current_axis):
+                        if (
+                            info.get("seismic_uid") != self.current_seismic_uid
+                            or info.get("axis") != self.current_axis
+                        ):
                             continue
 
                         fault_vtk = self.parent.geol_coll.get_uid_vtk_obj(fault_uid)
@@ -7785,15 +12747,39 @@ class ViewInterpretation(ViewMap):
                                         axis=self.current_axis,
                                     )
                                 if rc is None:
-                                    if self.current_axis == 'Inline':
-                                        row = int((y - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
-                                        col = int((z - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
-                                    elif self.current_axis == 'Crossline':
-                                        row = int((x - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
-                                        col = int((z - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
+                                    if self.current_axis == "Inline":
+                                        row = (
+                                            int((y - bounds[2]) / spacing[1])
+                                            if spacing[1] > 0
+                                            else 0
+                                        )
+                                        col = (
+                                            int((z - bounds[4]) / spacing[2])
+                                            if spacing[2] > 0
+                                            else 0
+                                        )
+                                    elif self.current_axis == "Crossline":
+                                        row = (
+                                            int((x - bounds[0]) / spacing[0])
+                                            if spacing[0] > 0
+                                            else 0
+                                        )
+                                        col = (
+                                            int((z - bounds[4]) / spacing[2])
+                                            if spacing[2] > 0
+                                            else 0
+                                        )
                                     else:  # Z-slice
-                                        row = int((x - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
-                                        col = int((y - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
+                                        row = (
+                                            int((x - bounds[0]) / spacing[0])
+                                            if spacing[0] > 0
+                                            else 0
+                                        )
+                                        col = (
+                                            int((y - bounds[2]) / spacing[1])
+                                            if spacing[1] > 0
+                                            else 0
+                                        )
                                     rc = (row, col)
                                 trace.append(rc)
 
@@ -7805,41 +12791,63 @@ class ViewInterpretation(ViewMap):
             except Exception:
                 fault_traces_by_slice = None
 
-            success, horizons, result_msg = propagate_horizon(
-                data_3d=data_3d,
-                seed_positions=seed_indices,
-                seed_slice_idx=current_idx,
-                axis=self.current_axis,
-                slices_to_track=slices_to_track,
-                attributes=attributes,
-                search_window=search_window,
-                smooth_sigma=smooth_sigma,
-                max_jump=max_jump,
-                smoothness_weight=smoothness_weight,
-                amplitude_weight=amplitude_weight,
-                edge_weight=edge_weight,
-                phase_weight=phase_weight,
-                similarity_weight=similarity_weight,
-                dip_weight=dip_weight,
-                fault_snap_weight=fault_snap_weight,
-                fault_attach_depth_tolerance=fault_attach_depth_tolerance,
-                fault_attach_apply_row_tolerance=fault_attach_apply_row_tolerance,
-                fault_attach_apply_col_tolerance=fault_attach_apply_col_tolerance,
-                fault_attach_blend_rows=fault_attach_blend_rows,
-                progress_callback=progress_callback,
-                fault_traces_by_slice=fault_traces_by_slice
-            )
-            
+            def run_tracking(slices):
+                return propagate_horizon(
+                    data_3d=data_3d,
+                    seed_positions=seed_indices,
+                    seed_slice_idx=current_idx,
+                    axis=self.current_axis,
+                    slices_to_track=slices,
+                    attributes=attributes,
+                    search_window=search_window,
+                    smooth_sigma=smooth_sigma,
+                    max_jump=max_jump,
+                    smoothness_weight=smoothness_weight,
+                    amplitude_weight=amplitude_weight,
+                    edge_weight=edge_weight,
+                    phase_weight=phase_weight,
+                    similarity_weight=similarity_weight,
+                    dip_weight=dip_weight,
+                    fault_snap_weight=fault_snap_weight,
+                    fault_attach_depth_tolerance=fault_attach_depth_tolerance,
+                    fault_attach_apply_row_tolerance=fault_attach_apply_row_tolerance,
+                    fault_attach_apply_col_tolerance=fault_attach_apply_col_tolerance,
+                    fault_attach_blend_rows=fault_attach_blend_rows,
+                    progress_callback=progress_callback,
+                    fault_traces_by_slice=fault_traces_by_slice,
+                )
+
+            if direction == 2:
+                horizons = {}
+                messages = []
+                success = True
+
+                if backward_slices:
+                    success_b, horizons_b, result_msg_b = run_tracking(backward_slices)
+                    success = success and success_b
+                    messages.append(result_msg_b)
+                    horizons.update(horizons_b)
+
+                if forward_slices:
+                    success_f, horizons_f, result_msg_f = run_tracking(forward_slices)
+                    success = success and success_f
+                    messages.append(result_msg_f)
+                    horizons.update(horizons_f)
+
+                result_msg = "; ".join(messages)
+            else:
+                success, horizons, result_msg = run_tracking(slices_to_track)
+
             if not success:
                 self.print_terminal(f"Tracking failed: {result_msg}")
                 return
-            
+
             self.print_terminal(f"Tracking complete: {len(horizons)} slices")
-            
+
             if len(horizons) == 0:
                 self.print_terminal("No horizons were tracked!")
                 return
-            
+
             # Build multipart polyline from tracking results
             all_points = []
             all_lines = []
@@ -7847,14 +12855,14 @@ class ViewInterpretation(ViewMap):
             cell_slice_indices = []
             slice_to_point_range = {}
             current_point_offset = 0
-            
+
             sorted_slices = sorted(horizons.keys())
-            
+
             for slice_idx in sorted_slices:
                 positions = horizons[slice_idx]
                 if len(positions) < 2:
                     continue
-                
+
                 # Convert slice coordinates to world coordinates
                 world_points = []
                 for row, col in positions:
@@ -7868,47 +12876,57 @@ class ViewInterpretation(ViewMap):
                             axis=self.current_axis,
                         )
                     if wp is None:
-                        if self.current_axis == 'Inline':
-                            x = bounds[0] + slice_idx * (bounds[1] - bounds[0]) / max(dims[0] - 1, 1)
+                        if self.current_axis == "Inline":
+                            x = bounds[0] + slice_idx * (bounds[1] - bounds[0]) / max(
+                                dims[0] - 1, 1
+                            )
                             y = bounds[2] + row * spacing[1]
                             z = bounds[4] + col * spacing[2]
-                        elif self.current_axis == 'Crossline':
+                        elif self.current_axis == "Crossline":
                             x = bounds[0] + row * spacing[0]
-                            y = bounds[2] + slice_idx * (bounds[3] - bounds[2]) / max(dims[1] - 1, 1)
+                            y = bounds[2] + slice_idx * (bounds[3] - bounds[2]) / max(
+                                dims[1] - 1, 1
+                            )
                             z = bounds[4] + col * spacing[2]
                         else:  # Z-slice
                             x = bounds[0] + row * spacing[0]
                             y = bounds[2] + col * spacing[1]
-                            z = bounds[4] + slice_idx * (bounds[5] - bounds[4]) / max(dims[2] - 1, 1)
+                            z = bounds[4] + slice_idx * (bounds[5] - bounds[4]) / max(
+                                dims[2] - 1, 1
+                            )
                         wp = (x, y, z)
                     world_points.append(wp)
-                
+
                 # Sort points along horizon
-                world_points.sort(key=lambda p: p[0] if self.current_axis != 'Inline' else p[1])
-                
+                world_points.sort(
+                    key=lambda p: p[0] if self.current_axis != "Inline" else p[1]
+                )
+
                 n_pts = len(world_points)
                 start_idx = current_point_offset
-                
+
                 all_points.extend(world_points)
                 point_slice_indices.extend([slice_idx] * n_pts)
-                
+
                 # VTK line connectivity
                 all_lines.append(n_pts)
                 all_lines.extend(list(range(start_idx, start_idx + n_pts)))
                 cell_slice_indices.append(slice_idx)
-                
+
                 slice_to_point_range[slice_idx] = (start_idx, start_idx + n_pts - 1)
                 current_point_offset += n_pts
-            
+
             # Create VTK multipart polyline
             if len(all_points) >= 2 and len(cell_slice_indices) > 0:
-                self.print_terminal(f"Creating multipart horizon with {len(cell_slice_indices)} parts, {len(all_points)} total points...")
-                
+                self.print_terminal(
+                    f"Creating multipart horizon with {len(cell_slice_indices)} parts, {len(all_points)} total points..."
+                )
+
                 # Create VTK points
                 vtk_points = vtkPoints()
                 for pt in all_points:
                     vtk_points.InsertNextPoint(pt[0], pt[1], pt[2])
-                
+
                 # Create VTK lines (cell array)
                 vtk_lines = vtkCellArray()
                 i = 0
@@ -7918,12 +12936,12 @@ class ViewInterpretation(ViewMap):
                     for j in range(n_pts):
                         vtk_lines.InsertCellPoint(all_lines[i + 1 + j])
                     i += n_pts + 1
-                
+
                 # Create the PolyLine entity
                 multipart_line = PolyLine()
                 multipart_line.SetPoints(vtk_points)
                 multipart_line.SetLines(vtk_lines)
-                
+
                 # Add point data array for slice indices (allows filtering by slice)
                 point_slice_array = vtkIntArray()
                 point_slice_array.SetName("slice_index")
@@ -7931,7 +12949,7 @@ class ViewInterpretation(ViewMap):
                 for idx in point_slice_indices:
                     point_slice_array.InsertNextValue(idx)
                 multipart_line.GetPointData().AddArray(point_slice_array)
-                
+
                 # Add cell data array for slice indices (allows filtering by slice)
                 cell_slice_array = vtkIntArray()
                 cell_slice_array.SetName("slice_index")
@@ -7939,14 +12957,16 @@ class ViewInterpretation(ViewMap):
                 for idx in cell_slice_indices:
                     cell_slice_array.InsertNextValue(idx)
                 multipart_line.GetCellData().AddArray(cell_slice_array)
-                
+
                 # Store the slice axis as field data so it can be recovered on project reload
+                from vtk import vtkStringArray
+
                 axis_array = vtkStringArray()
                 axis_array.SetName("slice_axis")
                 axis_array.SetNumberOfValues(1)
                 axis_array.SetValue(0, self.current_axis)
                 multipart_line.GetFieldData().AddArray(axis_array)
-                
+
                 # Create entity dictionary
                 line_dict = deepcopy(self.parent.geol_coll.entity_dict)
                 line_dict["name"] = self._build_propagated_entity_name(
@@ -7973,51 +12993,40 @@ class ViewInterpretation(ViewMap):
                 line_dict["scenario"] = self._sanitize_legend_value(
                     self.parent.geol_coll.get_uid_scenario(seed_uid), "undef"
                 )
-                
+
                 # Add to collection
-                new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
-                self._refresh_properties_legend()
-                
-                # Store multipart horizon metadata for visibility management
-                if not hasattr(self, 'multipart_horizons'):
-                    self.multipart_horizons = {}
-                
-                self.multipart_horizons[new_uid] = {
-                    'seismic_uid': self.current_seismic_uid,
-                    'axis': self.current_axis,
-                    'slice_indices': list(slice_to_point_range.keys()),
-                    'slice_to_cell_index': {slice_idx: i for i, slice_idx in enumerate(cell_slice_indices)},
-                    'seed_slice': current_idx
+                new_uid = str(uuid4())
+                line_dict["uid"] = new_uid
+                self._pending_fast_added_entities[new_uid] = {
+                    "kind": "multipart_horizon",
+                    "axis": self.current_axis,
+                    "slice_indices": list(slice_to_point_range.keys()),
+                    "slice_to_cell_index": {
+                        slice_idx: i for i, slice_idx in enumerate(cell_slice_indices)
+                    },
+                    "seed_slice": current_idx,
                 }
-                
+                new_uid = self.parent.geol_coll.add_entity_from_dict(line_dict)
+
                 self.print_terminal(f"=== Propagation Complete ===")
                 self.print_terminal(f"Created multipart horizon: {line_dict['name']}")
-                self.print_terminal(f"Contains {len(cell_slice_indices)} line segments across slices")
-                self.print_terminal(f"Slice range: {min(cell_slice_indices)} to {max(cell_slice_indices)}")
-                
-                # Add actor to scene and update visibility
-                self.show_actor_with_property(uid=new_uid, coll_name='geol_coll', visible=True)
-                
-                # CRITICAL: Set thick line width for multipart horizons for better visibility
-                try:
-                    if new_uid in self.plotter.renderer.actors:
-                        actor = self.plotter.renderer.actors[new_uid]
-                        if actor and hasattr(actor, 'GetProperty'):
-                            actor.GetProperty().SetLineWidth(8)  # Very thick for propagated horizons
-                            self.print_terminal(f"Set line width to 8 for multipart horizon {new_uid}")
-                except Exception as e:
-                    self.print_terminal(f"Could not set line width: {e}")
-                
-                self._mark_slice_visibility_dirty()
-                self.update_interpretation_line_visibility()
-                self.update_multipart_horizon_visibility(new_uid)
+                self.print_terminal(
+                    f"Contains {len(cell_slice_indices)} line segments across slices"
+                )
+                self.print_terminal(
+                    f"Slice range: {min(cell_slice_indices)} to {max(cell_slice_indices)}"
+                )
             else:
-                self.print_terminal("No valid line segments were created during propagation!")
+                self.print_terminal(
+                    "No valid line segments were created during propagation!"
+                )
 
         except Exception as e:
             self.print_terminal(f"Error in propagation: {e}")
-            self.print_terminal(traceback_format_exc())
-        
+            import traceback
+
+            self.print_terminal(traceback.format_exc())
+
         finally:
             self._is_propagating = False
             self.plotter.render()
@@ -8025,53 +13034,79 @@ class ViewInterpretation(ViewMap):
     # ==================== End Auto Propagation Methods ====================
 
     # ==================== Fault Tracking Methods ====================
-    
+
     def propagate_fault(self):
         """Open dialog to propagate a fault line across multiple slices."""
         self.disable_actions()
-        
+
         # Get existing lines that could be fault seeds
-        if not hasattr(self, 'interpretation_lines') or not self.interpretation_lines:
-            QMessageBox.warning(self, "No Fault Seed Lines", 
+        if not hasattr(self, "interpretation_lines") or not self.interpretation_lines:
+            from PySide6.QtWidgets import QMessageBox
+
+            QMessageBox.warning(
+                self,
+                "No Fault Seed Lines",
                 "Please draw a VERTICAL fault line first:\n\n"
                 "1. Use 'Draw Interpretation Line' from the menu\n"
                 "2. Draw a line following the fault (should be roughly vertical)\n"
-                "3. Then use 'Propagate Fault' to extend it across slices.")
+                "3. Then use 'Propagate Fault' to extend it across slices.",
+            )
             self.enable_actions()
             return
-        
+
         # Filter for lines on the current seismic (potential fault seeds)
         all_lines = []
         for uid, info in self.interpretation_lines.items():
-            if info.get('seismic_uid') == self.current_seismic_uid:
+            if info.get("seismic_uid") == self.current_seismic_uid:
                 name = f"Line_{uid[:8]}"
                 try:
-                    mask = self.parent.geol_coll.df['uid'] == uid
+                    mask = self.parent.geol_coll.df["uid"] == uid
                     if mask.any():
-                        name = self.parent.geol_coll.df.loc[mask, 'name'].values[0]
+                        name = self.parent.geol_coll.df.loc[mask, "name"].values[0]
                 except:
                     pass
-                slice_idx = info.get('slice_index', -1)
+                slice_idx = info.get("slice_index", -1)
                 all_lines.append((uid, name, slice_idx))
-        
+
         if not all_lines:
-            QMessageBox.warning(self, "No Lines", 
+            from PySide6.QtWidgets import QMessageBox
+
+            QMessageBox.warning(
+                self,
+                "No Lines",
                 "No seed lines found for the current seismic volume.\n\n"
-                "Draw a vertical line on a fault using 'Draw Interpretation Line'.")
+                "Draw a vertical line on a fault using 'Draw Interpretation Line'.",
+            )
             self.enable_actions()
             return
-        
+
         # Show compact dialog
- 
-        
+        from PySide6.QtWidgets import (
+            QDialog,
+            QVBoxLayout,
+            QHBoxLayout,
+            QComboBox,
+            QSpinBox,
+            QDoubleSpinBox,
+            QLabel,
+            QPushButton,
+            QRadioButton,
+            QButtonGroup,
+            QGroupBox,
+            QCheckBox,
+            QFormLayout,
+        )
+
         dialog = QDialog(self)
         dialog.setWindowTitle("Propagate Fault")
         dialog.setMinimumWidth(450)
         layout = QVBoxLayout(dialog)
         layout.setSpacing(8)
-        
+
         # Info label
-        info = QLabel("Select a line drawn on a fault. The line should be roughly VERTICAL.")
+        info = QLabel(
+            "Select a line drawn on a fault. The line should be roughly VERTICAL."
+        )
         info.setStyleSheet("color: gray; font-style: italic;")
         info.setWordWrap(True)
         layout.addWidget(info)
@@ -8082,24 +13117,26 @@ class ViewInterpretation(ViewMap):
         tooltip_hint.setStyleSheet("color: gray;")
         tooltip_hint.setWordWrap(True)
         layout.addWidget(tooltip_hint)
-        
+
         # Seed selection
         seed_layout = QHBoxLayout()
         seed_layout.addWidget(QLabel("Seed fault line:"))
         combo_seed = QComboBox()
         for uid, name, slice_idx in all_lines:
-            display_text = f"{name} [Slice {slice_idx}]" if slice_idx >= 0 else f"{name} [Current]"
+            display_text = (
+                f"{name} [Slice {slice_idx}]" if slice_idx >= 0 else f"{name} [Current]"
+            )
             combo_seed.addItem(display_text, uid)
         combo_seed.setMinimumWidth(200)
         seed_layout.addWidget(combo_seed, 1)
         layout.addLayout(seed_layout)
-        
+
         # Two columns
         columns = QHBoxLayout()
-        
+
         # Left: Direction + Attributes
         left = QVBoxLayout()
-        
+
         dir_group = QGroupBox("Direction")
         dir_layout = QVBoxLayout(dir_group)
         dir_layout.setSpacing(2)
@@ -8115,7 +13152,7 @@ class ViewInterpretation(ViewMap):
         dir_layout.addWidget(radio_backward)
         dir_layout.addWidget(radio_both)
         left.addWidget(dir_group)
-        
+
         attr_group = QGroupBox("Attributes")
         attr_layout = QVBoxLayout(attr_group)
         attr_layout.setSpacing(2)
@@ -8148,14 +13185,14 @@ class ViewInterpretation(ViewMap):
         left.addWidget(attr_group)
         left.addStretch()
         columns.addLayout(left)
-        
+
         # Right: Parameters
         right = QVBoxLayout()
-        
+
         params_group = QGroupBox("Parameters")
         params_form = QFormLayout(params_group)
         params_form.setSpacing(4)
-        
+
         spin_slices = QSpinBox()
         spin_slices.setRange(1, 500)
         spin_slices.setValue(50)
@@ -8174,7 +13211,7 @@ class ViewInterpretation(ViewMap):
             ),
             spin_slices,
         )
-        
+
         spin_search = QSpinBox()
         spin_search.setRange(3, 30)
         spin_search.setValue(10)
@@ -8193,7 +13230,7 @@ class ViewInterpretation(ViewMap):
             ),
             spin_search,
         )
-        
+
         spin_smooth = QDoubleSpinBox()
         spin_smooth.setRange(0.0, 5.0)
         spin_smooth.setValue(1.5)
@@ -8213,7 +13250,7 @@ class ViewInterpretation(ViewMap):
             ),
             spin_smooth,
         )
-        
+
         spin_max_jump = QSpinBox()
         spin_max_jump.setRange(1, 10)
         spin_max_jump.setValue(2)
@@ -8232,13 +13269,13 @@ class ViewInterpretation(ViewMap):
             ),
             spin_max_jump,
         )
-        
+
         right.addWidget(params_group)
         right.addStretch()
         columns.addLayout(right)
-        
+
         layout.addLayout(columns)
-        
+
         # Buttons
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
@@ -8249,45 +13286,45 @@ class ViewInterpretation(ViewMap):
         btn_layout.addWidget(btn_ok)
         btn_layout.addWidget(btn_cancel)
         layout.addLayout(btn_layout)
-        
+
         if dialog.exec() != QDialog.Accepted:
             self.enable_actions()
             return
-        
+
         # Get parameters
         selected_idx = combo_seed.currentIndex()
         seed_uid = combo_seed.currentData()
         seed_name = all_lines[selected_idx][1]
         seed_slice_idx = all_lines[selected_idx][2]
-        
+
         if seed_slice_idx < 0:
             seed_slice_idx = self.current_slice_index
-        
+
         direction = direction_group.checkedId()
         num_slices = spin_slices.value()
-        
+
         # Build attributes list
         selected_attributes = []
         if check_vert_edge.isChecked():
-            selected_attributes.append('vertical_edge')
+            selected_attributes.append("vertical_edge")
         if check_discont.isChecked():
-            selected_attributes.append('discontinuity')
+            selected_attributes.append("discontinuity")
         if check_variance.isChecked():
-            selected_attributes.append('variance')
+            selected_attributes.append("variance")
         if check_likelihood.isChecked():
-            selected_attributes.append('likelihood')
-        
+            selected_attributes.append("likelihood")
+
         if not selected_attributes:
-            selected_attributes = ['vertical_edge', 'discontinuity']
-        
+            selected_attributes = ["vertical_edge", "discontinuity"]
+
         search_window = spin_search.value()
         smooth_sigma = spin_smooth.value()
         max_jump = spin_max_jump.value()
-        
+
         self.print_terminal(f"=== Propagating Fault ===")
         self.print_terminal(f"Seed: {seed_name} (slice {seed_slice_idx})")
         self.print_terminal(f"Attributes: {', '.join(selected_attributes)}")
-        
+
         try:
             self._run_fault_propagation(
                 seed_uid=seed_uid,
@@ -8297,12 +13334,14 @@ class ViewInterpretation(ViewMap):
                 search_window=search_window,
                 smooth_sigma=smooth_sigma,
                 max_jump=max_jump,
-                seed_slice_index=seed_slice_idx
+                seed_slice_index=seed_slice_idx,
             )
         except Exception as e:
             self.print_terminal(f"Error during fault propagation: {e}")
-            self.print_terminal(traceback_format_exc())
-        
+            import traceback
+
+            self.print_terminal(traceback.format_exc())
+
         self.enable_actions()
 
     def _run_fault_propagation(
@@ -8314,56 +13353,58 @@ class ViewInterpretation(ViewMap):
         search_window=10,
         smooth_sigma=1.5,
         max_jump=2,
-        seed_slice_index=None
+        seed_slice_index=None,
     ):
         """Execute fault propagation using attribute-guided tracking."""
         if attributes is None:
-            attributes = ['vertical_edge', 'discontinuity']
-        
+            attributes = ["vertical_edge", "discontinuity"]
 
-        
+        from ..helpers.autotracker import propagate_fault
+        from vtk import vtkPoints, vtkCellArray, vtkIdList, vtkIntArray
+        from ..entities_factory import PolyLine
+        from copy import deepcopy
+        import numpy as np
+
         # Get seed line geometry using correct method
         seed_line = self.parent.geol_coll.get_uid_vtk_obj(seed_uid)
         if seed_line is None:
             self.print_terminal("Could not find seed fault line")
             return
-        
+
         # Get seismic volume data from cache
-        if not hasattr(self, '_cached_seismic') or self._cached_seismic is None:
+        if not hasattr(self, "_cached_seismic") or self._cached_seismic is None:
             self.print_terminal("No cached seismic data!")
             return
-        
+
         seismic = self._cached_seismic
         dims = self._cached_dims
         bounds = self._cached_bounds
-        
-        # Get the 3D data array
-        if 'intensity' in seismic.array_names:
-            data = seismic['intensity']
-        elif seismic.array_names:
-            data = seismic[seismic.array_names[0]]
-        else:
+
+        data_3d, _scalar_name = self._get_cached_volume_data_3d(cast_dtype=np.float32)
+        if data_3d is None:
             self.print_terminal("No data arrays in seismic!")
             return
-        
-        data_3d = data.reshape(dims, order='F').astype(np.float32)
-        
+
         # Calculate spacing
         spacing = [
             (bounds[1] - bounds[0]) / max(dims[0] - 1, 1),
             (bounds[3] - bounds[2]) / max(dims[1] - 1, 1),
-            (bounds[5] - bounds[4]) / max(dims[2] - 1, 1)
+            (bounds[5] - bounds[4]) / max(dims[2] - 1, 1),
         ]
-        
+
         # Get seed points from VTK object
         seed_points_world = np.array(seed_line.GetPoints().GetData())
         if len(seed_points_world) == 0:
             self.print_terminal("Seed fault line has no points!")
             return
-        
+
         self.print_terminal(f"Seed fault line has {len(seed_points_world)} points")
-        
-        current_idx = seed_slice_index if seed_slice_index is not None else self.current_slice_index
+
+        current_idx = (
+            seed_slice_index
+            if seed_slice_index is not None
+            else self.current_slice_index
+        )
 
         affine = self._get_seismic_axis_vectors()
         # Convert seed points to slice coordinates (row, col)
@@ -8372,12 +13413,14 @@ class ViewInterpretation(ViewMap):
         for pt in seed_points_world:
             rc = None
             if affine is not None:
-                rc = self._world_to_slice_rc(pt, slice_idx=current_idx, affine=affine, axis=self.current_axis)
+                rc = self._world_to_slice_rc(
+                    pt, slice_idx=current_idx, affine=affine, axis=self.current_axis
+                )
             if rc is None:
-                if self.current_axis == 'Inline':
+                if self.current_axis == "Inline":
                     row = int((pt[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
                     col = int((pt[2] - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
-                elif self.current_axis == 'Crossline':
+                elif self.current_axis == "Crossline":
                     row = int((pt[0] - bounds[0]) / spacing[0]) if spacing[0] > 0 else 0
                     col = int((pt[2] - bounds[4]) / spacing[2]) if spacing[2] > 0 else 0
                 else:  # Z-slice
@@ -8385,34 +13428,42 @@ class ViewInterpretation(ViewMap):
                     col = int((pt[1] - bounds[2]) / spacing[1]) if spacing[1] > 0 else 0
                 rc = (row, col)
             seed_indices.append(rc)
-        
+
         if not seed_indices:
             self.print_terminal("Could not convert seed points to slice coordinates")
             return
-        
+
         self.print_terminal(f"Converted to {len(seed_indices)} slice coordinates")
-        
+
         # Build slice list
-        if self.current_axis == 'Inline':
+        if self.current_axis == "Inline":
             max_slices = data_3d.shape[0]
-        elif self.current_axis == 'Crossline':
+        elif self.current_axis == "Crossline":
             max_slices = data_3d.shape[1]
         else:
             max_slices = data_3d.shape[2]
-        
+
         slices_to_track = []
         if direction == 0:  # Forward
-            slices_to_track = list(range(current_idx + 1, min(current_idx + num_slices + 1, max_slices)))
+            slices_to_track = list(
+                range(current_idx + 1, min(current_idx + num_slices + 1, max_slices))
+            )
         elif direction == 1:  # Backward
-            slices_to_track = list(range(current_idx - 1, max(current_idx - num_slices - 1, -1), -1))
+            slices_to_track = list(
+                range(current_idx - 1, max(current_idx - num_slices - 1, -1), -1)
+            )
         else:  # Both
-            forward = list(range(current_idx + 1, min(current_idx + num_slices + 1, max_slices)))
-            backward = list(range(current_idx - 1, max(current_idx - num_slices - 1, -1), -1))
+            forward = list(
+                range(current_idx + 1, min(current_idx + num_slices + 1, max_slices))
+            )
+            backward = list(
+                range(current_idx - 1, max(current_idx - num_slices - 1, -1), -1)
+            )
             slices_to_track = backward[::-1] + forward
-        
+
         def progress_callback(msg, pct):
             self.print_terminal(f"  {msg}" + (f" ({pct}%)" if pct is not None else ""))
-        
+
         self._is_propagating = True
         try:
             success, faults, result_msg = propagate_fault(
@@ -8425,15 +13476,15 @@ class ViewInterpretation(ViewMap):
                 search_window=search_window,
                 smooth_sigma=smooth_sigma,
                 max_jump=max_jump,
-                progress_callback=progress_callback
+                progress_callback=progress_callback,
             )
-            
+
             if not success:
                 self.print_terminal(f"Fault tracking failed: {result_msg}")
                 return
-            
+
             self.print_terminal(f"Fault tracking complete: {len(faults)} slices")
-            
+
             # Build multipart polyline for fault
             if faults:
                 all_points = []
@@ -8442,14 +13493,14 @@ class ViewInterpretation(ViewMap):
                 cell_slice_indices = []
                 slice_to_point_range = {}
                 current_point_offset = 0
-                
+
                 sorted_slices = sorted(faults.keys())
-                
+
                 for slice_idx in sorted_slices:
                     positions = faults[slice_idx]
                     if len(positions) < 2:
                         continue
-                    
+
                     # Convert slice coordinates to world coordinates (same as horizon)
                     world_points = []
                     for row, col in positions:
@@ -8463,46 +13514,54 @@ class ViewInterpretation(ViewMap):
                                 axis=self.current_axis,
                             )
                         if wp is None:
-                            if self.current_axis == 'Inline':
-                                x = bounds[0] + slice_idx * (bounds[1] - bounds[0]) / max(dims[0] - 1, 1)
+                            if self.current_axis == "Inline":
+                                x = bounds[0] + slice_idx * (
+                                    bounds[1] - bounds[0]
+                                ) / max(dims[0] - 1, 1)
                                 y = bounds[2] + row * spacing[1]
                                 z = bounds[4] + col * spacing[2]
-                            elif self.current_axis == 'Crossline':
+                            elif self.current_axis == "Crossline":
                                 x = bounds[0] + row * spacing[0]
-                                y = bounds[2] + slice_idx * (bounds[3] - bounds[2]) / max(dims[1] - 1, 1)
+                                y = bounds[2] + slice_idx * (
+                                    bounds[3] - bounds[2]
+                                ) / max(dims[1] - 1, 1)
                                 z = bounds[4] + col * spacing[2]
                             else:  # Z-slice
                                 x = bounds[0] + row * spacing[0]
                                 y = bounds[2] + col * spacing[1]
-                                z = bounds[4] + slice_idx * (bounds[5] - bounds[4]) / max(dims[2] - 1, 1)
+                                z = bounds[4] + slice_idx * (
+                                    bounds[5] - bounds[4]
+                                ) / max(dims[2] - 1, 1)
                             wp = (x, y, z)
                         world_points.append(wp)
-                    
+
                     # For faults, sort by Z (vertical) instead of horizontal
                     world_points.sort(key=lambda p: p[2])
-                    
+
                     n_pts = len(world_points)
                     start_idx = current_point_offset
-                    
+
                     all_points.extend(world_points)
                     point_slice_indices.extend([slice_idx] * n_pts)
-                    
+
                     all_lines.append(n_pts)
                     all_lines.extend(list(range(start_idx, start_idx + n_pts)))
                     cell_slice_indices.append(slice_idx)
-                    
+
                     slice_to_point_range[slice_idx] = (start_idx, start_idx + n_pts - 1)
                     current_point_offset += n_pts
-                
+
                 # Create VTK multipart polyline
                 if len(all_points) >= 2 and len(cell_slice_indices) > 0:
-                    self.print_terminal(f"Creating multipart fault with {len(cell_slice_indices)} parts, {len(all_points)} total points...")
-                    
+                    self.print_terminal(
+                        f"Creating multipart fault with {len(cell_slice_indices)} parts, {len(all_points)} total points..."
+                    )
+
                     # Create VTK points
                     vtk_points = vtkPoints()
                     for pt in all_points:
                         vtk_points.InsertNextPoint(pt[0], pt[1], pt[2])
-                    
+
                     # Create VTK lines (cell array)
                     vtk_lines = vtkCellArray()
                     i = 0
@@ -8513,31 +13572,33 @@ class ViewInterpretation(ViewMap):
                             id_list.InsertNextId(all_lines[i + 1 + j])
                         vtk_lines.InsertNextCell(id_list)
                         i += n_pts_in_line + 1
-                    
+
                     multipart_fault = PolyLine()
                     multipart_fault.SetPoints(vtk_points)
                     multipart_fault.SetLines(vtk_lines)
-                    
+
                     # Add slice index arrays
                     point_array = vtkIntArray()
                     point_array.SetName("slice_index")
                     for idx in point_slice_indices:
                         point_array.InsertNextValue(idx)
                     multipart_fault.GetPointData().AddArray(point_array)
-                    
+
                     cell_array = vtkIntArray()
                     cell_array.SetName("slice_index")
                     for idx in cell_slice_indices:
                         cell_array.InsertNextValue(idx)
                     multipart_fault.GetCellData().AddArray(cell_array)
-                    
+
                     # Store the slice axis as field data so it can be recovered on project reload
+                    from vtk import vtkStringArray
+
                     axis_array = vtkStringArray()
                     axis_array.SetName("slice_axis")
                     axis_array.SetNumberOfValues(1)
                     axis_array.SetValue(0, self.current_axis)
                     multipart_fault.GetFieldData().AddArray(axis_array)
-                    
+
                     # Create entity
                     fault_dict = deepcopy(self.parent.geol_coll.entity_dict)
                     fault_dict["name"] = self._build_propagated_entity_name(
@@ -8564,42 +13625,40 @@ class ViewInterpretation(ViewMap):
                     fault_dict["scenario"] = self._sanitize_legend_value(
                         self.parent.geol_coll.get_uid_scenario(seed_uid), "undef"
                     )
-                    
-                    new_uid = self.parent.geol_coll.add_entity_from_dict(fault_dict)
-                    self._refresh_properties_legend()
-                    
-                    # Store metadata
-                    if not hasattr(self, 'multipart_faults'):
-                        self.multipart_faults = {}
-                    
-                    self.multipart_faults[new_uid] = {
-                        'seismic_uid': self.current_seismic_uid,
-                        'axis': self.current_axis,
-                        'slice_indices': list(slice_to_point_range.keys()),
-                        'slice_to_cell_index': {slice_idx: i for i, slice_idx in enumerate(cell_slice_indices)},
-                        'seed_slice': current_idx
+
+                    new_uid = str(uuid4())
+                    fault_dict["uid"] = new_uid
+                    self._pending_fast_added_entities[new_uid] = {
+                        "kind": "multipart_fault",
+                        "axis": self.current_axis,
+                        "slice_indices": list(slice_to_point_range.keys()),
+                        "slice_to_cell_index": {
+                            slice_idx: i
+                            for i, slice_idx in enumerate(cell_slice_indices)
+                        },
+                        "seed_slice": current_idx,
                     }
-                    
+                    new_uid = self.parent.geol_coll.add_entity_from_dict(fault_dict)
+
                     self.print_terminal(f"=== Fault Propagation Complete ===")
-                    self.print_terminal(f"Created multipart fault: {fault_dict['name']}")
-                    self.print_terminal(f"Contains {len(cell_slice_indices)} segments across slices")
+                    self.print_terminal(
+                        f"Created multipart fault: {fault_dict['name']}"
+                    )
+                    self.print_terminal(
+                        f"Contains {len(cell_slice_indices)} segments across slices"
+                    )
                     self.print_terminal(f"Total points: {len(all_points)}")
-                    
-                    # Initially hide the raw actor - we'll show filtered version
-                    self.set_actor_visibility(new_uid, False)
-                    
-                    # Update visibility to show only current slice segment
-                    self.update_multipart_fault_visibility(new_uid)
-                    
-                    # Note: Line width is set in update_multipart_fault_visibility
-                    pass
+
+                    # Rendering is handled by the fast entity-added path above.
                 else:
                     self.print_terminal("No valid fault segments created!")
-        
+
         except Exception as e:
             self.print_terminal(f"Error in fault propagation: {e}")
-            self.print_terminal(traceback_format_exc())
-        
+            import traceback
+
+            self.print_terminal(traceback.format_exc())
+
         finally:
             self._is_propagating = False
             self.plotter.render()
@@ -8641,7 +13700,7 @@ class ViewInterpretation(ViewMap):
         self.drawInterpLineButton = QAction("Draw Interpretation Line", self)
         self.drawInterpLineButton.triggered.connect(self.draw_interpretation_line)
         self.menuCreate.addAction(self.drawInterpLineButton)
-        
+
         # Add semi-auto tracking action
         self.semiAutoTrackButton = QAction("Semi-Auto Track Horizon", self)
         self.semiAutoTrackButton.triggered.connect(self.draw_semi_auto_line)
@@ -8651,12 +13710,21 @@ class ViewInterpretation(ViewMap):
         self.semiAutoTrackFaultButton = QAction("Semi-Auto Track Fault", self)
         self.semiAutoTrackFaultButton.triggered.connect(self.draw_semi_auto_fault_line)
         self.menuCreate.addAction(self.semiAutoTrackFaultButton)
-        
+
+        # Add connector actions for filling interpreted gaps outside seismic bounds
+        self.createConnectorButton = QAction("Create Connector", self)
+        self.createConnectorButton.triggered.connect(self.draw_connector_line)
+        self.menuCreate.addAction(self.createConnectorButton)
+
+        self.propagateConnectorButton = QAction("Propagate Connector (Copy 3D)", self)
+        self.propagateConnectorButton.triggered.connect(self.propagate_connector)
+        self.menuCreate.addAction(self.propagateConnectorButton)
+
         # Add propagate horizon action
         self.propagateHorizonButton = QAction("Propagate Horizon (Auto-Track 3D)", self)
         self.propagateHorizonButton.triggered.connect(self.propagate_horizon)
         self.menuCreate.addAction(self.propagateHorizonButton)
-        
+
         # Add propagate fault action
         self.propagateFaultButton = QAction("Propagate Fault (Auto-Track 3D)", self)
         self.propagateFaultButton.triggered.connect(self.propagate_fault)
@@ -8674,6 +13742,18 @@ class ViewInterpretation(ViewMap):
         self.simplifyLineButton = QAction("Simplify line", self)
         self.simplifyLineButton.triggered.connect(self.simplify_selected_lines)
         self.menuModify.addAction(self.simplifyLineButton)
+
+        self.snapMultipartIntersectionButton = QAction("Snap to intersection", self)
+        self.snapMultipartIntersectionButton.triggered.connect(
+            self.snap_multipart_to_intersection
+        )
+        self.menuModify.addAction(self.snapMultipartIntersectionButton)
+
+        self.splitMultipartLineButton = QAction("Split line", self)
+        self.splitMultipartLineButton.triggered.connect(
+            self.split_multipart_line_by_line
+        )
+        self.menuModify.addAction(self.splitMultipartLineButton)
 
         self.menuModify.addAction(self.regularizeMultipartSamplingButton)
 
@@ -8697,19 +13777,27 @@ class ViewInterpretation(ViewMap):
         try:
             self.parent.signals.entities_added.connect(self.on_entities_added)
         except Exception as e:
-            self.print_terminal(f"Warning: Could not connect entities_added signal: {e}")
-        
+            self.print_terminal(
+                f"Warning: Could not connect entities_added signal: {e}"
+            )
+
         # Connect to entity removal signal to clean up interpretation_lines
         try:
             self.parent.signals.entities_removed.connect(self.on_entities_removed)
         except Exception as e:
-            self.print_terminal(f"Warning: Could not connect entities_removed signal: {e}")
-        
+            self.print_terminal(
+                f"Warning: Could not connect entities_removed signal: {e}"
+            )
+
         # Connect to colormap change signal to update slice colormap
         try:
-            self.parent.signals.prop_legend_cmap_modified.connect(self.on_colormap_changed)
+            self.parent.signals.prop_legend_cmap_modified.connect(
+                self.on_colormap_changed
+            )
         except Exception as e:
-            self.print_terminal(f"Warning: Could not connect prop_legend_cmap_modified signal: {e}")
+            self.print_terminal(
+                f"Warning: Could not connect prop_legend_cmap_modified signal: {e}"
+            )
 
         # Keep custom multipart filtered actors synced with standard geology legend edits.
         try:
@@ -8723,8 +13811,10 @@ class ViewInterpretation(ViewMap):
                 self.on_geology_legend_style_changed
             )
         except Exception as e:
-            self.print_terminal(f"Warning: Could not connect geology legend style signals: {e}")
-    
+            self.print_terminal(
+                f"Warning: Could not connect geology legend style signals: {e}"
+            )
+
     def on_entities_removed(self, uids):
         """
         Called when entities are removed from any collection.
@@ -8747,59 +13837,90 @@ class ViewInterpretation(ViewMap):
                 continue
 
             # 1) Clean up single-slice interpretation tracking (semi-auto horizons/fault seeds)
-            if hasattr(self, 'interpretation_lines') and uid in self.interpretation_lines:
+            if (
+                hasattr(self, "interpretation_lines")
+                and uid in self.interpretation_lines
+            ):
                 try:
                     self.unregister_interpretation_line(uid)
                 except Exception:
                     pass
 
                 # Keep visibility set consistent
-                if hasattr(self, 'vis_lines_on_display') and uid in self.vis_lines_on_display:
+                if (
+                    hasattr(self, "vis_lines_on_display")
+                    and uid in self.vis_lines_on_display
+                ):
                     try:
                         self.vis_lines_on_display.remove(uid)
                     except Exception:
                         pass
 
                 self._invalidate_actor_cache(uid)
-                self.print_terminal(f"Removed {uid[:8]}... from interpretation lines tracking")
+                self.print_terminal(
+                    f"Removed {uid[:8]}... from interpretation lines tracking"
+                )
 
             # 2) Clean up multipart horizon tracking + filtered actor
-            if hasattr(self, 'multipart_horizons') and uid in self.multipart_horizons:
+            if hasattr(self, "multipart_horizons") and uid in self.multipart_horizons:
                 try:
                     del self.multipart_horizons[uid]
                 except Exception:
                     pass
 
                 actor_name = f"multipart_slice_{uid}"
-                if hasattr(self, 'plotter') and actor_name in self.plotter.renderer.actors:
+                if (
+                    hasattr(self, "plotter")
+                    and actor_name in self.plotter.renderer.actors
+                ):
                     try:
                         self.plotter.remove_actor(actor_name)
                     except Exception:
                         pass
 
                 self._invalidate_actor_cache(uid)
-                self.print_terminal(f"Removed multipart horizon {uid[:8]}... from tracking")
+                self.print_terminal(
+                    f"Removed multipart horizon {uid[:8]}... from tracking"
+                )
 
             # 3) Clean up multipart fault tracking + filtered actor
-            if hasattr(self, 'multipart_faults') and uid in self.multipart_faults:
+            if hasattr(self, "multipart_faults") and uid in self.multipart_faults:
                 try:
                     del self.multipart_faults[uid]
                 except Exception:
                     pass
 
                 actor_name = f"multipart_fault_slice_{uid}"
-                if hasattr(self, 'plotter') and actor_name in self.plotter.renderer.actors:
+                if (
+                    hasattr(self, "plotter")
+                    and actor_name in self.plotter.renderer.actors
+                ):
                     try:
                         self.plotter.remove_actor(actor_name)
                     except Exception:
                         pass
 
                 self._invalidate_actor_cache(uid)
-                self.print_terminal(f"Removed multipart fault {uid[:8]}... from tracking")
+                self.print_terminal(
+                    f"Removed multipart fault {uid[:8]}... from tracking"
+                )
+
+            if hasattr(self, "slice_well_actors") and (
+                uid in self.slice_well_actors
+                or uid in getattr(self, "slice_well_halo_actors", {})
+                or uid in getattr(self, "slice_well_label_actors", {})
+                or uid in getattr(self, "slice_well_marker_actors", {})
+                or uid in getattr(self, "slice_well_marker_label_actors", {})
+                or uid in getattr(self, "slice_well_marker_leader_actors", {})
+            ):
+                try:
+                    self._remove_slice_well_actor(uid)
+                except Exception:
+                    pass
 
         # Force a visibility refresh after removals (even if slice key didn't change)
         self._visibility_dirty = True
-        if hasattr(self, '_last_visibility_key'):
+        if hasattr(self, "_last_visibility_key"):
             try:
                 del self._last_visibility_key
             except Exception:
@@ -8810,10 +13931,28 @@ class ViewInterpretation(ViewMap):
             self.update_all_multipart_faults_visibility()
         except Exception:
             pass
-    
+        try:
+            self._well_marker_filter_dirty = True
+            self.update_all_well_visibility()
+        except Exception:
+            pass
+
     def on_colormap_changed(self, property_name):
         """Called when colormap is changed in the legend manager."""
-        if property_name == 'intensity':
+        active_property = getattr(self, "_cached_scalar_name", None)
+        if not active_property:
+            try:
+                source_vtk = self._get_current_source_vtk()
+                if source_vtk is not None:
+                    active_property = self._get_current_scalar_name(pv.wrap(source_vtk))
+            except Exception:
+                active_property = None
+
+        if (
+            property_name is None
+            or active_property is None
+            or property_name == active_property
+        ):
             self.update_slice_colormap()
 
     def on_geology_legend_style_changed(self, updated_uids, collection):
@@ -8861,9 +14000,32 @@ class ViewInterpretation(ViewMap):
         if not horizon_uids and not fault_uids:
             return
 
+        for uid in horizon_uids | fault_uids:
+            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
+            if vtk_obj is not None and vtk_obj.GetNumberOfPolys() > 0:
+                self.multipart_horizons.pop(uid, None)
+                self.multipart_faults.pop(uid, None)
+                self._remove_filtered_actor(f"multipart_slice_{uid}")
+                self._remove_filtered_actor(f"multipart_fault_slice_{uid}")
+        horizon_uids = changed & set(getattr(self, "multipart_horizons", {}).keys())
+        fault_uids = changed & set(getattr(self, "multipart_faults", {}).keys())
+        # Relinking may transpose slice axes or reverse sample indices. Re-read
+        # persisted arrays instead of retaining the pre-migration registry.
+        for uid in horizon_uids | fault_uids:
+            self._register_multipart_from_slice_index(
+                uid=uid, vtk_obj=self.parent.geol_coll.get_uid_vtk_obj(uid), emit_updates=False
+            )
+        horizon_uids = changed & set(getattr(self, "multipart_horizons", {}).keys())
+        fault_uids = changed & set(getattr(self, "multipart_faults", {}).keys())
         for uid in horizon_uids:
+            self.multipart_horizons[uid]["seismic_uid"] = (
+                self._get_entity_parent_seismic_uid(uid)
+            )
             self.update_multipart_horizon_visibility(uid)
         for uid in fault_uids:
+            self.multipart_faults[uid]["seismic_uid"] = (
+                self._get_entity_parent_seismic_uid(uid)
+            )
             self.update_multipart_fault_visibility(uid)
 
         self.plotter.render()
@@ -8880,6 +14042,7 @@ class ViewInterpretation(ViewMap):
         if obj is None:
             return False
         try:
+            from shiboken6 import isValid as shiboken_is_valid
 
             return bool(shiboken_is_valid(obj))
         except Exception:
@@ -8947,10 +14110,31 @@ class ViewInterpretation(ViewMap):
             except Exception:
                 pass
 
+    def _refresh_well_overlay_for_style_uid(self, uid=None, collection=None):
+        """Refresh a slice well overlay if a well or its child marker style changed."""
+        if not uid or collection is None:
+            return False
+
+        if collection == getattr(self.parent, "well_coll", None):
+            self.update_well_visibility(uid=uid)
+            return True
+
+        if collection == getattr(self.parent, "geol_coll", None):
+            if self._is_well_child_marker_uid(uid):
+                parent_uid = self._get_well_child_marker_parent_uid(uid)
+                self._remove_raw_actor_for_uid(uid)
+                if parent_uid:
+                    self.update_well_visibility(uid=parent_uid)
+                return True
+
+        return False
+
     def change_actor_color(self, updated_uids=None, collection=None):
         """Update actor color without assuming every uid has a raw actor."""
         actors = getattr(self.plotter.renderer, "actors", {})
         for uid in updated_uids or []:
+            if self._refresh_well_overlay_for_style_uid(uid=uid, collection=collection):
+                continue
             if uid not in self.uids_in_view or uid not in actors:
                 continue
             color_R = collection.get_uid_legend(uid=uid)["color_R"]
@@ -8963,6 +14147,8 @@ class ViewInterpretation(ViewMap):
         """Update actor opacity without assuming every uid has a raw actor."""
         actors = getattr(self.plotter.renderer, "actors", {})
         for uid in updated_uids or []:
+            if self._refresh_well_overlay_for_style_uid(uid=uid, collection=collection):
+                continue
             if uid not in self.uids_in_view or uid not in actors:
                 continue
             opacity = collection.get_uid_legend(uid=uid)["opacity"] / 100
@@ -8972,6 +14158,8 @@ class ViewInterpretation(ViewMap):
         """Update actor line width without assuming every uid has a raw actor."""
         actors = getattr(self.plotter.renderer, "actors", {})
         for uid in updated_uids or []:
+            if self._refresh_well_overlay_for_style_uid(uid=uid, collection=collection):
+                continue
             if uid not in self.uids_in_view or uid not in actors:
                 continue
             line_thick = collection.get_uid_legend(uid=uid)["line_thick"]
@@ -8981,15 +14169,22 @@ class ViewInterpretation(ViewMap):
         """Update actor point size without assuming every uid has a raw actor."""
         actors = getattr(self.plotter.renderer, "actors", {})
         for uid in updated_uids or []:
+            if self._refresh_well_overlay_for_style_uid(uid=uid, collection=collection):
+                continue
             if uid not in self.uids_in_view or uid not in actors:
                 continue
             point_size = collection.get_uid_legend(uid=uid)["point_size"]
             actors[uid].GetProperty().SetPointSize(point_size)
 
-    def entities_metadata_modified_update_views(self, collection=None, updated_uids=None):
+    def entities_metadata_modified_update_views(
+        self, collection=None, updated_uids=None
+    ):
         """Keep multipart interpretation actors slice-filtered after metadata edits."""
         super().entities_metadata_modified_update_views(
             collection=collection, updated_uids=updated_uids
+        )
+        self._refresh_single_slice_interpretation_metadata(
+            updated_uids=updated_uids, collection=collection
         )
         self._refresh_multipart_entities_for_uids(
             updated_uids=updated_uids, collection=collection
@@ -9021,13 +14216,17 @@ class ViewInterpretation(ViewMap):
             updated_uids=updated_uids, collection=collection
         )
 
-    def entities_data_keys_removed_update_views(self, updated_uids=None, collection=None):
+    def entities_data_keys_removed_update_views(
+        self, updated_uids=None, collection=None
+    ):
         """Refresh multipart filtered actors after property removals."""
         self.entities_data_keys_added_update_views(
             updated_uids=updated_uids, collection=collection
         )
 
-    def entities_data_val_modified_update_views(self, updated_uids=None, collection=None):
+    def entities_data_val_modified_update_views(
+        self, updated_uids=None, collection=None
+    ):
         """Refresh multipart filtered actors after property value edits."""
         updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
         for uid in updated_uids:
@@ -9056,37 +14255,23 @@ class ViewInterpretation(ViewMap):
         super().show_qt_canvas()
         # Clear any full seismic volume actors that might have been inherited
         self.clear_seismic_volumes()
-        # Refresh volume list to detect any seismics (combo_volume now exists)
-        # This will call update_slice() at line 271 which creates and displays the slice
-        self.refresh_volume_list()
+        # Avoid repeating the expensive first-load path if showEvent will handle it.
+        if getattr(self, "_initialized", False):
+            self.refresh_volume_list(force_reload=False)
         # Ensure plotter updates immediately
         if self.plotter:
             self.plotter.render()
-    
-    def _force_initial_display(self):
-        """Force initial slice display after window is fully shown."""
-        if self.current_seismic_uid:
-            self.print_terminal("Forcing initial slice display...")
-            self._camera_initialized = False  # Force camera reset
-            self.update_slice_limits()
-            self.update_camera_orientation()  # Sets correct view (YZ for Inline, etc.)
-            self.update_slice()
-    
+
     def clear_seismic_volumes(self):
-        """Remove any full seismic volume actors from the plotter."""
+        """Remove any full structured-source actors from the plotter."""
         try:
-            # Get all seismic UIDs from image_coll
-            if hasattr(self.parent, 'image_coll') and self.parent.image_coll is not None:
-                for uid in self.parent.image_coll.get_uids:
-                    try:
-                        topology = self.parent.image_coll.get_uid_topology(uid)
-                        if topology == 'Seismics':
-                            # Try to remove this actor if it exists
-                            if uid in self.plotter.renderer.actors:
-                                self.plotter.remove_actor(uid)
-                                self.print_terminal(f"Cleared full seismic volume: {uid}")
-                    except:
-                        pass
+            for _label, source_info in self._iter_interpretation_source_candidates():
+                uid = source_info[1] if isinstance(source_info, tuple) and len(source_info) >= 2 else None
+                if not uid:
+                    continue
+                if uid in self.plotter.renderer.actors:
+                    self.plotter.remove_actor(uid)
+                    self.print_terminal(f"Cleared full source volume: {uid}")
         except Exception as e:
             self.print_terminal(f"Error clearing seismic volumes: {e}")
 
@@ -9096,14 +14281,14 @@ class ViewInterpretation(ViewMap):
         current_scale = 1.0
         if self.plotter.scale is not None and len(self.plotter.scale) >= 3:
             current_scale = self.plotter.scale[2]
-        
+
         exag_value = input_one_value_dialog(
             parent=self,
             title="Vertical exaggeration options",
             label="Set vertical exaggeration",
             default_value=current_scale,
         )
-        
+
         if exag_value is not None:
             self.plotter.set_scale(zscale=exag_value)
             # Update the slice display and camera to respect new vertical exaggeration

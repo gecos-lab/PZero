@@ -41,6 +41,8 @@ class ImageCollection(DIMCollection):
             "XsImage",
             "Seismics",
             "Image3D",
+            "Voxet",
+            "XsVoxet",
         ]
 
         self.collection_name = "image_coll"
