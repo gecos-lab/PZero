@@ -80,3 +80,4 @@ If you want to know more about the project or want to contribute, our [Wiki](htt
 <br />
 
 <img src='images/pzero_QR.png' width='150'>
+
