@@ -41,6 +41,8 @@ For your first steps with PZero, we have uploaded some test projects on public r
 
 [PZero-test Tutorial](https://github.com/gecos-lab/PZero-test-Tutorial)
 
+[PZero-test Seismic](https://github.com/gecos-lab/PZero_Seismicdata)
+
 The latter is used in most of our video tutorials.
 
 
@@ -68,6 +70,7 @@ The ***PZero*** developers are (or have been):
 * Tommaso Comelli (April 2023 - July 2023)
 * Waqas Hussain (since November 2023)
 * Riccardo Monti (since November 2023)
+* Colin Sanchez (June 2026 - August 2026)
 
 We acknowledge [Geode-Solutions](https://geode-solutions.com/), [Studio Vertix](https://www.vertix.it/) and [Luca Penasa](https://github.com/luca-penasa) for their contribution regarding software engineering, testing, and a more robust software development and project management in general. [Alessandro Frigeri](https://github.com/afrigeri) has provided an enthusiastic support and testing since the beginning.
 
