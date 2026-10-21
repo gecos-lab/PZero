@@ -645,6 +645,9 @@ class PropertiesCMaps(QObject):
             coll_prop_comps = collection.df["properties_components"].to_list()
             coll_prop_comps = list(pd_flatten(coll_prop_comps))
             for i in range(len(coll_props)):
+                # Keep interpretation slice metadata on entities, outside the legend.
+                if isinstance(coll_props[i], str) and coll_props[i].startswith("slices_"):
+                    continue
                 # if coll_prop_comps[i] == 3:
                 #     add_props = (
                 #         add_props
