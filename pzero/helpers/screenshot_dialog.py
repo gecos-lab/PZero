@@ -33,11 +33,11 @@ from ..properties_manager import PropertiesCMaps
 
 class ScreenshotExportDialog(QDialog):
     """Dialog for exporting high-quality screenshots from PZero views.
-    
+
     This dialog provides comprehensive options for exporting publication-quality
     figures including resolution presets, format selection, view settings,
     colormap options, and quality settings.
-    
+
     Args:
         parent: The parent view window (ViewVTK subclass)
         plotter: The PyVista plotter to capture
@@ -91,7 +91,7 @@ class ScreenshotExportDialog(QDialog):
         self.parent_view = parent
         self.plotter = plotter
         self.view_name = view_name
-        
+
         # Capture current camera position before dialog opens
         self._captured_camera = None
         if plotter is not None:
@@ -107,7 +107,7 @@ class ScreenshotExportDialog(QDialog):
         """Set up the dialog user interface."""
         self.setWindowTitle(f"Export Screenshot - {self.view_name}")
         self.setMinimumSize(900, 550)
-        
+
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(10)
 
@@ -118,7 +118,7 @@ class ScreenshotExportDialog(QDialog):
 
         # === Content Layout (2 Columns) ===
         content_layout = QHBoxLayout()
-        
+
         # Left Column: Primary Output Settings
         left_layout = QVBoxLayout()
         self._create_resolution_group(left_layout)
@@ -257,7 +257,9 @@ class ScreenshotExportDialog(QDialog):
         self.aa_samples_spin = QSpinBox()
         self.aa_samples_spin.setRange(1, 16)
         self.aa_samples_spin.setValue(8)
-        self.aa_samples_spin.setToolTip("Number of anti-aliasing samples (higher = smoother)")
+        self.aa_samples_spin.setToolTip(
+            "Number of anti-aliasing samples (higher = smoother)"
+        )
         form.addRow("AA Samples:", self.aa_samples_spin)
 
         # Line width scale
@@ -351,14 +353,18 @@ class ScreenshotExportDialog(QDialog):
 
     def _setup_export_plotter(self, plotter):
         """Configure the off-screen plotter for export.
-        
+
         Args:
             plotter: PyVista Plotter to configure
         """
         # Background color
         bg_choice = self.background_combo.currentText()
-        is_dark_bg = bg_choice in ["Black (Default)", "Dark Gray", "Gradient (Black-Gray)"]
-        
+        is_dark_bg = bg_choice in [
+            "Black (Default)",
+            "Dark Gray",
+            "Gradient (Black-Gray)",
+        ]
+
         if bg_choice == "Black (Default)":
             plotter.set_background("black")
         elif bg_choice == "White":
@@ -413,7 +419,7 @@ class ScreenshotExportDialog(QDialog):
 
     def _copy_actors_to_plotter(self, target_plotter, is_dark_bg):
         """Copy actors from source plotter to target plotter.
-        
+
         Args:
             target_plotter: The plotter to copy actors to
             is_dark_bg: Whether using a dark background
@@ -435,7 +441,7 @@ class ScreenshotExportDialog(QDialog):
                 try:
                     if not hasattr(actor, "GetMapper") or actor.GetMapper() is None:
                         continue
-                    
+
                     mapper = actor.GetMapper()
                     if mapper.GetInput() is None:
                         continue
@@ -458,7 +464,9 @@ class ScreenshotExportDialog(QDialog):
                         bool(prop.GetRenderLinesAsTubes()) if prop else False
                     )
                     visibility = actor.GetVisibility()
-                    texture = actor.GetTexture() if hasattr(actor, "GetTexture") else None
+                    texture = (
+                        actor.GetTexture() if hasattr(actor, "GetTexture") else None
+                    )
 
                     if not visibility:
                         continue
@@ -502,11 +510,17 @@ class ScreenshotExportDialog(QDialog):
                         render_points_as_spheres=render_points_as_spheres,
                         render_lines_as_tubes=render_lines_as_tubes,
                         show_scalar_bar=show_scalar_bar and scalars is not None,
-                        scalar_bar_args={
-                            "color": text_color,
-                            "title_font_size": self.font_size_spin.value(),
-                            "label_font_size": max(8, self.font_size_spin.value() - 4),
-                        } if show_scalar_bar else None,
+                        scalar_bar_args=(
+                            {
+                                "color": text_color,
+                                "title_font_size": self.font_size_spin.value(),
+                                "label_font_size": max(
+                                    8, self.font_size_spin.value() - 4
+                                ),
+                            }
+                            if show_scalar_bar
+                            else None
+                        ),
                     )
                 except Exception:
                     # Skip actors that can't be copied
@@ -650,7 +664,7 @@ class ScreenshotExportDialog(QDialog):
 
     def _apply_camera_view(self, plotter, view_choice):
         """Apply the selected camera view to the plotter.
-        
+
         Args:
             plotter: The plotter to configure
             view_choice: The selected view preset
@@ -676,7 +690,9 @@ class ScreenshotExportDialog(QDialog):
         try:
             # Create preview at reduced resolution
             preview_width = min(800, self.width_spin.value())
-            preview_height = int(preview_width * self.height_spin.value() / self.width_spin.value())
+            preview_height = int(
+                preview_width * self.height_spin.value() / self.width_spin.value()
+            )
 
             preview_plotter = pv.Plotter(
                 off_screen=True,
@@ -700,7 +716,9 @@ class ScreenshotExportDialog(QDialog):
             img = np.ascontiguousarray(img)
             height, width, channels = img.shape
             bytes_per_line = channels * width
-            q_img = QImage(img.data, width, height, bytes_per_line, QImage.Format_RGB888)
+            q_img = QImage(
+                img.data, width, height, bytes_per_line, QImage.Format_RGB888
+            )
             pixmap = QPixmap.fromImage(q_img)
 
             label = QLabel()
@@ -716,9 +734,7 @@ class ScreenshotExportDialog(QDialog):
 
         except Exception as e:
             QMessageBox.warning(
-                self,
-                "Preview Failed",
-                f"Could not generate preview:\n{str(e)}"
+                self, "Preview Failed", f"Could not generate preview:\n{str(e)}"
             )
 
     def _export_screenshot(self):
@@ -728,14 +744,13 @@ class ScreenshotExportDialog(QDialog):
         format_name, ext, filter_str = self.FORMAT_OPTIONS[format_idx]
 
         # Default filename
-        default_name = f"pzero_{self.view_name.lower().replace(' ', '_')}_screenshot.{ext}"
+        default_name = (
+            f"pzero_{self.view_name.lower().replace(' ', '_')}_screenshot.{ext}"
+        )
 
         # Ask for save location
         file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Export Screenshot",
-            default_name,
-            f"{filter_str};;All files (*.*)"
+            self, "Export Screenshot", default_name, f"{filter_str};;All files (*.*)"
         )
 
         if not file_path:
@@ -754,8 +769,7 @@ class ScreenshotExportDialog(QDialog):
             # Apply anti-aliasing
             if self.aa_check.isChecked():
                 export_plotter.enable_anti_aliasing(
-                    "ssaa",
-                    multi_samples=self.aa_samples_spin.value()
+                    "ssaa", multi_samples=self.aa_samples_spin.value()
                 )
 
             # Setup the plotter
@@ -785,15 +799,12 @@ class ScreenshotExportDialog(QDialog):
                 "Export Successful",
                 f"Screenshot exported to:\n{file_path}\n\n"
                 f"Resolution: {width} × {height} pixels\n"
-                f"Format: {format_name}"
+                f"Format: {format_name}",
             )
 
             self.accept()
 
         except Exception as e:
             QMessageBox.critical(
-                self,
-                "Export Failed",
-                f"Failed to export screenshot:\n{str(e)}"
+                self, "Export Failed", f"Failed to export screenshot:\n{str(e)}"
             )
-

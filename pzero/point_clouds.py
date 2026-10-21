@@ -25,8 +25,6 @@ from numpy import std as np_std
 from numpy import zeros as np_zeros
 from numpy import zeros_like as np_zeros_like
 
-from pyvista.core.filters import _update_alg as pv_update_alg
-
 from vtkmodules.util import numpy_support
 from vtkmodules.vtkCommonCore import vtkIdTypeArray
 from vtkmodules.vtkCommonDataModel import (
@@ -72,7 +70,6 @@ def normals2dd(self):
             dip = vtk_obj.points_map_dip
             dip_dir = vtk_obj.points_map_dip_direction
 
-            # print(np.rad2deg(dir))
             vtk_obj.init_point_data("dip", 1)
             vtk_obj.init_point_data("dip direction", 1)
 
@@ -125,7 +122,6 @@ def cut_pc(self, method="both"):
 
         clip_out, clip_in = extract_pc(vtk_obj, loop)
         entity_dict = deepcopy(self.parent.dom_coll.entity_dict)
-        # print(entity_dict)
         if method == "both":
             entity_dict["name"] = self.parent.dom_coll.get_uid_name(uid) + "_cut_in"
             entity_dict["vtk_obj"] = clip_in
@@ -141,7 +137,6 @@ def cut_pc(self, method="both"):
             self.parent.dom_coll.add_entity_from_dict(entity_dict)
 
             entity_dict = deepcopy(self.parent.dom_coll.entity_dict)
-            # print(entity_dict)
             entity_dict["name"] = self.parent.dom_coll.get_uid_name(uid) + "_cut_out"
             entity_dict["vtk_obj"] = clip_out
             entity_dict["topology"] = "PCDom"
@@ -182,9 +177,11 @@ def cut_pc(self, method="both"):
             )
             entity_dict["vtk_obj"] = clip_out
             self.parent.dom_coll.add_entity_from_dict(entity_dict)
+        else:
+            print("Error, invalid selected method")
+            return
 
         scissors.EnabledOff()
-        # self.enable_actions()
         self.clear_selection()
 
     if not self.selected_uids:
@@ -200,8 +197,15 @@ def cut_pc(self, method="both"):
 
 def decimate_pc(vtk_obj, fac):
     """Function used to decimate (randomly) a given point cloud"""
+
+    if (fac > 1) or (fac < 0):
+        print(
+            "Decimation factor to large, you can not decimate by a factor not in [0%:100%]"
+        )
+        return
+
     dec_fac = int(vtk_obj.GetNumberOfPoints() * fac)
-    random = np_random.choice(vtk_obj.GetNumberOfPoints(), dec_fac)
+    random = np_random.choice(vtk_obj.GetNumberOfPoints(), size=dec_fac, replace=False)
 
     ids = vtkIdTypeArray()
 
@@ -246,9 +250,10 @@ def segment_pc(self):
     if isinstance(vtk_obj, PCDom):
         if "dip direction" not in self.parent.dom_coll.get_uid_properties_names(uid):
             print(
-                "dip directio/dip data not present in the dataset. Calculate from Normals using the specific function."
+                "dip direction/dip data not present in the dataset. Calculate from Normals using the specific function."
             )
             return
+
         input_dict = {
             "name": ["Name result: ", "segmented_"],
             "dd1": ["Dip direction lower threshold: ", 0],
@@ -262,8 +267,6 @@ def segment_pc(self):
             title="Segmentation filter", input_dict=input_dict
         )
 
-        # print(dialog)
-
         vtk_obj.GetPointData().SetActiveScalars("dip direction")
         connectivity_filter_dd = vtkEuclideanClusterExtraction()
         connectivity_filter_dd.SetInputData(vtk_obj)
@@ -271,12 +274,10 @@ def segment_pc(self):
         connectivity_filter_dd.SetExtractionModeToAllClusters()
         connectivity_filter_dd.ScalarConnectivityOn()
         connectivity_filter_dd.SetScalarRange(dialog["dd1"], dialog["dd2"])
-        pv_update_alg(connectivity_filter_dd, True, "Segmenting on dip directions")
+        connectivity_filter_dd.Update()
+
         f1 = connectivity_filter_dd.GetOutput()
-        # print(f1)
         f1.GetPointData().SetActiveScalars("dip")
-        # print(f1.GetNumberOfPoints())
-        #
         connectivity_filter_dip = vtkEuclideanClusterExtraction()
         connectivity_filter_dip.SetInputData(f1)
         connectivity_filter_dip.SetRadius(dialog["rad"])
@@ -284,20 +285,15 @@ def segment_pc(self):
         connectivity_filter_dip.ColorClustersOn()
         connectivity_filter_dip.ScalarConnectivityOn()
         connectivity_filter_dip.SetScalarRange(dialog["d1"], dialog["d2"])
-
-        _update_alg(connectivity_filter_dip, True, "Segmenting dips")
-
-        # n_clusters = connectivity_filter_dip.GetNumberOfExtractedClusters()
-
-        # print(n_clusters)
+        connectivity_filter_dip.Update()
 
         r = vtkRadiusOutlierRemoval()
         r.SetInputData(connectivity_filter_dip.GetOutput())
         r.SetRadius(dialog["rad"])
         r.SetNumberOfNeighbors(dialog["nn"])
         r.GenerateOutliersOff()
+        r.Update()
 
-        _update_alg(r, True, "Cleaning pc")
         pc = PCDom()
         pc.ShallowCopy(r.GetOutput())
         pc.GetPointData().SetActiveScalars("ClusterId")
@@ -305,7 +301,7 @@ def segment_pc(self):
         n_clusters = len(rid)
         appender_pc = vtkAppendPolyData()
         for i, region in enumerate(rid):
-            print(f"{i}/{n_clusters}", end="\r")
+            print(f"{i}/{n_clusters-1}", end="\r")
 
             thresh = vtkThresholdPoints()
 
@@ -319,13 +315,19 @@ def segment_pc(self):
 
         seg_pc = PCDom()
         seg_pc.ShallowCopy(appender_pc.GetOutput())
+
+        if seg_pc.GetNumberOfPoints() == 0:
+            print("No clusters found after filtering")
+            self.clear_selection()
+            return
+
         seg_pc.generate_cells()
         properties_name = seg_pc.point_data_keys
         properties_components = [
             seg_pc.get_point_data_shape(c)[1] for c in properties_name
         ]
 
-        curr_obj_dict = deepcopy(DomCollection.entity_dict)
+        curr_obj_dict = deepcopy(self.parent.dom_coll.entity_dict)
         curr_obj_dict["uid"] = str(uuid4())
         curr_obj_dict["name"] = f'pc_{dialog["name"]}'
         curr_obj_dict["topology"] = "PCDom"
@@ -354,6 +356,11 @@ def facets_pc(self):
         uid = self.selected_uids[0]
 
     vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+    if "ClusterId" not in vtk_obj.point_data_keys:
+        print(
+            "Selected entity has no clusters, please choose an other or make them with the proper function"
+        )
+        return
     name = self.parent.dom_coll.get_uid_name(uid)
     appender = vtkAppendPolyData()
     regions = set(vtk_obj.get_point_data("ClusterId"))
@@ -367,7 +374,7 @@ def facets_pc(self):
     l_list = np_zeros(n_regions)
     w_list = np_zeros(n_regions)
     for i, region in enumerate(regions):
-        print(f"{i}/{n_regions}", end="\r")
+        print(f"{i}/{n_regions-1}", end="\r")
 
         thresh = vtkThresholdPoints()
 
@@ -423,7 +430,7 @@ def facets_pc(self):
     properties_name = facets.point_data_keys
     properties_components = [facets.get_point_data_shape(i)[1] for i in properties_name]
 
-    curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
+    curr_obj_dict = deepcopy(self.parent.geol_coll.entity_dict)
     curr_obj_dict["uid"] = str(uuid4())
     curr_obj_dict["name"] = f"{name}facets"
     curr_obj_dict["role"] = "undef"
@@ -444,6 +451,12 @@ def calibration_pc(self):
     n_points = np_zeros_like(self.selected_uids, dtype=float)
     normals_var = np_zeros_like(self.selected_uids, dtype=float)
     for i, uid in enumerate(self.selected_uids):
+        if "Normals" not in self.parent.dom_coll.get_uid_properties_names(uid):
+            print(
+                "Selected entity has no Normals, please choose an other or make them with the proper function"
+            )
+            return
+
         vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
         points = vtk_obj.points
         normals = numpy_support.vtk_to_numpy(
@@ -481,10 +494,6 @@ def calibration_pc(self):
     ax.set(xlabel="Number of points per region")
     ax = sns.histplot(normals_var, ax=ax2)
     ax.set(xlabel="SRF")
-    # ax1.autoscale(enable=True, axis="y", tight=True)
-    # ax2.hist(normals_var)
-    # ax2.set_xticklabels([])
-    # ax2.autoscale(enable=True, axis="y", tight=True)
     fig.show()
 
     # Calculate distance from fitted plane -> estimate of curvature
@@ -504,12 +513,19 @@ def auto_pick(self):
         uid = self.selected_uids[0]
 
     vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+    if "ClusterId" not in vtk_obj.point_data_keys:
+        print(
+            "Selected entity has no Clusters, please choose an other or make them with the proper function"
+        )
+        return
+
+    vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
     name = self.parent.dom_coll.get_uid_name(uid)
     appender = vtkAppendPolyData()
-    max_region = np_max(vtk_obj.get_point_data("ClusterId"))
+    regions = set(vtk_obj.get_point_data("ClusterId").astype(int))
     vtk_obj.GetPointData().SetActiveScalars("ClusterId")
-    for i in range(max_region):
-        print(f"{i}/{max_region}", end="\r")
+    for i in regions:
+        print(f"{i}/{regions}", end="\r")
         thresh = vtkThresholdPoints()
 
         thresh.SetInputData(vtk_obj)
@@ -518,15 +534,10 @@ def auto_pick(self):
         thresh.Update()
 
         points = numpy_support.vtk_to_numpy(thresh.GetOutput().GetPoints().GetData())
-        # print(points)
         if thresh.GetOutput().GetNumberOfPoints() > 0:
-            # print(thresh.GetOutput())
             c, n = best_fitting_plane(points)
-            # n = np.mean(numpy_support.vtk_to_numpy(thresh.GetOutput().GetPointData().GetArray('Normals')),axis=0)
-            # c = np.mean(points,axis=0)
             if n[2] >= 0:
                 n *= -1
-            # plane = pv.Plane(center = c, direction= n)
             att_point = Attitude()
             att_point.append_point(point_vector=c)
             att_point.auto_cells()
@@ -535,12 +546,17 @@ def auto_pick(self):
 
     appender.Update()
 
+    if appender.GetOutput().GetNumberOfPoints() == 0:
+        print("No attitude points could be computed")
+        self.clear_selection()
+        return
+
     points = Attitude()
     points.ShallowCopy(appender.GetOutput())
     properties_name = points.point_data_keys
     properties_components = [points.get_point_data_shape(i)[1] for i in properties_name]
 
-    curr_obj_dict = deepcopy(GeologicalCollection.entity_dict)
+    curr_obj_dict = deepcopy(self.parent.geol_coll.entity_dict)
     curr_obj_dict["uid"] = str(uuid4())
     curr_obj_dict["name"] = f"{name}auto_pick"
     curr_obj_dict["role"] = "undef"
@@ -559,7 +575,12 @@ def auto_pick(self):
 
 def thresh_filt(self):
     """Function used to filter the point cloud using a given property"""
-    uid = self.actors_df.loc[self.actors_df["show"] == True, "uid"].values[0]
+
+    if len(self.selected_uids) == 0:
+        print("No entities selected, make sure to have the right tab open")
+        return
+
+    uid = self.selected_uids[0]
     vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
     if isinstance(vtk_obj, PCDom):
         input_dict = {
@@ -580,10 +601,8 @@ def thresh_filt(self):
         out = PCDom()
         out.ShallowCopy(thresh.GetOutput())
         out.generate_cells()
-        # out.plot()
-        # self.parent.dom_coll.replace_vtk(uid[0],out)
+
         entity_dict = deepcopy(self.parent.dom_coll.entity_dict)
-        # print(entity_dict)
         entity_dict["name"] = (
             self.parent.dom_coll.get_uid_name(uid)
             + "_thresh_"
@@ -591,17 +610,15 @@ def thresh_filt(self):
             + "_"
             + str(dialog["u_t"])
         )
-        entity_dict["vtk_obj"] = out
         entity_dict["topology"] = "PCDom"
         entity_dict["properties_names"] = self.parent.dom_coll.get_uid_properties_names(
             uid
         )
-        entity_dict["topology"] = "PCDom"
         entity_dict["properties_components"] = (
             self.parent.dom_coll.get_uid_properties_components(uid)
         )
         entity_dict["vtk_obj"] = out
-        self.parent.dom_coll.add_entity_from_dict(entity_dict)
+        self.parent.dom_coll.add_entity_from_dict(entity_dict=entity_dict)
         del out
         del thresh
     else:

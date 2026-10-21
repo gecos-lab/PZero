@@ -211,7 +211,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
 
     # Support a fixed role value for all imported objects.
     if attribute_mapping.get("role") == FIXED_ROLE_TOKEN:
-        fixed_role_value = str(attribute_mapping.get("role_fixed_value", "undef")).strip()
+        fixed_role_value = str(
+            attribute_mapping.get("role_fixed_value", "undef")
+        ).strip()
         if not fixed_role_value:
             fixed_role_value = "undef"
         role_col_name = FIXED_ROLE_COLUMN
@@ -233,7 +235,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
 
     # Support a user-defined scenario value for all imported objects.
     if attribute_mapping.get("scenario") == USER_DEFINED_SCENARIO_TOKEN:
-        user_scenario_value = str(attribute_mapping.get("scenario_user_value", "")).strip()
+        user_scenario_value = str(
+            attribute_mapping.get("scenario_user_value", "")
+        ).strip()
         if not user_scenario_value:
             user_scenario_value = "undef"
         scenario_col_name = USER_DEFINED_SCENARIO_COLUMN
@@ -333,7 +337,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 # except:
                 #     print("Invalid object")
                 del curr_obj_dict
-            _print_import_summary(self, imported_count, total_entities, invalid_role_count)
+            _print_import_summary(
+                self, imported_count, total_entities, invalid_role_count
+            )
         elif gdf.geom_type[0] == "Point":
             feature_col = props_map.get("feature")
             group_cols = _get_point_group_columns(props_map, column_names)
@@ -408,7 +414,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     self.geol_coll.add_entity_from_dict(curr_obj_dict)
                     imported_count += 1
                     del curr_obj_dict
-                _print_import_summary(self, imported_count, total_entities, invalid_role_count)
+                _print_import_summary(
+                    self, imported_count, total_entities, invalid_role_count
+                )
             else:
                 self.print_terminal(
                     "Incomplete data. Feature property is required but not found in mapping."
@@ -461,7 +469,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 # except:
                 #     print("Invalid object")
                 del curr_obj_dict
-            _print_import_summary(self, imported_count, total_entities, invalid_role_count)
+            _print_import_summary(
+                self, imported_count, total_entities, invalid_role_count
+            )
         elif gdf.geom_type[0] == "Point":
             feature_col = props_map.get("feature")
             group_cols = _get_point_group_columns(props_map, column_names)
@@ -541,7 +551,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     self.fluid_coll.add_entity_from_dict(curr_obj_dict)
                     imported_count += 1
                     del curr_obj_dict
-                _print_import_summary(self, imported_count, total_entities, invalid_role_count)
+                _print_import_summary(
+                    self, imported_count, total_entities, invalid_role_count
+                )
             else:
                 self.print_terminal(
                     "Incomplete data. Feature property is required but not found in mapping."
@@ -606,7 +618,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 else:
                     self.print_terminal("Empty object")
                 del curr_obj_dict
-            _print_import_summary(self, imported_count, total_entities, invalid_role_count)
+            _print_import_summary(
+                self, imported_count, total_entities, invalid_role_count
+            )
             # Points
         elif gdf.geom_type[0] == "Point":
             feature_col = props_map.get("feature")
@@ -646,7 +660,9 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         self.backgrnd_coll.add_entity_from_dict(curr_obj_dict)
                         imported_count += 1
                     del curr_obj_dict
-                _print_import_summary(self, imported_count, total_entities, invalid_role_count)
+                _print_import_summary(
+                    self, imported_count, total_entities, invalid_role_count
+                )
             else:
                 self.print_terminal(
                     "Incomplete data. Feature property is required but not found in mapping."

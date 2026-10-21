@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal, QMimeData
 from PySide6.QtGui import QDrag, QActionGroup
 
-
 MESH_SLICER_COLLECTION_PREFIXES = {
     "mesh3d_coll": "Mesh",
     "image_coll": "Image",
@@ -266,6 +265,7 @@ class CustomTreeWidget(QTreeWidget):
                 else None
             )
         )
+        self.itemSelectionChanged.connect(self.emit_selection_changed)
 
         # Import initial selection state if parent and collection exist
         if hasattr(self.collection, "selected_uids"):
@@ -412,7 +412,9 @@ class CustomTreeWidget(QTreeWidget):
         if index < 0 and shown_property == "RGB":
             index = property_combo.findText("RGB total")
         if index >= 0:
+            property_combo.blockSignals(True)
             property_combo.setCurrentIndex(index)
+            property_combo.blockSignals(False)
 
         # connect signal used to change the property to be shown
         property_combo.currentTextChanged.connect(
@@ -721,7 +723,6 @@ class CustomTreeWidget(QTreeWidget):
 
         self.emit_checkbox_toggled()
 
-
     def toggle_with_menu(self, position):
         """
         Provides functionality to toggle the states of checkboxes for selected
@@ -748,16 +749,16 @@ class CustomTreeWidget(QTreeWidget):
             self.view, "show_mesh_slicer_dialog"
         ):
             open_mesh_slicer_action = menu.addAction("Open Mesh Slicer")
-        
+
         well_view_actions = self._create_well_view_mode_menu(menu)
-        
+
         # Add Labels submenu (Background collection only)
         background_labels_actions = None
         if self._can_show_labels():
             background_labels_actions = self._create_show_labels_submenu(menu, item)
 
         action = menu.exec_(self.viewport().mapToGlobal(position))
-        
+
         if action == toggle_action:
             for item in self.selectedItems():
                 new_state = (
@@ -767,10 +768,10 @@ class CustomTreeWidget(QTreeWidget):
                 self.update_child_check_states(item, new_state)
                 self.update_parent_check_states(item)
             self.emit_checkbox_toggled()
-        
+
         if action == open_mesh_slicer_action:
             self._open_mesh_slicer_for_item(item)
-            
+
         if well_view_actions:
             if action == well_view_actions.get("trace"):
                 self._set_borehole_view_mode("trace")
@@ -806,7 +807,9 @@ class CustomTreeWidget(QTreeWidget):
         none_action.setCheckable(True)
         # We don't easily know current state so we default to unchecked or leave it logic-less for now
         # Ideally we'd check if any labels are currently shown.
-        none_action.setChecked(True)  # Default to None being checked? OR try to find out.
+        none_action.setChecked(
+            True
+        )  # Default to None being checked? OR try to find out.
         action_group.addAction(none_action)
         actions["None"] = none_action
 
@@ -814,14 +817,13 @@ class CustomTreeWidget(QTreeWidget):
         action.setCheckable(True)
         action_group.addAction(action)
         actions[object_name] = action
-            
+
         return actions
 
     def _can_show_labels(self):
-        return (
-            getattr(self.collection, "collection_name", None) == "backgrnd_coll"
-            and hasattr(self.view, "show_labels")
-        )
+        return getattr(
+            self.collection, "collection_name", None
+        ) == "backgrnd_coll" and hasattr(self.view, "show_labels")
 
     def _show_background_labels(self, item, property_name):
         uid = self.get_item_uid(item)
@@ -933,48 +935,6 @@ class CustomTreeWidget(QTreeWidget):
         for i in range(self.columnCount()):
             self.resizeColumnToContents(i)
 
-    # def update_properties_for_uids(self, uids):
-    #     """
-    #     Updates properties for the provided UIDs by manipulating combo boxes and updating corresponding
-    #     dataframes. This method temporarily blocks signals to avoid unnecessary updates during the operation.
-    #     """
-    #
-    #     # Block signals temporarily to prevent unnecessary updates
-    #     self.blockSignals(True)
-    #
-    #     for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
-    #         uid = self.get_item_uid(item)
-    #         # "if uid" is needed since higher levels do not have an uid
-    #         if uid and uid in uids:
-    #             combo = self.itemWidget(item, self.columnCount() - 1)
-    #             if combo:
-    #                 # Store current selection if it exists
-    #                 current_text = combo.currentText()
-    #
-    #                 # Clear the combo box
-    #                 combo.clear()
-    #
-    #                 # Add default labels first
-    #                 for label in self.default_labels:
-    #                     combo.addItem(label)
-    #
-    #                 # Add the new properties
-    #                 properties_list = self.collection.df.loc[
-    #                     self.collection.df[self.uid_label] == uid, self.prop_label
-    #                 ].values[0]
-    #                 combo.addItems(properties_list)
-    #
-    #                 # Try to restore previous selection if it's still available
-    #                 index = combo.findText(current_text)
-    #                 if index >= 0:
-    #                     combo.setCurrentIndex(index)
-    #                 else:
-    #                     # If previous selection is no longer available, set to first default label
-    #                     combo.setCurrentIndex(0)
-    #
-    #     # Unblock signals
-    #     self.blockSignals(False)
-
     @preserve_selection
     def update_properties_for_uids(self, uids):
         """
@@ -1082,6 +1042,7 @@ class CustomTreeWidget(QTreeWidget):
         # Remove and delete the widget
         widget = self.itemWidget(item, self.columnCount() - 1)
         if widget:
+            widget.blockSignals(True)
             widget.deleteLater()
             self.removeItemWidget(item, self.columnCount() - 1)
 

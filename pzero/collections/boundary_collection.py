@@ -32,29 +32,46 @@ from pyvista import Line as pv_Line
 from pyvista import lines_from_points as pv_lines_from_points
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QWidget, QGridLayout, QLabel, QLineEdit, QCheckBox,
-                               QPushButton, QVBoxLayout, QSlider, QSpinBox,
-                               QGroupBox, QComboBox, QApplication)
+from PySide6.QtWidgets import (
+    QWidget,
+    QGridLayout,
+    QLabel,
+    QLineEdit,
+    QCheckBox,
+    QPushButton,
+    QVBoxLayout,
+    QSlider,
+    QSpinBox,
+    QGroupBox,
+    QComboBox,
+    QApplication,
+)
 
 from pzero.entities_factory import PolyLine, TriSurf
 from pzero.helpers.helper_dialogs import general_input_dialog, message_dialog
-from pzero.helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
+from pzero.helpers.helper_functions import (
+    freeze_gui_onoff,
+    freeze_gui_on,
+    freeze_gui_off,
+)
 from .AbstractCollection import BaseCollection
 
 
 def compute_obb_boundary(parent):
     """Compute true minimum area oriented bounding box from all data using convex hull and rotating axes."""
-    
+
     # Collect all points from all collections
     all_points = []
-    
+
     # helper to get points from collection
     def get_points(coll):
         pts = []
         try:
             for uid in coll.get_uids:
                 vtk_obj = coll.get_uid_vtk_obj(uid)
-                if hasattr(vtk_obj, 'points') and isinstance(vtk_obj.points, np_ndarray):
+                if hasattr(vtk_obj, "points") and isinstance(
+                    vtk_obj.points, np_ndarray
+                ):
                     pts.append(vtk_obj.points)
         except:
             pass
@@ -65,16 +82,16 @@ def compute_obb_boundary(parent):
     all_points.extend(get_points(parent.backgrnd_coll))
     all_points.extend(get_points(parent.well_coll))
     all_points.extend(get_points(parent.dom_coll))
-    
+
     if not all_points:
         return None, None, None
-        
+
     # Concatenate all points
     combined_points = np_concatenate(all_points, axis=0)
-    
+
     # Use only X,Y coordinates for 2D OBB (map view)
     xy_points = combined_points[:, :2]
-    
+
     # Compute Convex Hull
     try:
         hull = ConvexHull(xy_points)
@@ -83,118 +100,126 @@ def compute_obb_boundary(parent):
         # Fallback to AABB if hull fails (e.g. collinear points)
         min_x, min_y = np_min(xy_points, axis=0)
         max_x, max_y = np_max(xy_points, axis=0)
-        corners = np_array([[min_x, min_y], [max_x, min_y], [max_x, max_y], [min_x, max_y]])
+        corners = np_array(
+            [[min_x, min_y], [max_x, min_y], [max_x, max_y], [min_x, max_y]]
+        )
         return corners, np_max(combined_points[:, 2]), np_min(combined_points[:, 2])
 
     # Minimum Area Bounding Box (MABB) algorithm
-    min_area = float('inf')
+    min_area = float("inf")
     best_corners = None
     best_angle = 0.0
     best_translation = np_array([0.0, 0.0])
-    
+
     for i in range(len(hull_points)):
         # Edge between hull_points[i] and hull_points[(i+1)%len(hull_points)]
         p1 = hull_points[i]
-        p2 = hull_points[(i+1) % len(hull_points)]
+        p2 = hull_points[(i + 1) % len(hull_points)]
         edge = p2 - p1
-        
+
         # Angle of the edge
         angle = np_arctan2(edge[1], edge[0])
-        
+
         # Rotation matrix to align edge with X-axis
-        rotation = np_array([
-            [np_cos(angle), np_sin(angle)],
-            [-np_sin(angle), np_cos(angle)]
-        ])
-        
+        rotation = np_array(
+            [[np_cos(angle), np_sin(angle)], [-np_sin(angle), np_cos(angle)]]
+        )
+
         # Rotate points
         rotated_points = np_dot(xy_points, rotation.T)
-        
+
         # Axis-aligned bounding box in rotated space
         min_r = np_min(rotated_points, axis=0)
         max_r = np_max(rotated_points, axis=0)
-        
+
         # Add 10% margin
         range_r = max_r - min_r
         margin = range_r * 0.1
         min_r_ext = min_r - margin
         max_r_ext = max_r + margin
-        
+
         area = (max_r_ext[0] - min_r_ext[0]) * (max_r_ext[1] - min_r_ext[1])
-        
+
         if area < min_area:
             min_area = area
             best_angle = angle
             # Translation vector is the min corner in rotated (local) space
             best_translation = min_r_ext
             # Corners in rotated space
-            corners_r = np_array([
-                [min_r_ext[0], min_r_ext[1]],
-                [max_r_ext[0], min_r_ext[1]],
-                [max_r_ext[0], max_r_ext[1]],
-                [min_r_ext[0], max_r_ext[1]]
-            ])
+            corners_r = np_array(
+                [
+                    [min_r_ext[0], min_r_ext[1]],
+                    [max_r_ext[0], min_r_ext[1]],
+                    [max_r_ext[0], max_r_ext[1]],
+                    [min_r_ext[0], max_r_ext[1]],
+                ]
+            )
             # Rotate back to original space
             best_corners = np_dot(corners_r, rotation)
             # Store the LOCAL-space translation (min corner in rotated space)
             # This is needed because transformation is: rotate first, then translate
             best_local_translation = min_r_ext.copy()
-    
+
     # Return the local-space translation (min_r_ext) - NOT the real-world corner
     # The transformation order is: rotate -> translate (forward), translate -> inverse rotate (inverse)
-            
+
     # Get Z extent from all points
     z_min = np_min(combined_points[:, 2])
     z_max = np_max(combined_points[:, 2])
     z_margin = (z_max - z_min) * 0.1
     z_bottom = z_min - z_margin
     z_top = z_max + z_margin
-    
+
     return best_corners, z_top, z_bottom, best_angle, best_local_translation
+
 
 @freeze_gui_onoff
 def boundary_from_obb(self):
     """Create a new Boundary from OBB (Oriented Bounding Box) analysis of all data"""
     boundary_dict = deepcopy(self.parent.boundary_coll.entity_dict)
-    
+
     # Compute initial OBB values
     obb_result = compute_obb_boundary(self.parent)
-    
+
     if obb_result[0] is None:
-        message_dialog(title="OBB Boundary Error", message="No data found to compute OBB boundary.")
+        message_dialog(
+            title="OBB Boundary Error", message="No data found to compute OBB boundary."
+        )
         return
-    
+
     # Extract OBB results
     corners_xy, top, bottom, obb_angle, obb_translation = obb_result
-    
+
     # Create enhanced dialog with OBB compute button and size controls
     # Store original OBB dimensions for scaling
     original_corners = corners_xy.copy()
-    
+
     # Calculate original dimensions for scaling reference
     obb_width = np_max(corners_xy[:, 0]) - np_min(corners_xy[:, 0])
     obb_height = np_max(corners_xy[:, 1]) - np_min(corners_xy[:, 1])
-    
+
     # Create custom dialog widget
     dialog = QWidget()
     dialog.setWindowTitle("New Boundary from OBB - Interactive Sizing")
     dialog.resize(500, 400)
     dialog.setWindowModality(Qt.ApplicationModal)
-    
+
     layout = QVBoxLayout(dialog)
-    
+
     # Add warning label
-    warning_label = QLabel("Build new Boundary using OBB (Oriented Bounding Box) analysis of all data.\nMinimum volume oriented boundary box will be created based on covariance matrix.\nUse sliders to adjust size.")
+    warning_label = QLabel(
+        "Build new Boundary using OBB (Oriented Bounding Box) analysis of all data.\nMinimum volume oriented boundary box will be created based on covariance matrix.\nUse sliders to adjust size."
+    )
     layout.addWidget(warning_label)
-    
+
     # Create form layout for basic inputs
     basic_group = QGroupBox("Basic Settings")
     basic_layout = QGridLayout(basic_group)
-    
+
     # Boundary selection dropdown
     boundary_combo = QComboBox()
     boundary_combo.addItem("Create New Boundary", "new")
-    
+
     # Add existing boundaries to dropdown
     existing_boundaries = self.parent.boundary_coll.get_names
     for boundary_name in existing_boundaries:
@@ -205,14 +230,14 @@ def boundary_from_obb(self):
                 break
         if boundary_uid:
             boundary_combo.addItem(f"Update: {boundary_name}", boundary_uid)
-    
+
     # Input fields
     name_edit = QLineEdit("obb_boundary")
     top_edit = QLineEdit(f"{top:.2f}")
     bottom_edit = QLineEdit(f"{bottom:.2f}")
     volume_checkbox = QCheckBox()
     volume_checkbox.setChecked(True)
-    
+
     # Function to handle boundary selection change
     def on_boundary_selection_changed():
         selected_data = boundary_combo.currentData()
@@ -229,10 +254,10 @@ def boundary_from_obb(self):
             existing_name = self.parent.boundary_coll.get_uid_name(existing_uid)
             name_edit.setEnabled(False)
             name_edit.setText(existing_name)
-            
+
             # Get existing boundary properties
             existing_vtk = self.parent.boundary_coll.get_uid_vtk_obj(existing_uid)
-            if hasattr(existing_vtk, 'points') and existing_vtk.points is not None:
+            if hasattr(existing_vtk, "points") and existing_vtk.points is not None:
                 if len(existing_vtk.points) > 0:
                     existing_z_values = existing_vtk.points[:, 2]
                     if len(existing_z_values) > 0:
@@ -245,9 +270,9 @@ def boundary_from_obb(self):
                         else:
                             # It's a 2D boundary
                             volume_checkbox.setChecked(False)
-    
+
     boundary_combo.currentTextChanged.connect(on_boundary_selection_changed)
-    
+
     # Add to basic form
     basic_layout.addWidget(QLabel("Boundary:"), 0, 0)
     basic_layout.addWidget(boundary_combo, 0, 1)
@@ -259,13 +284,13 @@ def boundary_from_obb(self):
     basic_layout.addWidget(bottom_edit, 3, 1)
     basic_layout.addWidget(QLabel("Create volume:"), 4, 0)
     basic_layout.addWidget(volume_checkbox, 4, 1)
-    
+
     layout.addWidget(basic_group)
-    
+
     # Create size control group
     size_group = QGroupBox("Size Controls")
     size_layout = QGridLayout(size_group)
-    
+
     # Width control (along first principal component)
     width_label = QLabel("Width Scale:")
     width_slider = QSlider(Qt.Horizontal)
@@ -277,7 +302,7 @@ def boundary_from_obb(self):
     width_spinbox.setMaximum(500)
     width_spinbox.setValue(100)
     width_spinbox.setSuffix("%")
-    
+
     # Height control (along second principal component)
     height_label = QLabel("Height Scale:")
     height_slider = QSlider(Qt.Horizontal)
@@ -289,13 +314,13 @@ def boundary_from_obb(self):
     height_spinbox.setMaximum(500)
     height_spinbox.setValue(100)
     height_spinbox.setSuffix("%")
-    
+
     # Connect sliders and spinboxes
     width_slider.valueChanged.connect(width_spinbox.setValue)
     width_spinbox.valueChanged.connect(width_slider.setValue)
     height_slider.valueChanged.connect(height_spinbox.setValue)
     height_spinbox.valueChanged.connect(height_slider.setValue)
-    
+
     # Add to size layout
     size_layout.addWidget(width_label, 0, 0)
     size_layout.addWidget(width_slider, 0, 1)
@@ -303,72 +328,72 @@ def boundary_from_obb(self):
     size_layout.addWidget(height_label, 1, 0)
     size_layout.addWidget(height_slider, 1, 1)
     size_layout.addWidget(height_spinbox, 1, 2)
-    
+
     layout.addWidget(size_group)
-    
+
     # Function to update corners based on slider values
     def update_corners_from_sliders():
         nonlocal corners_xy
         # Get scale factors from sliders (convert percentage to decimal)
         width_scale = width_slider.value() / 100.0
         height_scale = height_slider.value() / 100.0
-        
+
         # Calculate center of original corners
         center_x = np_mean(original_corners[:, 0])
         center_y = np_mean(original_corners[:, 1])
-        
+
         # To scale correctly, we need to transform to local coordinates (un-rotated)
         # Calculate rotation angle using similar logic to get_boundary_orientation_info
         # We know it's a rectangle because it comes from PCA/OBB
         p0 = original_corners[0]
         p1 = original_corners[1]
         p3 = original_corners[3]
-        
+
         edge1 = p1 - p0
         edge2 = p3 - p0
-        
+
         # Find the primary edge (longest one) for consistent orientation
         edge1_len = np_linalg.norm(edge1)
         edge2_len = np_linalg.norm(edge2)
-        
+
         if edge1_len >= edge2_len:
             primary_edge = edge1
         else:
             primary_edge = edge2
-        
+
         # Calculate rotation angle
         rotation_angle = np_arctan2(primary_edge[1], primary_edge[0])
-        
+
         # Rotation matrices
         c, s = np_cos(-rotation_angle), np_sin(-rotation_angle)
-        R_inv = np_array(((c, -s), (s, c))) # Rotate to align with axes
-        
+        R_inv = np_array(((c, -s), (s, c)))  # Rotate to align with axes
+
         c, s = np_cos(rotation_angle), np_sin(rotation_angle)
-        R = np_array(((c, -s), (s, c))) # Rotate back
-        
+        R = np_array(((c, -s), (s, c)))  # Rotate back
+
         # Center points
         centered_points = original_corners - np_array([center_x, center_y])
-        
+
         # Rotate to local frame
         local_points = np_dot(centered_points, R_inv.T)
-        
+
         # Apply scaling in local aligned frame
         scaled_local = local_points.copy()
         scaled_local[:, 0] *= width_scale
         scaled_local[:, 1] *= height_scale
-        
+
         # Rotate back to global frame
         scaled_centered = np_dot(scaled_local, R.T)
-        
+
         # Add center back
         scaled_corners = scaled_centered + np_array([center_x, center_y])
-        
+
         corners_xy = scaled_corners
         return scaled_corners
-    
+
     # Button layout
     button_layout = QGridLayout()
-    
+
     # OBB compute button
     def compute_obb_callback():
         nonlocal corners_xy, top, bottom, original_corners, obb_angle, obb_translation
@@ -385,45 +410,45 @@ def boundary_from_obb(self):
             # Reset sliders to 100%
             width_slider.setValue(100)
             height_slider.setValue(100)
-    
+
     obb_button = QPushButton("Compute OBB")
     obb_button.clicked.connect(compute_obb_callback)
-    
+
     ok_button = QPushButton("OK")
     cancel_button = QPushButton("Cancel")
-    
+
     button_layout.addWidget(obb_button, 0, 0)
     button_layout.addWidget(cancel_button, 0, 1)
     button_layout.addWidget(ok_button, 0, 2)
-    
+
     layout.addLayout(button_layout)
-    
+
     # Dialog result handling
     dialog_result = {"accepted": False}
-        
+
     def reject_dialog():
         dialog_result["accepted"] = False
         dialog.close()
-    
+
     def accept_dialog():
         dialog_result["accepted"] = True
         # Update corners one final time before accepting
         update_corners_from_sliders()
         dialog.close()
-    
+
     ok_button.clicked.connect(accept_dialog)
     cancel_button.clicked.connect(reject_dialog)
-    
+
     # Show dialog and wait for result
     dialog.show()
-    
+
     # Process events until dialog is closed
     while dialog.isVisible():
         QApplication.processEvents()
-    
+
     if not dialog_result["accepted"]:
         return
-    
+
     # Get values from dialog
     selected_data = boundary_combo.currentData()
     boundary_dict_updt = {
@@ -431,13 +456,13 @@ def boundary_from_obb(self):
         "top": float(top_edit.text()) if top_edit.text() else 1000.0,
         "bottom": float(bottom_edit.text()) if bottom_edit.text() else -1000.0,
         "activatevolume": "check" if volume_checkbox.isChecked() else "uncheck",
-        "corners": corners_xy  # Store the oriented corners
+        "corners": corners_xy,  # Store the oriented corners
     }
-    
+
     # Check if top and bottom fields are valid
     if boundary_dict_updt["top"] == boundary_dict_updt["bottom"]:
         boundary_dict_updt["top"] = boundary_dict_updt["top"] + 1.0
-    
+
     if selected_data == "new":
         # Creating new boundary
         # Check if other Boundaries with the same name exist. If so, add suffix to make the name unique.
@@ -446,47 +471,47 @@ def boundary_from_obb(self):
                 boundary_dict_updt["name"] = boundary_dict_updt["name"] + "_0"
             else:
                 break
-        
+
         boundary_dict["name"] = boundary_dict_updt["name"]
-        
+
         if boundary_dict_updt["activatevolume"] == "check":
             # Build oriented Boundary as volume using OBB corners
             boundary_dict["topology"] = "TriSurf"
             boundary_dict["vtk_obj"] = TriSurf()
             nodes = vtkPoints()
-            
+
             # Get the oriented corners
             corners = boundary_dict_updt["corners"]
-            
+
             # Bottom face (4 corners at bottom Z)
             for i in range(4):
                 nodes.InsertPoint(
                     i,
                     corners[i, 0],  # X from OBB
-                    corners[i, 1],  # Y from OBB  
-                    boundary_dict_updt["bottom"]  # Z bottom
+                    corners[i, 1],  # Y from OBB
+                    boundary_dict_updt["bottom"],  # Z bottom
                 )
-            
+
             # Top face (4 corners at top Z)
             for i in range(4):
                 nodes.InsertPoint(
                     i + 4,
                     corners[i, 0],  # X from OBB
                     corners[i, 1],  # Y from OBB
-                    boundary_dict_updt["top"]  # Z top
+                    boundary_dict_updt["top"],  # Z top
                 )
-            
+
             boundary_dict["vtk_obj"].SetPoints(nodes)
-            
+
             # Create triangular faces for the oriented box
             # Bottom face (2 triangles)
             boundary_dict["vtk_obj"].append_cell(np_array([0, 1, 2]))
             boundary_dict["vtk_obj"].append_cell(np_array([0, 2, 3]))
-            
+
             # Top face (2 triangles)
             boundary_dict["vtk_obj"].append_cell(np_array([4, 6, 5]))
             boundary_dict["vtk_obj"].append_cell(np_array([4, 7, 6]))
-            
+
             # Side faces (8 triangles)
             boundary_dict["vtk_obj"].append_cell(np_array([0, 1, 4]))
             boundary_dict["vtk_obj"].append_cell(np_array([1, 4, 5]))
@@ -509,38 +534,35 @@ def boundary_from_obb(self):
                 (corners[0, 0], corners[0, 1], 0.0),  # back to corner 0 to close
             ]
             boundary_dict["vtk_obj"].auto_cells()
-        
+
         uid = self.parent.boundary_coll.add_entity_from_dict(entity_dict=boundary_dict)
-        
+
         # Store OBB transformation properties on the boundary
         n_points = boundary_dict["vtk_obj"].points_number
-        
+
         # Add obb_angle property
         self.parent.boundary_coll.append_uid_property(
-            uid=uid, 
-            property_name="obb_angle",
-            property_components=1
+            uid=uid, property_name="obb_angle", property_components=1
         )
         self.parent.boundary_coll.get_uid_vtk_obj(uid).set_point_data(
             data_key="obb_angle",
-            attribute_matrix=np_full(n_points, obb_angle, dtype=np_float32)
+            attribute_matrix=np_full(n_points, obb_angle, dtype=np_float32),
         )
-        
+
         # Add obb_translation property
         self.parent.boundary_coll.append_uid_property(
-            uid=uid,
-            property_name="obb_translation",
-            property_components=2
+            uid=uid, property_name="obb_translation", property_components=2
         )
         self.parent.boundary_coll.get_uid_vtk_obj(uid).set_point_data(
             data_key="obb_translation",
-            attribute_matrix=np_tile(obb_translation, (n_points, 1)).astype(np_float32)
+            attribute_matrix=np_tile(obb_translation, (n_points, 1)).astype(np_float32),
         )
-    
+
     else:
         # Updating existing boundary - it was already updated in the preview
         # The boundary is already updated via the preview mechanism
         pass
+
 
 def boundary_from_points(self, vector):
     """Create a new Boundary from a vector with two end points"""
@@ -690,7 +712,9 @@ def boundary_from_three_points(self, vector):
     delta_xy = p2[:2] - p1[:2]
     length = np_linalg.norm(delta_xy)
     if length == 0:
-        self.print_terminal(" -- Boundary from 3 points: first two points are coincident -- ")
+        self.print_terminal(
+            " -- Boundary from 3 points: first two points are coincident -- "
+        )
         freeze_gui_off(self)
         return
 
@@ -755,9 +779,7 @@ def boundary_from_three_points(self, vector):
         except Exception:
             return
         t = (p_raw[0] - p2[0]) * perp_unit[0] + (p_raw[1] - p2[1]) * perp_unit[1]
-        p_proj = np_array(
-            [p2[0] + perp_unit[0] * t, p2[1] + perp_unit[1] * t, p2[2]]
-        )
+        p_proj = np_array([p2[0] + perp_unit[0] * t, p2[1] + perp_unit[1] * t, p2[2]])
         p4 = np_array([p1[0] + (p_proj[0] - p2[0]), p1[1] + (p_proj[1] - p2[1]), p1[2]])
         guide_line.points = np_array(
             [[p2[0], p2[1], p2[2]], [p_proj[0], p_proj[1], p_proj[2]]]
@@ -856,17 +878,29 @@ def boundary_from_three_points(self, vector):
             boundary_dict_updt["top"] = boundary_dict_updt["top"] + 1.0
 
         # Enforce orthogonality after possible manual edits
-        p1_xy = np_array([boundary_dict_updt["p1_x"], boundary_dict_updt["p1_y"]], dtype=float)
-        p2_xy = np_array([boundary_dict_updt["p2_x"], boundary_dict_updt["p2_y"]], dtype=float)
-        p3_xy = np_array([boundary_dict_updt["p3_x"], boundary_dict_updt["p3_y"]], dtype=float)
+        p1_xy = np_array(
+            [boundary_dict_updt["p1_x"], boundary_dict_updt["p1_y"]], dtype=float
+        )
+        p2_xy = np_array(
+            [boundary_dict_updt["p2_x"], boundary_dict_updt["p2_y"]], dtype=float
+        )
+        p3_xy = np_array(
+            [boundary_dict_updt["p3_x"], boundary_dict_updt["p3_y"]], dtype=float
+        )
         delta_xy_local = p2_xy - p1_xy
         length_local = np_linalg.norm(delta_xy_local)
         if length_local == 0:
-            self.print_terminal(" -- Boundary from 3 points: point 1 and point 2 are coincident -- ")
+            self.print_terminal(
+                " -- Boundary from 3 points: point 1 and point 2 are coincident -- "
+            )
             freeze_gui_off(self)
             return
-        perp_unit_local = np_array([-delta_xy_local[1], delta_xy_local[0]]) / length_local
-        t_local = (p3_xy[0] - p2_xy[0]) * perp_unit_local[0] + (p3_xy[1] - p2_xy[1]) * perp_unit_local[1]
+        perp_unit_local = (
+            np_array([-delta_xy_local[1], delta_xy_local[0]]) / length_local
+        )
+        t_local = (p3_xy[0] - p2_xy[0]) * perp_unit_local[0] + (
+            p3_xy[1] - p2_xy[1]
+        ) * perp_unit_local[1]
         p3_xy = p2_xy + perp_unit_local * t_local
         p4_xy = p1_xy + (p3_xy - p2_xy)
         # Store OBB-like orientation (angle in radians) so LoopStructural can align the model.

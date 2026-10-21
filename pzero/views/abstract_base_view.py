@@ -538,23 +538,18 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def show_uids(self, uids: list = None):
         """Show actors with the given uids."""
         # Maybe in the future this might be reimplemented in parallel or vectorized?
-        # print("show_uids: ", uids)
         for uid in uids:
-            # self.print_terminal(f"showing uid: {uid}")
-            if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
-                self.set_actor_visible(uid=uid, visible=True)
-                self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = True
-                # self.print_terminal(f"shown uid: {uid}")
+            # if not self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
+            self.set_actor_visible(uid=uid, visible=True)
+            self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = True
 
     def hide_uids(self, uids: list = None):
         """Hide actors with the given uids."""
         # Maybe in th future this might be reimplemented in parallel or vectorized?
-        # print("hide_uids: ", uids)
         for uid in uids:
-            # self.print_terminal(f"hiding uid: {uid}")
-            if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
-                self.set_actor_visible(uid=uid, visible=False)
-                self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
+            # if self.actors_df.loc[self.actors_df["uid"] == uid, "show"].values[0]:
+            self.set_actor_visible(uid=uid, visible=False)
+            self.actors_df.loc[self.actors_df["uid"] == uid, "show"] = False
 
     @property
     def uids_in_view(self):
@@ -648,51 +643,51 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         All objects are visible by default -> show = True.
         """
         for collection_name in self.tree_collection_dict.values():
+            coll_df = eval(f"self.parent.{collection_name}").df
             try:
-                prgs_bar = progress_dialog(
-                    max_value=len(
-                        eval(f"self.parent.{collection_name}")
-                        .df.query(self.view_filter)["uid"]
-                        .tolist()
-                    ),
-                    title_txt="Opening view",
-                    label_txt=f"Adding objects from {collection_name}...",
-                    cancel_txt=None,
-                    parent=self,
+                filtered_uids = coll_df.query(self.view_filter)["uid"].tolist()
+            except Exception as e:
+                # This collection's DataFrame doesn't have the columns this
+                # view's filter depends on (e.g. xsect_coll has no
+                # "properties_names" column) - nothing to add from it for this view.
+                continue
+            prgs_bar = progress_dialog(
+                max_value=len(filtered_uids),
+                title_txt="Opening view",
+                label_txt=f"Adding objects from {collection_name}...",
+                cancel_txt=None,
+                parent=self,
+            )
+            for uid in (
+                eval(f"self.parent.{collection_name}")
+                .df.query(self.view_filter)["uid"]
+                .tolist()
+            ):
+                this_actor = self.show_actor_with_property(
+                    uid=uid,
+                    coll_name=collection_name,
+                    show_property=None,
+                    visible=True,
                 )
-                for uid in (
-                    eval(f"self.parent.{collection_name}")
-                    .df.query(self.view_filter)["uid"]
-                    .tolist()
-                ):
-                    this_actor = self.show_actor_with_property(
-                        uid=uid,
-                        coll_name=collection_name,
-                        show_property=None,
-                        visible=True,
-                    )
-                    # New Pandas >= 2.0.0
-                    self.actors_df = pd_concat(
-                        [
-                            self.actors_df,
-                            pd_DataFrame(
-                                [
-                                    {
-                                        "uid": uid,
-                                        "actor": this_actor,
-                                        "show": True,
-                                        "collection": collection_name,
-                                        "show_property": None,
-                                    }
-                                ]
-                            ),
-                        ],
-                        ignore_index=True,
-                    )
-                    prgs_bar.add_one()
-            except:
-                self.print_terminal(f"ERROR in add_all_entities: {collection_name}")
-                pass
+                # New Pandas >= 2.0.0
+                self.actors_df = pd_concat(
+                    [
+                        self.actors_df,
+                        pd_DataFrame(
+                            [
+                                {
+                                    "uid": uid,
+                                    "actor": this_actor,
+                                    "show": True,
+                                    "collection": collection_name,
+                                    "show_property": None,
+                                }
+                            ]
+                        ),
+                    ],
+                    ignore_index=True,
+                )
+                prgs_bar.add_one()
 
     # ================================  General methods shared by all views - built incrementally =====================
 

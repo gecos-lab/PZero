@@ -42,7 +42,13 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
     max_zz_txt = f"NaN value = {max_zz}"
     min_zz_txt = f"NaN value = {min_zz}"
 
-    nan_option = options_dialog(title="NaN's in DEM", message="Does this DEM includes NaN's?", yes_role=max_zz_txt, no_role=min_zz_txt, reject_role="No NaN's are present")
+    nan_option = options_dialog(
+        title="NaN's in DEM",
+        message="Does this DEM includes NaN's?",
+        yes_role=max_zz_txt,
+        no_role=min_zz_txt,
+        reject_role="No NaN's are present",
+    )
     if nan_option == 0:
         zz[zz == max_zz] = np_nan
     elif nan_option == 1:
