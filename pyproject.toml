@@ -11,8 +11,6 @@ patch_tags = ["fix"]
 
 # These NEVER trigger releases
 allowed_tags = [
-    "feat",
-    "fix",
     "build",
     "chore",
     "ci",
