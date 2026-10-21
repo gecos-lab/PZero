@@ -78,6 +78,11 @@ if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
 try:
+    from .project_storage import serialize_tetrahedral_mesh, restore_tetrahedral_mesh
+except ImportError:  # Standalone PyMeshIt entry point
+    from project_storage import serialize_tetrahedral_mesh, restore_tetrahedral_mesh
+
+try:
     from .PiecewiseStructuralComplex import PiecewiseStructuralComplex
 except ImportError:  # pragma: no cover - standalone script import
     from PiecewiseStructuralComplex import PiecewiseStructuralComplex
@@ -15072,15 +15077,18 @@ segmentation, triangulation, and visualization.
             logger.info(f"Saving project to: {file_path}")
 
             project_data = {
-                'version': '1.1',
+                'version': '1.2',
                 'datasets': self.datasets,
                 'current_dataset_index': self.current_dataset_index,
                 'current_tab_index': self.notebook.currentIndex(),
                 'datasets_intersections': getattr(self, 'datasets_intersections', {}),
                 'seg_length_by_surface': getattr(self, 'seg_length_by_surface', {}),
                 'mesh_size_by_surface': getattr(self, 'mesh_size_by_surface', {}),
-                'tetra_mesh_data': getattr(self, 'tetra_mesh_data', None),
+                'tetra_mesh_data': serialize_tetrahedral_mesh(getattr(self, 'tetrahedral_mesh', None)),
                 'tetra_materials': getattr(self, 'tetra_materials', []),
+                'tetra_surface_data': getattr(self, 'tetra_surface_data', {}),
+                'tetra_selected_surfaces': sorted(getattr(self, 'tetra_selected_surfaces', set())),
+                'tetra_fault_surface_indices': sorted(self._get_fault_surface_indices()),
             }
 
             with open(file_path, 'wb') as f:
@@ -15169,7 +15177,22 @@ segmentation, triangulation, and visualization.
             self.seg_length_by_surface = project_data.get('seg_length_by_surface', {})
             self.mesh_size_by_surface = project_data.get('mesh_size_by_surface', {})
             self.tetra_mesh_data = project_data.get('tetra_mesh_data', None)
+            self.tetrahedral_mesh = restore_tetrahedral_mesh(self.tetra_mesh_data)
+            self.full_tetra_mesh = self.tetrahedral_mesh
+            self.tetra_surface_data = project_data.get('tetra_surface_data', {})
+            self.tetra_selected_surfaces = set(project_data.get('tetra_selected_surfaces', []))
             self.tetra_materials = project_data.get('tetra_materials', [])
+            # A generator from another project must not supply stale fault or PLC data.
+            self.tetra_mesh_generator = TetrahedralMeshGenerator(
+                datasets=self.datasets,
+                selected_surfaces=self.tetra_selected_surfaces,
+                border_surface_indices={i for i in self.tetra_selected_surfaces if self.datasets[i].get('type') == 'BORDER'},
+                unit_surface_indices=set(),
+                fault_surface_indices=set(project_data.get('tetra_fault_surface_indices', [])),
+                materials=self.tetra_materials,
+                surface_data=self.tetra_surface_data,
+            )
+            self.tetra_mesh_generator.tetrahedral_mesh = self.tetrahedral_mesh
 
             logger.info(
                 f"Loaded {len(self.tetra_materials)} material definitions with seed locations"
@@ -15188,6 +15211,23 @@ segmentation, triangulation, and visualization.
                 self._refresh_well_refine_table()
             if hasattr(self, '_refresh_mesh_well_refine_table'):
                 self._refresh_mesh_well_refine_table()
+            self._refresh_tetra_loaded_surface_list()
+            if self.tetra_selected_surfaces:
+                self._auto_classify_surfaces()
+                fault_indices = set(project_data.get('tetra_fault_surface_indices', []))
+                self.material2d_list.blockSignals(True)
+                for i in range(self.material2d_list.count()):
+                    item = self.material2d_list.item(i)
+                    item.setCheckState(Qt.Checked if item.data(Qt.UserRole) in fault_indices else Qt.Unchecked)
+                self.material2d_list.blockSignals(False)
+                self._update_fault_list_from_checkboxes()
+                self._refresh_unit_surfaces_list()
+                self.tetra_mesh_generator.unit_surface_indices = self._get_unit_surface_indices()
+            has_mesh = self.tetrahedral_mesh is not None
+            self.export_mesh_btn.setEnabled(has_mesh)
+            self.export_figure_btn.setEnabled(has_mesh)
+            self.generate_tetra_mesh_btn.setEnabled(bool(self.tetra_selected_surfaces))
+            self._update_tetra_stats()
 
             self.notebook.blockSignals(True)
             if 0 <= saved_tab_index < self.notebook.count():
