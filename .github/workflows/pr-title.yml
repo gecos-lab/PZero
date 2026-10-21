@@ -1,0 +1,24 @@
+name: PR title prefix
+on:
+  pull_request_target:
+    types: [opened, reopened, edited]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  default-prefix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.pull_request.title;
+            const ok = /^(feat|fix|perf|build|chore|ci|docs|style|refactor|test)(\([^)]*\))?!?: /;
+            if (!ok.test(title)) {
+              await github.rest.pulls.update({
+                ...context.repo,
+                pull_number: context.payload.pull_request.number,
+                title: `fix: ${title}`,
+              });
+            }
