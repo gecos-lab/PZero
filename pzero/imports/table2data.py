@@ -114,6 +114,7 @@ def _stm_import_payload(payload):
             "stm_locked_conformable_links": decoded.get(
                 "locked_conformable_links", []
             ),
+            "stm_boundary_scenarios": decoded["boundary_scenarios"],
         },
     }
 

@@ -1641,6 +1641,7 @@ def build_stm_json(
     locked_conformable_links=None,
     boundary_columns=None,
     unit_columns=None,
+    boundary_scenarios=None,
 ):
     """Return an STM payload containing two dataframe-style tables."""
     boundaries_df = _as_dataframe(boundaries, boundary_columns)
@@ -1679,6 +1680,7 @@ def build_stm_json(
         "units": _split_payload(units_df),
         "colors": color_map,
         "locked_conformable_links": locked_links,
+        "boundary_scenarios": dict(boundary_scenarios or {}),
     }
 
 
@@ -1722,6 +1724,7 @@ def read_stm_json(payload):
         ),
         "units": units_df.where(units_df.notna(), "").to_dict(orient="records"),
         "colors": colors,
+        "boundary_scenarios": dict(payload.get("boundary_scenarios", {}) or {}),
         "locked_conformable_links": [
             {"unit": unit_name, "boundary": boundary_name}
             for unit_name, boundary_name in sorted(

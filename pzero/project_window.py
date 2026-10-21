@@ -2485,6 +2485,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 locked_conformable_links = stm_links(
                     table_options.get("stm_locked_conformable_links", [])
                 )
+                boundary_scenarios = table_options.pop("stm_boundary_scenarios", {})
                 table_options.pop("manual_units", None)
                 table_options.pop("conformable_connections", None)
                 table_options.pop("unconformable_connections", None)
@@ -2506,6 +2507,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             locked_conformable_links=locked_conformable_links,
                             boundary_columns=stm_boundary_cols,
                             unit_columns=stm_unit_cols,
+                            boundary_scenarios=boundary_scenarios,
                         ),
                     }
                 )
@@ -2578,6 +2580,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 table_options["stm_locked_conformable_links"] = decoded.get(
                     "locked_conformable_links", []
                 )
+                table_options["stm_boundary_scenarios"] = decoded["boundary_scenarios"]
                 self.custom_table_options[table_name] = table_options
             else:
                 dataframe_payload = table_payload.get("dataframe", {})
@@ -4253,6 +4256,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 stm_domain_col(1): "",
                 "feature": feature_name,
                 "role": role_name,
+                "scenario": str(row.get("scenario", "")).strip(),
                 "color_R": row.get("color_R", 255),
                 "color_G": row.get("color_G", 255),
                 "color_B": row.get("color_B", 255),
@@ -4263,6 +4267,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             key=lambda unit_info: (
                 str(unit_info.get(stm_feature_col, "")).casefold(),
                 str(unit_info.get("role", "")).casefold(),
+                str(unit_info.get("scenario", "")).casefold(),
             ),
         )
 
@@ -4287,6 +4292,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         legend_features = legend_df["feature"].astype(str).str.strip()
         legend_roles = legend_df["role"].astype(str).str.strip().str.casefold()
+        boundary_scenarios = self.custom_table_options.get(table_name, {}).get(
+            "stm_boundary_scenarios", {}
+        )
         legend_updated = False
         stm_tables = (
             self.custom_table_options.get(table_name, {})
@@ -4312,7 +4320,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 mask = (legend_features == stm_feature) & (
                     legend_roles == stm_role
                 )
-                if mask.any():
+                if stm_feature in boundary_scenarios:
+                    if "scenario" not in legend_df.columns:
+                        continue
+                    mask &= legend_df["scenario"].astype(str).str.strip().eq(
+                        boundary_scenarios[stm_feature]
+                    )
+                if mask.any() and not legend_df.loc[mask, legend_level_col].eq(
+                    polarity_value
+                ).all():
                     self.geol_coll.legend_df.loc[mask, legend_level_col] = polarity_value
                     legend_updated = True
         else:
@@ -4323,7 +4339,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 except (TypeError, ValueError):
                     continue
                 mask = legend_features == stm_feature
-                if mask.sum() == 1:
+                if mask.sum() == 1 and not legend_df.loc[mask, legend_level_col].eq(
+                    polarity_value
+                ).all():
                     self.geol_coll.legend_df.loc[mask, legend_level_col] = polarity_value
                     legend_updated = True
 
@@ -4344,6 +4362,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             (
                 unit_info[stm_feature_col],
                 str(unit_info.get("role", "")).strip().casefold(),
+            ): unit_info.get(stm_level_col, "")
+            for unit_info in legend_units
+        }
+        polarity_by_scenario = {
+            (
+                unit_info[stm_feature_col],
+                str(unit_info.get("role", "")).strip().casefold(),
+                str(unit_info.get("scenario", "")).strip(),
             ): unit_info.get(stm_level_col, "")
             for unit_info in legend_units
         }
@@ -4376,6 +4402,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 table_df[first_domain_col] = ""
 
             table_options = self.custom_table_options.get(table_name, {}) or {}
+            boundary_scenarios = table_options.get("stm_boundary_scenarios", {})
             stm_tables = table_options.get("stm_tables", {})
             table_polarities = {}
             if isinstance(stm_tables, dict):
@@ -4386,7 +4413,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     role = str(
                         boundary.get(stm_boundary_role_col, "")
                     ).strip().casefold()
-                    polarity = polarity_by_key.get((feature, role))
+                    if feature in boundary_scenarios:
+                        polarity = polarity_by_scenario.get(
+                            (feature, role, boundary_scenarios[feature])
+                        )
+                        table_polarities[feature] = boundary.get(
+                            stm_boundary_level_col, ""
+                        )
+                    else:
+                        polarity = polarity_by_key.get((feature, role))
                     if polarity is not None:
                         boundary[stm_boundary_level_col] = polarity
                         table_polarities[feature] = polarity
