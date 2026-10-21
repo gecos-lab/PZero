@@ -2,7 +2,7 @@
 commit_parser = "conventional"
 
 [tool.semantic_release.commit_parser_options]
-ignore_merge_commits = true
+ignore_merge_commits = false
 
 # Only these trigger releases
 major_tags = ["BREAKING CHANGE"]
