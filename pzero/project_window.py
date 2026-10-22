@@ -1983,14 +1983,20 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 collection = self.boundary_coll
             else:
                 return
+            split_any = False
             for uid in self.selected_uids:
                 if isinstance(collection.get_uid_vtk_obj(uid), (PolyLine, TriSurf)):
+                    vtk_out_list = collection.get_uid_vtk_obj(uid).split_parts()
+                    if not vtk_out_list or len(vtk_out_list) <= 1:
+                        self.print_terminal(
+                            f"{collection.get_uid_name(uid)}: no split needed "
+                            "(zero or one connected part)."
+                        )
+                        continue
                     if "RegionId" not in collection.get_uid_properties_names(uid):
                         collection.append_uid_property(
                             uid=uid, property_name="RegionId", property_components=1
                         )
-                    vtk_out_list = collection.get_uid_vtk_obj(uid).split_parts()
-
                     for i, vtk_object in enumerate(vtk_out_list):
                         vtk_out_dict = deepcopy(
                             collection.df.loc[collection.df["uid"] == uid]
@@ -2003,8 +2009,25 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         vtk_out_dict["vtk_obj"] = vtk_object
                         collection.add_entity_from_dict(entity_dict=vtk_out_dict)
                     collection.remove_entity(uid)
+                    split_any = True
                 elif isinstance(collection.get_uid_vtk_obj(uid), PCDom):
-                    vtk_out_list = collection.get_uid_vtk_obj(uid).split_parts()
+                    obj = collection.get_uid_vtk_obj(uid)
+                    if "ClusterId" not in obj.point_data_keys:
+                        self.print_terminal(
+                            f"{collection.get_uid_name(uid)}: run Connected Parts "
+                            "before splitting a point cloud."
+                        )
+                        continue
+                    # Check before split_parts(), which changes the active scalars.
+                    if np.unique(obj.get_point_data("ClusterId")).size <= 1:
+                        self.print_terminal(
+                            f"{collection.get_uid_name(uid)}: no split needed "
+                            "(zero or one connected part)."
+                        )
+                        continue
+                    vtk_out_list = obj.split_parts()
+                    if not vtk_out_list or len(vtk_out_list) <= 1:
+                        continue
                     for i, vtk_object in enumerate(vtk_out_list):
                         vtk_out_dict = deepcopy(
                             collection.df.loc[collection.df["uid"] == uid]
@@ -2017,8 +2040,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         vtk_out_dict["vtk_obj"] = vtk_object
                         collection.add_entity_from_dict(entity_dict=vtk_out_dict)
                     collection.remove_entity(uid)
+                    split_any = True
 
-            self.prop_legend.update_widget(self)
+            if split_any:
+                self.prop_legend.update_widget(self)
 
     # Methods used to save/open/create new projects.
 
