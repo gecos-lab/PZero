@@ -1707,6 +1707,7 @@ class PreviewWidget(QMainWindow, Ui_PreviewWindow):
 
     def closeEvent(self, event):
         self.preview_plotter.close()  # needed to cleanly close the vtk plotter
+        self.loop.quit()
         event.accept()
 
     def initialize_interactor(self):
@@ -1739,7 +1740,7 @@ class PreviewWidget(QMainWindow, Ui_PreviewWindow):
             elif isinstance(par, QComboBox):
                 parameters.append(par.currentText())
             elif isinstance(par, QCheckBox):
-                parameters.append(par.checkState())
+                parameters.append(par.isChecked())
 
         mod_mesh = self.function(self.parent, 1, *parameters)
         self.preview_plotter.clear()
@@ -1759,7 +1760,7 @@ class PreviewWidget(QMainWindow, Ui_PreviewWindow):
             elif isinstance(par, QComboBox):
                 parameters.append(par.currentText())
             elif isinstance(par, QCheckBox):
-                parameters.append(par.checkState())
+                parameters.append(par.isChecked())
 
         mod_mesh = self.function(self.parent, 0, *parameters)
         self.close()

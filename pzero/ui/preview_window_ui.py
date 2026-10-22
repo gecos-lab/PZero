@@ -99,7 +99,7 @@ class Ui_PreviewWindow(object):
         self.verticalLayout.addWidget(self.ConfirmButtonBox)
 
         self.horizontalLayout_2.addWidget(
-            self.OptionsWidget, 0, Qt.AlignmentFlag.Qt.AlignmentFlag.AlignVCenter
+            self.OptionsWidget, 0, Qt.AlignmentFlag.AlignVCenter
         )
 
         self.PreviewVerticalFrame = QFrame(self.centralwidget)

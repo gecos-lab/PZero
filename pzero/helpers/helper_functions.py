@@ -317,13 +317,15 @@ def freeze_gui_onoff(func):
         # Disable GUI before function is called.
         self.disable_actions()
         # the wrapped function goes here, with try-except to avoid crashes
+        result = None
         try:
             print(f"Function {func} started.")
-            func(self, *args, **kwargs)
+            result = func(self, *args, **kwargs)
             print(f"Function {func} ended successfully.")
         except Exception:
             self.print_terminal(f"Function {func} cannot be started.")
         # Enable GUI after function is called.
         self.enable_actions()
+        return result
 
     return wrapper
