@@ -10,7 +10,7 @@ from vtk import vtkPoints
 
 from numpy import array as np_array
 from numpy import ndarray as np_ndarray
-from numpy import float32 as np_float32
+from numpy import float64 as np_float64
 from numpy import arctan2 as np_arctan2
 from numpy import cos as np_cos
 from numpy import sin as np_sin
@@ -20,8 +20,6 @@ from numpy import mean as np_mean
 from numpy import min as np_min
 from numpy import max as np_max
 from numpy import dot as np_dot
-from numpy import full as np_full
-from numpy import tile as np_tile
 
 from scipy.spatial import ConvexHull
 
@@ -48,6 +46,10 @@ from PySide6.QtWidgets import (
 )
 
 from pzero.entities_factory import PolyLine, TriSurf
+from pzero.helpers.boundary_orientation import (
+    boundary_obb_transform,
+    mark_oriented_boundary,
+)
 from pzero.helpers.helper_dialogs import general_input_dialog, message_dialog
 from pzero.helpers.helper_functions import (
     freeze_gui_onoff,
@@ -84,18 +86,20 @@ def compute_obb_boundary(parent):
     all_points.extend(get_points(parent.dom_coll))
 
     if not all_points:
-        return None, None, None
+        return None, None, None, None, None
 
     # Concatenate all points
-    combined_points = np_concatenate(all_points, axis=0)
+    combined_points = np_concatenate(all_points, axis=0).astype(np_float64)
 
     # Use only X,Y coordinates for 2D OBB (map view)
     xy_points = combined_points[:, :2]
+    reference_xy = np_mean(xy_points, axis=0)
+    local_xy = xy_points - reference_xy
 
     # Compute Convex Hull
     try:
-        hull = ConvexHull(xy_points)
-        hull_points = xy_points[hull.vertices]
+        hull = ConvexHull(local_xy)
+        hull_points = local_xy[hull.vertices]
     except:
         # Fallback to AABB if hull fails (e.g. collinear points)
         min_x, min_y = np_min(xy_points, axis=0)
@@ -103,13 +107,16 @@ def compute_obb_boundary(parent):
         corners = np_array(
             [[min_x, min_y], [max_x, min_y], [max_x, max_y], [min_x, max_y]]
         )
-        return corners, np_max(combined_points[:, 2]), np_min(combined_points[:, 2])
+        return (
+            corners, np_max(combined_points[:, 2]), np_min(combined_points[:, 2]),
+            0.0, np_array([min_x, min_y], dtype=np_float64),
+        )
 
     # Minimum Area Bounding Box (MABB) algorithm
     min_area = float("inf")
     best_corners = None
     best_angle = 0.0
-    best_translation = np_array([0.0, 0.0])
+    best_local_translation = None
 
     for i in range(len(hull_points)):
         # Edge between hull_points[i] and hull_points[(i+1)%len(hull_points)]
@@ -126,7 +133,7 @@ def compute_obb_boundary(parent):
         )
 
         # Rotate points
-        rotated_points = np_dot(xy_points, rotation.T)
+        rotated_points = np_dot(local_xy, rotation.T)
 
         # Axis-aligned bounding box in rotated space
         min_r = np_min(rotated_points, axis=0)
@@ -143,8 +150,6 @@ def compute_obb_boundary(parent):
         if area < min_area:
             min_area = area
             best_angle = angle
-            # Translation vector is the min corner in rotated (local) space
-            best_translation = min_r_ext
             # Corners in rotated space
             corners_r = np_array(
                 [
@@ -155,10 +160,10 @@ def compute_obb_boundary(parent):
                 ]
             )
             # Rotate back to original space
-            best_corners = np_dot(corners_r, rotation)
+            best_corners = np_dot(corners_r, rotation) + reference_xy
             # Store the LOCAL-space translation (min corner in rotated space)
             # This is needed because transformation is: rotate first, then translate
-            best_local_translation = min_r_ext.copy()
+            best_local_translation = min_r_ext + np_dot(reference_xy, rotation.T)
 
     # Return the local-space translation (min_r_ext) - NOT the real-world corner
     # The transformation order is: rotate -> translate (forward), translate -> inverse rotate (inverse)
@@ -188,7 +193,7 @@ def boundary_from_obb(self):
         return
 
     # Extract OBB results
-    corners_xy, top, bottom, obb_angle, obb_translation = obb_result
+    corners_xy, top, bottom = obb_result[:3]
 
     # Create enhanced dialog with OBB compute button and size controls
     # Store original OBB dimensions for scaling
@@ -396,13 +401,11 @@ def boundary_from_obb(self):
 
     # OBB compute button
     def compute_obb_callback():
-        nonlocal corners_xy, top, bottom, original_corners, obb_angle, obb_translation
+        nonlocal corners_xy, top, bottom, original_corners
         new_result = compute_obb_boundary(self.parent)
         if new_result[0] is not None:
-            corners_xy, new_top, new_bottom, new_angle, new_translation = new_result
+            corners_xy, new_top, new_bottom = new_result[:3]
             original_corners = corners_xy.copy()  # Update original reference
-            obb_angle = new_angle
-            obb_translation = new_translation
             top_edit.setText(f"{new_top:.2f}")
             bottom_edit.setText(f"{new_bottom:.2f}")
             top = new_top
@@ -479,6 +482,7 @@ def boundary_from_obb(self):
             boundary_dict["topology"] = "TriSurf"
             boundary_dict["vtk_obj"] = TriSurf()
             nodes = vtkPoints()
+            nodes.SetDataTypeToDouble()
 
             # Get the oriented corners
             corners = boundary_dict_updt["corners"]
@@ -535,28 +539,8 @@ def boundary_from_obb(self):
             ]
             boundary_dict["vtk_obj"].auto_cells()
 
-        uid = self.parent.boundary_coll.add_entity_from_dict(entity_dict=boundary_dict)
-
-        # Store OBB transformation properties on the boundary
-        n_points = boundary_dict["vtk_obj"].points_number
-
-        # Add obb_angle property
-        self.parent.boundary_coll.append_uid_property(
-            uid=uid, property_name="obb_angle", property_components=1
-        )
-        self.parent.boundary_coll.get_uid_vtk_obj(uid).set_point_data(
-            data_key="obb_angle",
-            attribute_matrix=np_full(n_points, obb_angle, dtype=np_float32),
-        )
-
-        # Add obb_translation property
-        self.parent.boundary_coll.append_uid_property(
-            uid=uid, property_name="obb_translation", property_components=2
-        )
-        self.parent.boundary_coll.get_uid_vtk_obj(uid).set_point_data(
-            data_key="obb_translation",
-            attribute_matrix=np_tile(obb_translation, (n_points, 1)).astype(np_float32),
-        )
+        mark_oriented_boundary(boundary_dict["vtk_obj"])
+        self.parent.boundary_coll.add_entity_from_dict(entity_dict=boundary_dict)
 
     else:
         # Updating existing boundary - it was already updated in the preview
@@ -629,6 +613,7 @@ def boundary_from_points(self, vector):
         boundary_dict["topology"] = "TriSurf"
         boundary_dict["vtk_obj"] = TriSurf()
         nodes = vtkPoints()
+        nodes.SetDataTypeToDouble()
         nodes.InsertPoint(
             0,
             boundary_dict_updt["origin_x"],
@@ -903,10 +888,6 @@ def boundary_from_three_points(self, vector):
         ) * perp_unit_local[1]
         p3_xy = p2_xy + perp_unit_local * t_local
         p4_xy = p1_xy + (p3_xy - p2_xy)
-        # Store OBB-like orientation (angle in radians) so LoopStructural can align the model.
-        # Convention must match compute_obb_boundary / get_boundary_obb_transform.
-        obb_angle = float(np_arctan2(delta_xy_local[1], delta_xy_local[0]))
-
         boundary_dict["name"] = boundary_dict_updt["name"]
 
         if boundary_dict_updt["activatevolume"] == "check":
@@ -926,6 +907,7 @@ def boundary_from_three_points(self, vector):
             boundary_dict["topology"] = "TriSurf"
             boundary_dict["vtk_obj"] = TriSurf()
             nodes = vtkPoints()
+            nodes.SetDataTypeToDouble()
             # Bottom face
             nodes.InsertPoint(0, p1_xy[0], p1_xy[1], boundary_dict_updt["bottom"])
             nodes.InsertPoint(1, p2_xy[0], p2_xy[1], boundary_dict_updt["bottom"])
@@ -951,21 +933,8 @@ def boundary_from_three_points(self, vector):
             boundary_dict["vtk_obj"].append_cell(np_array([3, 0, 7]))
             boundary_dict["vtk_obj"].append_cell(np_array([0, 7, 4]))
 
-        uid = self.parent.boundary_coll.add_entity_from_dict(entity_dict=boundary_dict)
-        # Add OBB angle metadata (same pattern used by boundary_from_obb) so oriented boundaries
-        # are correctly handled by LoopStructural alignment logic.
-        try:
-            n_points = boundary_dict["vtk_obj"].points_number
-            self.parent.boundary_coll.append_uid_property(
-                uid=uid, property_name="obb_angle", property_components=1
-            )
-            self.parent.boundary_coll.get_uid_vtk_obj(uid).set_point_data(
-                data_key="obb_angle",
-                attribute_matrix=np_full(n_points, obb_angle, dtype=np_float32),
-            )
-        except Exception:
-            # If anything goes wrong, continue without OBB metadata (boundary still exists).
-            pass
+        mark_oriented_boundary(boundary_dict["vtk_obj"])
+        self.parent.boundary_coll.add_entity_from_dict(entity_dict=boundary_dict)
         try:
             for view in self.parent.view_dict.values():
                 if hasattr(view, "add_all_entities"):
@@ -990,7 +959,7 @@ class BoundaryCollection(BaseCollection):
             "parent_uid": "",  # this is the uid of the cross section for "XsVertexSet", "XsPolyLine", and "XsImage", empty for all others
             "topology": "undef",
             "vtk_obj": None,
-            "properties_names": [],  # at the moment this is used to store OBB rotation -> use a dynamic property instead
+            "properties_names": [],
             "properties_components": [],
         }
 
@@ -1014,6 +983,10 @@ class BoundaryCollection(BaseCollection):
         self.initialize_df()
 
     # =================================== Obligatory methods ===========================================
+
+    def get_uid_obb_transform(self, uid: str = None) -> dict:
+        """Calculate the horizontal boundary frame from its current geometry."""
+        return boundary_obb_transform(self.get_uid_vtk_obj(uid))
 
     def add_entity_from_dict(
         self, entity_dict: pd_DataFrame = None, color: np_ndarray = None

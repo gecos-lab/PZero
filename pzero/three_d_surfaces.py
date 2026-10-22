@@ -194,56 +194,8 @@ def _build_sampled_extrusion_surface(
 
 
 def get_boundary_obb_transform(boundary_coll, boundary_uid):
-    """
-    Get OBB transformation parameters from a boundary if available.
-
-    Returns a dict with:
-        - 'has_obb': bool - whether the boundary has OBB transformation data
-        - 'angle': float - rotation angle in radians (around Z axis)
-        - 'translation': ndarray - translation vector [tx, ty] in local (rotated) space
-        - 'center': ndarray - center of the oriented bounding box [cx, cy]
-
-    The transformation to align OBB with axes is:
-        1. Translate to center: p' = p - center
-        2. Rotate by -angle: p'' = R(-angle) @ p'
-
-    The inverse transformation (from axis-aligned back to OBB) is:
-        1. Rotate by angle: p' = R(angle) @ p''
-        2. Translate from center: p = p' + center
-    """
-    from numpy import mean as np_mean
-    from numpy import arctan2 as np_arctan2
-    from numpy import linalg as np_linalg
-    from numpy import array as np_array
-    from numpy import cos as np_cos
-    from numpy import sin as np_sin
-
-    vtk_obj = boundary_coll.get_uid_vtk_obj(boundary_uid)
-
-    # Check if boundary has OBB properties
-    property_names = boundary_coll.get_uid_properties_names(boundary_uid)
-
-    if "obb_angle" not in property_names:
-        return {"has_obb": False}
-
-    # Get OBB angle from point data (it's the same for all points)
-    obb_angle = vtk_obj.get_point_data("obb_angle")[0]
-
-    # Get OBB translation if available
-    obb_translation = None
-    if "obb_translation" in property_names:
-        obb_translation = vtk_obj.get_point_data("obb_translation")[0]
-
-    # Calculate center from boundary points (XY only)
-    points = vtk_obj.points
-    center_xy = np_array([np_mean(points[:, 0]), np_mean(points[:, 1])])
-
-    return {
-        "has_obb": True,
-        "angle": float(obb_angle),
-        "translation": obb_translation,
-        "center": center_xy,
-    }
+    """Read the current boundary frame without relying on cached point properties."""
+    return boundary_coll.get_uid_obb_transform(boundary_uid)
 
 
 def transform_points_to_aligned(points_df, obb_info):

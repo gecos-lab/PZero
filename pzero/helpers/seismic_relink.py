@@ -8,6 +8,10 @@ from pathlib import Path
 import numpy as np
 from vtk import vtkPoints, vtkStringArray
 from vtkmodules.util.numpy_support import numpy_to_vtk, vtk_to_numpy
+from pzero.helpers.boundary_orientation import (
+    boundary_obb_transform,
+    is_generated_oriented_boundary,
+)
 
 from pzero.imports.segy_reader import (
     DEFAULT_HEADERS, SegyImportOptions, file_identity, get_seismic_metadata,
@@ -251,7 +255,9 @@ def prepare_relinked_interpretations(objects, target, old_uid, new_uid, derived_
         if angle_array is not None:
             # OBB properties are spatial coordinates too; retaining the old
             # translation would displace later explicit-modelling operations.
-            angle = float(vtk_to_numpy(angle_array).ravel()[0])
+            frame = boundary_obb_transform(original)
+            angle = (frame["angle"] if frame["has_obb"]
+                     else float(vtk_to_numpy(angle_array).ravel()[0]))
             direction = np.array([np.cos(angle), np.sin(angle)])
             jacobian = np.linalg.solve(transform.source_basis, transform.target_basis)
             direction = direction @ jacobian
@@ -306,7 +312,8 @@ def prepare_relinked_interpretations(objects, target, old_uid, new_uid, derived_
             migrated["derived_from_uids"] = derived_sources[uid]
             migrated["interpretation_relink"]["recovered_parent_from"] = (
                 "explicit legacy reference recipe and single interpretation group" if is_reference else
-                "generated model boundary and single interpretation group" if angle_array is not None
+                "generated model boundary and single interpretation group"
+                if angle_array is not None or is_generated_oriented_boundary(original)
                 else "matching generated surface name and source coordinate frame")
         if is_reference:
             # Archive the old recipe so other consumers cannot mistake it for
@@ -385,7 +392,8 @@ def find_legacy_model_boundaries(geology_records, boundary_records, old_uid):
     for row in boundary_records:
         if row.get("parent_uid") == old_uid or (
             whole_model and not row.get("parent_uid")
-            and "obb_angle" in (row.get("properties_names") or [])
+            and ("obb_angle" in (row.get("properties_names") or [])
+                 or is_generated_oriented_boundary(row.get("vtk_obj")))
         ):
             result[row["uid"]] = sorted(linked)
     return result
