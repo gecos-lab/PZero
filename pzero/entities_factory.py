@@ -15,6 +15,7 @@ from numpy import cumsum as np_cumsum
 from numpy import diff as np_diff
 from numpy import dot as np_dot
 from numpy import empty as np_empty
+from numpy import full as np_full
 from numpy import hstack as np_hstack
 from numpy import ones as np_ones
 from numpy import pi as np_pi
@@ -42,9 +43,6 @@ from pyvista import (
 )  # very useful - can be used when dsa fails
 from pyvista import image_to_texture as pv_image_to_texture
 from pyvista import wrap as pv_wrap
-from pyvista.core.filters import (
-    _update_alg as pv_update_alg,
-)  # used in the detection of connected parts of PCDOM, which in theory should not be connected...
 
 from vtk import (
     vtkPolyData,
@@ -602,6 +600,33 @@ class PolyData(vtkPolyData):
         #     else:
         #         return None
 
+    def _store_connectivity_labels(self, connectivity_filter, property_name):
+        """Map filter output labels to the original points without replacing data."""
+        labels = np_full(self.GetNumberOfPoints(), -1, dtype="int64")
+        if self.GetNumberOfPoints():
+            # Connectivity filters reorder points. Keep original IDs on a temporary
+            # pipeline; FieldDataOn prevents IDs replacing the active scalar array.
+            ids = vtkIdFilter()
+            ids.SetInputData(self)
+            ids.PointIdsOn()
+            ids.CellIdsOff()
+            ids.FieldDataOn()
+            ids.SetPointIdsArrayName("_pzero_connectivity_point_id")
+            connectivity_filter.SetInputConnection(ids.GetOutputPort())
+            connectivity_filter.Update()
+            output = connectivity_filter.GetOutput()
+            if output.GetNumberOfPoints():
+                point_ids = vtk_to_numpy(
+                    output.GetPointData().GetArray("_pzero_connectivity_point_id")
+                )
+                # VTK can leave extra label tuples for unused input points.
+                labels[point_ids] = vtk_to_numpy(
+                    output.GetPointData().GetArray(property_name)
+                )[: output.GetNumberOfPoints()]
+        # Unused mesh points retain -1; their coordinates and IDs are preserved.
+        self.set_point_data(property_name, labels)
+        self.Modified()
+
     def connected_calc(self):
         """Adds a scalar property called RegionId with the connected region index, useful for processing and
         visualization (it will be automatically added to the properties legend).
@@ -610,15 +635,10 @@ class PolyData(vtkPolyData):
         """
         if not isinstance(self, VertexSet):
             connectivity_filter = vtkPolyDataConnectivityFilter()
-            connectivity_filter.SetInputData(self)
             connectivity_filter.SetExtractionModeToAllRegions()
             connectivity_filter.ColorRegionsOn()
-            connectivity_filter.Update()
-            num_regions = connectivity_filter.GetNumberOfExtractedRegions()
-            self.GetPointData().SetScalars(
-                connectivity_filter.GetOutput().GetPointData().GetScalars()
-            )
-            return num_regions
+            self._store_connectivity_labels(connectivity_filter, "RegionId")
+            return connectivity_filter.GetNumberOfExtractedRegions()
 
     def split_parts(self):
         """Splits connected parts using RegionId from self.connected_calc().
@@ -2382,29 +2402,13 @@ class PCDom(PolyData):
         del generator
 
     def connected_calc(self):
-        """Adds a scalar property called RegionId with the connected region index, useful for processing and
-        visualization (it will be automatically added to the properties legend).
-        Also returns the number of connected regions.
-        Returns None in case it is called for a VertexSet, so it works for PolyLine and TriSurf only.
-        """
-        #  this is a bit strange - PCDom should always be a VertexSet... ___________________________________________
-        temp = vtkPolyData()
-        temp.ShallowCopy(self)
+        """Add ClusterId using a radius of 2 project units; return cluster count."""
         connectivity_filter = vtkEuclideanClusterExtraction()
-        connectivity_filter.SetInputData(temp)
         connectivity_filter.SetRadius(2)
         connectivity_filter.SetExtractionModeToAllClusters()
         connectivity_filter.ColorClustersOn()
-        # print(connectivity_filterconnectivity_filter.GetLocator())
-        # connectivity_filter.AlignedNormalsOn()
-        pv_update_alg(connectivity_filter, True, "test")
-        # connectivity_filter.Update()
-        # num_regions = connectivity_filter.GetNumberOfExtractedRegions()
-        # print(connectivity_filter.GetOutput().GetPointData().GetArray('RegionId'))
-        self.GetPointData().SetScalars(
-            connectivity_filter.GetOutput().GetPointData().GetArray("ClusterId")
-        )
-        self.Modified()
+        self._store_connectivity_labels(connectivity_filter, "ClusterId")
+        return connectivity_filter.GetNumberOfExtractedClusters()
 
     def split_parts(self):
         if "ClusterId" not in self.point_data_keys:

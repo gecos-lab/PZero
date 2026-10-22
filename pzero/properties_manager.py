@@ -103,6 +103,7 @@ PROPERTY_COLLECTION_NAMES = (
     "mesh3d_coll",
     "fluid_coll",
     "backgrnd_coll",
+    "boundary_coll",
     "well_coll",
 )
 
@@ -639,6 +640,7 @@ class PropertiesCMaps(QObject):
             parent.mesh3d_coll,
             parent.fluid_coll,
             parent.backgrnd_coll,
+            parent.boundary_coll,
         ]:
             coll_props = collection.df["properties_names"].to_list()
             coll_props = list(pd_flatten(coll_props))

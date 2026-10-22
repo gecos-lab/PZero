@@ -1901,28 +1901,60 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 temp_gui.deleteLater()
 
     def connected_parts(self):
-        """Calculate connectivity of PolyLine and TriSurf entities."""
-        if self.selected_uids:
-            if self.shown_table == "tabGeology":
-                collection = self.geol_coll
-            elif self.shown_table == "tabDOMs":
-                collection = self.dom_coll
-            elif self.shown_table == "tabBoundaries":
-                collection = self.boundary_coll
+        """Label connected mesh parts or point-cloud clusters without splitting."""
+        self.tabWidgetBottomLeft.setCurrentWidget(self.tabTerminal)
+        uids = list(self.selected_uids)
+        if not uids:
+            self.print_terminal("No entities selected.")
+            return
+        if self.shown_table not in ("tabGeology", "tabDOMs", "tabBoundaries"):
+            self.print_terminal("Connected Parts supports Geology, DOMs and Boundaries.")
+            return
+        collection = getattr(self, self.selected_collection)
+        changed_uids, changed_keys = [], []
+        for uid in uids:
+            obj = collection.get_uid_vtk_obj(uid)
+            if isinstance(obj, (PolyLine, TriSurf)):
+                property_name = "RegionId"
+            elif isinstance(obj, PCDom):
+                property_name = "ClusterId"
             else:
-                return
-            for uid in self.selected_uids:
-                if isinstance(collection.get_uid_vtk_obj(uid), (PolyLine, TriSurf)):
-                    collection.append_uid_property(
-                        uid=uid, property_name="RegionId", property_components=1
-                    )
-                    collection.get_uid_vtk_obj(uid).connected_calc()
-                elif isinstance(collection.get_uid_vtk_obj(uid), PCDom):
-                    collection.append_uid_property(
-                        uid=uid, property_name="ClusterId", property_components=1
-                    )
-                    collection.get_uid_vtk_obj(uid).connected_calc()
+                self.print_terminal(
+                    f"Skipped {collection.get_uid_name(uid)}: unsupported geometry."
+                )
+                continue
+            try:
+                count = obj.connected_calc()
+            except Exception as exc:
+                self.print_terminal(f"Connected Parts failed for {uid}: {exc}")
+                continue
+
+            names = collection.get_uid_properties_names(uid)
+            components = collection.get_uid_properties_components(uid)
+            # Register only after calculation, and repair duplicate labels from old runs.
+            if names.count(property_name) != 1:
+                changed_keys.append(uid)
+            kept = [i for i, name in enumerate(names) if name != property_name]
+            collection.set_uid_properties_names(
+                uid, [names[i] for i in kept] + [property_name]
+            )
+            collection.set_uid_properties_components(
+                uid, [components[i] for i in kept] + [1]
+            )
+            changed_uids.append(uid)
+            self.print_terminal(
+                f"{collection.get_uid_name(uid)}: found {count} connected parts. "
+                f"Select {property_name} in the view tree to colour them."
+                + (
+                    " Point-cloud radius: 2 project units."
+                    if isinstance(obj, PCDom) else ""
+                )
+            )
+        if changed_uids:
             self.prop_legend.update_widget(self)
+            if changed_keys:
+                self.signals.data_keys_added.emit(changed_keys, collection)
+            self.signals.geom_modified.emit(changed_uids, collection)
 
     def split_multipart(self):
         """Split multi-part entities into single-parts."""
