@@ -109,6 +109,7 @@ from pzero.imports.pyvista2vtk import pyvista2vtk
 from pzero.imports.segy2vtk import segy2vtk, read_segy_file, read_legacy_segy_file
 from pzero.imports.segy_reader import get_seismic_metadata, file_identity
 from pzero.helpers.project_storage import write_checked, write_seismic_snapshot, publish_project_revision
+from pzero.helpers.edit_metadata_dialog import EditMetadataDialog, bind_metadata_value_editors
 from pzero.imports.shp2vtk import shp2vtk
 from pzero.imports.stl2vtk import vtk2stl, vtk2stl_dilation
 from pzero.imports.table2data import import_tables
@@ -563,7 +564,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def on_entities_table_context_menu(
         self, table_view=None, source_collection_name: str = None, position=None
     ):
-        """Open table right-click menu with Copy to / Move to actions."""
+        """Open table right-click menu with transfer and metadata editing actions."""
         if table_view is None or not source_collection_name:
             return
 
@@ -615,7 +616,22 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 compatible and destination_collection_name != source_collection_name
             )
 
+        menu.addSeparator()
+        edit_action = menu.addAction("Edit metadata…")
+        edit_action.setEnabled(bool(source_collection.editable_columns_names))
         chosen_action = menu.exec(table_view.viewport().mapToGlobal(position))
+        if chosen_action == edit_action:
+            default_field = (
+                table_view.model().headerData(idx.column(), Qt.Horizontal, Qt.DisplayRole)
+                if idx.isValid() else None
+            )
+            EditMetadataDialog(
+                collection=source_collection,
+                selected_uids=selected_uids,
+                default_field=default_field,
+                parent=self,
+            ).exec()
+            return
         if chosen_action not in action_map:
             return
 
@@ -2004,12 +2020,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # Ui_ProjectWindow). Setting the model also updates the view.
         self.backgrnd_coll = BackgroundCollection(parent=self)
         self.BackgroundsTableView.setModel(self.backgrnd_coll.proxy_table_model)
-        for table_view, collection in [
-            (self.GeologyTableView, self.geol_coll),
-            (self.FluidsTableView, self.fluid_coll),
-            (self.BackgroundsTableView, self.backgrnd_coll),
-        ]:
+        for table_view, collection_name in self.table_view_collection_dict.items():
+            collection = getattr(self, collection_name)
             self.bind_role_click_editor(table_view=table_view, collection=collection)
+            bind_metadata_value_editors(table_view, collection)
         self.bind_collection_table_context_menus()
 
         # Create the geol_coll.legend_df legend table (a Pandas dataframe), create the corresponding QT

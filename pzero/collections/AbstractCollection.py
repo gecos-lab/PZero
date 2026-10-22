@@ -261,6 +261,32 @@ class BaseCollection(ABC):
         """Set value(s) stored in dataframe (as pointer) from uid."""
         self.df.loc[self.df["uid"] == uid, "name"] = name
 
+    def set_metadata_for_uids(self, uids, field, value):
+        """Set one editable metadata field and refresh once for the whole batch."""
+        if field not in self.editable_columns_names or field not in self.df.columns:
+            raise ValueError("This metadata field cannot be edited.")
+        value = str(value).strip()
+        if not value:
+            raise ValueError("Enter a value for the selected field.")
+        if field == "role" and self.valid_roles and value not in self.valid_roles:
+            raise ValueError("Choose one of the allowed roles.")
+
+        changed = self.df["uid"].isin(uids) & self.df[field].ne(value).fillna(True)
+        updated_uids = self.df.loc[changed, "uid"].tolist()
+        if not updated_uids:
+            return []
+
+        self.df.loc[changed, field] = value
+        rows = np_array(changed).nonzero()[0]
+        column = self.df.columns.get_loc(field)
+        self.table_model.dataChanged.emit(
+            self.table_model.index(int(rows[0]), column),
+            self.table_model.index(int(rows[-1]), column),
+        )
+        self.attr_modified_update_legend_table()
+        self.parent.signals.metadata_modified.emit(updated_uids, self)
+        return updated_uids
+
     def get_name_uid(self, name=None) -> list:
         """Get a list of uids corresponding to a given name."""
         # Use the query method in the future?
