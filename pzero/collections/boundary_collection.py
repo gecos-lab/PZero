@@ -1009,6 +1009,7 @@ class BoundaryCollection(BaseCollection):
         """Remove an entity and its metadata."""
         # Remove row from dataframe and reset data model.
         self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
+        self.df.reset_index(drop=True, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         # When done, send a signal over to the views. A list of uids is emitted, even if the entity is just one.
         self.parent.signals.entities_removed.emit([uid], self)

@@ -134,6 +134,7 @@ class GFBCollection(BaseCollection):
         if uid not in self.get_uids:
             return
         self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
+        self.df.reset_index(drop=True, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         # Then remove role / feature / scenario from legend if needed.
         # legend_updated is used to record if the table is updated or not.

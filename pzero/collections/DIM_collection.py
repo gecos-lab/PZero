@@ -118,6 +118,7 @@ class DIMCollection(BaseCollection):
         if uid not in self.get_uids:
             return
         self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
+        self.df.reset_index(drop=True, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         self.parent.prop_legend.update_widget(self.parent)
         # When done, send a signal over to the views. A list of uids is emitted, even if the entity is just one.

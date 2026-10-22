@@ -374,6 +374,7 @@ class XSectionCollection(BaseCollection):
         if uid not in self.get_uids:
             return
         self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
+        self.df.reset_index(drop=True, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         # Emit a list of uids, even if the entity is just one
         self.parent.signals.entities_removed.emit([uid], self)
