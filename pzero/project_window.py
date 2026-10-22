@@ -4592,6 +4592,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 imported_paths.append(path)
             except Exception as exc:
                 skipped_paths.append(path)
+                self.print_terminal(f"Could not import well file '{path}': {exc}")
 
         if imported_paths:
             self.prop_legend.update_widget(parent=self)
@@ -4601,7 +4602,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         if skipped_paths:
             self.print_terminal(
-                f"Rejected {len(skipped_paths)} incompatible well file(s)."
+                f"Failed to import {len(skipped_paths)} well file(s)."
             )
 
         # loc_attr_list = ['As is','LocationID', 'LocationType', 'Easting', 'Northing', 'GroundLevel', 'FinalDepth', 'Trend', 'Plunge','N.a.']

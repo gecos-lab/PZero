@@ -35,7 +35,11 @@ from pzero.imports.segy_reader import set_seismic_metadata
 def well2vtk(self, path=None):
     data = pd_read_excel(path, sheet_name=None)
     well_data = data["INFO"]
-    well_id = well_data["NAME"].values[0]
+    # Older templates use WELL; newer workbooks use NAME.
+    name_column = next((key for key in ("NAME", "WELL") if key in well_data), None)
+    if name_column is None:
+        raise ValueError("The INFO sheet must contain a NAME or WELL column.")
+    well_id = well_data[name_column].values[0]
 
     # Get and set well head data
 
