@@ -639,6 +639,9 @@ class PolyData(vtkPolyData):
                 connectivity_filter.AddSpecifiedRegion(rid)
                 connectivity_filter.Update()
                 cleaner = vtkCleanPolyData()
+                if isinstance(self, PolyLine):
+                    # Drop collapsed segments instead of rendering them as points.
+                    cleaner.ConvertLinesToPointsOff()
                 cleaner.SetInputConnection(connectivity_filter.GetOutputPort())
                 cleaner.Update()
                 if isinstance(self, PolyLine):
