@@ -68,6 +68,9 @@ class SegyImportDialog(QDialog):
         form.addRow("File CRS", self.file_crs_edit)
         self.target_crs_edit = QLineEdit()
         self.target_crs_edit.setPlaceholderText("Same as file CRS, or a projected EPSG code")
+        if getattr(parent, "project_crs", None):
+            self.target_crs_edit.setText(parent.project_crs)
+            self.target_crs_edit.setReadOnly(True)
         form.addRow("Output CRS", self.target_crs_edit)
         note = QLabel("XY is stored in metres. CRS fields describe projected coordinates; "
                       "leaving them blank preserves an unspecified local system.")

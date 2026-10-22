@@ -20,6 +20,8 @@ from pzero.collections.dom_collection import DomCollection
 from pzero.collections.fluid_collection import FluidCollection
 from pzero.entities_factory import DEM
 from pzero.helpers.helper_dialogs import options_dialog
+from pzero.helpers.project_crs import check_import_crs
+from rasterio.enums import Resampling
 
 
 def dem2vtk(self=None, in_file_name=None, collection=None):
@@ -28,13 +30,22 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
     # Read raster file format (geotiff) with xarray and rasterio and create DEM structured grid.
     # Helpful: http://xarray.pydata.org/en/stable/auto_gallery/plot_rasterio.html
     # https://github.com/pyvista/pyvista-support/issues/205, thanks to Bane Sullivan
-    data = rx_open_rasterio(in_file_name)
-    values = data.values[0]
-    # nans = values == data.nodatavals
-    # if np_any(nans):
-    #     values[nans] = np_nan
-    xx, yy = np_meshgrid(data["x"], data["y"])
-    zz = values.reshape(xx.shape)
+    with rx_open_rasterio(in_file_name) as original:
+        crs_plan = check_import_crs(
+            self, in_file_name, original.rio.crs, allow_reprojection=True
+        )
+        if crs_plan is None:
+            return
+        data = original
+        if crs_plan.source is not None:
+            if data.rio.crs is None:
+                data = data.rio.write_crs(crs_plan.source)
+            transform = data.rio.transform()
+            if crs_plan.needs_reprojection or transform.b or transform.d:
+                data = data.rio.reproject(crs_plan.target, resampling=Resampling.bilinear)
+        values = data.values[0]
+        xx, yy = np_meshgrid(data["x"], data["y"])
+        zz = values.reshape(xx.shape)
 
     # detect NaN's
     max_zz = np_amax(zz)

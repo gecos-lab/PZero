@@ -4,6 +4,7 @@ PZero© Andrea Bistacchi"""
 from vtk import vtkCesium3DTilesWriter, vtkMultiBlockDataSet
 
 from pzero.entities_factory import TriSurf
+from pzero.helpers.project_crs import project_crs_code
 
 
 def vtk2cesium(self=None, out_dir_name=None):
@@ -16,6 +17,9 @@ def vtk2cesium(self=None, out_dir_name=None):
     https://github.com/Kitware/Danesfield/blob/master/tools/tiler-test.sh
 
     IN THE FUTURE extend to other entity classes such as DEM, polyline, etc."""
+    crs = project_crs_code(getattr(self, "project_crs", None))
+    if crs is None:
+        raise ValueError("Assign the project CRS before exporting Cesium tiles.")
     # File name
     out_file_name = str(out_dir_name) + "/" + "multi_block_dataset" + ".glb"
     # Create GLTF writer.
@@ -38,7 +42,6 @@ def vtk2cesium(self=None, out_dir_name=None):
     writer.SetTextureBaseDirectory(out_dir_name)
     writer.SetInputType(2)
     writer.SetContentGLTF(True)
-    crs = "+proj=utm +zone=32 +north +datum=WGS84"
     writer.SetCRS(crs)
     print("writer: ", writer)
     writer.Write()

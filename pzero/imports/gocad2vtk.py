@@ -39,6 +39,7 @@ from pzero.helpers.helper_dialogs import (
     options_dialog,
 )
 from pzero.helpers.helper_functions import best_fitting_plane
+from pzero.helpers.project_crs import check_import_crs
 from pzero.collections.xsection_collection import XSectionCollection
 
 # """We import only come Gocad object attributes.
@@ -104,6 +105,8 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
     pointset, polyline, triangulated surfaces as VTK polydata entities.
     <self> is the calling ProjectWindow() instance.
     """
+    if check_import_crs(self, in_file_name) is None:
+        return
     # Define import options.
     scenario_default = input_text_dialog(
         parent=None, title="Scenario", label="Default scenario", default_text="undef"
@@ -849,6 +852,8 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
     polyline and triangulated surfaces as VTK polydata entities.
     <self> is the calling ProjectWindow() instance.
     """
+    if check_import_crs(self, in_file_name) is None:
+        return
     # """Define import options."""
     # scenario_default = input_text_dialog(parent=None, title="Scenario", label="Default scenario", default_text="undef")
     # if not scenario_default:

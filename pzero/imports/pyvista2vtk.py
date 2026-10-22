@@ -8,6 +8,7 @@ from copy import deepcopy
 import os
 from vtk import vtkXMLImageDataReader
 from pzero.helpers.helper_dialogs import input_combo_dialog
+from pzero.helpers.project_crs import check_import_crs
 
 from pzero.entities_factory import (
     VertexSet,
@@ -114,6 +115,8 @@ def pyvista2vtk(self):
         self, "Import entities from PyVista-supported file"
     )[0]
     if in_file_name:
+        if check_import_crs(self, in_file_name) is None:
+            return
         self.print_terminal(f"in_file_name: {in_file_name}")
         # Initialize
         cell_type = -1

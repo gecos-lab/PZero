@@ -30,6 +30,7 @@ from pzero.helpers.well_coordinates import (
     load_well_coordinate_metadata, validate_well_time_coordinates, well_time_column,
 )
 from pzero.imports.segy_reader import set_seismic_metadata
+from pzero.helpers.project_crs import check_import_crs
 
 
 def well2vtk(self, path=None):
@@ -66,6 +67,8 @@ def well2vtk(self, path=None):
         if "COORDINATE_METADATA" in well_data.columns else None
     )
     coordinate_metadata = load_well_coordinate_metadata(path, well_id, embedded)
+    if check_import_crs(self, path, coordinate_metadata.get("crs")) is None:
+        return False
     if coordinate_metadata:
         column = well_time_column(coordinate_metadata)
         samples = data.get("ORIGINAL_MD")

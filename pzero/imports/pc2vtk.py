@@ -21,6 +21,7 @@ from vtk import vtkPoints
 from vtkmodules.util.numpy_support import numpy_to_vtk
 from pzero.collections.dom_collection import DomCollection
 from pzero.entities_factory import PCDom
+from pzero.helpers.project_crs import check_import_crs
 
 COORDINATE_ALIASES = {
     "X": (
@@ -112,6 +113,7 @@ def pc2vtk(
 
     point_cloud = PCDom()  #  vtkPointSet object
     points = vtkPoints()
+    source_crs = None
 
     skip_range = range(1, row_range.start)
     if skip_range:
@@ -143,6 +145,7 @@ def pc2vtk(
 
     elif ext == ".las" or ext == ".laz":
         las_data = lp_read(in_file_name)
+        source_crs = las_data.header.parse_crs()
         dim_names = las_data.point_format.dimension_names
         prop_dict = dict()
         for dim in dim_names:
@@ -167,6 +170,9 @@ def pc2vtk(
             names=col_names,
         )
 
+    crs_plan = check_import_crs(self.parent, in_file_name, source_crs)
+    if crs_plan is None:
+        return
     self.parent.print_terminal("Checking the data")
 
     #  Check if in the whole dataset there are NaNs text and such
@@ -198,10 +204,11 @@ def pc2vtk(
             )
             return
 
-        offset = input_df[["X", "Y"]].iloc[0].round(-2)
-
-        input_df["X"] -= offset["X"]
-        input_df["Y"] -= offset["Y"]
+        # Declared map coordinates must retain their absolute easting/northing.
+        if crs_plan.target is None:
+            offset = input_df[["X", "Y"]].iloc[0].round(-2)
+            input_df["X"] -= offset["X"]
+            input_df["Y"] -= offset["Y"]
 
         XYZ = numpy_to_vtk(
             np_column_stack(

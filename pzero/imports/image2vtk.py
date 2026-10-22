@@ -6,9 +6,13 @@ from os import path as os_path
 from uuid import uuid4
 
 from copy import deepcopy
+from contextlib import ExitStack
 
 from rasterio import open as rio_open
 import rasterio.plot as rio_plt
+from rasterio.vrt import WarpedVRT
+from rasterio.enums import Resampling
+from pzero.helpers.project_crs import check_import_crs
 
 from numpy import abs as np_abs
 from numpy import cos as np_cos
@@ -79,23 +83,28 @@ def geo_image2vtk(self=None, in_file_name=None):
         # The image is not read here but will be read afterward with rio_image.read()
         # http://xarray.pydata.org/en/stable/io.html#rasterio
         # http://www-2.unipv.it/compmech/seminars/group/VTK-VMTK.pdf
-        rio_image = rio_open(in_file_name)
-
-        # Image size as read by rasterio
-        img_width_px = rio_image.width
-        img_height_px = rio_image.height
-
-        # Georeferencing variables as read by rasterio
-        img_x_min = rio_plt.plotting_extent(rio_image)[0]
-        img_x_max = rio_plt.plotting_extent(rio_image)[1]
-        img_y_min = rio_plt.plotting_extent(rio_image)[2]
-        img_y_max = rio_plt.plotting_extent(rio_image)[3]
-
-        spacing_X = (img_x_max - img_x_min) / (img_width_px + 1)
-        spacing_Y = (img_y_min - img_y_max) / (img_height_px + 1)
-
-        # Read the image and convert to vtk array.
-        vtk_array = image_file_to_vtk(self=self, rio_image=rio_image)
+        with ExitStack() as resources:
+            rio_image = resources.enter_context(rio_open(in_file_name))
+            crs_plan = check_import_crs(
+                self, in_file_name, rio_image.crs, allow_reprojection=True
+            )
+            if crs_plan is None:
+                return
+            transform = rio_image.transform
+            if crs_plan.source is not None and (
+                crs_plan.needs_reprojection or transform.b or transform.d
+            ):
+                rio_image = resources.enter_context(WarpedVRT(
+                    rio_image, src_crs=crs_plan.source, crs=crs_plan.target,
+                    resampling=Resampling.nearest,
+                ))
+            img_width_px = rio_image.width
+            img_height_px = rio_image.height
+            transform = rio_image.transform
+            # VTK stores sample positions: place points at raster pixel centres.
+            img_x_min, img_y_max = transform * (0.5, 0.5)
+            spacing_X, spacing_Y = transform.a, transform.e
+            vtk_array = image_file_to_vtk(self=self, rio_image=rio_image)
 
         # Create MapImage entity (inherits from vtk.vtkImageData) and then set all data.
         # Recall that image coords 0,0 are at upper-left and image coords grow along x and -y.

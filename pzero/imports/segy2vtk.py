@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QDialog, QMessageBox
 
 from pzero.entities_factory import Seismics
 from pzero.imports.segy_reader import read_grid, set_seismic_metadata
+from pzero.helpers.project_crs import check_import_crs
 
 
 def segy2vtk(self, in_file_name):
@@ -22,6 +23,19 @@ def segy2vtk(self, in_file_name):
         dialog.survey = None
         dialog.deleteLater()
         return None
+    output_crs = dialog.import_options.target_crs or dialog.import_options.file_crs
+    crs_plan = check_import_crs(self, in_file_name, output_crs or None)
+    if crs_plan is None:
+        dialog.survey = None
+        dialog.deleteLater()
+        return None
+    if crs_plan.target is not None:
+        from dataclasses import replace
+        dialog.import_options = replace(
+            dialog.import_options,
+            file_crs=dialog.import_options.file_crs or crs_plan.source.to_string(),
+            target_crs=crs_plan.target.to_string(),
+        )
     self.disable_actions()
     try:
         grid = read_segy_file(in_file_name, dialog.import_options, survey=dialog.survey)

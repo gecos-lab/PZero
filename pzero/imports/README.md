@@ -4,6 +4,28 @@ This folder contains modules for importing, exporting, and converting various da
 
 ## File Overview
 
+### Project coordinate systems
+
+Use **File > CRS > Assign project CRS** to declare a projected EPSG system in
+metres. This assigns metadata; existing coordinates stay unchanged. The status
+bar shows the current CRS. Projects save it in the `.p0` file and in each revision's
+`pzero_crs.json`; older projects open with an unspecified CRS.
+
+SHP, DEM and map-image imports can reproject into the project CRS after confirmation.
+GOCAD, XYZ, PyVista, LAS/point-cloud and well imports check for a matching CRS and
+stop on a mismatch. Files without metadata ask for a source CRS; an unspecified
+local system is allowed only when the project also has no declared CRS. Elevation
+and depth must already be in metres. Horizontal reprojection preserves Z; seismic
+time retains its separate domain and units. SEG-Y uses the project's CRS as its
+output CRS through the existing seismic import dialog.
+
+CAD, VTK and CSV exports include `pzero_crs.json` and an EPSG-named text file.
+Cesium also receives the actual CRS through its native writer. Keep these sidecars
+with exported geometry. Imports recognize per-file `.crs.json` and `.prj` files,
+then the export folder's `pzero_crs.json`. Whole-project reprojection is not included.
+
+## Format handlers
+
 - `well2vtk.py`  
   Converts well data from Excel and other formats into VTK objects and PZero entities.  
   **Main function:**  

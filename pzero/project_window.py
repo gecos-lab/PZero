@@ -109,6 +109,9 @@ from pzero.imports.pyvista2vtk import pyvista2vtk
 from pzero.imports.segy2vtk import segy2vtk, read_segy_file, read_legacy_segy_file
 from pzero.imports.segy_reader import get_seismic_metadata, file_identity
 from pzero.helpers.project_storage import write_checked, write_seismic_snapshot, publish_project_revision
+from pzero.helpers.project_crs import (
+    check_import_crs, project_crs_code, read_project_crs, write_crs_metadata,
+)
 from pzero.helpers.edit_metadata_dialog import EditMetadataDialog, bind_metadata_value_editors
 from pzero.imports.shp2vtk import shp2vtk
 from pzero.imports.stl2vtk import vtk2stl, vtk2stl_dilation
@@ -260,6 +263,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         super(ProjectWindow, self).__init__(*args, **kwargs)
         """Import GUI from project_window_ui.py"""
         self.setupUi(self)
+        self._install_project_crs_action()
         self._install_import_table_action()
         self._install_import_xyz_action()
         self.TextTerminal.setReadOnly(True)
@@ -2047,10 +2051,56 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     # Methods used to save/open/create new projects.
 
+    def _install_project_crs_action(self):
+        self.project_crs_label = QLabel(self)
+        self.statusBar().addPermanentWidget(self.project_crs_label)
+        self.actionProjectCRS = QAction("Assign project CRS...", self)
+        self.actionProjectCRS.setToolTip("Declare the coordinate system without moving existing geometry")
+        self.actionProjectCRS.triggered.connect(self.edit_project_crs)
+        self.menuCRS.insertAction(self.actionTransformSelectedCRS, self.actionProjectCRS)
+
+    def set_project_crs(self, crs):
+        self.project_crs = project_crs_code(crs)
+        self.project_crs_label.setText(f"CRS: {self.project_crs or 'unspecified'}")
+
+    def edit_project_crs(self):
+        value = input_text_dialog(
+            parent=self, title="Assign project CRS",
+            label="Projected EPSG code in metres (assignment does not move coordinates)",
+            default_text=self.project_crs or "",
+        )
+        if not value:
+            return
+        try:
+            code = project_crs_code(value)
+            if code is None:
+                raise ValueError("Enter a projected EPSG code in metres.")
+        except ValueError as error:
+            QMessageBox.warning(self, "Project CRS", str(error))
+            return
+        if code != self.project_crs:
+            answer = QMessageBox.question(
+                self, "Assign project CRS",
+                f"Declare that this project's existing coordinates use {code}?\n"
+                "This does not reproject any geometry.",
+                QMessageBox.Yes | QMessageBox.Cancel, QMessageBox.Cancel,
+            )
+            if answer == QMessageBox.Yes:
+                self.set_project_crs(code)
+
+    def _write_export_crs(self, directory):
+        try:
+            write_crs_metadata(directory, self.project_crs, check_existing=True)
+            return True
+        except (ValueError, OSError, KeyError) as error:
+            QMessageBox.warning(self, "Export CRS", str(error))
+            return False
+
     def create_empty(self):
         """Create empty containers for a new empty project."""
         # this is used to delete open windows when the current project is closed (and a new one is opened)
         self.signals.project_close.emit()
+        self.set_project_crs(None)
 
         self.custom_tables = {}
         self.custom_table_types = {}
@@ -2250,7 +2300,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.setEnabled(False)
         try:
             self._save_project_revision(out_dir_name)
-            publish_project_revision(self.out_file_name, f"rev_{now}")
+            publish_project_revision(self.out_file_name, f"rev_{now}", self.project_crs)
         except Exception as error:
             self.print_terminal(f"Project save failed: {error}. The previous completed revision is unchanged.")
             QMessageBox.warning(self, "Project not saved", str(error))
@@ -2261,6 +2311,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def _save_project_revision(self, out_dir_name):
         """Write all payloads before publishing the project's revision pointer."""
+        write_crs_metadata(out_dir_name, self.project_crs)
         # --------------------- SAVE LEGENDS ---------------------
 
         # Save geological legend table to JSON file. Keep old CSV table format here in comments, in case it might be useful in the future.
@@ -2770,20 +2821,22 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             fin = open(in_file_name, "rt")
             lines = fin.readlines()
             rev_name = lines[2].strip()
-            try:
-                test_epsg = lines[4].strip()
-            except:
-                test_epsg = "no_epsg"
             fin.close()
             in_dir_name = in_file_name[:-3] + "_p0/" + rev_name
             self.print_terminal(
                 f"Opening project/revision : {in_file_name}/{rev_name}\n"
             )
-            self.print_terminal(f"Project CRS : {test_epsg}\n")
             if not os_path.isdir(in_dir_name):
                 self.print_terminal(in_dir_name)
                 self.print_terminal("-- ERROR: missing folder --")
                 return
+
+            try:
+                self.set_project_crs(read_project_crs(lines, in_dir_name))
+            except (ValueError, OSError, KeyError) as error:
+                self.set_project_crs(None)
+                self.print_terminal(f"Project CRS could not be read: {error}")
+            self.print_terminal(f"Project CRS : {self.project_crs or 'unspecified'}\n")
 
             #  In the following it is still possible to open old projects with metadata stored
             #  as CSV tables, however JSON is used now because it leads to fewer problems and errors
@@ -4226,6 +4279,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         for in_file_name in in_file_names:
             self.print_terminal("in_file_name: " + in_file_name)
             # Get x-section name from file.
+            if check_import_crs(self, in_file_name) is None:
+                continue
             x_section_name = os_path.splitext(os_path.basename(in_file_name))[0]
             if x_section_name in self.xsect_coll.df["name"].to_list():
                 if append_opt == 0:
@@ -4677,7 +4732,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         for path in paths:
             self.print_terminal("in_file_name: " + path)
             try:
-                well2vtk(self, path=path)
+                if well2vtk(self, path=path) is False:
+                    continue
                 imported_paths.append(path)
             except Exception as exc:
                 skipped_paths.append(path)
@@ -4785,6 +4841,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # Create the folder if it does not exist already.
         if not os_path.isdir(out_dir_name):
             os_mkdir(out_dir_name)
+        if cad_format == "CESIUM" and not self.project_crs:
+            QMessageBox.warning(self, "Export CRS", "Assign the project CRS before exporting Cesium tiles.")
+            return
+        if not self._write_export_crs(out_dir_name):
+            return
         if cad_format == "DXF":
             print("is DXF")
             if not os_path.isdir(f"{out_dir_name}/csv"):
@@ -4905,6 +4966,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.out_dir_name = save_file_dialog(
                 parent=self, caption="Select save directory.", directory=True
             )
+            if not self.out_dir_name or not self._write_export_crs(self.out_dir_name):
+                return
             # print(self.out_file_name)
             for (
                 uid
@@ -4978,6 +5041,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.out_dir_name = save_file_dialog(
                 parent=self, caption="Select save directory.", directory=True
             )
+            if not self.out_dir_name or not self._write_export_crs(self.out_dir_name):
+                return
             # print(self.out_file_name)
             for (
                 uid

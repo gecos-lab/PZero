@@ -43,12 +43,12 @@ def write_seismic_snapshot(grid, destination, progress=None):
         temporary.unlink(missing_ok=True)
 
 
-def publish_project_revision(project_file, revision, crs="test_epsg"):
+def publish_project_revision(project_file, revision, crs=None):
     """Replace the project pointer only after every revision payload is saved."""
     destination = Path(project_file)
     temporary = destination.with_name(destination.name + f".{uuid4().hex}.tmp")
     text = ("PZero project file saved in folder with the same name, including VTK files and CSV tables.\n"
-            f"Last saved revision:\n{revision}\nCRS EPSG:\n{crs}\n")
+            f"Last saved revision:\n{revision}\nCRS EPSG:\n{crs or 'unspecified'}\n")
     try:
         with temporary.open("w", encoding="utf-8") as stream:
             stream.write(text)

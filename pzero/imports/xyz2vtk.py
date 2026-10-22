@@ -36,6 +36,7 @@ from pzero.imports.shp2vtk import (
     _validate_and_fix_roles,
 )
 from pzero.orientation_analysis import dip_directions2normals
+from pzero.helpers.project_crs import check_import_crs
 from pzero.ui.import_window_ui import Ui_ImportOptionsWindow
 
 
@@ -937,6 +938,8 @@ def _build_tabular_vtk_object(group_df):
 
 def _import_tabular_file(self, collection, file_path, import_config):
     """Import a single tabular file into the selected collection."""
+    if check_import_crs(self, file_path) is None:
+        return 0
     input_df = _read_tabular_dataframe(file_path=file_path, import_config=import_config)
 
     props_map = {
@@ -1103,6 +1106,8 @@ def xyz2vtk(self=None, in_file_names=None, collection_name="Geology"):
 
     for in_file_name in vtk_files:
         try:
+            if check_import_crs(self, in_file_name) is None:
+                continue
             points, properties = _extract_from_vtk(in_file_name)
             vtk_obj = _build_vertex_set(points=points, properties=properties)
             entity_dict = _build_entity_dict(

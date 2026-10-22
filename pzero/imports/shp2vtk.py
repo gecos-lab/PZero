@@ -22,6 +22,7 @@ from pzero.collections.geological_collection import GeologicalCollection
 from pzero.entities_factory import PolyLine, VertexSet, Attitude
 from pzero.helpers.helper_dialogs import ShapefileAssignmentDialog, options_dialog
 from pzero.orientation_analysis import dip_directions2normals
+from pzero.helpers.project_crs import check_import_crs
 
 USER_DEFINED_FEATURE_TOKEN = "__user_defined_feature__"
 USER_DEFINED_FEATURE_COLUMN = "__pzero_user_defined_feature__"
@@ -145,6 +146,13 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
     # Read shape file into a GeoPandas dataframe. Each row is an
     # entity with geometry stored in the geometry column in shapely format.
     gdf = gpd_read_file(in_file_name)
+    crs_plan = check_import_crs(self, in_file_name, gdf.crs, allow_reprojection=True)
+    if crs_plan is None:
+        return
+    if crs_plan.source is not None and gdf.crs is None:
+        gdf = gdf.set_crs(crs_plan.source)
+    if crs_plan.needs_reprojection:
+        gdf = gdf.to_crs(crs_plan.target)
     # print("geometry type: ", gdf.geom_type[0])
     # print("CRS:\n", gdf.crs)
     # if False in gdf.is_valid[:]:
