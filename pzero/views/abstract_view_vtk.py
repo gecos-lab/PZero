@@ -298,10 +298,21 @@ class ViewVTK(BaseView):
             self.actors_df["uid"] == uid, "collection"
         ].values[0]
         actors = getattr(self.plotter.renderer, "actors", {})
+        if not hasattr(self, "_hidden_actor_pickability"):
+            self._hidden_actor_pickability = {}
 
         def _set_visibility_for(key):
             try:
-                actors[key].SetVisibility(visible)
+                actor = actors[key]
+                if not visible:
+                    self._hidden_actor_pickability.setdefault(key, actor.GetPickable())
+                    actor.PickableOff()
+                elif key in self._hidden_actor_pickability:
+                    actor.SetPickable(self._hidden_actor_pickability.pop(key))
+                actor.SetVisibility(visible)
+                if key == uid and not visible:
+                    self.selected_uids = [item for item in self.selected_uids if item != uid]
+                    self.plotter.remove_actor(f"{uid}_silh", render=False)
             except Exception:
                 pass
 
@@ -316,7 +327,7 @@ class ViewVTK(BaseView):
                 _set_visibility_for(f"{uid}_marker-points")
                 return
             # Default behaviour toggles trace and any auxiliary actors (property, geo, litho)
-            this_actor.SetVisibility(visible)
+            _set_visibility_for(uid)
             _set_visibility_for(f"{uid}_prop")
             _set_visibility_for(f"{uid}_geo")
             _set_visibility_for(f"{uid}_litho")
@@ -325,7 +336,7 @@ class ViewVTK(BaseView):
             # case for BACKGROUNDS
             _set_visibility_for(f"{uid}_name-labels")
 
-        this_actor.SetVisibility(visible)
+        _set_visibility_for(uid)
 
     def remove_actor_in_view(self, uid=None, redraw=False):
         """ "Remove actor from plotter"""
@@ -1380,6 +1391,8 @@ class ViewVTK(BaseView):
         picker.SetTolerance(0.01)
         picker_output = picker.Pick(pos[0], pos[1], 0, style.GetDefaultRenderer())
         actor = picker.GetActor()
+        if actor is None or not actor.GetVisibility() or not actor.GetPickable():
+            return None
 
         # show messages in terminal
         self.print_terminal(f"Picker tolerance: {picker.GetTolerance()}")
@@ -1392,9 +1405,15 @@ class ViewVTK(BaseView):
             sel_uid = self.get_uid_from_actor(actor=actor)
             self.print_terminal(f"Picked uid: {sel_uid}")
 
-            # Add uid of picked actor to selected_uids list, with SHIFT-SELECT option
+            # Shift-click toggles the picked actor in the selection.
             if shift:
-                self.selected_uids.append(sel_uid)
+                self.selected_uids = [
+                    uid for uid in self.selected_uids if self.actor_shown(uid)
+                ]
+                if sel_uid in self.selected_uids:
+                    self.selected_uids.remove(sel_uid)
+                else:
+                    self.selected_uids.append(sel_uid)
             else:
                 self.selected_uids = [sel_uid]
             self.print_terminal(f"Selected uids: {self.selected_uids}")
@@ -1421,9 +1440,10 @@ class ViewVTK(BaseView):
                     line_width=5,
                 )
 
-                for av_actor in actors.difference(name_list):
-                    if "_silh" in av_actor:
-                        self.plotter.remove_actor(av_actor)
+            # Also remove stale outlines when the last object is deselected.
+            for av_actor in actors.difference(name_list):
+                if "_silh" in av_actor:
+                    self.plotter.remove_actor(av_actor)
 
             self.actor_in_table(self.selected_uids)
 
