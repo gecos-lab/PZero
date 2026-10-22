@@ -602,18 +602,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             action_map[copy_action] = (destination_collection_name, False)
             action_map[move_action] = (destination_collection_name, True)
 
-            compatible = True
-            for uid in selected_uids:
-                can_transfer, _ = source_collection.can_transfer_uid_to_collection(
-                    uid=uid, destination_collection=destination_collection
+            if "topology" in destination_collection.entity_dict_keys:
+                compatible = (
+                    "topology" in source_collection.entity_dict_keys
+                    and source_collection.df.loc[
+                        source_collection.df["uid"].isin(selected_uids), "topology"
+                    ].isin(destination_collection.valid_topologies).all()
                 )
-                if not can_transfer:
-                    compatible = False
-                    break
+            else:
+                compatible = "topology" not in source_collection.entity_dict_keys
 
-            copy_action.setEnabled(compatible)
+            copy_action.setEnabled(bool(compatible))
             move_action.setEnabled(
-                compatible and destination_collection_name != source_collection_name
+                bool(compatible) and destination_collection_name != source_collection_name
             )
 
         menu.addSeparator()
@@ -670,7 +671,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             destination_collection=destination_collection,
             uids=selected_uids,
             move=move,
-            keep_uid_on_move=False,
         )
 
         operation = "Moved" if move else "Copied"
