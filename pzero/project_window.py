@@ -325,7 +325,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionMergeEntities.triggered.connect(self.entities_merge)
         self.actionSplitMultipart.triggered.connect(self.split_multipart)
         self.actionDecimatePointCloud.triggered.connect(self.decimate_pc_dialog)
-        """______________________________________ ADD TOOL TO PRINT VTK INFO self.print_terminal( -- vtk object as text -- )"""
+        self.actionShowInfoOnEntities.triggered.connect(self.show_info_on_entities)
         self.actionAddTexture.triggered.connect(self.texture_add)
         self.actionRemoveTexture.triggered.connect(self.texture_remove)
         self.actionAddProperty.triggered.connect(self.property_add)
@@ -818,6 +818,22 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     #             for idx in selected_idxs:
     #                 selected_uids_all.append(self.backgrnd_coll.data(index=idx, qt_role=Qt.DisplayRole))
     #     return selected_uids_all
+
+    def show_info_on_entities(self):
+        """Print the selected entities' VTK descriptions in the project terminal."""
+        self.tabWidgetBottomLeft.setCurrentWidget(self.tabTerminal)
+        uids = self.selected_uids
+        if not uids:
+            self.print_terminal("No entities selected.")
+            return
+
+        collection = getattr(self, self.selected_collection)
+        for uid in uids:
+            vtk_object = collection.get_uid_vtk_obj(uid)
+            self.print_terminal(f"{collection.get_uid_name(uid)} (UID: {uid})")
+            self.print_terminal(
+                str(vtk_object) if vtk_object is not None else "No VTK object available."
+            )
 
     def entity_remove(self):
         """Remove entities selected in an attribute table. Just rows completely selected are removed."""
