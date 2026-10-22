@@ -355,7 +355,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             lambda: decimation_quadric_resampling(self)
         )
         self.actionExtrusion.triggered.connect(lambda: linear_extrusion(self))
-        self.actionEnhancedExtrusion = QAction("Enhanced Extrusion", self)
+        self.actionEnhancedExtrusion = QAction("Extrusion with Densification", self)
         self.actionEnhancedExtrusion.setObjectName("actionEnhancedExtrusion")
         self.actionEnhancedExtrusion.triggered.connect(
             lambda: enhanced_linear_extrusion(self)

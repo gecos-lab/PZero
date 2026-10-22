@@ -615,7 +615,7 @@ class Ui_ProjectWindow(object):
             QCoreApplication.translate("ProjectWindow", "Retopologize", None)
         )
         self.actionExtrusion.setText(
-            QCoreApplication.translate("ProjectWindow", "Extrusion", None)
+            QCoreApplication.translate("ProjectWindow", "Simple Extrusion", None)
         )
         self.actionXSectionIntersection.setText(
             QCoreApplication.translate("ProjectWindow", "X-section Intersection", None)

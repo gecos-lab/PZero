@@ -689,7 +689,7 @@ def split_line_line(self):
             outU = np_array(line.coords)[:, 0]
             outV = np_array(line.coords)[:, 1]
             if isinstance(self, ViewMap):
-                new_line["parent_uid"] = None
+                new_line["parent_uid"] = ""
                 new_line["vtk_obj"] = PolyLine()
                 outX = outU
                 outY = outV

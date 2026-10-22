@@ -1912,7 +1912,7 @@ def linear_extrusion(self):
     """vtkLinearExtrusionFilter sweeps the generating primitives along a straight line path. This tool is here
     used to create fault surfaces from faults traces."""
     self.print_terminal(
-        "Linear extrusion: create surface by projecting target linear object along a straight line path"
+        "Simple extrusion: create surface by projecting target linear object along a straight line path"
     )
     if self.shown_table != "tabGeology":
         self.print_terminal(" -- Only geological objects can be projected -- ")
@@ -1937,13 +1937,13 @@ def linear_extrusion(self):
     surf_dict = _build_extrusion_output_dict(
         self=self,
         input_uid=input_uids[0],
-        title="Linear Extrusion",
+        title="Simple Extrusion",
         default_suffix="_extruded",
     )
     if surf_dict is None:
         return
     extrusion_parameters = _ask_linear_extrusion_parameters(
-        self=self, title="Linear Extrusion"
+        self=self, title="Simple Extrusion"
     )
     if extrusion_parameters is None:
         return
@@ -1993,7 +1993,7 @@ def linear_extrusion(self):
 def enhanced_linear_extrusion(self):
     """Create a sampled extrusion surface with intermediate profiles."""
     self.print_terminal(
-        "Enhanced extrusion: create a surface from one polyline with internal sampled extrusion lines"
+        "Extrusion with densification: create a surface from one polyline with internal sampled extrusion lines"
     )
     if self.shown_table != "tabGeology":
         self.print_terminal(" -- Only geological objects can be projected -- ")
@@ -2015,21 +2015,21 @@ def enhanced_linear_extrusion(self):
     surf_dict = _build_extrusion_output_dict(
         self=self,
         input_uid=input_uids[0],
-        title="Enhanced Extrusion",
+        title="Extrusion with Densification",
         default_suffix="_enhanced_extruded",
     )
     if surf_dict is None:
         return
 
     extrusion_parameters = _ask_linear_extrusion_parameters(
-        self=self, title="Enhanced Extrusion"
+        self=self, title="Extrusion with Densification"
     )
     if extrusion_parameters is None:
         return
     trend, plunge, vertical_extrusion = extrusion_parameters
 
     sample_lines = input_one_value_dialog(
-        title="Enhanced Extrusion",
+        title="Extrusion with Densification",
         label="Internal sample lines",
         default_value=10,
     )
