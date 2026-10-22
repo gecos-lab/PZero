@@ -763,9 +763,17 @@ class PropertiesCMaps(QObject):
             )
 
         # Squeeze column width to fit content
-        parent.PropertiesTableWidget.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeToContents
-        )
+        header = parent.PropertiesTableWidget.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        # Keep these editors compact rather than sizing for every possible value.
+        metrics = parent.PropertiesTableWidget.fontMetrics()
+        cmap_width = max(
+            [metrics.horizontalAdvance("Colormap")]
+            + [metrics.horizontalAdvance(str(cmap)) for cmap in parent.prop_legend_df["colormap"]]
+        ) + 36
+        for column, width in ((1, cmap_width), (4, 120), (5, 120)):
+            header.setSectionResizeMode(column, QHeaderView.Interactive)
+            parent.PropertiesTableWidget.setColumnWidth(column, width)
 
     def change_property_cmap(self, sender=None, parent=None):
         new_cmap = str(sender.currentText())
