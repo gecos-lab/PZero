@@ -320,6 +320,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionExportCSV.triggered.connect(self.export_csv)
 
         """Edit actions -> slots"""
+        self.actionCloneEntity.triggered.connect(self.entity_clone)
         self.actionRemoveEntity.triggered.connect(self.entity_remove)
         self.actionConnectedParts.triggered.connect(self.connected_parts)
         self.actionMergeEntities.triggered.connect(self.entities_merge)
@@ -834,6 +835,21 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.print_terminal(
                 str(vtk_object) if vtk_object is not None else "No VTK object available."
             )
+
+    def entity_clone(self):
+        """Clone the selection using the shared copy-to-collection implementation."""
+        self.tabWidgetBottomLeft.setCurrentWidget(self.tabTerminal)
+        uids = list(self.selected_uids)
+        if not uids:
+            self.print_terminal("No entities selected.")
+            return
+        collection_name = self.selected_collection
+        return self.transfer_entities_between_collections(
+            source_collection_name=collection_name,
+            destination_collection_name=collection_name,
+            selected_uids=uids,
+            move=False,
+        )
 
     def entity_remove(self):
         """Remove entities selected in an attribute table. Just rows completely selected are removed."""
