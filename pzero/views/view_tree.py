@@ -14,8 +14,9 @@ from PySide6.QtWidgets import (
     QWidget,
     QSizePolicy,
     QComboBox,
+    QApplication,
 )
-from PySide6.QtCore import Qt, Signal, QMimeData
+from PySide6.QtCore import Qt, Signal, QMimeData, QEvent, QItemSelectionModel, QSignalBlocker
 from PySide6.QtGui import QDrag, QActionGroup
 
 MESH_SLICER_COLLECTION_PREFIXES = {
@@ -270,6 +271,17 @@ class CustomTreeWidget(QTreeWidget):
         # Import initial selection state if parent and collection exist
         if hasattr(self.collection, "selected_uids"):
             self.restore_selection(self.collection.selected_uids)
+
+    def selectionCommand(self, index, event=None):
+        # Shift-right-click opens the menu without extending or replacing a range.
+        if (
+            event is not None
+            and event.type() in (QEvent.MouseButtonPress, QEvent.MouseButtonRelease)
+            and event.button() == Qt.RightButton
+            and event.modifiers() & Qt.ShiftModifier
+        ):
+            return QItemSelectionModel.NoUpdate
+        return super().selectionCommand(index, event)
 
     @property
     def tree_name(self):
@@ -736,14 +748,24 @@ class CustomTreeWidget(QTreeWidget):
         A signal indicating that a checkbox has been toggled is then emitted.
         """
         item = self.itemAt(position)
-        if item and item not in self.selectedItems():
-            self.clearSelection()
-            item.setSelected(True)
+        keep_selection = (
+            QApplication.keyboardModifiers() & Qt.ShiftModifier
+            and bool(self.selectedItems())
+        )
         if item:
-            self.setCurrentItem(item)
+            if not keep_selection:
+                self.clearSelection()
+                item.setSelected(True)
+            self.setCurrentItem(item, 0, QItemSelectionModel.NoUpdate)
+        selected_items = self.selectedItems()
 
         menu = QMenu()
+        menu.setToolTipsVisible(True)
         toggle_action = menu.addAction("Toggle Checkboxes")
+        toggle_action.setToolTip(
+            "Hold Shift when right-clicking to keep multiple items selected "
+            "and toggle their checkboxes together."
+        )
         open_mesh_slicer_action = None
         if self._mesh_slicer_label_for_item(item) and hasattr(
             self.view, "show_mesh_slicer_dialog"
@@ -758,15 +780,23 @@ class CustomTreeWidget(QTreeWidget):
             background_labels_actions = self._create_show_labels_submenu(menu, item)
 
         action = menu.exec_(self.viewport().mapToGlobal(position))
+        if action is None:
+            return
 
         if action == toggle_action:
-            for item in self.selectedItems():
-                new_state = (
-                    Qt.Checked if item.checkState(0) == Qt.Unchecked else Qt.Unchecked
-                )
-                item.setCheckState(0, new_state)
-                self.update_child_check_states(item, new_state)
-                self.update_parent_check_states(item)
+            with QSignalBlocker(self):
+                for item in selected_items:
+                    parent = item.parent()
+                    while parent is not None and not parent.isSelected():
+                        parent = parent.parent()
+                    if parent is not None:
+                        continue  # Its selected ancestor already toggles this subtree.
+                    new_state = (
+                        Qt.Checked if item.checkState(0) == Qt.Unchecked else Qt.Unchecked
+                    )
+                    item.setCheckState(0, new_state)
+                    self.update_child_check_states(item, new_state)
+                    self.update_parent_check_states(item)
             self.emit_checkbox_toggled()
 
         if action == open_mesh_slicer_action:
