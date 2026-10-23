@@ -1139,8 +1139,7 @@ class ViewInterpretation(ViewMap):
     def end_pick(self, pos):
         """Override View2D.end_pick to prevent resetting to default View XY."""
         # Remove the selector observer
-        if hasattr(self.plotter.iren, "interactor"):  # Safety check
-            self.plotter.iren.interactor.RemoveObservers("LeftButtonPressEvent")
+        self._remove_actor_pick_observer()
 
         self.plotter.untrack_click_position(side="right")
         self.plotter.untrack_click_position(side="left")

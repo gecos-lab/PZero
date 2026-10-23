@@ -1056,7 +1056,7 @@ class View3D(ViewVTK):
         must be reimplemented in subclasses.
         Do not use @freeze_gui_onoff here, that is used at a higher level."""
         # Remove the selector observer
-        self.plotter.iren.interactor.RemoveObservers("LeftButtonPressEvent")
+        self._remove_actor_pick_observer()
         # Remove the right click observer
         self.plotter.untrack_click_position(side="right")
         # Remove the left click observer
