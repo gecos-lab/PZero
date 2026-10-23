@@ -59,9 +59,14 @@ class BaseCollection(ABC):
         """Add entity to collection from dictionary."""
         pass
 
-    @abstractmethod
     def remove_entity(self, uid: str = None) -> str:
         """Remove entity from collection."""
+        removed_uids = self.remove_entities([uid])
+        return removed_uids[0] if removed_uids else None
+
+    @abstractmethod
+    def remove_entities(self, uids: list) -> list:
+        """Remove entities and update the collection once for the whole batch."""
         pass
 
     @abstractmethod

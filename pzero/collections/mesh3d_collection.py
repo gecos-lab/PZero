@@ -51,13 +51,13 @@ class Mesh3DCollection(DIMCollection):
         self.parent.legend.update_widget(self.parent)
         return uid
 
-    def remove_entity(self, uid: str = None) -> str:
-        removed_uid = super().remove_entity(uid=uid)
-        if removed_uid is not None:
+    def remove_entities(self, uids: list) -> list:
+        removed_uids = super().remove_entities(uids)
+        if removed_uids:
             legend_df = self.parent.others_legend_df
-            legend_df.drop(legend_df[legend_df["uid"] == removed_uid].index, inplace=True)
+            legend_df.drop(legend_df[legend_df["uid"].isin(removed_uids)].index, inplace=True)
             self.parent.legend.update_widget(self.parent)
-        return removed_uid
+        return removed_uids
 
     def attr_modified_update_legend_table(self):
         """Keep mesh names in the legend in step with edits in the mesh table."""

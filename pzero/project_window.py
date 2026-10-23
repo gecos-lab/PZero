@@ -870,25 +870,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if check == QMessageBox.No:
             return
         """Remove entities."""
-        for uid in self.selected_uids:
-            if self.shown_table == "tabGeology":
-                self.geol_coll.remove_entity(uid=uid)
-            elif self.shown_table == "tabXSections":
-                self.xsect_coll.remove_entity(uid=uid)
-            elif self.shown_table == "tabMeshes":
-                self.mesh3d_coll.remove_entity(uid=uid)
-            elif self.shown_table == "tabDOMs":
-                self.dom_coll.remove_entity(uid=uid)
-            elif self.shown_table == "tabImages":
-                self.image_coll.remove_entity(uid=uid)
-            elif self.shown_table == "tabBoundaries":
-                self.boundary_coll.remove_entity(uid=uid)
-            elif self.shown_table == "tabWells":
-                self.well_coll.remove_entity(uid=uid)
-            elif self.shown_table == "tabFluids":
-                self.fluid_coll.remove_entity(uid=uid)
-            elif self.shown_table == "tabBackgrounds":
-                self.backgrnd_coll.remove_entity(uid=uid)
+        collection = getattr(self, self.selected_collection)
+        collection.remove_entities(self.selected_uids)
 
     def _get_seismic_image_uids(self):
         """Return the uid set of imported seismic images currently stored in the project."""

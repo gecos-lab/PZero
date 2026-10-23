@@ -366,23 +366,22 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """This is called when an entity is removed from a collection."""
         tree = self.tree_from_coll(coll=collection)
         has_plotter = hasattr(self, "plotter") and hasattr(self.plotter, "renderer")
+        actor_uids = set(self.actors_df["uid"])
         for uid in updated_uids:
-            if uid in self.actors_df["uid"].to_list():
-                self.remove_actor_in_view(uid=uid, redraw=True)
-                self.actors_df.drop(
-                    self.actors_df[self.actors_df["uid"] == uid].index, inplace=True
-                )
+            if uid in actor_uids:
+                self.remove_actor_in_view(uid=uid, redraw=False)
             if has_plotter:
-                silh_name = f"{uid}_silh"
-                if silh_name in self.plotter.renderer.actors:
-                    self.plotter.remove_actor(silh_name)
-            if uid in self.selected_uids:
-                self.selected_uids = [
-                    selected_uid
-                    for selected_uid in self.selected_uids
-                    if selected_uid != uid
-                ]
+                self.plotter.remove_actor(f"{uid}_silh", render=False)
+        self.actors_df.drop(
+            self.actors_df[self.actors_df["uid"].isin(updated_uids)].index, inplace=True
+        )
+        removed_uids = set(updated_uids)
+        self.selected_uids = [uid for uid in self.selected_uids if uid not in removed_uids]
         tree.remove_items_from_tree(uids_to_remove=updated_uids)
+        if has_plotter:
+            self.plotter.render()
+        elif hasattr(self, "figure"):
+            self.figure.canvas.draw_idle()
 
     def entities_geom_modified_update_views(self, updated_uids=None, collection=None):
         """This is called when an entity geometry or topology is modified (i.e. the vtk object is modified)."""

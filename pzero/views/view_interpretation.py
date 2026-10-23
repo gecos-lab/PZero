@@ -289,10 +289,10 @@ class ViewInterpretation(ViewMap):
             try:
                 actors = getattr(self.plotter.renderer, "actors", {})
                 if actor_name in actors:
-                    self.plotter.remove_actor(actors[actor_name])
+                    self.plotter.remove_actor(actors[actor_name], render=redraw)
             except Exception:
                 try:
-                    self.plotter.remove_actor(actor_name)
+                    self.plotter.remove_actor(actor_name, render=redraw)
                 except Exception:
                     pass
 

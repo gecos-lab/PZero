@@ -128,12 +128,13 @@ class GFBCollection(BaseCollection):
         self.parent.signals.entities_added.emit([entity_dict["uid"]], self)
         return entity_dict["uid"]
 
-    def remove_entity(self, uid: str = None) -> str:
-        """Remove an entity and its metadata."""
+    def remove_entities(self, uids: list) -> list:
+        """Remove entities and their metadata in one batch."""
+        uids = self.df.loc[self.df["uid"].isin(uids), "uid"].tolist()
+        if not uids:
+            return []
         # Remove row from dataframe and reset data model.
-        if uid not in self.get_uids:
-            return
-        self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
+        self.df.drop(self.df[self.df["uid"].isin(uids)].index, inplace=True)
         self.df.reset_index(drop=True, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         # Then remove role / feature / scenario from legend if needed.
@@ -145,9 +146,8 @@ class GFBCollection(BaseCollection):
         if legend_updated:
             self.parent.legend.update_widget(self.parent)
             self.parent.prop_legend.update_widget(self.parent)
-        # A list of uids is emitted, even if the entity is just one
-        self.parent.signals.entities_removed.emit([uid], self)
-        return uid
+        self.parent.signals.entities_removed.emit(uids, self)
+        return uids
 
     def clone_entity(self, uid: str = None) -> str:
         """Clone an entity."""

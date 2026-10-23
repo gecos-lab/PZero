@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QApplication,
 )
-from PySide6.QtCore import Qt, Signal, QMimeData, QEvent, QItemSelectionModel, QSignalBlocker
+from PySide6.QtCore import Qt, Signal, QMimeData, QEvent, QItemSelectionModel, QSignalBlocker, QTimer
 from PySide6.QtGui import QDrag, QActionGroup
 
 MESH_SLICER_COLLECTION_PREFIXES = {
@@ -259,13 +259,10 @@ class CustomTreeWidget(QTreeWidget):
         self.customContextMenuRequested.connect(self.toggle_with_menu)
         self.itemExpanded.connect(self.resize_columns)
         self.itemCollapsed.connect(self.resize_columns)
-        self.itemChanged.connect(
-            lambda item, column: (
-                self.on_checkbox_changed(item, column)
-                if item.childCount() == 0
-                else None
-            )
-        )
+        self._checkbox_timer = QTimer(self)
+        self._checkbox_timer.setSingleShot(True)
+        self._checkbox_timer.timeout.connect(self.emit_checkbox_toggled)
+        self.itemChanged.connect(self.on_checkbox_changed)
         self.itemSelectionChanged.connect(self.emit_selection_changed)
 
         # Import initial selection state if parent and collection exist
@@ -722,18 +719,12 @@ class CustomTreeWidget(QTreeWidget):
             if item.parent():
                 self.update_parent_check_states(item)
 
-    @preserve_selection
     def on_checkbox_changed(self, item, column):
-        """Handle state changes of a checkbox by mouse click, after self.itemChanged signal is emitted."""
+        """Sync once after Qt has propagated checkbox changes through the tree."""
         if column != 0 or item.checkState(0) == Qt.PartiallyChecked:
             return
 
-        self.blockSignals(True)
-        self.update_child_check_states(item, item.checkState(0))
-        self.update_parent_check_states(item)
-        self.blockSignals(False)
-
-        self.emit_checkbox_toggled()
+        self._checkbox_timer.start(0)
 
     def toggle_with_menu(self, position):
         """
@@ -910,6 +901,7 @@ class CustomTreeWidget(QTreeWidget):
             if hasattr(self.view, "print_terminal"):
                 self.view.print_terminal(f"Failed to set borehole view mode: {exc}")
 
+    @preserve_selection
     def emit_checkbox_toggled(self):
         """
         To be used when checking/unchecking, to send the new state to the main application.
@@ -920,6 +912,8 @@ class CustomTreeWidget(QTreeWidget):
         updates the DataFrame accordingly, and emits a signal with lists of unique
         identifiers (UIDs) for items that were turned on or off.
         """
+        self._checkbox_timer.stop()
+        shown_by_uid = dict(zip(self.view.actors_df["uid"], self.view.actors_df["show"]))
         # Update the checked state in actors_df based on the current tree state
         turn_on_uids = []
         turn_off_uids = []
@@ -927,11 +921,9 @@ class CustomTreeWidget(QTreeWidget):
             "", Qt.MatchContains | Qt.MatchRecursive, 1
         ):  # Search in the name column (1)
             uid = self.get_item_uid(item)
-            if uid:
+            if uid in shown_by_uid:
                 is_checked = item.checkState(0) == Qt.Checked
-                is_shown = self.view.actors_df.loc[
-                    self.view.actors_df["uid"] == uid, "show"
-                ].values[0]
+                is_shown = shown_by_uid[uid]
                 if is_checked != is_shown:
                     if is_checked:
                         turn_on_uids.append(uid)

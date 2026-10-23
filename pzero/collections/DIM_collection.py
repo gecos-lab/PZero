@@ -105,25 +105,26 @@ class DIMCollection(BaseCollection):
         self.parent.signals.entities_added.emit([entity_dict["uid"]], self)
         return entity_dict["uid"]
 
-    def remove_entity(self, uid: str = None) -> str:
-        """Remove an entity and its metadata."""
+    def remove_entities(self, uids: list) -> list:
+        """Remove entities and their metadata in one batch."""
+        uids = self.df.loc[self.df["uid"].isin(uids), "uid"].tolist()
+        if not uids:
+            return []
         # First remove textures from DOMs, if defined. This is generally necessary just for images,
         # but it is worth adding it here for a more general behaviour with no relevant computational cost.
         for dom_uid in self.parent.dom_coll.get_uids:
-            if uid in self.parent.dom_coll.get_uid_textures(dom_uid):
-                self.parent.dom_coll.remove_map_texture_from_dom(
-                    dom_uid=dom_uid, map_image_uid=uid
-                )
+            for uid in uids:
+                if uid in self.parent.dom_coll.get_uid_textures(dom_uid):
+                    self.parent.dom_coll.remove_map_texture_from_dom(
+                        dom_uid=dom_uid, map_image_uid=uid
+                    )
         # Remove row from dataframe and reset data model.
-        if uid not in self.get_uids:
-            return
-        self.df.drop(self.df[self.df["uid"] == uid].index, inplace=True)
+        self.df.drop(self.df[self.df["uid"].isin(uids)].index, inplace=True)
         self.df.reset_index(drop=True, inplace=True)
         self.modelReset.emit()  # is this really necessary?
         self.parent.prop_legend.update_widget(self.parent)
-        # When done, send a signal over to the views. A list of uids is emitted, even if the entity is just one.
-        self.parent.signals.entities_removed.emit([uid], self)
-        return uid
+        self.parent.signals.entities_removed.emit(uids, self)
+        return uids
 
     def clone_entity(self, uid: str = None) -> str:
         """Clone an entity."""

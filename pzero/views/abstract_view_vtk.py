@@ -349,7 +349,7 @@ class ViewVTK(BaseView):
                 this_actor = None
             if this_actor is not None:
                 try:
-                    self.plotter.remove_actor(this_actor)
+                    self.plotter.remove_actor(this_actor, render=redraw)
                 except Exception:
                     pass
 
@@ -1451,11 +1451,7 @@ class ViewVTK(BaseView):
             return None
 
     def remove_entity(self):
-        """This method first removes the yellow silhouette that highlights selected actors (actually an actor itself),
-        then call the general method to remove entities from the project, which in turn fires a signal to update all
-        plot windows removing all actors."""
-        for sel_uid in self.selected_uids:
-            self.plotter.remove_actor(f"{sel_uid}_silh")
+        """Remove selected entities through the project and let its signal update all views."""
         self.parent.entity_remove()
 
     def vert_exag(self):
