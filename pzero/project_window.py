@@ -117,6 +117,7 @@ from pzero.imports.well2vtk import well2vtk
 from pzero.imports.xyz2vtk import xyz2vtk
 from pzero.ui.project_window_ui import Ui_ProjectWindow
 from pzero.pymeshit_app.pzero_bridge import PZeroPymeshitBridge
+from pzero.helpers.resources import resource_path
 from .entities_factory import (
     VertexSet,
     PolyLine,
@@ -464,7 +465,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         layout = QVBoxLayout(dialog)
 
         # Logo
-        image_path = QPixmap("images/Gecos_logo.jpg")
+        image_path = QPixmap(resource_path("images/Gecos_logo.jpg"))
         logo_label = QLabel()
         pixmap = QPixmap(image_path)
 
