@@ -73,7 +73,7 @@ def dem2vtk(self=None, in_file_name=None, collection=None):
         # Add to entity collection.
         self.dom_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)
     elif collection == "Fluid contacts":
-        curr_obj_attributes = deepcopy(FluidCollection.entity_dict)
+        curr_obj_attributes = deepcopy(self.fluid_coll.entity_dict)
         curr_obj_attributes["uid"] = str(uuid4())
         curr_obj_attributes["name"] = os.path.basename(in_file_name)
         curr_obj_attributes["role"] = "raster"
