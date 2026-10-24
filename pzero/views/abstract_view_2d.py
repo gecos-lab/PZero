@@ -230,6 +230,8 @@ class View2D(ViewVTK):
         self.plotter.enable_image_style()
         # Closing settings
         self.plotter.reset_key_events()
+        # Keep the 2D camera protected after restoring default key events (issue #174).
+        self.plotter.clear_events_for_key("v")
         self.selected_uids = self.parent.selected_uids
         # self.enable_actions()
         freeze_gui_off(self)
