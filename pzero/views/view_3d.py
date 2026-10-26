@@ -280,7 +280,9 @@ class View3D(ViewVTK):
                 continue
         return None
 
-    def _resolve_slice_actor_style(self, slice_data=None, prop_text=None, main_uid=None):
+    def _resolve_slice_actor_style(
+        self, slice_data=None, prop_text=None, main_uid=None
+    ):
         scalar_array = None
         cmap = None
         clim = None
@@ -486,7 +488,9 @@ class View3D(ViewVTK):
         except Exception:
             return None
 
-    def _structured_slice_index(self, dims, slice_type, normalized_position, interior=False):
+    def _structured_slice_index(
+        self, dims, slice_type, normalized_position, interior=False
+    ):
         axis_idx = self._slice_axis_index(slice_type)
         axis_dim = int(dims[axis_idx]) if dims and len(dims) > axis_idx else 0
         if axis_dim <= 1:
@@ -546,23 +550,29 @@ class View3D(ViewVTK):
                 base = origin + slice_index * a0
                 row_vec = a1
                 col_vec = a2
-                center = base + 0.5 * max(dims[1] - 1, 0) * row_vec + 0.5 * max(
-                    dims[2] - 1, 0
-                ) * col_vec
+                center = (
+                    base
+                    + 0.5 * max(dims[1] - 1, 0) * row_vec
+                    + 0.5 * max(dims[2] - 1, 0) * col_vec
+                )
             elif slice_type == "Y":
                 base = origin + slice_index * a1
                 row_vec = a0
                 col_vec = a2
-                center = base + 0.5 * max(dims[0] - 1, 0) * row_vec + 0.5 * max(
-                    dims[2] - 1, 0
-                ) * col_vec
+                center = (
+                    base
+                    + 0.5 * max(dims[0] - 1, 0) * row_vec
+                    + 0.5 * max(dims[2] - 1, 0) * col_vec
+                )
             else:
                 base = origin + slice_index * a2
                 row_vec = a0
                 col_vec = a1
-                center = base + 0.5 * max(dims[0] - 1, 0) * row_vec + 0.5 * max(
-                    dims[1] - 1, 0
-                ) * col_vec
+                center = (
+                    base
+                    + 0.5 * max(dims[0] - 1, 0) * row_vec
+                    + 0.5 * max(dims[1] - 1, 0) * col_vec
+                )
 
             normal = np.cross(row_vec, col_vec)
             n_norm = float(np.linalg.norm(normal))
@@ -622,7 +632,13 @@ class View3D(ViewVTK):
             )
             normal = np.array([0.0, 0.0, 1.0], dtype=float)
 
-        return {"center": center, "normal": normal, "dims": None, "index": None, "affine": None}
+        return {
+            "center": center,
+            "normal": normal,
+            "dims": None,
+            "index": None,
+            "affine": None,
+        }
 
     def _normalized_slicer_position_from_point(
         self,
@@ -657,11 +673,17 @@ class View3D(ViewVTK):
             pv_entity = dataset if isinstance(dataset, pv.DataSet) else pv.wrap(dataset)
             bounds = pv_entity.bounds
             if slice_type == "X" and bounds[1] > bounds[0]:
-                return max(0.0, min(1.0, float((p[0] - bounds[0]) / (bounds[1] - bounds[0]))))
+                return max(
+                    0.0, min(1.0, float((p[0] - bounds[0]) / (bounds[1] - bounds[0])))
+                )
             if slice_type == "Y" and bounds[3] > bounds[2]:
-                return max(0.0, min(1.0, float((p[1] - bounds[2]) / (bounds[3] - bounds[2]))))
+                return max(
+                    0.0, min(1.0, float((p[1] - bounds[2]) / (bounds[3] - bounds[2])))
+                )
             if slice_type == "Z" and bounds[5] > bounds[4]:
-                return max(0.0, min(1.0, float((p[2] - bounds[4]) / (bounds[5] - bounds[4]))))
+                return max(
+                    0.0, min(1.0, float((p[2] - bounds[4]) / (bounds[5] - bounds[4])))
+                )
         except Exception:
             pass
 
@@ -670,14 +692,22 @@ class View3D(ViewVTK):
     def _extract_structured_subset_slice(self, pv_entity, slice_type, slice_index):
         dims = pv_entity.dimensions
         if slice_type == "X":
-            subset = pv_entity.extract_subset([slice_index, slice_index, 0, dims[1] - 1, 0, dims[2] - 1])
+            subset = pv_entity.extract_subset(
+                [slice_index, slice_index, 0, dims[1] - 1, 0, dims[2] - 1]
+            )
         elif slice_type == "Y":
-            subset = pv_entity.extract_subset([0, dims[0] - 1, slice_index, slice_index, 0, dims[2] - 1])
+            subset = pv_entity.extract_subset(
+                [0, dims[0] - 1, slice_index, slice_index, 0, dims[2] - 1]
+            )
         else:
-            subset = pv_entity.extract_subset([0, dims[0] - 1, 0, dims[1] - 1, slice_index, slice_index])
+            subset = pv_entity.extract_subset(
+                [0, dims[0] - 1, 0, dims[1] - 1, slice_index, slice_index]
+            )
         return subset.extract_surface() if subset.n_points > 0 else subset
 
-    def _build_affine_image_slice_surface(self, pv_entity, slice_type, slice_index, affine):
+    def _build_affine_image_slice_surface(
+        self, pv_entity, slice_type, slice_index, affine
+    ):
         """
         Build slice geometry explicitly from the image affine instead of trusting
         `extract_subset()` geometry for oriented image data.
@@ -872,7 +902,11 @@ class View3D(ViewVTK):
                 except Exception:
                     slice_data = None
 
-            if slice_data is not None and slice_data.n_points > 0 and plane_info is not None:
+            if (
+                slice_data is not None
+                and slice_data.n_points > 0
+                and plane_info is not None
+            ):
                 try:
                     slice_data.points = self._project_points_to_plane(
                         slice_data.points,
@@ -899,7 +933,11 @@ class View3D(ViewVTK):
         except Exception:
             slice_data = None
 
-        if slice_data is not None and slice_data.n_points > 0 and plane_info is not None:
+        if (
+            slice_data is not None
+            and slice_data.n_points > 0
+            and plane_info is not None
+        ):
             try:
                 slice_data.points = self._project_points_to_plane(
                     slice_data.points,
@@ -1000,62 +1038,62 @@ class View3D(ViewVTK):
     def vert_exag(self):
         """Override parent's vertical exaggeration to store value and refresh plane widgets."""
         from ..helpers.helper_dialogs import input_one_value_dialog
-        
+
         # Get current scale value as default
         current_scale = 1.0
-        if hasattr(self, 'v_exaggeration'):
+        if hasattr(self, "v_exaggeration"):
             current_scale = self.v_exaggeration
         elif self.plotter.scale is not None and len(self.plotter.scale) >= 3:
             current_scale = self.plotter.scale[2]
-        
+
         exag_value = input_one_value_dialog(
             parent=self,
             title="Vertical exaggeration options",
             label="Set vertical exaggeration",
             default_value=current_scale,
         )
-        
+
         if exag_value is None:
             return
-        
+
         # Store the exaggeration value for plane widgets to use
         self.v_exaggeration = exag_value
-        
+
         # Apply the scale to the plotter
         self.plotter.set_scale(zscale=exag_value)
-        
+
         # Refresh plane widgets if mesh slicer is open with manipulation enabled
         self._refresh_plane_widgets_for_exaggeration()
-        
+
         self.plotter.render()
 
     def _refresh_plane_widgets_for_exaggeration(self):
         """Refresh plane widgets when vertical exaggeration changes."""
         # Check if mesh slicer dialog is open
-        if not hasattr(self, 'mesh_slicer_dialog') or self.mesh_slicer_dialog is None:
+        if not hasattr(self, "mesh_slicer_dialog") or self.mesh_slicer_dialog is None:
             return
-        
+
         try:
             dialog = self.mesh_slicer_dialog
             if not dialog.isVisible():
                 return
-            
+
             # Find the enable manipulation checkbox
             enable_manip_checkbox = None
             for checkbox in dialog.findChildren(QCheckBox):
                 if checkbox.text() == "Enable Direct Manipulation":
                     enable_manip_checkbox = checkbox
                     break
-            
+
             if enable_manip_checkbox is None or not enable_manip_checkbox.isChecked():
                 return
-            
+
             # Toggle manipulation off and on to refresh widgets with new bounds
             print("Refreshing plane widgets for new vertical exaggeration...")
             enable_manip_checkbox.setChecked(False)
             QApplication.processEvents()
             enable_manip_checkbox.setChecked(True)
-            
+
         except Exception as e:
             print(f"Error refreshing plane widgets: {e}")
 
@@ -1541,14 +1579,14 @@ class View3D(ViewVTK):
         # Initialize throttle time for UI updates
         self.last_slider_update = time.time()
         slider_throttle = 1 / 60.0  # 60 FPS for smoother updates
-        
+
         # Entity cache for fast slice updates - avoids repeated lookups
         self._slicer_entity_cache = {
-            'entity_name': None,
-            'entity': None,
-            'pv_entity': None,
-            'bounds': None,
-            'main_uid': None,
+            "entity_name": None,
+            "entity": None,
+            "pv_entity": None,
+            "bounds": None,
+            "main_uid": None,
         }
 
         # Create entity selection group (shared between modes)
@@ -1871,12 +1909,16 @@ class View3D(ViewVTK):
                         ):
                             def slice_update_callback(normal, widget_origin):
                                 # Calculate normalized position from widget interaction
-                                current_entity = self.get_entity_by_name(target_entity_name)
-                                new_normalized_pos = self._normalized_slicer_position_from_point(
-                                    dataset=current_entity,
-                                    slice_type=target_slice_type,
-                                    point=widget_origin,
-                                    display_coordinates=True,
+                                current_entity = self.get_entity_by_name(
+                                    target_entity_name
+                                )
+                                new_normalized_pos = (
+                                    self._normalized_slicer_position_from_point(
+                                        dataset=current_entity,
+                                        slice_type=target_slice_type,
+                                        point=widget_origin,
+                                        display_coordinates=True,
+                                    )
                                 )
 
                                 # Clamp slightly inside [0,1] to prevent disappearing at exact bounds
@@ -2005,7 +2047,9 @@ class View3D(ViewVTK):
             mapping = {"U Direction": "X", "V Direction": "Y", "W Direction": "Z"}
             return mapping.get(direction, "X")
 
-        def extract_slice_data_for_position(pv_entity, slice_type, normalized_pos, bounds):
+        def extract_slice_data_for_position(
+            pv_entity, slice_type, normalized_pos, bounds
+        ):
             """Create one slice at a normalized position, respecting dataset orientation."""
             slice_data, _plane_info = self._extract_slice_data_for_slicer(
                 dataset=pv_entity,
@@ -2256,12 +2300,18 @@ class View3D(ViewVTK):
             default_direction = direction_combo.currentText()
             default_n_slices = int(slices_spin.value())
             default_slice_no = max(1, int((default_n_slices + 1) / 2))
-            direction_letter = {"U Direction": "U", "V Direction": "V", "W Direction": "W"}.get(
-                default_direction, "U"
+            direction_letter = {
+                "U Direction": "U",
+                "V Direction": "V",
+                "W Direction": "W",
+            }.get(default_direction, "U")
+            plain_name = (
+                entity_name.split(": ", 1)[1] if ": " in entity_name else entity_name
             )
-            plain_name = entity_name.split(": ", 1)[1] if ": " in entity_name else entity_name
             safe_name = plain_name.replace(" ", "_")
-            default_section_name = f"XS_{safe_name}_{direction_letter}_{default_slice_no}"
+            default_section_name = (
+                f"XS_{safe_name}_{direction_letter}_{default_slice_no}"
+            )
 
             out_dict = multiple_input_dialog(
                 title="Create Section from Slice",
@@ -2318,7 +2368,9 @@ class View3D(ViewVTK):
                 self.print_terminal("Failed to create X-Section from selected slice.")
                 return
 
-            xs_data_uid = self._add_xsection_data_from_entity(entity_name=entity_name, xuid=xuid)
+            xs_data_uid = self._add_xsection_data_from_entity(
+                entity_name=entity_name, xuid=xuid
+            )
             if not xs_data_uid:
                 self.print_terminal(
                     "Warning: Section created, but slice data could not be attached."
@@ -2542,8 +2594,8 @@ class View3D(ViewVTK):
                 return
 
             # Use cached entity if available for better performance
-            if self._slicer_entity_cache['entity_name'] == entity_name:
-                entity = self._slicer_entity_cache['entity']
+            if self._slicer_entity_cache["entity_name"] == entity_name:
+                entity = self._slicer_entity_cache["entity"]
             else:
                 entity = self.get_entity_by_name(entity_name)
                 if not entity:
@@ -2588,8 +2640,8 @@ class View3D(ViewVTK):
                 return
 
             # Use cached entity if available
-            if self._slicer_entity_cache['entity_name'] == entity_name:
-                entity = self._slicer_entity_cache['entity']
+            if self._slicer_entity_cache["entity_name"] == entity_name:
+                entity = self._slicer_entity_cache["entity"]
             else:
                 entity = self.get_entity_by_name(entity_name)
                 if not entity:
@@ -2625,8 +2677,8 @@ class View3D(ViewVTK):
                 return
 
             # Use cached entity if available
-            if self._slicer_entity_cache['entity_name'] == entity_name:
-                entity = self._slicer_entity_cache['entity']
+            if self._slicer_entity_cache["entity_name"] == entity_name:
+                entity = self._slicer_entity_cache["entity"]
             else:
                 entity = self.get_entity_by_name(entity_name)
                 if not entity:
@@ -2662,8 +2714,8 @@ class View3D(ViewVTK):
                 return
 
             # Use cached entity if available
-            if self._slicer_entity_cache['entity_name'] == entity_name:
-                entity = self._slicer_entity_cache['entity']
+            if self._slicer_entity_cache["entity_name"] == entity_name:
+                entity = self._slicer_entity_cache["entity"]
             else:
                 entity = self.get_entity_by_name(entity_name)
                 if not entity:
@@ -2696,22 +2748,22 @@ class View3D(ViewVTK):
         # Helper function to update entity cache
         def update_entity_cache(entity_name):
             """Update the entity cache for fast slice updates."""
-            if self._slicer_entity_cache['entity_name'] == entity_name:
+            if self._slicer_entity_cache["entity_name"] == entity_name:
                 return  # Already cached
-            
+
             entity = self.get_entity_by_name(entity_name)
             if not entity:
                 return
-            
+
             pv_entity = pv.wrap(entity)
             main_uid = self.get_entity_uid_by_name(entity_name)
-            
+
             self._slicer_entity_cache = {
-                'entity_name': entity_name,
-                'entity': entity,
-                'pv_entity': pv_entity,
-                'bounds': pv_entity.bounds,
-                'main_uid': main_uid,
+                "entity_name": entity_name,
+                "entity": entity,
+                "pv_entity": pv_entity,
+                "bounds": pv_entity.bounds,
+                "main_uid": main_uid,
             }
 
         # Event handlers
@@ -2734,30 +2786,30 @@ class View3D(ViewVTK):
             )
 
             # Use cached entity for fast updates to avoid expensive lookups
-            if fast_update and self._slicer_entity_cache['entity_name'] == entity_name:
-                entity = self._slicer_entity_cache['entity']
-                pv_entity = self._slicer_entity_cache['pv_entity']
-                bounds = self._slicer_entity_cache['bounds']
-                main_uid = self._slicer_entity_cache['main_uid']
+            if fast_update and self._slicer_entity_cache["entity_name"] == entity_name:
+                entity = self._slicer_entity_cache["entity"]
+                pv_entity = self._slicer_entity_cache["pv_entity"]
+                bounds = self._slicer_entity_cache["bounds"]
+                main_uid = self._slicer_entity_cache["main_uid"]
             else:
                 # Full lookup for non-cached or non-fast updates
                 entity = self.get_entity_by_name(entity_name)
                 if not entity:
                     print(f"Entity {entity_name} not found")
                     return
-                
+
                 # Convert to PyVista object
                 pv_entity = pv.wrap(entity)
                 bounds = pv_entity.bounds
                 main_uid = self.get_entity_uid_by_name(entity_name)
-                
+
                 # Update cache for future fast updates
                 self._slicer_entity_cache = {
-                    'entity_name': entity_name,
-                    'entity': entity,
-                    'pv_entity': pv_entity,
-                    'bounds': bounds,
-                    'main_uid': main_uid,
+                    "entity_name": entity_name,
+                    "entity": entity,
+                    "pv_entity": pv_entity,
+                    "bounds": bounds,
+                    "main_uid": main_uid,
                 }
 
             # Determine and persist the current main-mesh property for this entity (skip for fast updates)
@@ -2818,11 +2870,11 @@ class View3D(ViewVTK):
                     color_RGB = None
                     try:
                         # Use cached main_uid if available
-                        if self._slicer_entity_cache['entity_name'] == entity_name:
-                            main_uid = self._slicer_entity_cache['main_uid']
+                        if self._slicer_entity_cache["entity_name"] == entity_name:
+                            main_uid = self._slicer_entity_cache["main_uid"]
                         else:
                             main_uid = self.get_entity_uid_by_name(entity_name)
-                        
+
                         # Get current property - prefer persisted, then actors_df
                         current_prop = None
                         if (
@@ -2834,7 +2886,7 @@ class View3D(ViewVTK):
                             current_prop = self.actors_df.loc[
                                 self.actors_df["uid"] == main_uid, "show_property"
                             ].values[0]
-                        
+
                         (
                             scalar_array,
                             cmap,
@@ -2955,12 +3007,12 @@ class View3D(ViewVTK):
                 return  # Early return for fast visibility toggle
             elif checked:
                 # Create new slice - ensure cache is populated first
-                if self._slicer_entity_cache['entity_name'] != entity_name:
+                if self._slicer_entity_cache["entity_name"] != entity_name:
                     update_entity_cache(entity_name)
-                
+
                 # Use cached main_uid
-                main_uid = self._slicer_entity_cache.get('main_uid')
-                
+                main_uid = self._slicer_entity_cache.get("main_uid")
+
                 # Persist the current property for colormap inheritance BEFORE creating slice
                 if main_uid is not None:
                     try:
@@ -2972,7 +3024,7 @@ class View3D(ViewVTK):
                         self.slice_prop_by_entity[entity_name] = current_prop
                     except Exception:
                         pass
-                
+
                 norm_pos = None
                 if slice_type == "X":
                     norm_pos = u_slider.value() / 100.0
@@ -2983,7 +3035,7 @@ class View3D(ViewVTK):
 
                 # Create slice - update_slice_visualization will use slice_prop_by_entity for colormap
                 update_slice_visualization(entity_name, slice_type, norm_pos)
-                
+
                 # Hide/uncheck main entity in collection when slicer is turned on
                 if main_uid:
                     try:
@@ -3069,7 +3121,7 @@ class View3D(ViewVTK):
                 # Single render call after fast update
                 if needs_render:
                     self.plotter.render()
-                    
+
                 self.last_slider_update = current_time
 
             finally:
@@ -3082,9 +3134,9 @@ class View3D(ViewVTK):
 
             # Pre-cache the entity for fast slice updates (does the lookup once)
             update_entity_cache(entity_name)
-            
+
             # Check if cache was populated successfully
-            if self._slicer_entity_cache['entity'] is None:
+            if self._slicer_entity_cache["entity"] is None:
                 return
 
             # Uncheck all checkboxes
@@ -3573,7 +3625,11 @@ class View3D(ViewVTK):
             import numpy as np
             from scipy.interpolate import griddata as sp_griddata
             from vtk import vtkImageData
-            from vtkmodules.vtkFiltersCore import vtkCleanPolyData, vtkCutter, vtkStripper
+            from vtkmodules.vtkFiltersCore import (
+                vtkCleanPolyData,
+                vtkCutter,
+                vtkStripper,
+            )
             from ..entities_factory import TriSurf, XsPolyLine, XsVertexSet, XsVoxet
 
             if ":" not in entity_name:
@@ -3642,7 +3698,11 @@ class View3D(ViewVTK):
                         and entity_name in self.slice_prop_by_entity
                     ):
                         cand = self.slice_prop_by_entity[entity_name]
-                        if cand and cand not in ["none", "X", "Y", "Z"] and not cand.endswith("]"):
+                        if (
+                            cand
+                            and cand not in ["none", "X", "Y", "Z"]
+                            and not cand.endswith("]")
+                        ):
                             scalar_name = cand
                 except Exception:
                     pass
@@ -3713,7 +3773,9 @@ class View3D(ViewVTK):
                     npts = int(cut_out.GetNumberOfPoints())
                     dim_z = int(max(2, round(np.sqrt(max(npts, 4)))))
                     dim_w = int(max(2, round(max(npts, 4) / dim_z)))
-                    spacing_z = abs(cutter_bounds[5] - cutter_bounds[4]) / max(dim_z - 1, 1)
+                    spacing_z = abs(cutter_bounds[5] - cutter_bounds[4]) / max(
+                        dim_z - 1, 1
+                    )
 
                 spacing_w = np.sqrt(
                     (cutter_bounds[1] - cutter_bounds[0]) ** 2
@@ -3727,30 +3789,54 @@ class View3D(ViewVTK):
                 if strike <= 90:
                     origin = [cutter_bounds[0], cutter_bounds[2], cutter_bounds[4]]
                     direction_matrix = [
-                        np.sin(strike * np.pi / 180), 0, -(np.cos(strike * np.pi / 180)),
-                        np.cos(strike * np.pi / 180), 0, np.sin(strike * np.pi / 180),
-                        0, 1, 0,
+                        np.sin(strike * np.pi / 180),
+                        0,
+                        -(np.cos(strike * np.pi / 180)),
+                        np.cos(strike * np.pi / 180),
+                        0,
+                        np.sin(strike * np.pi / 180),
+                        0,
+                        1,
+                        0,
                     ]
                 elif strike <= 180:
                     origin = [cutter_bounds[1], cutter_bounds[2], cutter_bounds[4]]
                     direction_matrix = [
-                        -(np.sin(strike * np.pi / 180)), 0, -(np.cos(strike * np.pi / 180)),
-                        -(np.cos(strike * np.pi / 180)), 0, np.sin(strike * np.pi / 180),
-                        0, 1, 0,
+                        -(np.sin(strike * np.pi / 180)),
+                        0,
+                        -(np.cos(strike * np.pi / 180)),
+                        -(np.cos(strike * np.pi / 180)),
+                        0,
+                        np.sin(strike * np.pi / 180),
+                        0,
+                        1,
+                        0,
                     ]
                 elif strike <= 270:
                     origin = [cutter_bounds[0], cutter_bounds[2], cutter_bounds[4]]
                     direction_matrix = [
-                        -(np.sin(strike * np.pi / 180)), 0, -(np.cos(strike * np.pi / 180)),
-                        -(np.cos(strike * np.pi / 180)), 0, np.sin(strike * np.pi / 180),
-                        0, 1, 0,
+                        -(np.sin(strike * np.pi / 180)),
+                        0,
+                        -(np.cos(strike * np.pi / 180)),
+                        -(np.cos(strike * np.pi / 180)),
+                        0,
+                        np.sin(strike * np.pi / 180),
+                        0,
+                        1,
+                        0,
                     ]
                 else:
                     origin = [cutter_bounds[1], cutter_bounds[2], cutter_bounds[4]]
                     direction_matrix = [
-                        np.sin(strike * np.pi / 180), 0, -(np.cos(strike * np.pi / 180)),
-                        np.cos(strike * np.pi / 180), 0, np.sin(strike * np.pi / 180),
-                        0, 1, 0,
+                        np.sin(strike * np.pi / 180),
+                        0,
+                        -(np.cos(strike * np.pi / 180)),
+                        np.cos(strike * np.pi / 180),
+                        0,
+                        np.sin(strike * np.pi / 180),
+                        0,
+                        1,
+                        0,
                     ]
 
                 probe_image = vtkImageData()
@@ -3777,7 +3863,9 @@ class View3D(ViewVTK):
                 probe_image.GetPointData().SetActiveScalars(scalar_name)
 
                 obj_dict = deepcopy(self.parent.mesh3d_coll.entity_dict)
-                base_name = f"{plain_name}_xs_{self.parent.xsect_coll.get_uid_name(xuid)}"
+                base_name = (
+                    f"{plain_name}_xs_{self.parent.xsect_coll.get_uid_name(xuid)}"
+                )
                 obj_dict["name"] = _unique_name(self.parent.mesh3d_coll, base_name)
                 obj_dict["scenario"] = source_scenario
                 obj_dict["topology"] = "XsVoxet"
@@ -3822,7 +3910,11 @@ class View3D(ViewVTK):
                 stripper.SetInputConnection(clean.GetOutputPort())
                 stripper.Update()
                 stripped = stripper.GetOutput()
-                if stripped and stripped.GetNumberOfPoints() > 0 and stripped.GetNumberOfLines() > 0:
+                if (
+                    stripped
+                    and stripped.GetNumberOfPoints() > 0
+                    and stripped.GetNumberOfLines() > 0
+                ):
                     line_data = stripped
 
             if line_data is not None:
@@ -3835,7 +3927,9 @@ class View3D(ViewVTK):
                 obj_dict["vtk_obj"].DeepCopy(cut_out)
             else:
                 obj_dict["topology"] = "XsVertexSet"
-                obj_dict["vtk_obj"] = XsVertexSet(x_section_uid=xuid, parent=self.parent)
+                obj_dict["vtk_obj"] = XsVertexSet(
+                    x_section_uid=xuid, parent=self.parent
+                )
                 obj_dict["vtk_obj"].DeepCopy(cut_out)
 
             try:
@@ -3849,7 +3943,9 @@ class View3D(ViewVTK):
                 return None
             return self.parent.geol_coll.add_entity_from_dict(obj_dict)
         except Exception:
-            self.print_terminal("Warning: could not attach section data for new X-Section.")
+            self.print_terminal(
+                "Warning: could not attach section data for new X-Section."
+            )
             return None
 
     def _set_tree_checked_for_uid(self, coll_name, uid, checked: bool):
@@ -4041,9 +4137,11 @@ class View3D(ViewVTK):
         if result is None:
             return None
         # Show only the added cells; overlaying the source causes depth flicker.
-        return pv.wrap(result).extract_cells(
-            range(vtk_obj.GetNumberOfCells(), result.GetNumberOfCells())
-        ).extract_surface()
+        return (
+            pv.wrap(result)
+            .extract_cells(range(vtk_obj.GetNumberOfCells(), result.GetNumberOfCells()))
+            .extract_surface()
+        )
 
     def _cleanup_extend_surface_preview(self):
         self.plotter.remove_actor("_extend_surface_preview", render=False)
@@ -4494,7 +4592,11 @@ class View3D(ViewVTK):
 
                 # Create plane widget for U slice
                 widget = self.create_single_plane_widget(
-                    "X", normalized_positions["X"], bounds, callback_func, entity=pv_entity
+                    "X",
+                    normalized_positions["X"],
+                    bounds,
+                    callback_func,
+                    entity=pv_entity,
                 )
                 if widget:
                     self.plane_widgets.append(widget)
@@ -4520,7 +4622,11 @@ class View3D(ViewVTK):
 
                 # Create plane widget for V slice
                 widget = self.create_single_plane_widget(
-                    "Y", normalized_positions["Y"], bounds, callback_func, entity=pv_entity
+                    "Y",
+                    normalized_positions["Y"],
+                    bounds,
+                    callback_func,
+                    entity=pv_entity,
                 )
                 if widget:
                     self.plane_widgets.append(widget)
@@ -4546,7 +4652,11 @@ class View3D(ViewVTK):
 
                 # Create plane widget for W slice
                 widget = self.create_single_plane_widget(
-                    "Z", normalized_positions["Z"], bounds, callback_func, entity=pv_entity
+                    "Z",
+                    normalized_positions["Z"],
+                    bounds,
+                    callback_func,
+                    entity=pv_entity,
                 )
                 if widget:
                     self.plane_widgets.append(widget)
@@ -4832,11 +4942,17 @@ class View3D(ViewVTK):
                     try:
                         pv_entity = pv.wrap(entity)
                         actor = self.slice_actors.get(slice_uid)
-                        normalized_position = self._normalized_slicer_position_from_point(
-                            dataset=pv_entity,
-                            slice_type=slice_type,
-                            point=actor.GetCenter() if actor is not None else pv_entity.center,
-                            display_coordinates=True,
+                        normalized_position = (
+                            self._normalized_slicer_position_from_point(
+                                dataset=pv_entity,
+                                slice_type=slice_type,
+                                point=(
+                                    actor.GetCenter()
+                                    if actor is not None
+                                    else pv_entity.center
+                                ),
+                                display_coordinates=True,
+                            )
                         )
                         slice_data, _plane_info = self._extract_slice_data_for_slicer(
                             dataset=pv_entity,

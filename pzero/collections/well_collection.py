@@ -13,6 +13,7 @@ from .AbstractCollection import BaseCollection
 
 class WellCollection(BaseCollection):
     """Collection for all wells and their metadata."""
+
     shared_legend_name = "Wells"
 
     def __init__(self, parent=None, *args, **kwargs):

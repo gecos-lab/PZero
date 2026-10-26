@@ -84,7 +84,9 @@ def insert_uv_point_on_line(line_uv=None, point=None, tolerance=1.0e-8):
     return uv
 
 
-def trim_uv_terminal_branch(line_uv=None, point=None, max_distance=0.0, tolerance=1.0e-8):
+def trim_uv_terminal_branch(
+    line_uv=None, point=None, max_distance=0.0, tolerance=1.0e-8
+):
     """Trim a short overshooting terminal branch back to an intersection point."""
     uv = np.asarray(line_uv, dtype=float)
     point = np.asarray(point, dtype=float).reshape(2)
@@ -98,10 +100,9 @@ def trim_uv_terminal_branch(line_uv=None, point=None, max_distance=0.0, toleranc
 
     start_dist = float(np.linalg.norm(point - out[0]))
     end_dist = float(np.linalg.norm(point - out[-1]))
-    if (
-        start_dist > float(max_distance) + float(tolerance)
-        and end_dist > float(max_distance) + float(tolerance)
-    ):
+    if start_dist > float(max_distance) + float(tolerance) and end_dist > float(
+        max_distance
+    ) + float(tolerance):
         return out, uv_coords_changed(uv, out, tolerance=tolerance)
 
     distances = np.linalg.norm(out - point, axis=1)
@@ -167,13 +168,17 @@ def snap_two_uv_lines_to_intersection(
         or line_uv["a"].shape[0] < 2
         or line_uv["b"].shape[0] < 2
     ):
-        return line_a_uv, line_b_uv, {
-            "changed_a": False,
-            "changed_b": False,
-            "intersection_count": 0,
-            "trim_count": 0,
-            "endpoint_snap_count": 0,
-        }
+        return (
+            line_a_uv,
+            line_b_uv,
+            {
+                "changed_a": False,
+                "changed_b": False,
+                "intersection_count": 0,
+                "trim_count": 0,
+                "endpoint_snap_count": 0,
+            },
+        )
 
     changed = {"a": False, "b": False}
     trim_count = 0
@@ -242,9 +247,8 @@ def snap_two_uv_lines_to_intersection(
             for candidate in candidates:
                 vec = candidate - anchor
                 proj = float(vec[0] * direction[0] + vec[1] * direction[1])
-                if (
-                    proj < -float(tolerance)
-                    or proj > float(max_distance) + float(tolerance)
+                if proj < -float(tolerance) or proj > float(max_distance) + float(
+                    tolerance
                 ):
                     continue
                 if best_dist is None or proj < best_dist:
@@ -256,10 +260,9 @@ def snap_two_uv_lines_to_intersection(
 
             active_before = line_uv[key]
             if mode == "append":
-                if (
-                    best_dist > float(tolerance)
-                    and np.linalg.norm(best_point - active_before[-1]) > float(tolerance)
-                ):
+                if best_dist > float(tolerance) and np.linalg.norm(
+                    best_point - active_before[-1]
+                ) > float(tolerance):
                     active_after = np.concatenate(
                         (active_before, best_point.reshape(1, 2)), axis=0
                     )
@@ -269,10 +272,9 @@ def snap_two_uv_lines_to_intersection(
                     changed[key] = True
                     endpoint_snap_count += 1
             else:
-                if (
-                    best_dist > float(tolerance)
-                    and np.linalg.norm(best_point - active_before[0]) > float(tolerance)
-                ):
+                if best_dist > float(tolerance) and np.linalg.norm(
+                    best_point - active_before[0]
+                ) > float(tolerance):
                     active_after = np.concatenate(
                         (best_point.reshape(1, 2), active_before), axis=0
                     )
@@ -291,13 +293,17 @@ def snap_two_uv_lines_to_intersection(
                 line_uv[target_key] = target_after
                 changed[target_key] = True
 
-    return line_uv["a"], line_uv["b"], {
-        "changed_a": bool(changed["a"]),
-        "changed_b": bool(changed["b"]),
-        "intersection_count": int(intersection_count),
-        "trim_count": int(trim_count),
-        "endpoint_snap_count": int(endpoint_snap_count),
-    }
+    return (
+        line_uv["a"],
+        line_uv["b"],
+        {
+            "changed_a": bool(changed["a"]),
+            "changed_b": bool(changed["b"]),
+            "intersection_count": int(intersection_count),
+            "trim_count": int(trim_count),
+            "endpoint_snap_count": int(endpoint_snap_count),
+        },
+    )
 
 
 def extend_uv_line_for_splitter(line_uv=None, factor=100.0, tolerance=1.0e-12):
@@ -335,12 +341,7 @@ def split_uv_line_by_line(
     """
     paper = dedupe_consecutive_uv(paper_uv, tolerance=tolerance)
     scissors = dedupe_consecutive_uv(scissors_uv, tolerance=tolerance)
-    if (
-        paper is None
-        or scissors is None
-        or paper.shape[0] < 2
-        or scissors.shape[0] < 2
-    ):
+    if paper is None or scissors is None or paper.shape[0] < 2 or scissors.shape[0] < 2:
         return []
 
     paper_line = shp_linestring(paper)

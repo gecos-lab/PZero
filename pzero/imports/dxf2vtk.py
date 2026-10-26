@@ -60,9 +60,7 @@ def _write_surface_dxf(
         if len(face_points) < 3:
             print(f"problem with cell {cell_id} in {layer}, skipping cell")
             continue
-        dxf_model.add_3dface(
-            face_points[:3], dxfattribs={"layer": layer, "color": 256}
-        )
+        dxf_model.add_3dface(face_points[:3], dxfattribs={"layer": layer, "color": 256})
 
     df.to_csv(f"{out_dir_name}/csv/{out_file_name}.csv", index=False)
     dxf_out.saveas(f"{out_dir_name}/dxf/{out_file_name}.dxf")
@@ -232,9 +230,7 @@ def vtk2dxf(self=None, out_dir_name=None):
             face_points = numpy_support.vtk_to_numpy(
                 vtk_entity.GetCell(cell).GetPoints().GetData()
             )
-            dxf_model.add_3dface(
-                face_points, dxfattribs={"layer": layer, "color": 256}
-            )
+            dxf_model.add_3dface(face_points, dxfattribs={"layer": layer, "color": 256})
 
         out_file_name = f"{uid}_{layer}"
         list_uids.append(uid)
@@ -309,7 +305,9 @@ def vtk2dxf(self=None, out_dir_name=None):
             list_names.append(f"{mesh_name}_mesh")
             self.print_terminal(f"Mesh3D {topology} exported to DXF: {mesh_name}_mesh")
         else:
-            self.print_terminal(f"Mesh3D {topology} has no exportable surface: {mesh_name}")
+            self.print_terminal(
+                f"Mesh3D {topology} has no exportable surface: {mesh_name}"
+            )
 
     complete_list = pd_DataFrame({"uids": list_uids, "features": list_names})
     complete_list.to_csv(f"{out_dir_name}/exported_object_list.csv", index=False)

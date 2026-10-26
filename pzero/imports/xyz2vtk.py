@@ -38,7 +38,6 @@ from pzero.imports.shp2vtk import (
 from pzero.orientation_analysis import dip_directions2normals
 from pzero.ui.import_window_ui import Ui_ImportOptionsWindow
 
-
 TEXT_EXTENSIONS = {".txt", ".csv", ".xyz", ".asc", ".dat"}
 VTK_EXTENSIONS = {".vtu", ".vtk", ".vtp"}
 VALID_PROPERTY_COMPONENTS = {1, 2, 3, 4, 6, 9}
@@ -529,14 +528,20 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             attr_combo.setObjectName(f"AttrcomboBox_{row_idx}")
             attr_combo.addItems(SPECIAL_ASSIGNMENTS)
             attr_combo.currentTextChanged.connect(
-                lambda _text, idx=row_idx, combo=attr_combo: self._on_assignment_changed(idx, combo)
+                lambda _text, idx=row_idx, combo=attr_combo: self._on_assignment_changed(
+                    idx, combo
+                )
             )
 
             custom_line = QLineEdit()
             custom_line.setObjectName(f"CustomPropertyLine_{row_idx}")
             custom_line.setEnabled(False)
-            custom_line.returnPressed.connect(lambda idx=row_idx: self._on_custom_name_changed(idx))
-            custom_line.editingFinished.connect(lambda idx=row_idx: self._on_custom_name_changed(idx))
+            custom_line.returnPressed.connect(
+                lambda idx=row_idx: self._on_custom_name_changed(idx)
+            )
+            custom_line.editingFinished.connect(
+                lambda idx=row_idx: self._on_custom_name_changed(idx)
+            )
 
             self.AssignTable.setItem(row_idx, 0, col_item)
             self.AssignTable.setCellWidget(row_idx, 1, attr_combo)
@@ -552,8 +557,12 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             else:
                 attr_combo.setCurrentText("N.a.")
 
-        self.AssignTable.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.AssignTable.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.AssignTable.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeToContents
+        )
+        self.AssignTable.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeToContents
+        )
         self.AssignTable.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.AssignTable.blockSignals(False)
         self._is_populating_table = False
@@ -718,7 +727,9 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             )
             return
 
-        normal_components = [name for name in ("Nx", "Ny", "Nz") if name in mapped_names]
+        normal_components = [
+            name for name in ("Nx", "Ny", "Nz") if name in mapped_names
+        ]
         if normal_components and len(normal_components) != 3:
             QMessageBox.warning(
                 self,
@@ -833,7 +844,9 @@ def _read_tabular_dataframe(file_path, import_config):
 
     for numeric_column in ("X", "Y", "Z", "dip", "dip_dir", "dir", "Nx", "Ny", "Nz"):
         if numeric_column in input_df.columns:
-            input_df[numeric_column] = pd_to_numeric(input_df[numeric_column], errors="raise")
+            input_df[numeric_column] = pd_to_numeric(
+                input_df[numeric_column], errors="raise"
+            )
 
     if "Z" not in input_df.columns:
         input_df["Z"] = 0.0
@@ -904,7 +917,11 @@ def _build_tabular_vtk_object(group_df):
 
     if has_direct_normals:
         normals = np_column_stack(
-            (group_df["Nx"].to_numpy(), group_df["Ny"].to_numpy(), group_df["Nz"].to_numpy())
+            (
+                group_df["Nx"].to_numpy(),
+                group_df["Ny"].to_numpy(),
+                group_df["Nz"].to_numpy(),
+            )
         )
         normals_flipped = np_where(normals[:, 2:] > 0, normals * -1, normals)
         vtk_obj.set_point_data("Normals", normals_flipped)
@@ -918,7 +935,11 @@ def _build_tabular_vtk_object(group_df):
     elif has_dip_dir:
         vtk_obj.set_point_data("dip_dir", group_df["dip_dir"].to_numpy())
 
-    if has_dip and ("dip_dir" in vtk_obj.point_data_keys) and "Normals" not in vtk_obj.point_data_keys:
+    if (
+        has_dip
+        and ("dip_dir" in vtk_obj.point_data_keys)
+        and "Normals" not in vtk_obj.point_data_keys
+    ):
         normals = dip_directions2normals(
             vtk_obj.get_point_data("dip"),
             vtk_obj.get_point_data("dip_dir"),
@@ -980,9 +1001,11 @@ def _import_tabular_file(self, collection, file_path, import_config):
     for _group_key, group_df in grouped_iterable:
         vtk_obj = _build_tabular_vtk_object(group_df)
         metadata = {
-            "name": _normalise_text_value(group_df.iloc[0]["name"], fallback="undef")
-            if "name" in group_df.columns
-            else import_config["name_value"],
+            "name": (
+                _normalise_text_value(group_df.iloc[0]["name"], fallback="undef")
+                if "name" in group_df.columns
+                else import_config["name_value"]
+            ),
             "feature": _normalise_text_value(
                 group_df.iloc[0]["feature"],
                 fallback=import_config["feature_value"],
@@ -1075,7 +1098,10 @@ def xyz2vtk(self=None, in_file_names=None, collection_name="Geology"):
                 vtk_files.append(in_file_name)
             else:
                 failed_files.append(
-                    (os_path.basename(in_file_name), f"unsupported extension {extension}")
+                    (
+                        os_path.basename(in_file_name),
+                        f"unsupported extension {extension}",
+                    )
                 )
 
         if not selected_files:

@@ -467,7 +467,11 @@ def _estimate_reconstruction_spacing(vtk_objects):
     all_points = []
 
     for vtk_obj in vtk_objects:
-        points = np_array(vtk_obj.points, dtype=float) if vtk_obj.points is not None else None
+        points = (
+            np_array(vtk_obj.points, dtype=float)
+            if vtk_obj.points is not None
+            else None
+        )
         if points is None or len(points) == 0:
             continue
 
@@ -540,7 +544,9 @@ def _sample_polyline_for_reconstruction(vtk_obj, sample_spacing, ribbon_half_wid
     from numpy import linalg as np_linalg
     from numpy import vstack as np_vstack
 
-    points = np_array(vtk_obj.points, dtype=float) if vtk_obj.points is not None else None
+    points = (
+        np_array(vtk_obj.points, dtype=float) if vtk_obj.points is not None else None
+    )
     if points is None or len(points) == 0:
         return np_array([]).reshape(0, 3), np_array([]).reshape(0, 3)
 
@@ -575,7 +581,9 @@ def _sample_polyline_for_reconstruction(vtk_obj, sample_spacing, ribbon_half_wid
             if normals is None or ribbon_half_width <= 0:
                 continue
 
-            point_normal = (1.0 - weight) * normals[int(cell[0])] + weight * normals[int(cell[1])]
+            point_normal = (1.0 - weight) * normals[int(cell[0])] + weight * normals[
+                int(cell[1])
+            ]
             point_normal, valid = _normalize_vectors(point_normal)
             if not valid[0]:
                 continue
@@ -604,13 +612,17 @@ def _sample_object_for_reconstruction(vtk_obj, sample_spacing, ribbon_half_width
             vtk_obj, sample_spacing=sample_spacing, ribbon_half_width=ribbon_half_width
         )
 
-    points = np_array(vtk_obj.points, dtype=float) if vtk_obj.points is not None else None
+    points = (
+        np_array(vtk_obj.points, dtype=float) if vtk_obj.points is not None else None
+    )
     if points is None or len(points) == 0:
         return np_array([]).reshape(0, 3), np_array([]).reshape(0, 3)
     return points.copy(), points.copy()
 
 
-def _trim_reconstructed_surface(surface, constraint_points, trim_distance, keep_largest_patch=True):
+def _trim_reconstructed_surface(
+    surface, constraint_points, trim_distance, keep_largest_patch=True
+):
     """Remove parts of the reconstructed mesh that are unsupported by the input data."""
     from scipy.spatial import cKDTree
 
@@ -647,12 +659,12 @@ def _orient_polyline_rows_consistently(row_points):
     for row in row_points:
         current_row = np_array(row, dtype=float)
         if previous_row is not None:
-            forward_cost = np_linalg.norm(current_row[0] - previous_row[0]) + np_linalg.norm(
-                current_row[-1] - previous_row[-1]
-            )
-            reverse_cost = np_linalg.norm(current_row[-1] - previous_row[0]) + np_linalg.norm(
-                current_row[0] - previous_row[-1]
-            )
+            forward_cost = np_linalg.norm(
+                current_row[0] - previous_row[0]
+            ) + np_linalg.norm(current_row[-1] - previous_row[-1])
+            reverse_cost = np_linalg.norm(
+                current_row[-1] - previous_row[0]
+            ) + np_linalg.norm(current_row[0] - previous_row[-1])
             if reverse_cost + 1.0e-9 < forward_cost:
                 current_row = current_row[::-1].copy()
         oriented_rows.append(current_row)
@@ -686,7 +698,10 @@ def _extract_regularized_slice_stack(vtk_obj):
         if n_points < 2:
             continue
         points = np.asarray(
-            [vtk_obj.GetPoint(cell.GetPointId(point_idx)) for point_idx in range(n_points)],
+            [
+                vtk_obj.GetPoint(cell.GetPointId(point_idx))
+                for point_idx in range(n_points)
+            ],
             dtype=float,
         )
         slice_idx = int(slice_array.GetValue(cell_id))
@@ -806,7 +821,10 @@ def _extract_gridded_polyline_stack(vtk_obj):
         if cell is None or cell.GetNumberOfPoints() != col_count:
             return None, None
         points = np_array(
-            [vtk_obj.GetPoint(cell.GetPointId(point_idx)) for point_idx in range(col_count)],
+            [
+                vtk_obj.GetPoint(cell.GetPointId(point_idx))
+                for point_idx in range(col_count)
+            ],
             dtype=float,
         )
         row_points.append(points)
@@ -913,7 +931,9 @@ def _resample_point_stack_columns(point_stack, target_row_count):
         (target_row_count, stack.shape[1], stack.shape[2]), dtype=float
     )
     for col_idx in range(stack.shape[1]):
-        column_curve = _resample_structured_curve(stack[:, col_idx, :], target_row_count)
+        column_curve = _resample_structured_curve(
+            stack[:, col_idx, :], target_row_count
+        )
         if column_curve is None:
             return None
         resampled_stack[:, col_idx, :] = column_curve
@@ -921,7 +941,9 @@ def _resample_point_stack_columns(point_stack, target_row_count):
     return resampled_stack
 
 
-def _densify_structured_point_stack(point_stack, steiner_points=0, max_point_count=400000):
+def _densify_structured_point_stack(
+    point_stack, steiner_points=0, max_point_count=400000
+):
     """
     Redistribute a structured grid and optionally insert Steiner points between samples.
 
@@ -951,9 +973,8 @@ def _densify_structured_point_stack(point_stack, steiner_points=0, max_point_cou
         "redistributed_only": bool(steiner_points == 0),
         "max_point_count": int(max_point_count),
     }
-    if (
-        target_point_count > int(max_point_count)
-        and target_point_count > int(row_count * col_count)
+    if target_point_count > int(max_point_count) and target_point_count > int(
+        row_count * col_count
     ):
         info["limit_exceeded"] = True
         return None, info
@@ -965,7 +986,9 @@ def _densify_structured_point_stack(point_stack, steiner_points=0, max_point_cou
     top_boundary = row_resampled[0, :, :].copy()
     bottom_boundary = row_resampled[-1, :, :].copy()
     left_boundary = _resample_structured_curve(row_resampled[:, 0, :], target_row_count)
-    right_boundary = _resample_structured_curve(row_resampled[:, -1, :], target_row_count)
+    right_boundary = _resample_structured_curve(
+        row_resampled[:, -1, :], target_row_count
+    )
     if left_boundary is None or right_boundary is None:
         return None, info
 
@@ -1012,8 +1035,12 @@ def _build_surface_from_point_stack(point_stack):
             bottom_left = (row_idx + 1) * col_count + col_idx
             bottom_right = bottom_left + 1
 
-            diag_main = np_linalg.norm(surface.points[top_left] - surface.points[bottom_right])
-            diag_cross = np_linalg.norm(surface.points[top_right] - surface.points[bottom_left])
+            diag_main = np_linalg.norm(
+                surface.points[top_left] - surface.points[bottom_right]
+            )
+            diag_cross = np_linalg.norm(
+                surface.points[top_right] - surface.points[bottom_left]
+            )
             if diag_main <= diag_cross:
                 append_triangle_if_valid([top_left, top_right, bottom_right])
                 append_triangle_if_valid([top_left, bottom_right, bottom_left])
@@ -1129,6 +1156,7 @@ def interpolation_delaunay_2d(self):
     # ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning
     surf_dict["vtk_obj"].ShallowCopy(delaunay_2d.GetOutput())
     from .helpers.seismic_relink import inherit_surface_seismic_parent
+
     inherit_surface_seismic_parent(self.geol_coll, input_uids, surf_dict)
     surf_dict["vtk_obj"].Modified()
     # Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
@@ -1162,7 +1190,9 @@ def regularized_grid_surface_interpolation(self):
         hasattr(input_vtk_obj, attr)
         for attr in ("GetNumberOfCells", "GetCell", "GetPoint")
     ):
-        self.print_terminal(" -- Error input type: only VTK polyline grids are supported -- ")
+        self.print_terminal(
+            " -- Error input type: only VTK polyline grids are supported -- "
+        )
         return
 
     structured_stack, structured_info = _extract_structured_point_stack(input_vtk_obj)
@@ -1230,11 +1260,14 @@ def regularized_grid_surface_interpolation(self):
     )
     structured_surface = _build_surface_from_point_stack(dense_stack)
     if structured_surface is None:
-        self.print_terminal(" -- Could not build structured surface from regularized samples -- ")
+        self.print_terminal(
+            " -- Could not build structured surface from regularized samples -- "
+        )
         return
 
     surf_dict["vtk_obj"].ShallowCopy(structured_surface)
     from .helpers.seismic_relink import inherit_surface_seismic_parent
+
     inherit_surface_seismic_parent(self.geol_coll, input_uids, surf_dict)
     surf_dict["vtk_obj"].Modified()
     if surf_dict["vtk_obj"].points_number > 0:
@@ -2009,7 +2042,9 @@ def enhanced_linear_extrusion(self):
 
     input_obj = self.geol_coll.get_uid_vtk_obj(input_uids[0])
     if not isinstance(input_obj, (PolyLine, XsPolyLine)):
-        self.print_terminal(" -- Error input type: only PolyLine and XsPolyLine type -- ")
+        self.print_terminal(
+            " -- Error input type: only PolyLine and XsPolyLine type -- "
+        )
         return
 
     surf_dict = _build_extrusion_output_dict(
@@ -2647,7 +2682,9 @@ def project_2_dem(self):
         "tabWells": "well_coll",
     }
     if self.shown_table not in valid_tables:
-        self.print_terminal(" -- Only geological objects and wells can be interpolated -- ")
+        self.print_terminal(
+            " -- Only geological objects and wells can be interpolated -- "
+        )
         return
     source_coll = getattr(self, valid_tables[self.shown_table])
     is_well_projection = self.shown_table == "tabWells"
@@ -2759,13 +2796,15 @@ def project_2_dem(self):
                 if replace_on_off == 1:
                     child_dict = deepcopy(collection.entity_dict)
                     child_dict["uid"] = None
-                    child_dict["name"] = f"{collection.get_uid_name(child_uid)}_proj_DEM"
+                    child_dict["name"] = (
+                        f"{collection.get_uid_name(child_uid)}_proj_DEM"
+                    )
                     child_dict["scenario"] = collection.get_uid_scenario(child_uid)
                     child_dict["topology"] = collection.get_uid_topology(child_uid)
                     child_dict["role"] = collection.get_uid_role(child_uid)
                     child_dict["feature"] = collection.get_uid_feature(child_uid)
-                    child_dict["properties_names"] = collection.get_uid_properties_names(
-                        child_uid
+                    child_dict["properties_names"] = (
+                        collection.get_uid_properties_names(child_uid)
                     )
                     child_dict["properties_components"] = (
                         collection.get_uid_properties_components(child_uid)
@@ -2842,7 +2881,9 @@ def project_2_dem(self):
             obj_dict["scenario"] = source_coll.get_uid_scenario(uid)
             obj_dict["topology"] = source_coll.get_uid_topology(uid)
             obj_dict["properties_names"] = source_coll.get_uid_properties_names(uid)
-            obj_dict["properties_components"] = source_coll.get_uid_properties_components(uid)
+            obj_dict["properties_components"] = (
+                source_coll.get_uid_properties_components(uid)
+            )
             if not is_well_projection:
                 obj_dict["feature"] = source_coll.get_uid_feature(uid)
                 obj_dict["role"] = source_coll.get_uid_role(uid)
@@ -2925,12 +2966,16 @@ def project_2_dem(self):
                 projected_probe.get_point_data("elevation"), dtype=np_float64
             ).reshape(-1)
             if elevation.size == 0:
-                self.print_terminal(" -- DEM elevation not available for projected well head -- ")
+                self.print_terminal(
+                    " -- DEM elevation not available for projected well head -- "
+                )
                 prgs_bar.add_one()
                 continue
             target_head_z = np_float64(elevation[0])
             if target_head_z != target_head_z:
-                self.print_terminal(" -- DEM returned an invalid elevation for well head -- ")
+                self.print_terminal(
+                    " -- DEM returned an invalid elevation for well head -- "
+                )
                 prgs_bar.add_one()
                 continue
             delta_z = target_head_z - head_z
@@ -2967,7 +3012,9 @@ def project_2_dem(self):
                 projected_obj.GetFieldData().RemoveArray("pmarker_head")
             projected_obj.set_field_data(
                 name="pmarker_head",
-                data=np_array([[head_xyz[0], head_xyz[1], target_head_z]], dtype=np_float64),
+                data=np_array(
+                    [[head_xyz[0], head_xyz[1], target_head_z]], dtype=np_float64
+                ),
             )
             projected_obj.Modified()
         else:
@@ -2989,7 +3036,9 @@ def project_2_dem(self):
                 projected_obj = VertexSet()
 
             if projected_obj is None:
-                self.print_terminal(f" -- Unknown object type for uid {uid_to_project} -- ")
+                self.print_terminal(
+                    f" -- Unknown object type for uid {uid_to_project} -- "
+                )
                 prgs_bar.add_one()
                 continue
 
@@ -3092,12 +3141,16 @@ def project_2_xs(self):
     # main geology table is deselected while the dataframe is built.
     input_uids = deepcopy(self.selected_uids)
     # Select only supported topologies.
-    valid_topologies = ["PolyLine", "XsPolyLine"] if is_well_projection else [
-        "VertexSet",
-        "PolyLine",
-        "XsVertexSet",
-        "XsPolyLine",
-    ]
+    valid_topologies = (
+        ["PolyLine", "XsPolyLine"]
+        if is_well_projection
+        else [
+            "VertexSet",
+            "PolyLine",
+            "XsVertexSet",
+            "XsPolyLine",
+        ]
+    )
     input_uids_clean = deepcopy(input_uids)
     for uid in input_uids:
         if source_coll.get_uid_topology(uid) not in valid_topologies:
@@ -3111,7 +3164,10 @@ def project_2_xs(self):
     def _clip_polyline_to_distance_band(polyline_obj, max_dist):
         """Clip a polyline to the band |signed_distance| <= max_dist using nodal property."""
         clipped = PolyLine()
-        if polyline_obj.GetNumberOfPoints() <= 0 or polyline_obj.GetNumberOfLines() <= 0:
+        if (
+            polyline_obj.GetNumberOfPoints() <= 0
+            or polyline_obj.GetNumberOfLines() <= 0
+        ):
             return clipped
         if "signed_distance" not in polyline_obj.point_data_keys:
             return clipped
@@ -3159,13 +3215,15 @@ def project_2_xs(self):
                 clipped.append_cell(np_array([id0, id0 + 1]))
         return clipped
 
-    def _project_xyz_to_section(x_coords, y_coords, z_coords, section_origin, section_normal):
+    def _project_xyz_to_section(
+        x_coords, y_coords, z_coords, section_origin, section_normal
+    ):
         """Project XYZ coordinates to a section along the chosen projection axis."""
         ox, oy, oz = section_origin
         nx, ny, nz = section_normal
-        t_vals = (nx * (ox - x_coords) + ny * (oy - y_coords) + nz * (oz - z_coords)) / (
-            nx * alpha + ny * beta + nz * gamma
-        )
+        t_vals = (
+            nx * (ox - x_coords) + ny * (oy - y_coords) + nz * (oz - z_coords)
+        ) / (nx * alpha + ny * beta + nz * gamma)
         return (
             (x_coords + alpha * t_vals).astype(np_float32),
             (y_coords + beta * t_vals).astype(np_float32),
@@ -3285,12 +3343,7 @@ def project_2_xs(self):
         strike_delta = min(
             np_abs((proj_trend - section_strike + 180.0) % 360.0 - 180.0),
             np_abs(
-                (
-                    proj_trend
-                    - ((section_strike + 180.0) % 360.0)
-                    + 180.0
-                )
-                % 360.0
+                (proj_trend - ((section_strike + 180.0) % 360.0) + 180.0) % 360.0
                 - 180.0
             ),
         )
@@ -3350,7 +3403,9 @@ def project_2_xs(self):
                 entity_dict["role"] = collection.get_uid_role(uid)
                 entity_dict["feature"] = collection.get_uid_feature(uid)
                 entity_dict["scenario"] = collection.get_uid_scenario(uid)
-                entity_dict["properties_names"] = collection.get_uid_properties_names(uid)
+                entity_dict["properties_names"] = collection.get_uid_properties_names(
+                    uid
+                )
                 entity_dict["properties_components"] = (
                     collection.get_uid_properties_components(uid)
                 )
@@ -3492,12 +3547,14 @@ def project_2_xs(self):
             )
             for uid in section_input_uids:
                 entity_dict = deepcopy(self.well_coll.entity_dict)
-                entity_dict["name"] = self.well_coll.get_uid_name(uid) + "_prj_" + xs_name
+                entity_dict["name"] = (
+                    self.well_coll.get_uid_name(uid) + "_prj_" + xs_name
+                )
                 entity_dict["scenario"] = self.well_coll.get_uid_scenario(uid)
                 entity_dict["parent_uid"] = xs_uid
                 entity_dict["topology"] = "XsPolyLine"
-                entity_dict["properties_names"] = self.well_coll.get_uid_properties_names(
-                    uid
+                entity_dict["properties_names"] = (
+                    self.well_coll.get_uid_properties_names(uid)
                 )
                 entity_dict["properties_components"] = (
                     self.well_coll.get_uid_properties_components(uid)
@@ -3506,7 +3563,9 @@ def project_2_xs(self):
                 entity_dict["properties_types"] = deepcopy(
                     self.well_coll.df.at[row_idx, "properties_types"]
                 )
-                entity_dict["markers"] = deepcopy(self.well_coll.df.at[row_idx, "markers"])
+                entity_dict["markers"] = deepcopy(
+                    self.well_coll.df.at[row_idx, "markers"]
+                )
 
                 out_vtk = self.well_coll.get_uid_vtk_obj(uid).deep_copy()
                 proj_x, proj_y, proj_z, t_vals = _project_xyz_to_section(
@@ -3524,8 +3583,8 @@ def project_2_xs(self):
 
                 field_keys = list(out_vtk.get_field_data_keys())
                 for field_key in field_keys:
-                    is_position_key = field_key == "pmarker_head" or field_key.startswith(
-                        "pmarker_"
+                    is_position_key = (
+                        field_key == "pmarker_head" or field_key.startswith("pmarker_")
                     )
                     if not is_position_key and field_key.startswith("p"):
                         is_position_key = (
@@ -3535,10 +3594,9 @@ def project_2_xs(self):
                     if not is_position_key:
                         continue
                     try:
-                        field_xyz = (
-                            np_array(out_vtk.get_field_data(field_key), dtype=np_float64)
-                            .reshape(-1, 3)
-                        )
+                        field_xyz = np_array(
+                            out_vtk.get_field_data(field_key), dtype=np_float64
+                        ).reshape(-1, 3)
                     except (TypeError, ValueError):
                         continue
                     projected_field_xyz, _ = _project_xyz_matrix(

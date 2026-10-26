@@ -38,7 +38,6 @@ from pzero.helpers.structural_topology import (
 from pzero.properties_manager import PropertiesCMaps
 from pzero.ui.import_window_ui import Ui_ImportOptionsWindow
 
-
 TEXT_TABLE_FILTER = (
     "Supported table files (*.csv *.dat *.txt *.tsv *.asc *.xyz *.json);;"
     "STM JSON files (*.json);;"
@@ -111,9 +110,7 @@ def _stm_import_payload(payload):
                 "boundaries": decoded["boundaries"],
                 "units": decoded["units"],
             },
-            "stm_locked_conformable_links": decoded.get(
-                "locked_conformable_links", []
-            ),
+            "stm_locked_conformable_links": decoded.get("locked_conformable_links", []),
             "stm_boundary_scenarios": decoded["boundary_scenarios"],
         },
     }
@@ -190,8 +187,10 @@ def _stm_boundary_dataframe(payload):
                 stm_domain_col(1): "",
             }
         )
-    return pd_DataFrame(rows) if rows else pd_DataFrame(
-        columns=stm_required_cols + [stm_domain_col(1)]
+    return (
+        pd_DataFrame(rows)
+        if rows
+        else pd_DataFrame(columns=stm_required_cols + [stm_domain_col(1)])
     )
 
 
@@ -257,9 +256,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         self.ImportAsSTmCheckBox = QCheckBox(self.OptionsFrame)
         self.ImportAsSTmCheckBox.setText("Import as STM")
         self.ImportAsSTmCheckBox.setChecked(False)
-        self.formLayout.setWidget(
-            5, QFormLayout.ItemRole.LabelRole, QLabel("STM type")
-        )
+        self.formLayout.setWidget(5, QFormLayout.ItemRole.LabelRole, QLabel("STM type"))
         self.formLayout.setWidget(
             5, QFormLayout.ItemRole.FieldRole, self.ImportAsSTmCheckBox
         )
@@ -283,7 +280,9 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         self.EndRowspinBox.valueChanged.connect(self._refresh_preview)
         self.SeparatorcomboBox.currentTextChanged.connect(self._refresh_preview)
         self.HasHeaderCheckBox.toggled.connect(self._refresh_preview)
-        self.ImportAsColormapCheckBox.toggled.connect(self._on_import_as_colormap_toggled)
+        self.ImportAsColormapCheckBox.toggled.connect(
+            self._on_import_as_colormap_toggled
+        )
         self.ImportAsSTmCheckBox.toggled.connect(self._on_import_as_stm_toggled)
         self.ColormapModeComboBox.currentTextChanged.connect(
             self._on_colormap_mode_changed
@@ -353,9 +352,10 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             detected_sep = ","
 
         self.preview_stm_payload = _read_stm_export_payload(self.preview_path)
-        if self.preview_stm_payload is not None and self.preview_stm_payload.get(
-            "table_type"
-        ) == stm_table_type:
+        if (
+            self.preview_stm_payload is not None
+            and self.preview_stm_payload.get("table_type") == stm_table_type
+        ):
             self.ImportAsSTmCheckBox.setChecked(True)
             self.ImportAsColormapCheckBox.setChecked(False)
 
@@ -397,8 +397,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         """Read a preview dataframe from the current file/options."""
         if (
             self.preview_stm_payload is not None
-            and self.preview_stm_payload.get("table_type")
-            == stm_table_type
+            and self.preview_stm_payload.get("table_type") == stm_table_type
         ):
             return _stm_boundary_dataframe(self.preview_stm_payload)
         delimiter = self._current_separator()
@@ -406,7 +405,9 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         has_header = self.HasHeaderCheckBox.isChecked()
         start_row = self.StartRowspinBox.value()
         end_row = self.EndRowspinBox.value()
-        preview_nrows = max(min(end_row - start_row, 50), 1) if end_row > start_row else 50
+        preview_nrows = (
+            max(min(end_row - start_row, 50), 1) if end_row > start_row else 50
+        )
 
         if has_header:
             skiprows = range(1, start_row + 1) if start_row > 0 else None
@@ -470,7 +471,10 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
         """Assign default mappings for the current import mode."""
         column_names = list(self.input_data_df.columns)
 
-        if not self.ImportAsColormapCheckBox.isChecked() and not self.ImportAsSTmCheckBox.isChecked():
+        if (
+            not self.ImportAsColormapCheckBox.isChecked()
+            and not self.ImportAsSTmCheckBox.isChecked()
+        ):
             self.rename_dict = {idx: "As is" for idx in range(len(column_names))}
             return
 
@@ -480,9 +484,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             target_assignments = stm_required_cols
 
         self.rename_dict = {}
-        remaining_targets = {
-            target.casefold(): target for target in target_assignments
-        }
+        remaining_targets = {target.casefold(): target for target in target_assignments}
         for idx, column_name in enumerate(column_names):
             column_name_txt = str(column_name)
             matched_target = remaining_targets.pop(column_name_txt.casefold(), None)
@@ -495,8 +497,10 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
                     if suffix.isdigit() and int(suffix) > 0:
                         self.rename_dict[idx] = column_name_txt
                         continue
-            self.rename_dict[idx] = matched_target if matched_target else (
-                "As is" if self.ImportAsSTmCheckBox.isChecked() else "N.a."
+            self.rename_dict[idx] = (
+                matched_target
+                if matched_target
+                else ("As is" if self.ImportAsSTmCheckBox.isChecked() else "N.a.")
             )
 
     def _assign_data_table(self):
@@ -535,9 +539,8 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             self.AssignTable.setCellWidget(row_idx, 2, custom_line)
 
             current_value = self.rename_dict.get(row_idx, "As is")
-            if (
-                self.ImportAsSTmCheckBox.isChecked()
-                and str(current_value).startswith("Domain_")
+            if self.ImportAsSTmCheckBox.isChecked() and str(current_value).startswith(
+                "Domain_"
             ):
                 attr_combo.setCurrentText("Domain")
                 custom_line.setEnabled(True)
@@ -779,10 +782,7 @@ class TableImportDialog(QMainWindow, Ui_ImportOptionsWindow):
 def _read_table_dataframe(file_path, import_config):
     """Read a mapped text table according to the dialog configuration."""
     stm_payload = _read_stm_export_payload(file_path)
-    if (
-        stm_payload is not None
-        and stm_payload.get("table_type") == stm_table_type
-    ):
+    if stm_payload is not None and stm_payload.get("table_type") == stm_table_type:
         return _stm_boundary_dataframe(stm_payload)
     column_specs = import_config["column_specs"]
     usecols = [spec["source_index"] for spec in column_specs]
@@ -834,6 +834,7 @@ def _read_table_dataframe(file_path, import_config):
 
 def _normalise_stm_dataframe(input_df):
     """Ensure imported STM tables always expose the expected core columns."""
+
     def domain_sort_key(column_name):
         text = str(column_name)
         if text == "Domain":
@@ -853,9 +854,7 @@ def _normalise_stm_dataframe(input_df):
         if required_column not in output_df.columns:
             output_df[required_column] = ""
     for row_label in output_df.index.tolist():
-        unit_role = _normalise_stm_unit_role(
-            output_df.at[row_label, stm_unit_role_col]
-        )
+        unit_role = _normalise_stm_unit_role(output_df.at[row_label, stm_unit_role_col])
         output_df.at[row_label, stm_unit_role_col] = unit_role
     if not any(str(column).startswith("Domain") for column in output_df.columns):
         output_df[first_domain_col] = ""
@@ -920,7 +919,10 @@ def import_tables(self=None, in_file_names=None):
             import_as_colormap = bool(import_config.get("import_as_colormap", False))
             import_as_stm = bool(import_config.get("import_as_stm", False))
             stm_options = {}
-            if stm_payload is not None and stm_payload.get("table_type") == stm_table_type:
+            if (
+                stm_payload is not None
+                and stm_payload.get("table_type") == stm_table_type
+            ):
                 import_as_stm = True
                 import_as_colormap = False
                 stm_options = dict(stm_payload.get("options", {}))

@@ -86,9 +86,7 @@ def _bbox_diagonal(poly: pv.PolyData) -> float:
     if poly is None or poly.n_points == 0:
         return 1.0
     xmin, xmax, ymin, ymax, zmin, zmax = poly.bounds
-    diag = float(
-        np.sqrt((xmax - xmin) ** 2 + (ymax - ymin) ** 2 + (zmax - zmin) ** 2)
-    )
+    diag = float(np.sqrt((xmax - xmin) ** 2 + (ymax - ymin) ** 2 + (zmax - zmin) ** 2))
     return diag if diag > 0.0 else 1.0
 
 
@@ -140,9 +138,7 @@ def _convex_hull_polydata(points: np.ndarray) -> Optional[pv.PolyData]:
         return None
 
 
-def _blend_toward_convex_hull(
-    points: np.ndarray, blend: float
-) -> np.ndarray:
+def _blend_toward_convex_hull(points: np.ndarray, blend: float) -> np.ndarray:
     """Move points toward their closest projection on the convex hull.
 
     This is the operation to "remove concave features" from a surface:
@@ -239,9 +235,7 @@ def _surface_vertex_area_weights(mesh: pv.PolyData) -> Optional[np.ndarray]:
 
 def _fault_trace_frame(
     points: np.ndarray, weights: Optional[np.ndarray] = None
-) -> Optional[
-    Tuple[np.ndarray, float, np.ndarray, np.ndarray, float, float]
-]:
+) -> Optional[Tuple[np.ndarray, float, np.ndarray, np.ndarray, float, float]]:
     """Fit a map-view strike frame for straightening steep fault surfaces.
 
     The fitted plane is constrained to keep a straight XY trace: cross-strike
@@ -341,9 +335,7 @@ def _project_to_plane(
 
     projected = points.copy()
     projected[:, :2] = (
-        xy_center
-        + np.outer(strike_coord, strike)
-        + np.outer(target_cross, cross)
+        xy_center + np.outer(strike_coord, strike) + np.outer(target_cross, cross)
     )
     return points + blend * (projected - points)
 
@@ -464,9 +456,7 @@ def _surface_local_frame(
     return center, u_axis, v_axis, normal, local_points
 
 
-def _apply_side_clip(
-    mesh: pv.PolyData, params: Dict[str, object]
-) -> pv.PolyData:
+def _apply_side_clip(mesh: pv.PolyData, params: Dict[str, object]) -> pv.PolyData:
     """Clip `mesh` from one local side using a planar trim.
 
     The clip plane is defined in the surface local frame, so `left`,
@@ -550,9 +540,7 @@ def _apply_side_clip(
     ).triangulate()
 
 
-def _apply_fix_pipeline(
-    source: pv.PolyData, params: Dict[str, object]
-) -> pv.PolyData:
+def _apply_fix_pipeline(source: pv.PolyData, params: Dict[str, object]) -> pv.PolyData:
     """Run the configured sequence of filters on `source`.
 
     The pipeline order matters: clean first to remove duplicates and
@@ -590,9 +578,7 @@ def _apply_fix_pipeline(
         algorithm = str(params.get("decimate_algorithm", "decimate_pro"))
         feature_angle = float(params.get("decimate_feature_angle", 45.0))
         preserve_topology = bool(params.get("decimate_preserve_topology", True))
-        boundary_vertex_deletion = bool(
-            params.get("decimate_boundary_deletion", False)
-        )
+        boundary_vertex_deletion = bool(params.get("decimate_boundary_deletion", False))
         if algorithm == "decimate":
             mesh = mesh.decimate(
                 target_reduction=target_reduction,
@@ -709,9 +695,7 @@ def _mesh_quality_stats(mesh: pv.PolyData) -> Dict[str, float]:
     if mesh.n_cells == 0:
         return stats
     try:
-        qual = mesh.compute_cell_sizes(
-            length=False, area=True, volume=False
-        )
+        qual = mesh.compute_cell_sizes(length=False, area=True, volume=False)
         areas = np.asarray(qual.cell_data["Area"])
         stats["area_min"] = float(np.min(areas)) if areas.size else 0.0
     except Exception:
@@ -1097,8 +1081,7 @@ class FixGeometryDialog(QDialog):
         self.clip_extent_spin.setSingleStep(0.05)
         self.clip_extent_spin.setValue(0.0)
         self.clip_extent_spin.setToolTip(
-            "Relative inward trim amount in [0, 1].\n"
-            "Used when Measure = extent."
+            "Relative inward trim amount in [0, 1].\n" "Used when Measure = extent."
         )
         self.clip_extent_spin.valueChanged.connect(self._schedule_preview)
         form.addRow("Extent (rel):", self.clip_extent_spin)
@@ -1402,9 +1385,7 @@ class FixGeometryDialog(QDialog):
         except Exception:
             return None
 
-    def _update_stats(
-        self, source: pv.PolyData, result: pv.PolyData
-    ) -> None:
+    def _update_stats(self, source: pv.PolyData, result: pv.PolyData) -> None:
         src = _mesh_quality_stats(source)
         dst = _mesh_quality_stats(result)
         txt = (

@@ -114,7 +114,9 @@ class ViewVTK(BaseView):
         return None
 
     def _get_property_render_settings(self, property_name=None):
-        return get_property_render_settings(parent=self.parent, property_name=property_name)
+        return get_property_render_settings(
+            parent=self.parent, property_name=property_name
+        )
 
     def _resolve_scalar_range_and_cmap(self, property_name=None, color_bar_range=None):
         if property_name is None:
@@ -311,7 +313,9 @@ class ViewVTK(BaseView):
                     actor.SetPickable(self._hidden_actor_pickability.pop(key))
                 actor.SetVisibility(visible)
                 if key == uid and not visible:
-                    self.selected_uids = [item for item in self.selected_uids if item != uid]
+                    self.selected_uids = [
+                        item for item in self.selected_uids if item != uid
+                    ]
                     self.plotter.remove_actor(f"{uid}_silh", render=False)
             except Exception:
                 pass
@@ -819,9 +823,13 @@ class ViewVTK(BaseView):
                     original_prop = show_property[:pos1]
                     index = int(show_property[pos1 + 1 : pos2])
                     if original_prop in plot_entity.point_data_keys:
-                        show_property = plot_entity.get_point_data(original_prop)[:, index]
+                        show_property = plot_entity.get_point_data(original_prop)[
+                            :, index
+                        ]
                     elif original_prop in plot_entity.cell_data_keys:
-                        show_property = plot_entity.get_cell_data(original_prop)[:, index]
+                        show_property = plot_entity.get_cell_data(original_prop)[
+                            :, index
+                        ]
                         preference = "cell"
                     else:
                         show_property = None
@@ -911,7 +919,11 @@ class ViewVTK(BaseView):
                     # Check if property exists and has 3 components (for RGB)
                     try:
                         if plot_entity.GetPointData().GetArray(show_property):
-                            n_comp = plot_entity.GetPointData().GetArray(show_property).GetNumberOfComponents()
+                            n_comp = (
+                                plot_entity.GetPointData()
+                                .GetArray(show_property)
+                                .GetNumberOfComponents()
+                            )
                             if n_comp == 3:
                                 plot_rgb_option = True
                     except Exception:

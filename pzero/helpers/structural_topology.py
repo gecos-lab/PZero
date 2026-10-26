@@ -7,7 +7,6 @@ from hashlib import md5
 from pandas import DataFrame, concat as pd_concat, isna as pd_isna
 from PySide6.QtGui import QColor
 
-
 stm_table_type = "stm"
 stm_feature_col = "Feature"
 stm_unit_role_col = "Unit Role"
@@ -245,9 +244,7 @@ def normalise_stm_boundaries(dataframe=None):
 def normalise_stm_units(dataframe=None):
     """Return the canonical STM Units dataframe."""
     out_df = (
-        dataframe.copy()
-        if dataframe is not None
-        else DataFrame(columns=stm_unit_cols)
+        dataframe.copy() if dataframe is not None else DataFrame(columns=stm_unit_cols)
     )
     if "Domain" in out_df.columns and "Domain_1" not in out_df.columns:
         out_df.rename(columns={"Domain": "Domain_1"}, inplace=True)
@@ -298,13 +295,17 @@ def normalise_stm_units(dataframe=None):
             + domain_columns
         )
     ]
-    ordered_columns = [
-        stm_feature_col,
-        stm_unit_role_col,
-        stm_unit_level_col,
-        stm_unconformable_boundaries_col,
-        stm_conformable_boundaries_col,
-    ] + domain_columns + extra_columns
+    ordered_columns = (
+        [
+            stm_feature_col,
+            stm_unit_role_col,
+            stm_unit_level_col,
+            stm_unconformable_boundaries_col,
+            stm_conformable_boundaries_col,
+        ]
+        + domain_columns
+        + extra_columns
+    )
     return out_df[ordered_columns].reset_index(drop=True)
 
 
@@ -334,9 +335,7 @@ def reconcile_stm_relationships(
         if str(value).strip()
     }
     unit_names = {
-        str(value).strip()
-        for value in units[stm_feature_col]
-        if str(value).strip()
+        str(value).strip() for value in units[stm_feature_col] if str(value).strip()
     }
     conformable_links = {
         link
@@ -606,13 +605,11 @@ def _stm_structural_level_context(boundaries, units):
         )
 
     unit_names = {item["name"] for item in unit_rows}
-    conformable_links = (
-        stm_links([])
-        | _stm_relation_links_from_units(units_df, stm_conformable_boundaries_col)
+    conformable_links = stm_links([]) | _stm_relation_links_from_units(
+        units_df, stm_conformable_boundaries_col
     )
-    unconformable_links = (
-        stm_links([])
-        | _stm_relation_links_from_units(units_df, stm_unconformable_boundaries_col)
+    unconformable_links = stm_links([]) | _stm_relation_links_from_units(
+        units_df, stm_unconformable_boundaries_col
     )
     return {
         "boundaries_df": boundaries_df,
@@ -631,9 +628,7 @@ def _stm_structural_level_context(boundaries, units):
 
 def stm_structural_level_preflight(boundaries, units):
     """Return diagnostics that should be shown before calculating unit levels."""
-    return list(
-        _stm_structural_level_context(boundaries, units).get("diagnostics", [])
-    )
+    return list(_stm_structural_level_context(boundaries, units).get("diagnostics", []))
 
 
 def _stm_preferred_side(unit_role, boundary_role):
@@ -651,14 +646,10 @@ def _stm_preferred_side(unit_role, boundary_role):
 def _stm_interval_from_anchor_side(anchor_level, side, finite_levels):
     """Return a finite interval on one side of an anchor level."""
     if side == "above":
-        upper_candidates = [
-            level for level in finite_levels if level > anchor_level
-        ]
+        upper_candidates = [level for level in finite_levels if level > anchor_level]
         upper = min(upper_candidates) if upper_candidates else anchor_level + 1.0
         return anchor_level, upper
-    lower_candidates = [
-        level for level in finite_levels if level < anchor_level
-    ]
+    lower_candidates = [level for level in finite_levels if level < anchor_level]
     lower = max(lower_candidates) if lower_candidates else anchor_level - 1.0
     return lower, anchor_level
 
@@ -685,9 +676,7 @@ def _stm_intrusive_anchor_candidate(
 ):
     """Return the IU candidate implied by one main intrusive contact."""
     main_contacts = (
-        conformable_intrusive_links
-        if conformable_intrusive_links
-        else intrusive_links
+        conformable_intrusive_links if conformable_intrusive_links else intrusive_links
     )
     numeric_contacts = [
         (boundary_name, boundary_levels[boundary_name])
@@ -698,9 +687,7 @@ def _stm_intrusive_anchor_candidate(
     if len(numeric_contacts) != 1:
         return None
     anchor_name, anchor_level = numeric_contacts[0]
-    lower, upper = _stm_interval_from_anchor_side(
-        anchor_level, "below", finite_levels
-    )
+    lower, upper = _stm_interval_from_anchor_side(anchor_level, "below", finite_levels)
     gap = upper - lower
     value = anchor_level - gap * 0.1
     if not lower < value < upper:
@@ -741,14 +728,8 @@ def _stm_single_conformable_candidates(
         existing = side_candidates.get(side)
         is_nearer = (
             existing is None
-            or (
-                side == "above"
-                and linked_level < existing["opposite_level"]
-            )
-            or (
-                side == "below"
-                and linked_level > existing["opposite_level"]
-            )
+            or (side == "above" and linked_level < existing["opposite_level"])
+            or (side == "below" and linked_level > existing["opposite_level"])
         )
         if is_nearer:
             side_candidates[side] = _stm_candidate(
@@ -764,14 +745,10 @@ def _stm_single_conformable_candidates(
                 endpoint_boundaries={anchor_name, boundary_name},
             )
 
-    preferred_side = _stm_preferred_side(
-        unit_role, boundary_roles.get(anchor_name, "")
-    )
+    preferred_side = _stm_preferred_side(unit_role, boundary_roles.get(anchor_name, ""))
     if preferred_side:
         if preferred_side in side_candidates:
-            side_candidates[preferred_side]["score"] += (
-                80 if locked_anchor else 5
-            )
+            side_candidates[preferred_side]["score"] += 80 if locked_anchor else 5
             side_candidates[preferred_side]["source"] = (
                 f"{side_candidates[preferred_side]['source']}+"
                 f"{'locked-role' if locked_anchor else 'role'}"
@@ -783,12 +760,8 @@ def _stm_single_conformable_candidates(
             side_candidates[preferred_side] = _stm_candidate(
                 lower,
                 upper,
-                "locked-role"
-                if locked_anchor
-                else "role-hint",
-                80
-                if locked_anchor
-                else 5,
+                "locked-role" if locked_anchor else "role-hint",
+                80 if locked_anchor else 5,
                 unit=unit_name,
                 side=preferred_side,
                 anchor=anchor_name,
@@ -870,8 +843,7 @@ def _stm_interval_split_allowed(
     boundary_levels,
 ):
     has_intrusive = any(
-        unit_info_by_name[unit_name]["role"] == "IU"
-        for unit_name in interval_units
+        unit_info_by_name[unit_name]["role"] == "IU" for unit_name in interval_units
     )
     return has_intrusive
 
@@ -1009,9 +981,7 @@ def _stm_has_internal_separator(
             if level is not None and math.isfinite(level):
                 if not lower < level < upper:
                     continue
-            internal_units_by_boundary.setdefault(boundary_name, set()).add(
-                unit_name
-            )
+            internal_units_by_boundary.setdefault(boundary_name, set()).add(unit_name)
     shared_internal = [
         boundary_name
         for boundary_name, linked_units in internal_units_by_boundary.items()
@@ -1112,9 +1082,7 @@ def _stm_level_assignment_variants(
     for choices in interval_choices:
         if len(variants) * len(choices) > stm_level_solution_limit:
             return None, unresolved, diagnostics
-        variants = [
-            {**variant, **choice} for variant in variants for choice in choices
-        ]
+        variants = [{**variant, **choice} for variant in variants for choice in choices]
     return variants, unresolved, diagnostics
 
 
@@ -1140,10 +1108,7 @@ def calculate_stm_unit_levels(
         "candidates_by_unit": {},
         "ambiguity_solutions": [],
     }
-    if any(
-        diagnostic.get("severity") == "error"
-        for diagnostic in diagnostics
-    ):
+    if any(diagnostic.get("severity") == "error" for diagnostic in diagnostics):
         return result
 
     boundary_names = context["boundary_names"]
@@ -1154,23 +1119,15 @@ def calculate_stm_unit_levels(
     finite_levels = sorted(
         level for level in boundary_levels.values() if math.isfinite(level)
     )
-    conformable = (
-        context["conformable_links"] | stm_links(conformable_links)
-    )
+    conformable = context["conformable_links"] | stm_links(conformable_links)
     locked_conformable = stm_links(locked_conformable_links)
-    unconformable = (
-        context["unconformable_links"] | stm_links(unconformable_links)
-    )
+    unconformable = context["unconformable_links"] | stm_links(unconformable_links)
     conformable = {
         link
         for link in conformable
         if link[0] in unit_names and link[1] in boundary_names
     }
-    locked_conformable = {
-        link
-        for link in locked_conformable
-        if link in conformable
-    }
+    locked_conformable = {link for link in locked_conformable if link in conformable}
     unconformable = {
         link
         for link in unconformable
@@ -1198,8 +1155,7 @@ def calculate_stm_unit_levels(
         intrusive_links = {
             boundary_name
             for boundary_name in linked_boundaries
-            if str(boundary_roles.get(boundary_name, "")).casefold()
-            == "intrusive"
+            if str(boundary_roles.get(boundary_name, "")).casefold() == "intrusive"
         }
         conformable_intrusive_links = intrusive_links & set(conformable_boundaries)
         if unit_info["role"] == "IU" and intrusive_links:
@@ -1234,8 +1190,7 @@ def calculate_stm_unit_levels(
                         boundary_levels,
                         boundary_roles,
                         finite_levels,
-                        locked_anchor=(unit_name, anchor_name)
-                        in locked_conformable,
+                        locked_anchor=(unit_name, anchor_name) in locked_conformable,
                     )
                 )
             if intrusive_candidates:
@@ -1256,14 +1211,10 @@ def calculate_stm_unit_levels(
                     for candidate in best_candidates
                     if candidate.get("anchor")
                 }
-                if (
-                    max_score <= 0
-                    or len(best_intervals) > 1
-                    or len(best_anchors) > 1
-                ):
-                    result["unresolved_rows"][unit_info["row_label"]] = (
-                        "ambiguous_intrusive_contacts"
-                    )
+                if max_score <= 0 or len(best_intervals) > 1 or len(best_anchors) > 1:
+                    result["unresolved_rows"][
+                        unit_info["row_label"]
+                    ] = "ambiguous_intrusive_contacts"
                     diagnostics.append(
                         {
                             "severity": "warning",
@@ -1308,9 +1259,9 @@ def calculate_stm_unit_levels(
                     }
                 )
                 continue
-            result["unresolved_rows"][unit_info["row_label"]] = (
-                "no_numeric_linked_boundary"
-            )
+            result["unresolved_rows"][
+                unit_info["row_label"]
+            ] = "no_numeric_linked_boundary"
             diagnostics.append(
                 {
                     "severity": "info",
@@ -1324,9 +1275,9 @@ def calculate_stm_unit_levels(
             )
             continue
         if not numeric_conformables:
-            result["unresolved_rows"][unit_info["row_label"]] = (
-                "no_numeric_conformable_boundary"
-            )
+            result["unresolved_rows"][
+                unit_info["row_label"]
+            ] = "no_numeric_conformable_boundary"
             diagnostics.append(
                 {
                     "severity": "warning",
@@ -1400,9 +1351,7 @@ def calculate_stm_unit_levels(
 
     for item in context["unit_rows"]:
         if item["name"] in duplicate_unit_names:
-            result["unresolved_rows"][item["row_label"]] = (
-                "duplicate_unit_feature"
-            )
+            result["unresolved_rows"][item["row_label"]] = "duplicate_unit_feature"
 
     # Reject invalid numerical positions before comparing whole configurations,
     # rather than hiding individual units from the ambiguity dialog afterwards.
@@ -1418,9 +1367,9 @@ def calculate_stm_unit_levels(
             candidate_options_by_unit[name] = valid_candidates
         else:
             candidate_options_by_unit.pop(name)
-            result["unresolved_rows"][unit_info_by_name[name]["row_label"]] = (
-                "unit_level_on_boundary"
-            )
+            result["unresolved_rows"][
+                unit_info_by_name[name]["row_label"]
+            ] = "unit_level_on_boundary"
             diagnostics.append(
                 {
                     "severity": "warning",
@@ -1485,9 +1434,9 @@ def calculate_stm_unit_levels(
 
     if not complete:
         for name in candidate_options_by_unit:
-            result["unresolved_rows"][unit_info_by_name[name]["row_label"]] = (
-                "level_search_limit"
-            )
+            result["unresolved_rows"][
+                unit_info_by_name[name]["row_label"]
+            ] = "level_search_limit"
         diagnostics.append(
             {
                 "severity": "warning",
@@ -1514,9 +1463,7 @@ def calculate_stm_unit_levels(
     ambiguous_units = [
         name
         for name in sorted(selected_candidates)
-        if len(
-            {round(solution[name]["value"], 9) for solution in final_solutions}
-        ) > 1
+        if len({round(solution[name]["value"], 9) for solution in final_solutions}) > 1
     ]
     if ambiguous_units:
         seen_alternatives = set()
@@ -1604,11 +1551,7 @@ def _as_dataframe(data, columns=None):
     if ordered_columns:
         dataframe = dataframe[
             ordered_columns
-            + [
-                column
-                for column in dataframe.columns
-                if column not in ordered_columns
-            ]
+            + [column for column in dataframe.columns if column not in ordered_columns]
         ]
     return dataframe.astype(object).where(dataframe.notna(), "")
 
@@ -1662,7 +1605,9 @@ def build_stm_json(
             continue
         for _, row in dataframe.iterrows():
             feature = str(row.get(stm_feature_col, "")).strip()
-            if feature and all(column in dataframe.columns for column in stm_color_cols):
+            if feature and all(
+                column in dataframe.columns for column in stm_color_cols
+            ):
                 rgb = _rgb(row)
                 if rgb is not None:
                     color_map.setdefault(feature, rgb)

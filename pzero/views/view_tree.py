@@ -16,7 +16,15 @@ from PySide6.QtWidgets import (
     QComboBox,
     QApplication,
 )
-from PySide6.QtCore import Qt, Signal, QMimeData, QEvent, QItemSelectionModel, QSignalBlocker, QTimer
+from PySide6.QtCore import (
+    Qt,
+    Signal,
+    QMimeData,
+    QEvent,
+    QItemSelectionModel,
+    QSignalBlocker,
+    QTimer,
+)
 from PySide6.QtGui import QDrag, QActionGroup
 
 MESH_SLICER_COLLECTION_PREFIXES = {
@@ -739,9 +747,8 @@ class CustomTreeWidget(QTreeWidget):
         A signal indicating that a checkbox has been toggled is then emitted.
         """
         item = self.itemAt(position)
-        keep_selection = (
-            QApplication.keyboardModifiers() & Qt.ShiftModifier
-            and bool(self.selectedItems())
+        keep_selection = QApplication.keyboardModifiers() & Qt.ShiftModifier and bool(
+            self.selectedItems()
         )
         if item:
             if not keep_selection:
@@ -783,7 +790,9 @@ class CustomTreeWidget(QTreeWidget):
                     if parent is not None:
                         continue  # Its selected ancestor already toggles this subtree.
                     new_state = (
-                        Qt.Checked if item.checkState(0) == Qt.Unchecked else Qt.Unchecked
+                        Qt.Checked
+                        if item.checkState(0) == Qt.Unchecked
+                        else Qt.Unchecked
                     )
                     item.setCheckState(0, new_state)
                     self.update_child_check_states(item, new_state)
@@ -913,7 +922,9 @@ class CustomTreeWidget(QTreeWidget):
         identifiers (UIDs) for items that were turned on or off.
         """
         self._checkbox_timer.stop()
-        shown_by_uid = dict(zip(self.view.actors_df["uid"], self.view.actors_df["show"]))
+        shown_by_uid = dict(
+            zip(self.view.actors_df["uid"], self.view.actors_df["show"])
+        )
         # Update the checked state in actors_df based on the current tree state
         turn_on_uids = []
         turn_off_uids = []

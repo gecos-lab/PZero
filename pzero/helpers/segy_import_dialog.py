@@ -4,13 +4,30 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-    QDoubleSpinBox, QFormLayout, QGroupBox, QLabel, QLineEdit,
-    QPlainTextEdit, QPushButton, QScrollArea, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QGroupBox,
+    QLabel,
+    QLineEdit,
+    QPlainTextEdit,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 from pzero.imports.segy_reader import (
-    DEFAULT_HEADERS, SegyImportOptions, inspect_segy, prepare_geometry,
+    DEFAULT_HEADERS,
+    SegyImportOptions,
+    inspect_segy,
+    prepare_geometry,
 )
 
 
@@ -46,31 +63,45 @@ class SegyImportDialog(QDialog):
         form.addRow("Name", self.name_edit)
         self.type_label = QLabel("3D post-stack seismic")
         form.addRow("Type", self.type_label)
-        self.domain_combo = self._combo([
-            ("Two-way time (TWT)", "twt"), ("One-way time (OWT)", "owt"),
-            ("Depth / elevation", "depth"),
-        ])
+        self.domain_combo = self._combo(
+            [
+                ("Two-way time (TWT)", "twt"),
+                ("One-way time (OWT)", "owt"),
+                ("Depth / elevation", "depth"),
+            ]
+        )
         self.domain_combo.setPlaceholderText("Select the file's vertical domain…")
         self.domain_combo.setCurrentIndex(-1)
         form.addRow("Domain", self.domain_combo)
         self.datum_edit = QLineEdit()
-        self.datum_edit.setPlaceholderText("Unspecified — e.g. seismic datum or mean sea level")
+        self.datum_edit.setPlaceholderText(
+            "Unspecified — e.g. seismic datum or mean sea level"
+        )
         form.addRow("Vertical datum", self.datum_edit)
 
         form = self._group(layout, "Coordinates and units")
-        self.xy_combo = self._combo([
-            ("Use SEG-Y measurement units", "header"),
-            ("Metres", "m"), ("International feet → metres", "ft"),
-        ])
+        self.xy_combo = self._combo(
+            [
+                ("Use SEG-Y measurement units", "header"),
+                ("Metres", "m"),
+                ("International feet → metres", "ft"),
+            ]
+        )
         form.addRow("File XY units", self.xy_combo)
         self.file_crs_edit = QLineEdit()
-        self.file_crs_edit.setPlaceholderText("Unspecified / local coordinates, or EPSG:32632")
+        self.file_crs_edit.setPlaceholderText(
+            "Unspecified / local coordinates, or EPSG:32632"
+        )
         form.addRow("File CRS", self.file_crs_edit)
         self.target_crs_edit = QLineEdit()
-        self.target_crs_edit.setPlaceholderText("Same as file CRS, or a projected EPSG code")
+        self.target_crs_edit.setPlaceholderText(
+            "Same as file CRS, or a projected EPSG code"
+        )
         form.addRow("Output CRS", self.target_crs_edit)
-        note = QLabel("XY is stored in metres. CRS fields describe projected coordinates; "
-                      "leaving them blank preserves an unspecified local system.")
+        note = QLabel(
+            "XY is stored in metres. CRS fields describe projected coordinates; "
+            "leaving them blank preserves an unspecified local system."
+        )
         note.setWordWrap(True)
         form.addRow(note)
 
@@ -83,14 +114,18 @@ class SegyImportDialog(QDialog):
         self.step_spin = self._number(0.000001, 1e9, 1)
         form.addRow("First sample", self.origin_spin)
         form.addRow("Sample interval", self.step_spin)
-        self.depth_confirm = QCheckBox("I have verified the first depth and interval against the source documentation")
+        self.depth_confirm = QCheckBox(
+            "I have verified the first depth and interval against the source documentation"
+        )
         self.depth_confirm.setVisible(False)
         form.addRow(self.depth_confirm)
         self.depth_confirm.toggled.connect(self.update_preview)
         self.negate_check = QCheckBox("Input samples increase downward (negate Z)")
         self.negate_check.setChecked(True)
         form.addRow(self.negate_check)
-        self.domain_note = QLabel("Keep time sampling, or supply a model on the Depth conversion tab.")
+        self.domain_note = QLabel(
+            "Keep time sampling, or supply a model on the Depth conversion tab."
+        )
         self.domain_note.setWordWrap(True)
         form.addRow(self.domain_note)
         layout.addStretch()
@@ -99,9 +134,13 @@ class SegyImportDialog(QDialog):
         advanced_layout = QVBoxLayout(advanced)
         self.tabs.addTab(advanced, "SEG-Y headers")
         form = self._group(advanced_layout, "Header mapping")
-        self.endian_combo = self._combo([
-            ("Detect byte order", "auto"), ("Big endian", "big"), ("Little endian", "little"),
-        ])
+        self.endian_combo = self._combo(
+            [
+                ("Detect byte order", "auto"),
+                ("Big endian", "big"),
+                ("Little endian", "little"),
+            ]
+        )
         form.addRow("Byte order", self.endian_combo)
         self.auto_headers = QCheckBox("Detect header layout automatically")
         self.auto_headers.setChecked(True)
@@ -109,7 +148,12 @@ class SegyImportDialog(QDialog):
         self.auto_headers.toggled.connect(self._mapping_changed)
         self.header_spins = {}
         self.header_widths = {}
-        for key, label in (("inline", "Inline"), ("crossline", "Crossline"), ("x", "X coordinate"), ("y", "Y coordinate")):
+        for key, label in (
+            ("inline", "Inline"),
+            ("crossline", "Crossline"),
+            ("x", "X coordinate"),
+            ("y", "Y coordinate"),
+        ):
             spin = QSpinBox()
             spin.setRange(1, 239)
             spin.setValue(DEFAULT_HEADERS[key])
@@ -120,8 +164,10 @@ class SegyImportDialog(QDialog):
             self.header_widths[key] = width
             form.addRow(label + " width", width)
             width.currentIndexChanged.connect(self._manual_mapping_changed)
-        hint = QLabel("One-based start bytes of signed trace-header fields. Automatic detection uses textual declarations and spatial consistency. "
-                      "CDP X/Y: 181/185; source X/Y: 73/77. Coordinate scalars are always applied.")
+        hint = QLabel(
+            "One-based start bytes of signed trace-header fields. Automatic detection uses textual declarations and spatial consistency. "
+            "CDP X/Y: 181/185; source X/Y: 73/77. Coordinate scalars are always applied."
+        )
         hint.setWordWrap(True)
         form.addRow(hint)
         self.scan_button = QPushButton("Read headers and preview")
@@ -136,8 +182,13 @@ class SegyImportDialog(QDialog):
         conversion_layout = QVBoxLayout(conversion)
         self.tabs.addTab(conversion, "Depth conversion")
         form = self._group(conversion_layout, "Time-to-depth model")
-        self.model_combo = self._combo([("Keep source domain", "none"),
-                                       ("Constant velocity", "constant"), ("Time-depth table / checkshots", "table")])
+        self.model_combo = self._combo(
+            [
+                ("Keep source domain", "none"),
+                ("Constant velocity", "constant"),
+                ("Time-depth table / checkshots", "table"),
+            ]
+        )
         form.addRow("Model", self.model_combo)
         self.velocity_spin = self._number(0, 100000, 0)
         self.velocity_spin.setSpecialValueText("Enter velocity")
@@ -147,13 +198,17 @@ class SegyImportDialog(QDialog):
         form.addRow("Reference travel time (s)", self.model_time_spin)
         form.addRow("Reference elevation (m)", self.model_datum_spin)
         self.table_edit = QPlainTextEdit()
-        self.table_edit.setPlaceholderText("One time, depth pair per line, for example:\n0, 0\n1, 1200\n2, 2700")
+        self.table_edit.setPlaceholderText(
+            "One time, depth pair per line, for example:\n0, 0\n1, 1200\n2, 2700"
+        )
         form.addRow("Table: time (s), depth (m)", self.table_edit)
-        note = QLabel("Use a model appropriate to this survey. Table times must use the selected TWT or OWT convention, "
-                      "relative to the reference travel time; depths increase below the reference elevation. "
-                      "Constant velocity uses depth = velocity * time / 2 for TWT, or velocity * time for OWT. "
-                      "Tables must cover the full time range. A single table is applied to every trace; "
-                      "lateral velocity variation is not modelled. No velocity is inferred from reflection amplitudes.")
+        note = QLabel(
+            "Use a model appropriate to this survey. Table times must use the selected TWT or OWT convention, "
+            "relative to the reference travel time; depths increase below the reference elevation. "
+            "Constant velocity uses depth = velocity * time / 2 for TWT, or velocity * time for OWT. "
+            "Tables must cover the full time range. A single table is applied to every trace; "
+            "lateral velocity variation is not modelled. No velocity is inferred from reflection amplitudes."
+        )
         note.setWordWrap(True)
         form.addRow(note)
         conversion_layout.addStretch()
@@ -189,7 +244,12 @@ class SegyImportDialog(QDialog):
         self.endian_combo.currentIndexChanged.connect(self._mapping_changed)
         for combo in (self.xy_combo,):
             combo.currentIndexChanged.connect(self.update_preview)
-        for edit in (self.name_edit, self.file_crs_edit, self.target_crs_edit, self.datum_edit):
+        for edit in (
+            self.name_edit,
+            self.file_crs_edit,
+            self.target_crs_edit,
+            self.datum_edit,
+        ):
             edit.textChanged.connect(self.update_preview)
         for spin in (self.origin_spin, self.step_spin):
             spin.valueChanged.connect(self.update_preview)
@@ -247,44 +307,83 @@ class SegyImportDialog(QDialog):
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
             self.survey = inspect_segy(
-                self.path, self.endian_combo.currentData(),
-                None if self.auto_headers.isChecked() else {key: spin.value() for key, spin in self.header_spins.items()},
-                None if self.auto_headers.isChecked() else {key: combo.currentData() for key, combo in self.header_widths.items()},
+                self.path,
+                self.endian_combo.currentData(),
+                (
+                    None
+                    if self.auto_headers.isChecked()
+                    else {key: spin.value() for key, spin in self.header_spins.items()}
+                ),
+                (
+                    None
+                    if self.auto_headers.isChecked()
+                    else {
+                        key: combo.currentData()
+                        for key, combo in self.header_widths.items()
+                    }
+                ),
             )
             survey = self.survey
             self._updating = True
             for key in self.header_spins:
                 self.header_spins[key].setValue(survey["headers"][key])
-                self.header_widths[key].setCurrentIndex(self.header_widths[key].findData(survey["header_widths"][key]))
+                self.header_widths[key].setCurrentIndex(
+                    self.header_widths[key].findData(survey["header_widths"][key])
+                )
             self._updating = False
             hints = survey.get("hints", {})
             if self.domain_combo.currentIndex() < 0 and hints.get("domain"):
-                self.domain_combo.setCurrentIndex(self.domain_combo.findData(hints["domain"]))
+                self.domain_combo.setCurrentIndex(
+                    self.domain_combo.findData(hints["domain"])
+                )
                 if hints["domain"] == "depth":
-                    self.unit_combo.setCurrentIndex(self.unit_combo.findData(hints["vertical_units"]))
+                    self.unit_combo.setCurrentIndex(
+                        self.unit_combo.findData(hints["vertical_units"])
+                    )
                     self.step_spin.setValue(hints["sample_step"])
                     self.origin_spin.setValue(hints.get("sample_origin") or 0)
-            self.depth_confirm.setVisible(self.domain_combo.currentData() == "depth" and hints.get("sample_origin") is None)
+            self.depth_confirm.setVisible(
+                self.domain_combo.currentData() == "depth"
+                and hints.get("sample_origin") is None
+            )
             if not self.file_crs_edit.text() and hints.get("file_crs"):
                 self.file_crs_edit.setText(hints["file_crs"])
-            self.domain_note.setText(" ".join(hints.get("notes", [])) or
-                                    "The file does not declare its vertical domain. Select it from the data provider's documentation.")
-            self.type_label.setText("3D interval-velocity volume" if hints.get("data_kind") == "interval_velocity"
-                                    else "3D velocity volume" if hints.get("data_kind") == "velocity"
-                                    else "3D post-stack seismic")
+            self.domain_note.setText(
+                " ".join(hints.get("notes", []))
+                or "The file does not declare its vertical domain. Select it from the data provider's documentation."
+            )
+            self.type_label.setText(
+                "3D interval-velocity volume"
+                if hints.get("data_kind") == "interval_velocity"
+                else (
+                    "3D velocity volume"
+                    if hints.get("data_kind") == "velocity"
+                    else "3D post-stack seismic"
+                )
+            )
             self.header_text.setPlainText(survey["text_header"])
-            measurement = {1: "metres", 2: "feet"}.get(survey["measurement_system"], "unspecified")
-            sampling = (f"Declared depth interval: {hints['sample_step']:g} {hints['vertical_units']}"
-                        if hints.get("domain") == "depth" else
-                        f"Sample interval: {survey['sample_interval_us']:g} us; recording delay: {survey['delay_ms']:g} ms")
+            measurement = {1: "metres", 2: "feet"}.get(
+                survey["measurement_system"], "unspecified"
+            )
+            sampling = (
+                f"Declared depth interval: {hints['sample_step']:g} {hints['vertical_units']}"
+                if hints.get("domain") == "depth"
+                else f"Sample interval: {survey['sample_interval_us']:g} us; recording delay: {survey['delay_ms']:g} ms"
+            )
             self.summary_label.setText(
                 f"{survey['trace_count']:,} traces x {survey['num_samples']:,} samples; "
                 f"{survey['format_name']}; {survey['endian']} endian\n"
                 f"XY header units: {measurement}. {sampling}.\n"
                 f"{survey['detection_evidence']}. "
-                + ("A standard copy will be generated automatically." if survey["requires_standardization"] else "")
+                + (
+                    "A standard copy will be generated automatically."
+                    if survey["requires_standardization"]
+                    else ""
+                )
             )
-            self.summary_label.setMinimumHeight(self.summary_label.heightForWidth(max(self.width() - 50, 200)))
+            self.summary_label.setMinimumHeight(
+                self.summary_label.heightForWidth(max(self.width() - 50, 200))
+            )
             self._sampling_changed()
         except Exception as error:
             self.survey = None
@@ -298,8 +397,11 @@ class SegyImportDialog(QDialog):
         depth = self.domain_combo.currentData() == "depth"
         self._updating = True
         self.unit_combo.clear()
-        for label, value in ([('Metres', 'm'), ('International feet → metres', 'ft')] if depth
-                             else [('Milliseconds', 'ms'), ('Seconds', 's')]):
+        for label, value in (
+            [("Metres", "m"), ("International feet → metres", "ft")]
+            if depth
+            else [("Milliseconds", "ms"), ("Seconds", "s")]
+        ):
             self.unit_combo.addItem(label, value)
         self._last_unit = self.unit_combo.currentData()
         self.override_check.setChecked(depth)
@@ -310,8 +412,9 @@ class SegyImportDialog(QDialog):
             self.step_spin.setValue(hints.get("sample_step") or 1)
         self.domain_note.setText(
             "Enter the actual depth sampling from the data provider. Depth is stored in metres; "
-            "SEG-Y time-header values are not used as depth." if depth else
-            "Keep time sampling, or supply a model on the Depth conversion tab."
+            "SEG-Y time-header values are not used as depth."
+            if depth
+            else "Keep time sampling, or supply a model on the Depth conversion tab."
         )
         self._updating = False
         hints = self.survey.get("hints", {}) if self.survey is not None else {}
@@ -358,23 +461,43 @@ class SegyImportDialog(QDialog):
                     try:
                         row = [float(value) for value in line.replace(",", " ").split()]
                     except ValueError:
-                        raise ValueError("Table rows must contain numeric time (seconds) and depth (metres).")
+                        raise ValueError(
+                            "Table rows must contain numeric time (seconds) and depth (metres)."
+                        )
                     if len(row) != 2:
-                        raise ValueError("Each table row must have exactly two values: time (s), depth (m).")
+                        raise ValueError(
+                            "Each table row must have exactly two values: time (s), depth (m)."
+                        )
                     table.append(row)
         return SegyImportOptions(
-            name=self.name_edit.text().strip(), domain=self.domain_combo.currentData(),
-            xy_units=self.xy_combo.currentData(), vertical_units=self.unit_combo.currentData(),
+            name=self.name_edit.text().strip(),
+            domain=self.domain_combo.currentData(),
+            xy_units=self.xy_combo.currentData(),
+            vertical_units=self.unit_combo.currentData(),
             negate_z=self.negate_check.isChecked(),
             sample_origin=self.origin_spin.value() if override else None,
             sample_step=self.step_spin.value() if override else None,
             vertical_datum=self.datum_edit.text().strip() or "Unspecified",
-            file_crs=self.file_crs_edit.text().strip(), target_crs=self.target_crs_edit.text().strip(),
+            file_crs=self.file_crs_edit.text().strip(),
+            target_crs=self.target_crs_edit.text().strip(),
             endian=self.endian_combo.currentData(),
-            headers=None if self.auto_headers.isChecked() else {key: spin.value() for key, spin in self.header_spins.items()},
-            header_widths=None if self.auto_headers.isChecked() else {key: combo.currentData() for key, combo in self.header_widths.items()},
-            depth_model=self.model_combo.currentData(), velocity_m_s=self.velocity_spin.value(),
-            time_depth_table=table, depth_datum_m=self.model_datum_spin.value(),
+            headers=(
+                None
+                if self.auto_headers.isChecked()
+                else {key: spin.value() for key, spin in self.header_spins.items()}
+            ),
+            header_widths=(
+                None
+                if self.auto_headers.isChecked()
+                else {
+                    key: combo.currentData()
+                    for key, combo in self.header_widths.items()
+                }
+            ),
+            depth_model=self.model_combo.currentData(),
+            velocity_m_s=self.velocity_spin.value(),
+            time_depth_table=table,
+            depth_datum_m=self.model_datum_spin.value(),
             model_time_datum_s=self.model_time_spin.value(),
         )
 
@@ -396,21 +519,34 @@ class SegyImportDialog(QDialog):
                 raise ValueError("Enter a name for the seismic volume.")
             geometry = prepare_geometry(self.survey, options)
             hints = self.survey.get("hints", {})
-            if options.domain == "depth" and hints.get("sample_origin") is None and not self.depth_confirm.isChecked():
-                raise ValueError("First depth is not declared in this file. Enter and confirm the depth sampling from the data provider.")
+            if (
+                options.domain == "depth"
+                and hints.get("sample_origin") is None
+                and not self.depth_confirm.isChecked()
+            ):
+                raise ValueError(
+                    "First depth is not declared in this file. Enter and confirm the depth sampling from the data provider."
+                )
             for index, axis in enumerate("XY"):
                 values = geometry["xy"][:, index]
-                self.range_labels[axis].setText(f"{values.min():,.3f} to {values.max():,.3f} m")
+                self.range_labels[axis].setText(
+                    f"{values.min():,.3f} to {values.max():,.3f} m"
+                )
             z = geometry["z"]
-            self.range_labels["Z"].setText(f"{z.min():,.6g} to {z.max():,.6g} {geometry['z_units']} (positive up)")
+            self.range_labels["Z"].setText(
+                f"{z.min():,.6g} to {z.max():,.6g} {geometry['z_units']} (positive up)"
+            )
             ni, nx, ns = geometry["dimensions"]
             crs = geometry["output_crs"] or "unspecified local CRS"
             self.status_label.setStyleSheet("")
             self.status_label.setText(
                 f"Ready: {ni} inlines x {nx} crosslines x {ns} samples. Output: {crs}.\n"
                 f"Navigation adjustment: up to {geometry['max_grid_residual_m']:.3g} m; "
-                f"{geometry['recovered_coordinates']} coordinates recovered; {geometry['missing_bins']} bins masked.")
-            self.status_label.setMinimumHeight(self.status_label.heightForWidth(max(self.width() - 30, 200)))
+                f"{geometry['recovered_coordinates']} coordinates recovered; {geometry['missing_bins']} bins masked."
+            )
+            self.status_label.setMinimumHeight(
+                self.status_label.heightForWidth(max(self.width() - 30, 200))
+            )
             self.import_button.setEnabled(True)
             return True
         except Exception as error:

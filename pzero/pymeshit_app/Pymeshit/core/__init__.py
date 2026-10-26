@@ -15,10 +15,11 @@ try:
         Triangle,
         Intersection,
         TriplePoint,
-        GradientControl
+        GradientControl,
     )
 except ImportError as e:
     import sys
+
     print(f"Warning: C++ extensions not available: {e}", file=sys.stderr)
     print("Using Python fallback implementations", file=sys.stderr)
 
@@ -40,7 +41,9 @@ except ImportError as e:
 
         def calculate_convex_hull(self):
             # Dummy implementation
-            self.convex_hull = [Vector3D(*p) for p in self.points[:min(10, len(self.points))]]
+            self.convex_hull = [
+                Vector3D(*p) for p in self.points[: min(10, len(self.points))]
+            ]
 
     class GradientControl:
         def __init__(self):
@@ -79,15 +82,16 @@ except ImportError as e:
     def create_polyline(points, name="Polyline"):
         return Polyline(points, name)
 
+
 __all__ = [
-    'MeshItModel',
-    'Vector3D',
-    'Surface',
-    'Polyline',
-    'create_surface',
-    'create_polyline',
-    'Triangle',
-    'Intersection',
-    'TriplePoint',
-    'GradientControl'
+    "MeshItModel",
+    "Vector3D",
+    "Surface",
+    "Polyline",
+    "create_surface",
+    "create_polyline",
+    "Triangle",
+    "Intersection",
+    "TriplePoint",
+    "GradientControl",
 ]

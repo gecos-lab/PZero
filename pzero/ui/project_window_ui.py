@@ -591,7 +591,9 @@ class Ui_ProjectWindow(object):
             QCoreApplication.translate("ProjectWindow", "Poisson", None)
         )
         self.actionRegularizedGridSurface.setText(
-            QCoreApplication.translate("ProjectWindow", "Regularized Grid Surface", None)
+            QCoreApplication.translate(
+                "ProjectWindow", "Regularized Grid Surface", None
+            )
         )
         self.actionLoopStructural.setText(
             QCoreApplication.translate("ProjectWindow", "LoopStructural Implicit", None)

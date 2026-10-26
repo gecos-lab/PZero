@@ -108,8 +108,15 @@ from pzero.imports.ply2vtk import vtk2ply
 from pzero.imports.pyvista2vtk import pyvista2vtk
 from pzero.imports.segy2vtk import segy2vtk, read_segy_file, read_legacy_segy_file
 from pzero.imports.segy_reader import get_seismic_metadata, file_identity
-from pzero.helpers.project_storage import write_checked, write_seismic_snapshot, publish_project_revision
-from pzero.helpers.edit_metadata_dialog import EditMetadataDialog, bind_metadata_value_editors
+from pzero.helpers.project_storage import (
+    write_checked,
+    write_seismic_snapshot,
+    publish_project_revision,
+)
+from pzero.helpers.edit_metadata_dialog import (
+    EditMetadataDialog,
+    bind_metadata_value_editors,
+)
 from pzero.imports.shp2vtk import shp2vtk
 from pzero.imports.stl2vtk import vtk2stl, vtk2stl_dilation
 from pzero.imports.table2data import import_tables
@@ -161,6 +168,7 @@ from .three_d_surfaces import (
 
 from pzero.views.dock_window import DockWindow
 from .processing.CRS import CRS_list, CRS_transform_selected
+
 # import json
 from json import dump as json_dump
 from json import load as json_load
@@ -174,6 +182,7 @@ from PySide6.QtCore import QObject, QUrl
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QDialog, QLabel, QVBoxLayout
 from PySide6.QtGui import QAction, QDesktopServices, QPixmap
 from PySide6.QtCore import Qt
+
 PYMESHIT_MODULE_NAME = "Pymeshit_workflow_gui"
 PYMESHIT_CLASS_NAME = "MeshItWorkflowGUI"
 PYMESHIT_ENTRY_FILE = "Pymeshit_workflow_gui.py"
@@ -190,20 +199,24 @@ import importlib
 import importlib.util
 import os
 import sys
+
+
 class _PyMeshItDockWidget(QDockWidget):
     """
     Custom QDockWidget that hides instead of closing when the X button is clicked.
-    
+
     This prevents PyVista/VTK OpenGL context crashes that occur when the dock
     is destroyed while plotters are still active. The dock stays in memory
     and can be re-shown via the menu.
     """
-    
+
     def closeEvent(self, event):
         """Override close to hide instead of destroy."""
         # Just hide the dock instead of closing/destroying it
         self.hide()
         event.ignore()  # Prevent actual close/destruction
+
+
 class ProjectSignals(QObject):
     """
     This class is used to store signals used project-wide that will be used according
@@ -366,7 +379,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionXSectionIntersection.triggered.connect(lambda: intersection_xs(self))
         self.actionProject2XSection.triggered.connect(lambda: project_2_xs(self))
         self.actionSplitSurfaces.triggered.connect(lambda: split_surf(self))
-        self.actionRetriangulateSurface.triggered.connect(self.retriangulate_surface_dialog)
+        self.actionRetriangulateSurface.triggered.connect(
+            self.retriangulate_surface_dialog
+        )
         self.actionRetopologize.triggered.connect(self.retopologize_surface)
 
         """View actions -> slots"""
@@ -548,10 +563,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 except Exception:
                     pass
             table_view.setContextMenuPolicy(Qt.CustomContextMenu)
-            handler = (
-                lambda pos, tv=table_view, src=collection_name: self.on_entities_table_context_menu(
-                    table_view=tv, source_collection_name=src, position=pos
-                )
+            handler = lambda pos, tv=table_view, src=collection_name: self.on_entities_table_context_menu(
+                table_view=tv, source_collection_name=src, position=pos
             )
             table_view._transfer_context_handler = handler
             table_view.customContextMenuRequested.connect(handler)
@@ -609,14 +622,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     "topology" in source_collection.entity_dict_keys
                     and source_collection.df.loc[
                         source_collection.df["uid"].isin(selected_uids), "topology"
-                    ].isin(destination_collection.valid_topologies).all()
+                    ]
+                    .isin(destination_collection.valid_topologies)
+                    .all()
                 )
             else:
                 compatible = "topology" not in source_collection.entity_dict_keys
 
             copy_action.setEnabled(bool(compatible))
             move_action.setEnabled(
-                bool(compatible) and destination_collection_name != source_collection_name
+                bool(compatible)
+                and destination_collection_name != source_collection_name
             )
 
         menu.addSeparator()
@@ -625,8 +641,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         chosen_action = menu.exec(table_view.viewport().mapToGlobal(position))
         if chosen_action == edit_action:
             default_field = (
-                table_view.model().headerData(idx.column(), Qt.Horizontal, Qt.DisplayRole)
-                if idx.isValid() else None
+                table_view.model().headerData(
+                    idx.column(), Qt.Horizontal, Qt.DisplayRole
+                )
+                if idx.isValid()
+                else None
             )
             EditMetadataDialog(
                 collection=source_collection,
@@ -656,7 +675,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Copy/move selected UIDs between collections and log the result."""
         source_collection = getattr(self, source_collection_name, None)
         destination_collection = getattr(self, destination_collection_name, None)
-        if source_collection is None or destination_collection is None or not selected_uids:
+        if (
+            source_collection is None
+            or destination_collection is None
+            or not selected_uids
+        ):
             return {"added_uids": [], "removed_uids": [], "failed": []}
 
         if move and source_collection_name == destination_collection_name:
@@ -834,7 +857,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             vtk_object = collection.get_uid_vtk_obj(uid)
             self.print_terminal(f"{collection.get_uid_name(uid)} (UID: {uid})")
             self.print_terminal(
-                str(vtk_object) if vtk_object is not None else "No VTK object available."
+                str(vtk_object)
+                if vtk_object is not None
+                else "No VTK object available."
             )
 
     def entity_clone(self):
@@ -895,8 +920,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return []
 
         seismic_uids = self._get_seismic_image_uids()
-        xsection_uids = {str(uid).strip() for uid in self.xsect_coll.get_uids if str(uid).strip()}
-        well_uids = {str(uid).strip() for uid in self.well_coll.get_uids if str(uid).strip()}
+        xsection_uids = {
+            str(uid).strip() for uid in self.xsect_coll.get_uids if str(uid).strip()
+        }
+        well_uids = {
+            str(uid).strip() for uid in self.well_coll.get_uids if str(uid).strip()
+        }
 
         orphan_groups = {}
         for _, row in geol_df.iterrows():
@@ -942,12 +971,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 group["features"].add(feature)
 
         orphan_list = []
-        from pzero.helpers.seismic_relink import find_derived_surface_links, find_legacy_model_boundaries, find_legacy_reference_links
+        from pzero.helpers.seismic_relink import (
+            find_derived_surface_links,
+            find_legacy_model_boundaries,
+            find_legacy_reference_links,
+        )
+
         records = geol_df.to_dict("records")
         for parent_uid, group in orphan_groups.items():
             derived = find_derived_surface_links(records, parent_uid)
             references = find_legacy_reference_links(records, parent_uid)
-            boundaries = find_legacy_model_boundaries(records, self.boundary_coll.df.to_dict("records"), parent_uid)
+            boundaries = find_legacy_model_boundaries(
+                records, self.boundary_coll.df.to_dict("records"), parent_uid
+            )
             preview_names = ", ".join(sorted(group["names"])[:3])
             role_preview = ", ".join(sorted(group["roles"])[:2])
             label = f"{parent_uid} | {len(group['uids'])} linked objects + {len(derived)} surfaces + {len(references)} references + {len(boundaries)} model boundaries"
@@ -1006,7 +1042,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             )
             if "topology" in self.geol_coll.df.columns:
                 mask = mask & (
-                    ~self.geol_coll.df["topology"].fillna("").astype(str).str.startswith("Xs")
+                    ~self.geol_coll.df["topology"]
+                    .fillna("")
+                    .astype(str)
+                    .str.startswith("Xs")
                 )
         except Exception:
             return []
@@ -1016,21 +1055,38 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return []
 
         from pzero.helpers.seismic_relink import (
-            prepare_relinked_interpretations, find_derived_surface_links, find_legacy_model_boundaries, find_legacy_reference_links,
+            prepare_relinked_interpretations,
+            find_derived_surface_links,
+            find_legacy_model_boundaries,
+            find_legacy_reference_links,
         )
 
         boundary_sources = find_legacy_model_boundaries(
-            self.geol_coll.df.to_dict("records"), self.boundary_coll.df.to_dict("records"), old_parent_uid
+            self.geol_coll.df.to_dict("records"),
+            self.boundary_coll.df.to_dict("records"),
+            old_parent_uid,
         )
-        derived_sources = find_derived_surface_links(self.geol_coll.df.to_dict("records"), old_parent_uid)
-        reference_sources = find_legacy_reference_links(self.geol_coll.df.to_dict("records"), old_parent_uid)
+        derived_sources = find_derived_surface_links(
+            self.geol_coll.df.to_dict("records"), old_parent_uid
+        )
+        reference_sources = find_legacy_reference_links(
+            self.geol_coll.df.to_dict("records"), old_parent_uid
+        )
         updated_uids.extend(uid for uid in derived_sources if uid not in updated_uids)
         updated_uids.extend(uid for uid in reference_sources if uid not in updated_uids)
         target = self.image_coll.get_uid_vtk_obj(new_parent_uid)
         objects = {uid: self.geol_coll.get_uid_vtk_obj(uid) for uid in updated_uids}
-        objects.update({uid: self.boundary_coll.get_uid_vtk_obj(uid) for uid in boundary_sources})
+        objects.update(
+            {uid: self.boundary_coll.get_uid_vtk_obj(uid) for uid in boundary_sources}
+        )
         try:
-            replacements = prepare_relinked_interpretations(objects, target, old_parent_uid, new_parent_uid, dict(derived_sources, **reference_sources, **boundary_sources))
+            replacements = prepare_relinked_interpretations(
+                objects,
+                target,
+                old_parent_uid,
+                new_parent_uid,
+                dict(derived_sources, **reference_sources, **boundary_sources),
+            )
         except (ValueError, OSError, KeyError) as error:
             self.print_terminal(f"Interpretation linking stopped: {error}")
             QMessageBox.warning(self, "Cannot align interpretations", str(error))
@@ -1039,17 +1095,25 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         for uid, replacement in replacements.items():
             objects[uid].DeepCopy(replacement)
             objects[uid].Modified()
-        self.geol_coll.df.loc[self.geol_coll.df["uid"].isin(updated_uids), "parent_uid"] = new_parent_uid
+        self.geol_coll.df.loc[
+            self.geol_coll.df["uid"].isin(updated_uids), "parent_uid"
+        ] = new_parent_uid
         self.geol_coll.modelReset.emit()
         if replacements:
             changed_geology = [uid for uid in updated_uids if uid in replacements]
             self.signals.geom_modified.emit(changed_geology, self.geol_coll)
-            self.print_terminal(f"Aligned {len(changed_geology)} geological objects (including {len(derived_sources)} recovered surfaces and {len(reference_sources)} reference horizons) and {len(boundary_sources)} model boundaries to the imported seismic coordinates and domain.")
+            self.print_terminal(
+                f"Aligned {len(changed_geology)} geological objects (including {len(derived_sources)} recovered surfaces and {len(reference_sources)} reference horizons) and {len(boundary_sources)} model boundaries to the imported seismic coordinates and domain."
+            )
         if boundary_sources:
-            self.boundary_coll.df.loc[self.boundary_coll.df["uid"].isin(boundary_sources), "parent_uid"] = new_parent_uid
+            self.boundary_coll.df.loc[
+                self.boundary_coll.df["uid"].isin(boundary_sources), "parent_uid"
+            ] = new_parent_uid
             self.boundary_coll.modelReset.emit()
             self.signals.geom_modified.emit(list(boundary_sources), self.boundary_coll)
-            self.signals.metadata_modified.emit(list(boundary_sources), self.boundary_coll)
+            self.signals.metadata_modified.emit(
+                list(boundary_sources), self.boundary_coll
+            )
         self.signals.metadata_modified.emit(updated_uids, self.geol_coll)
         return updated_uids
 
@@ -1552,8 +1616,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     last_exc = exc
 
             if self._pymeshit_widget is None:
-                raise last_exc if last_exc is not None else RuntimeError(
-                    "Unable to instantiate PyMeshIt GUI"
+                raise (
+                    last_exc
+                    if last_exc is not None
+                    else RuntimeError("Unable to instantiate PyMeshIt GUI")
                 )
 
             if self._pymeshit_widget.parent() is None:
@@ -1709,7 +1775,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def retriangulate_surface_dialog(self):
         """Retriangulate the first selected geology TriSurf using the PyMeshIt workflow."""
         if self.shown_table != "tabGeology":
-            self.print_terminal("Retriangulate works on Geological Collection TriSurf objects only.")
+            self.print_terminal(
+                "Retriangulate works on Geological Collection TriSurf objects only."
+            )
             return
         if not self.selected_uids:
             self.print_terminal("No selected objects")
@@ -1717,7 +1785,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
         uid = self.selected_uids[0]
         if len(self.selected_uids) > 1:
-            self.print_terminal("Multiple surfaces selected, retriangulating the first one only.")
+            self.print_terminal(
+                "Multiple surfaces selected, retriangulating the first one only."
+            )
 
         if self.geol_coll.get_uid_topology(uid) != "TriSurf":
             self.print_terminal("Selected geology object is not a TriSurf.")
@@ -1736,7 +1806,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         source_surface = self.geol_coll.get_uid_vtk_obj(uid)
         points = np.asarray(source_surface.points, dtype=float)
         if points.ndim != 2 or points.shape[0] < 3:
-            self.print_terminal("Selected TriSurf has too few points for retriangulation.")
+            self.print_terminal(
+                "Selected TriSurf has too few points for retriangulation."
+            )
             return
 
         try:
@@ -1812,9 +1884,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             if alpha_value <= 0.0:
                 raise ValueError("Alpha value must be > 0.")
 
-            temp_gui.hull_method_by_surface = {0: hull_method_map[retri_input["hull_method"]]}
+            temp_gui.hull_method_by_surface = {
+                0: hull_method_map[retri_input["hull_method"]]
+            }
             temp_gui.seg_length_by_surface[0] = refine_length
-            temp_gui.tri_method_by_surface = {0: tri_method_map[retri_input["tri_method"]]}
+            temp_gui.tri_method_by_surface = {
+                0: tri_method_map[retri_input["tri_method"]]
+            }
             temp_gui.hull_alpha_spin.setValue(alpha_value)
             if hasattr(temp_gui, "tri_use_edges_checkbox"):
                 temp_gui.tri_use_edges_checkbox.setChecked(use_edges)
@@ -1833,7 +1909,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             tri_result = temp_gui.datasets[0].get("triangulation_result") or {}
             vertices = np.asarray(tri_result.get("vertices"), dtype=float)
             triangles = np.asarray(tri_result.get("triangles"), dtype=int)
-            if vertices.ndim != 2 or vertices.shape[0] < 3 or triangles.ndim != 2 or triangles.shape[0] < 1:
+            if (
+                vertices.ndim != 2
+                or vertices.shape[0] < 3
+                or triangles.ndim != 2
+                or triangles.shape[0] < 1
+            ):
                 raise RuntimeError("PyMeshIt did not return a valid triangulation.")
 
             build_trisurf = getattr(pymeshit_module, "_build_trisurf_from_arrays", None)
@@ -1874,7 +1955,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 out_dict["feature"] = self.geol_coll.get_uid_feature(uid)
                 out_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
                 out_dict["parent_uid"] = self.geol_coll.get_uid_x_section(uid)
-                out_dict["properties_names"] = list(retriangulated_surface.point_data_keys)
+                out_dict["properties_names"] = list(
+                    retriangulated_surface.point_data_keys
+                )
                 out_dict["properties_components"] = [
                     retriangulated_surface.get_point_data_shape(key)[1]
                     for key in out_dict["properties_names"]
@@ -1908,7 +1991,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.print_terminal("No entities selected.")
             return
         if self.shown_table not in ("tabGeology", "tabDOMs", "tabBoundaries"):
-            self.print_terminal("Connected Parts supports Geology, DOMs and Boundaries.")
+            self.print_terminal(
+                "Connected Parts supports Geology, DOMs and Boundaries."
+            )
             return
         collection = getattr(self, self.selected_collection)
         changed_uids, changed_keys = [], []
@@ -1947,7 +2032,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 f"Select {property_name} in the view tree to colour them."
                 + (
                     " Point-cloud radius: 2 project units."
-                    if isinstance(obj, PCDom) else ""
+                    if isinstance(obj, PCDom)
+                    else ""
                 )
             )
         if changed_uids:
@@ -2214,6 +2300,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Save project to file and folder"""
         # Get date and time, used to save incremental revisions.
         from uuid import uuid4
+
         now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "-" + uuid4().hex[:8]
         # Select and open output file and folder. Saving always performs a complete backup since the output folder
         # is named with the present date and time "rev_<now>".
@@ -2236,7 +2323,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self._save_project_revision(out_dir_name)
             publish_project_revision(self.out_file_name, f"rev_{now}")
         except Exception as error:
-            self.print_terminal(f"Project save failed: {error}. The previous completed revision is unchanged.")
+            self.print_terminal(
+                f"Project save failed: {error}. The previous completed revision is unchanged."
+            )
             QMessageBox.warning(self, "Project not saved", str(error))
             return
         finally:
@@ -2398,35 +2487,58 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     except Exception:
                         source_file = None
 
-                source_file = source_file if isinstance(source_file, str) and source_file.strip() else None
+                source_file = (
+                    source_file
+                    if isinstance(source_file, str) and source_file.strip()
+                    else None
+                )
                 # Persist the actual grid and its domain metadata. Re-reading the
                 # source alone loses import settings and later coordinate edits.
                 seismic_object = self.image_coll.get_uid_vtk_obj(uid)
                 from time import perf_counter
+
                 started = perf_counter()
-                self.print_terminal(f"Saving seismic {uid} ({seismic_object.GetNumberOfPoints():,} points)...")
+                self.print_terminal(
+                    f"Saving seismic {uid} ({seismic_object.GetNumberOfPoints():,} points)..."
+                )
                 seismic_progress = progress_dialog(
-                    max_value=100, title_txt="Save seismic", label_txt="Writing seismic snapshot...",
-                    cancel_txt=None, parent=self,
+                    max_value=100,
+                    title_txt="Save seismic",
+                    label_txt="Writing seismic snapshot...",
+                    cancel_txt=None,
+                    parent=self,
                 )
                 seismic_progress.setWindowModality(Qt.NonModal)
                 # Progress dialogs process paint events; exclude input while a
                 # snapshot is being written so the geometry cannot be edited.
                 from PySide6.QtCore import QCoreApplication, QEventLoop
+
                 last_percent = [-1]
+
                 def report_progress(fraction):
                     percent = min(99, int(fraction * 100))
                     if percent != last_percent[0]:
                         last_percent[0] = percent
                         seismic_progress.setValue(percent)
-                        seismic_progress.setLabelText(f"Writing seismic snapshot: {percent}%")
+                        seismic_progress.setLabelText(
+                            f"Writing seismic snapshot: {percent}%"
+                        )
                         seismic_progress.repaint()
-                        QCoreApplication.processEvents(QEventLoop.ExcludeUserInputEvents)
+                        QCoreApplication.processEvents(
+                            QEventLoop.ExcludeUserInputEvents
+                        )
+
                 try:
-                    write_seismic_snapshot(seismic_object, out_dir_name + "/" + uid + ".vts", report_progress)
+                    write_seismic_snapshot(
+                        seismic_object,
+                        out_dir_name + "/" + uid + ".vts",
+                        report_progress,
+                    )
                 finally:
                     seismic_progress.close()
-                self.print_terminal(f"Seismic snapshot saved in {perf_counter() - started:.1f} seconds.")
+                self.print_terminal(
+                    f"Seismic snapshot saved in {perf_counter() - started:.1f} seconds."
+                )
 
                 seismic_metadata = {
                     "uid": uid,
@@ -2434,7 +2546,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     "storage": "embedded_vts",
                     "seismic_metadata": get_seismic_metadata(seismic_object),
                 }
-                with open(out_dir_name + "/" + uid + "_seismic_metadata.json", "w") as f:
+                with open(
+                    out_dir_name + "/" + uid + "_seismic_metadata.json", "w"
+                ) as f:
                     json_dump(seismic_metadata, f, indent=2)
                 prgs_bar.add_one()
 
@@ -2639,10 +2753,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
             table_type = table_payload.get("table_type", "manual")
             stm_payload = table_payload.get("stm")
-            if (
-                table_type == stm_table_type
-                and is_stm_json(stm_payload)
-            ):
+            if table_type == stm_table_type and is_stm_json(stm_payload):
                 decoded = read_stm_json(stm_payload)
                 boundaries = decoded["boundaries"]
                 table_rows = [
@@ -2679,15 +2790,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.custom_tables[table_name] = pd_DataFrame(
                     data=data, columns=columns
                 )
-                self.custom_table_options[table_name] = table_payload.get(
-                    "options", {}
-                )
+                self.custom_table_options[table_name] = table_payload.get("options", {})
             self.custom_table_types[table_name] = table_type
 
         if self.custom_tables:
-            self.print_terminal(
-                f"Loaded {len(self.custom_tables)} custom table(s)."
-            )
+            self.print_terminal(f"Loaded {len(self.custom_tables)} custom table(s).")
         self.sync_structural_topology_tables_from_legend()
         self.refresh_custom_colormaps()
 
@@ -2928,9 +3035,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 for idx, other_collection in enumerate(
                     Legend.others_legend_dict["other_collection"]
                 ):
-                    if other_collection in self.others_legend_df[
-                        "other_collection"
-                    ].tolist():
+                    if (
+                        other_collection
+                        in self.others_legend_df["other_collection"].tolist()
+                    ):
                         continue
                     default_other_rows.append(
                         {
@@ -2947,7 +3055,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         ignore_index=True,
                     )
                 if "uid" in self.others_legend_df:
-                    self.others_legend_df["uid"] = self.others_legend_df["uid"].fillna("")
+                    self.others_legend_df["uid"] = self.others_legend_df["uid"].fillna(
+                        ""
+                    )
                 other_order = {
                     name: idx
                     for idx, name in enumerate(
@@ -3138,7 +3248,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             self.print_terminal(f"column {column} added to xsect table")
 
                     # Remove duplicate columns if any (can occur when loading old projects)
-                    new_xsect_coll_df = new_xsect_coll_df.loc[:, ~new_xsect_coll_df.columns.duplicated()]
+                    new_xsect_coll_df = new_xsect_coll_df.loc[
+                        :, ~new_xsect_coll_df.columns.duplicated()
+                    ]
 
                     # reorder columns
                     new_xsect_coll_df = new_xsect_coll_df[self.xsect_coll.df.columns]
@@ -3228,7 +3340,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             self.print_terminal(f"column {column} added to dom table")
 
                     # Remove duplicate columns if any (can occur when loading old projects)
-                    new_dom_coll_df = new_dom_coll_df.loc[:, ~new_dom_coll_df.columns.duplicated()]
+                    new_dom_coll_df = new_dom_coll_df.loc[
+                        :, ~new_dom_coll_df.columns.duplicated()
+                    ]
 
                     # reorder columns
                     new_dom_coll_df = new_dom_coll_df[self.dom_coll.df.columns]
@@ -3341,7 +3455,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             self.print_terminal(f"column {column} added to image table")
 
                     # Remove duplicate columns if any (can occur when loading old projects)
-                    new_image_coll_df = new_image_coll_df.loc[:, ~new_image_coll_df.columns.duplicated()]
+                    new_image_coll_df = new_image_coll_df.loc[
+                        :, ~new_image_coll_df.columns.duplicated()
+                    ]
 
                     # reorder columns
                     new_image_coll_df = new_image_coll_df[self.image_coll.df.columns]
@@ -3427,8 +3543,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             sg_reader = vtkXMLStructuredGridReader()
                             sg_reader.SetFileName(seismic_vts_path)
                             sg_reader.Update()
-                            if sg_reader.GetErrorCode() or sg_reader.GetOutput().GetNumberOfPoints() == 0:
-                                raise ValueError(f"Could not read saved seismic grid: {seismic_vts_path}")
+                            if (
+                                sg_reader.GetErrorCode()
+                                or sg_reader.GetOutput().GetNumberOfPoints() == 0
+                            ):
+                                raise ValueError(
+                                    f"Could not read saved seismic grid: {seismic_vts_path}"
+                                )
                             vtk_object.ShallowCopy(sg_reader.GetOutput())
                         else:
                             source_file = None
@@ -3456,18 +3577,31 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             if not source_file or not os_path.isfile(source_file):
                                 print("error: missing seismic VTK file and source file")
                                 return
-                            import_options = seismic_metadata.get("seismic_metadata", {}).get("import_options")
+                            import_options = seismic_metadata.get(
+                                "seismic_metadata", {}
+                            ).get("import_options")
                             if import_options:
-                                original_identity = seismic_metadata["seismic_metadata"].get("source_identity")
-                                if original_identity and original_identity != file_identity(source_file):
-                                    raise ValueError("Seismic snapshot is missing and the source SEG-Y has changed. Restore the saved .vts file.")
-                                vtk_object.ShallowCopy(read_segy_file(source_file, options=import_options))
+                                original_identity = seismic_metadata[
+                                    "seismic_metadata"
+                                ].get("source_identity")
+                                if (
+                                    original_identity
+                                    and original_identity != file_identity(source_file)
+                                ):
+                                    raise ValueError(
+                                        "Seismic snapshot is missing and the source SEG-Y has changed. Restore the saved .vts file."
+                                    )
+                                vtk_object.ShallowCopy(
+                                    read_segy_file(source_file, options=import_options)
+                                )
                             else:
                                 self.print_terminal(
                                     "Opening legacy seismic with its original coordinate scale; "
                                     "physical units remain unknown. Reimport to configure the domain."
                                 )
-                                vtk_object.ShallowCopy(read_legacy_segy_file(source_file))
+                                vtk_object.ShallowCopy(
+                                    read_legacy_segy_file(source_file)
+                                )
                         vtk_object.Modified()
                     self.image_coll.set_uid_vtk_obj(uid=uid, vtk_obj=vtk_object)
                     prgs_bar.add_one()
@@ -3533,7 +3667,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             )
 
                     # Remove duplicate columns if any (can occur when loading old projects)
-                    new_mesh3d_coll_df = new_mesh3d_coll_df.loc[:, ~new_mesh3d_coll_df.columns.duplicated()]
+                    new_mesh3d_coll_df = new_mesh3d_coll_df.loc[
+                        :, ~new_mesh3d_coll_df.columns.duplicated()
+                    ]
 
                     # reorder columns
                     new_mesh3d_coll_df = new_mesh3d_coll_df[self.mesh3d_coll.df.columns]
@@ -3679,7 +3815,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             )
 
                     # Remove duplicate columns if any (can occur when loading old projects)
-                    new_boundary_coll_df = new_boundary_coll_df.loc[:, ~new_boundary_coll_df.columns.duplicated()]
+                    new_boundary_coll_df = new_boundary_coll_df.loc[
+                        :, ~new_boundary_coll_df.columns.duplicated()
+                    ]
 
                     # reorder columns
                     new_boundary_coll_df = new_boundary_coll_df[
@@ -3767,7 +3905,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             self.print_terminal(f"column {column} added to wells table")
 
                     # Remove duplicate columns if any (can occur when loading old projects)
-                    new_well_coll_df = new_well_coll_df.loc[:, ~new_well_coll_df.columns.duplicated()]
+                    new_well_coll_df = new_well_coll_df.loc[
+                        :, ~new_well_coll_df.columns.duplicated()
+                    ]
 
                     # reorder columns
                     new_well_coll_df = new_well_coll_df[self.well_coll.df.columns]
@@ -3856,7 +3996,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             )
 
                     # Remove duplicate columns if any (can occur when loading old projects)
-                    new_geol_coll_df = new_geol_coll_df.loc[:, ~new_geol_coll_df.columns.duplicated()]
+                    new_geol_coll_df = new_geol_coll_df.loc[
+                        :, ~new_geol_coll_df.columns.duplicated()
+                    ]
 
                     # reorder columns
                     new_geol_coll_df = new_geol_coll_df[self.geol_coll.df.columns]
@@ -3959,7 +4101,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             )
 
                     # Remove duplicate columns if any (can occur when loading old projects)
-                    new_fluids_coll_df = new_fluids_coll_df.loc[:, ~new_fluids_coll_df.columns.duplicated()]
+                    new_fluids_coll_df = new_fluids_coll_df.loc[
+                        :, ~new_fluids_coll_df.columns.duplicated()
+                    ]
 
                     # reorder columns
                     new_fluids_coll_df = new_fluids_coll_df[self.fluid_coll.df.columns]
@@ -4067,7 +4211,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                             )
 
                     # Remove duplicate columns if any (can occur when loading old projects)
-                    new_backgrounds_coll_df = new_backgrounds_coll_df.loc[:, ~new_backgrounds_coll_df.columns.duplicated()]
+                    new_backgrounds_coll_df = new_backgrounds_coll_df.loc[
+                        :, ~new_backgrounds_coll_df.columns.duplicated()
+                    ]
 
                     # reorder columns
                     new_backgrounds_coll_df = new_backgrounds_coll_df[
@@ -4336,18 +4482,20 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             role_name = str(row.get("role", "")).strip()
             if not feature_name:
                 continue
-            units.append({
-                stm_feature_col: feature_name,
-                stm_unit_role_col: "Discontinuity",
-                stm_level_col: row.get(legend_level_col, 0.0),
-                stm_domain_col(1): "",
-                "feature": feature_name,
-                "role": role_name,
-                "scenario": str(row.get("scenario", "")).strip(),
-                "color_R": row.get("color_R", 255),
-                "color_G": row.get("color_G", 255),
-                "color_B": row.get("color_B", 255),
-            })
+            units.append(
+                {
+                    stm_feature_col: feature_name,
+                    stm_unit_role_col: "Discontinuity",
+                    stm_level_col: row.get(legend_level_col, 0.0),
+                    stm_domain_col(1): "",
+                    "feature": feature_name,
+                    "role": role_name,
+                    "scenario": str(row.get("scenario", "")).strip(),
+                    "color_R": row.get("color_R", 255),
+                    "color_G": row.get("color_G", 255),
+                    "color_B": row.get("color_B", 255),
+                }
+            )
 
         return sorted(
             units,
@@ -4383,40 +4531,41 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             "stm_boundary_scenarios", {}
         )
         legend_updated = False
-        stm_tables = (
-            self.custom_table_options.get(table_name, {})
-            .get("stm_tables", {})
-        )
+        stm_tables = self.custom_table_options.get(table_name, {}).get("stm_tables", {})
         boundaries = (
-            stm_tables.get("boundaries", [])
-            if isinstance(stm_tables, dict)
-            else []
+            stm_tables.get("boundaries", []) if isinstance(stm_tables, dict) else []
         )
         if boundaries:
             for boundary in boundaries:
                 if not isinstance(boundary, dict):
                     continue
                 stm_feature = str(boundary.get(stm_feature_col, "")).strip()
-                stm_role = str(
-                    boundary.get(stm_boundary_role_col, "")
-                ).strip().casefold()
+                stm_role = (
+                    str(boundary.get(stm_boundary_role_col, "")).strip().casefold()
+                )
                 try:
                     polarity_value = float(boundary.get(stm_boundary_level_col, ""))
                 except (TypeError, ValueError):
                     continue
-                mask = (legend_features == stm_feature) & (
-                    legend_roles == stm_role
-                )
+                mask = (legend_features == stm_feature) & (legend_roles == stm_role)
                 if stm_feature in boundary_scenarios:
                     if "scenario" not in legend_df.columns:
                         continue
-                    mask &= legend_df["scenario"].astype(str).str.strip().eq(
-                        boundary_scenarios[stm_feature]
+                    mask &= (
+                        legend_df["scenario"]
+                        .astype(str)
+                        .str.strip()
+                        .eq(boundary_scenarios[stm_feature])
                     )
-                if mask.any() and not legend_df.loc[mask, legend_level_col].eq(
-                    polarity_value
-                ).all():
-                    self.geol_coll.legend_df.loc[mask, legend_level_col] = polarity_value
+                if (
+                    mask.any()
+                    and not legend_df.loc[mask, legend_level_col]
+                    .eq(polarity_value)
+                    .all()
+                ):
+                    self.geol_coll.legend_df.loc[mask, legend_level_col] = (
+                        polarity_value
+                    )
                     legend_updated = True
         else:
             for _, row in table_df.iterrows():
@@ -4426,10 +4575,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 except (TypeError, ValueError):
                     continue
                 mask = legend_features == stm_feature
-                if mask.sum() == 1 and not legend_df.loc[mask, legend_level_col].eq(
-                    polarity_value
-                ).all():
-                    self.geol_coll.legend_df.loc[mask, legend_level_col] = polarity_value
+                if (
+                    mask.sum() == 1
+                    and not legend_df.loc[mask, legend_level_col]
+                    .eq(polarity_value)
+                    .all()
+                ):
+                    self.geol_coll.legend_df.loc[mask, legend_level_col] = (
+                        polarity_value
+                    )
                     legend_updated = True
 
         if legend_updated:
@@ -4477,7 +4631,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 continue
 
             first_domain_col = stm_domain_col(1)
-            if "Domain" in table_df.columns and first_domain_col not in table_df.columns:
+            if (
+                "Domain" in table_df.columns
+                and first_domain_col not in table_df.columns
+            ):
                 table_df.rename(columns={"Domain": first_domain_col}, inplace=True)
             if stm_feature_col not in table_df.columns:
                 table_df[stm_feature_col] = ""
@@ -4497,9 +4654,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     if not isinstance(boundary, dict):
                         continue
                     feature = str(boundary.get(stm_feature_col, "")).strip()
-                    role = str(
-                        boundary.get(stm_boundary_role_col, "")
-                    ).strip().casefold()
+                    role = (
+                        str(boundary.get(stm_boundary_role_col, "")).strip().casefold()
+                    )
                     if feature in boundary_scenarios:
                         polarity = polarity_by_scenario.get(
                             (feature, role, boundary_scenarios[feature])
@@ -4674,9 +4831,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             )
 
         if skipped_paths:
-            self.print_terminal(
-                f"Failed to import {len(skipped_paths)} well file(s)."
-            )
+            self.print_terminal(f"Failed to import {len(skipped_paths)} well file(s).")
 
         # loc_attr_list = ['As is','LocationID', 'LocationType', 'Easting', 'Northing', 'GroundLevel', 'FinalDepth', 'Trend', 'Plunge','N.a.']
 
@@ -4735,9 +4890,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     + "."
                 )
             else:
-                self.print_terminal(
-                    "No interpretations were relinked."
-                )
+                self.print_terminal("No interpretations were relinked.")
 
     # Methods used to export entities to other file formats.
 

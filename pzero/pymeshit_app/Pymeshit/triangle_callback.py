@@ -20,9 +20,18 @@ ONETHIRD = 1.0 / 3.0
 
 
 def refine_surface_with_cpp_triunsuitable(
-    vertices_2d, vertices_3d, triangles, segments, gradient, mesh_size,
-    feature_points, feature_sizes, max_iterations=8, max_new_points=2500,
-    min_point_spacing=None, logger=None,
+    vertices_2d,
+    vertices_3d,
+    triangles,
+    segments,
+    gradient,
+    mesh_size,
+    feature_points,
+    feature_sizes,
+    max_iterations=8,
+    max_new_points=2500,
+    min_point_spacing=None,
+    logger=None,
 ):
     """Apply the C++ size criterion without changing the input 3D surface.
 
@@ -44,13 +53,17 @@ def refine_surface_with_cpp_triunsuitable(
         return uv, xyz, tris
     if uv.shape != (len(xyz), 2) or xyz.shape[1:] != (3,):
         raise ValueError("Surface refinement requires matching Nx2 and Nx3 vertices")
-    spacing = float(min_point_spacing) if min_point_spacing is not None else max(
-        1e-10, min(float(np.min(fsizes)), float(mesh_size)) * 0.25
+    spacing = (
+        float(min_point_spacing)
+        if min_point_spacing is not None
+        else max(1e-10, min(float(np.min(fsizes)), float(mesh_size)) * 0.25)
     )
     protected = set()
     if segments is not None:
         protected.update(tuple(sorted(map(int, edge))) for edge in segments)
-    all_edges = np.sort(np.vstack((tris[:, [0, 1]], tris[:, [1, 2]], tris[:, [2, 0]])), axis=1)
+    all_edges = np.sort(
+        np.vstack((tris[:, [0, 1]], tris[:, [1, 2]], tris[:, [2, 0]])), axis=1
+    )
     edges, counts = np.unique(all_edges, axis=0, return_counts=True)
     protected.update(map(tuple, edges[counts != 2]))
 
@@ -67,11 +80,16 @@ def refine_surface_with_cpp_triunsuitable(
         midpoints, seeds, new_uv, new_xyz = {}, {}, [], []
         for ti in bad_ids:
             t = tris[ti]
-            candidates = [tuple(sorted((int(t[j]), int(t[(j + 1) % 3])))) for j in range(3)]
+            candidates = [
+                tuple(sorted((int(t[j]), int(t[(j + 1) % 3])))) for j in range(3)
+            ]
             candidates = [edge for edge in candidates if edge not in protected]
             if candidates:
                 edge = max(candidates, key=lambda e: np.sum((uv[e[1]] - uv[e[0]]) ** 2))
-                if edge in midpoints or np.linalg.norm(uv[edge[1]] - uv[edge[0]]) <= 2 * spacing:
+                if (
+                    edge in midpoints
+                    or np.linalg.norm(uv[edge[1]] - uv[edge[0]]) <= 2 * spacing
+                ):
                     continue
                 midpoints[edge] = len(uv) + len(new_uv)
                 new_uv.append((uv[edge[0]] + uv[edge[1]]) * 0.5)
@@ -97,7 +115,9 @@ def refine_surface_with_cpp_triunsuitable(
                 children.extend((int(t[j]), int(t[(j + 1) % 3]), m) for j in range(3))
                 continue
             parts = [tuple(map(int, t))]
-            split_edges = [tuple(sorted((int(t[j]), int(t[(j + 1) % 3])))) for j in range(3)]
+            split_edges = [
+                tuple(sorted((int(t[j]), int(t[(j + 1) % 3])))) for j in range(3)
+            ]
             split_edges = [edge for edge in split_edges if edge in midpoints]
             split_edges.sort(key=lambda e: -np.sum((uv[e[1]] - uv[e[0]]) ** 2))
             for edge in split_edges:
@@ -118,11 +138,14 @@ def refine_surface_with_cpp_triunsuitable(
         tris = np.asarray(children, dtype=np.int32)
         added += len(new_uv)
 
-    remaining = np.count_nonzero(triunsuitable_mask(uv, tris, gradient, mesh_size, fpts, fsizes))
+    remaining = np.count_nonzero(
+        triunsuitable_mask(uv, tris, gradient, mesh_size, fpts, fsizes)
+    )
     log.info(
         "Surface-preserving triunsuitable refinement: added %d vertices; "
         "%d unsuitable triangles remain (fixed constraints / refinement limits)",
-        added, remaining,
+        added,
+        remaining,
     )
     return uv, xyz, tris
 
@@ -308,7 +331,9 @@ def triangulate_with_cpp_triunsuitable(
 
         result = tr.triangulate(run_input, tri_options)
         if "triangles" not in result or len(result["triangles"]) == 0:
-            log.warning("triunsuitable bridge produced an empty triangulation; returning last result")
+            log.warning(
+                "triunsuitable bridge produced an empty triangulation; returning last result"
+            )
             return result
 
         verts = np.asarray(result["vertices"], dtype=np.float64)
