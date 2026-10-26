@@ -878,7 +878,7 @@ def gocad2vtk_boundary(self=None, in_file_name=None, uid_from_name=None):
             # A new entity starts here in a GOCAD file, so here we create a new empty dictionary,
             # then we will fill its components in the next lines. Use deepcopy otherwise the
             # original dictionary would be altered.
-            curr_obj_dict = deepcopy(BoundaryCollection.entity_dict)
+            curr_obj_dict = deepcopy(self.boundary_coll.entity_dict)
             # curr_obj_dict['scenario'] = scenario_default
 
             # Store uid and topological type of new entity.
