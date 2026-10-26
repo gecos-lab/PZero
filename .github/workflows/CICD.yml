@@ -36,25 +36,34 @@ jobs:
   release:
     runs-on: ubuntu-latest
     needs: test
-    concurrency: release        # avoid two releases racing
+    if: github.ref == 'refs/heads/main'
     outputs:
       version: ${{ steps.semantic.outputs.version }}
       tag: ${{ steps.semantic.outputs.tag }}
       released: ${{ steps.semantic.outputs.released }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.TOKEN }}
       - name: Python Semantic Release
-        uses: python-semantic-release/python-semantic-release@v9   # pin to the major you use, not @master
+        uses: python-semantic-release/python-semantic-release@v9
         id: semantic
         with:
           github_token: ${{ secrets.TOKEN }}
 
+      - name: Debug semantic-release outputs
+        run: |
+          echo "version=${{ steps.semantic.outputs.version }}"
+          echo "released=${{ steps.semantic.outputs.released }}"
+
   deploy:
     if: needs.release.outputs.released == 'true'
     runs-on: ${{ matrix.os }}
+    # PyMeshIt also imports modules directly from its bundled source directory.
+    env:
+      PYTHONPATH: pzero/pymeshit_app
     strategy:
       fail-fast: false
       matrix:
@@ -76,6 +85,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # Embed the released version for the in-app update notification.
+      - name: Set application version
+        env:
+          PZERO_RELEASE_VERSION: ${{ needs.release.outputs.version }}
+        run: python -c "import os; from pathlib import Path; Path('pzero/_version.py').write_text('__version__ = ' + repr(os.environ['PZERO_RELEASE_VERSION']) + '\n', encoding='utf-8')"
       - name: Build executable MacOS
         if: runner.os == 'macOS'
         run: |
@@ -83,12 +97,12 @@ jobs:
             arch -x86_64 pip3 install --upgrade pip
             arch -x86_64 pip3 install -r requirements.txt
             arch -x86_64 pip3 install pyinstaller
-            arch -x86_64 python3 helper_scripts/build_release.py --version "${{ needs.release.outputs.version }}" --name pzero-macOS-${{ matrix.arch }} --arch ${{ matrix.arch }}
+            arch -x86_64 pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --hidden-import=pyogrio._geometry --collect-all rasterio pzero.py --name pzero-macOS-${{ matrix.arch }} --add-data "_internal/pzero_splash.png:_internal" --add-data "_internal/pzero.ico:_internal" --add-data "images/Gecos_logo.jpg:images" --add-data "LICENSE.txt:." --add-data "pzero/pymeshit_app:pzero/pymeshit_app" --paths pzero/pymeshit_app --hidden-import Pymeshit_workflow_gui --hidden-import PiecewiseStructuralComplex --hidden-import project_storage --hidden-import tetgen --hidden-import triangle --collect-submodules Pymeshit --collect-submodules scipy.special --collect-data pyogrio --collect-data triangle --exclude-module scipy.special.tests --exclude-module scipy.special._precompute --exclude-module PyQt5 --exclude-module PyQt6 --exclude-module PySide2 --exclude-module pytest --exclude-module sphinx --exclude-module black --exclude-module tkinter --noupx
           else
             python3 -m pip install --upgrade pip
             pip install -r requirements.txt
             pip install pyinstaller
-            python3 helper_scripts/build_release.py --version "${{ needs.release.outputs.version }}" --name pzero-macOS-${{ matrix.arch }} --arch ${{ matrix.arch }}
+            pyinstaller --onedir --windowed --target-arch ${{ matrix.arch }} --hidden-import=pyogrio._geometry --collect-all rasterio pzero.py --name pzero-macOS-${{ matrix.arch }} --add-data "_internal/pzero_splash.png:_internal" --add-data "_internal/pzero.ico:_internal" --add-data "images/Gecos_logo.jpg:images" --add-data "LICENSE.txt:." --add-data "pzero/pymeshit_app:pzero/pymeshit_app" --paths pzero/pymeshit_app --hidden-import Pymeshit_workflow_gui --hidden-import PiecewiseStructuralComplex --hidden-import project_storage --hidden-import tetgen --hidden-import triangle --collect-submodules Pymeshit --collect-submodules scipy.special --collect-data pyogrio --collect-data triangle --exclude-module scipy.special.tests --exclude-module scipy.special._precompute --exclude-module PyQt5 --exclude-module PyQt6 --exclude-module PySide2 --exclude-module pytest --exclude-module sphinx --exclude-module black --exclude-module tkinter --noupx
           fi
         env:
           ARCHFLAGS: "-arch ${{ matrix.arch }}"
@@ -98,14 +112,14 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
-          python3 helper_scripts/build_release.py --version "${{ needs.release.outputs.version }}" --name pzero-Ubuntu
+          pyinstaller --onedir --windowed --hidden-import=pyogrio._geometry --collect-all rasterio pzero.py --name pzero-Ubuntu --add-data "_internal/pzero_splash.png:_internal" --add-data "_internal/pzero.ico:_internal" --add-data "images/Gecos_logo.jpg:images" --add-data "LICENSE.txt:." --add-data "pzero/pymeshit_app:pzero/pymeshit_app" --paths pzero/pymeshit_app --hidden-import Pymeshit_workflow_gui --hidden-import PiecewiseStructuralComplex --hidden-import project_storage --hidden-import tetgen --hidden-import triangle --collect-submodules Pymeshit --collect-submodules scipy.special --collect-data pyogrio --collect-data triangle --exclude-module scipy.special.tests --exclude-module scipy.special._precompute --exclude-module PyQt5 --exclude-module PyQt6 --exclude-module PySide2 --exclude-module pytest --exclude-module sphinx --exclude-module black --exclude-module tkinter --noupx
       - name: Build executable Windows
         if: runner.os == 'Windows'
         run: |
           python3 -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller==6.15.0
-          python helper_scripts/build_release.py --version "${{ needs.release.outputs.version }}" --name pzero-Windows
+          pyinstaller --onedir --windowed --hidden-import=pyogrio._geometry --collect-all rasterio pzero.py --name pzero-Windows --icon="_internal/pzero.ico" --add-data "_internal/pzero.ico;_internal" --add-data "_internal/pzero_splash.png;_internal" --add-data "images/Gecos_logo.jpg;images" --add-data "LICENSE.txt;." --add-data "pzero/pymeshit_app;pzero/pymeshit_app" --paths pzero/pymeshit_app --hidden-import Pymeshit_workflow_gui --hidden-import PiecewiseStructuralComplex --hidden-import project_storage --hidden-import tetgen --hidden-import triangle --collect-submodules Pymeshit --collect-submodules scipy.special --collect-data pyogrio --collect-data triangle --exclude-module scipy.special.tests --exclude-module scipy.special._precompute --exclude-module PyQt5 --exclude-module PyQt6 --exclude-module PySide2 --exclude-module pytest --exclude-module sphinx --exclude-module black --exclude-module tkinter --noupx
       - name: Zip executable (Unix/MacOS)
         if: runner.os != 'Windows'
         run: |
