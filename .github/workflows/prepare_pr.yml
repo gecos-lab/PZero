@@ -33,5 +33,7 @@ jobs:
       - uses: dciborow/action-pylint@main
         with:
           github_token: ${{ secrets.github_token }}
-          reporter: github-pr-review
+          # Avoid GitHub's 20,000-line PR diff limit; report lint results in the job log.
+          reporter: local
+          filter_mode: nofilter
           glob_pattern: "**/*.py"
