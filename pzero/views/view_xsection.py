@@ -88,9 +88,7 @@ class ViewXsection(View2D):
         self.menuModify.addAction(self.switchPscAreasButton)
 
         self.buildPscSectionAreasButton = QAction("Build PSC section areas", self)
-        self.buildPscSectionAreasButton.triggered.connect(
-            self.build_psc_section_areas
-        )
+        self.buildPscSectionAreasButton.triggered.connect(self.build_psc_section_areas)
         self.menuCreate.addAction(self.buildPscSectionAreasButton)
 
     def build_psc_section_areas(self):

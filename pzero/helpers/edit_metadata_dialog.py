@@ -17,7 +17,9 @@ class EditMetadataDialog(QDialog):
         self.collection = collection
         self.selected_uids = list(dict.fromkeys(selected_uids))
         self.updated_uids = []
-        self.setWindowTitle(f"Edit metadata — {len(self.selected_uids)} selected entities")
+        self.setWindowTitle(
+            f"Edit metadata — {len(self.selected_uids)} selected entities"
+        )
 
         layout = QFormLayout(self)
         self.field_combo = QComboBox()
@@ -101,9 +103,12 @@ class MetadataValueDelegate(QStyledItemDelegate):
         editor.setFocusPolicy(Qt.StrongFocus)
         editor.setEditable(True)
         editor.setInsertPolicy(QComboBox.NoInsert)
-        editor.addItems(sorted(
-            self.collection.df[field].dropna().astype(str).unique(), key=str.casefold
-        ))
+        editor.addItems(
+            sorted(
+                self.collection.df[field].dropna().astype(str).unique(),
+                key=str.casefold,
+            )
+        )
         editor.activated.connect(lambda: self.commitData.emit(editor))
         editor.activated.connect(lambda: self.closeEditor.emit(editor))
         QTimer.singleShot(0, editor, editor.showPopup)

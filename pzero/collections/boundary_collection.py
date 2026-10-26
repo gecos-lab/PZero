@@ -108,8 +108,11 @@ def compute_obb_boundary(parent):
             [[min_x, min_y], [max_x, min_y], [max_x, max_y], [min_x, max_y]]
         )
         return (
-            corners, np_max(combined_points[:, 2]), np_min(combined_points[:, 2]),
-            0.0, np_array([min_x, min_y], dtype=np_float64),
+            corners,
+            np_max(combined_points[:, 2]),
+            np_min(combined_points[:, 2]),
+            0.0,
+            np_array([min_x, min_y], dtype=np_float64),
         )
 
     # Minimum Area Bounding Box (MABB) algorithm

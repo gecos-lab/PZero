@@ -430,7 +430,10 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
                 )
                 curr_obj_dict["vtk_obj"].SetPoints(curr_obj_points)
                 curr_obj_dict["vtk_obj"].SetPolys(curr_obj_cells)
-                if curr_obj_tface_ids.GetNumberOfTuples() == curr_obj_cells.GetNumberOfCells():
+                if (
+                    curr_obj_tface_ids.GetNumberOfTuples()
+                    == curr_obj_cells.GetNumberOfCells()
+                ):
                     curr_obj_dict["vtk_obj"].GetCellData().AddArray(curr_obj_tface_ids)
 
             if properties_number > 0:

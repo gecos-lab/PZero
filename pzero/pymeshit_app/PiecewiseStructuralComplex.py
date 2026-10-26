@@ -51,7 +51,6 @@ from pzero.helpers.structural_topology import (
 )
 
 
-
 class PSCSectionSeedSelectionDialog(QDialog):
     """Small selector for PZero section seeds used as PSC seed overrides."""
 
@@ -217,7 +216,9 @@ class PSCSectionSeedSelectionDialog(QDialog):
                     seed_row.get("status", ""),
                 ]
                 for offset, value in enumerate(values, start=1):
-                    item = QTableWidgetItem(str(value) if value not in (None, "") else "-")
+                    item = QTableWidgetItem(
+                        str(value) if value not in (None, "") else "-"
+                    )
                     if offset == self.COL_UID:
                         item.setToolTip(str(value))
                     if offset == self.COL_STATUS and not importable:
@@ -246,11 +247,11 @@ class PSCSectionSeedSelectionDialog(QDialog):
             for row_idx in range(self.table.rowCount()):
                 item = self.table.item(row_idx, self.COL_INCLUDE)
                 seed_row = item.data(Qt.UserRole) if item is not None else None
-                checked = (
-                    isinstance(seed_row, dict)
-                    and seed_row.get("status_key")
-                    in {"matched", "matched_feature", "eroded"}
-                )
+                checked = isinstance(seed_row, dict) and seed_row.get("status_key") in {
+                    "matched",
+                    "matched_feature",
+                    "eroded",
+                }
                 if isinstance(seed_row, dict) and seed_row.get("target_unit_key"):
                     item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
         finally:
@@ -318,12 +319,12 @@ class PiecewiseStructuralComplex:
                 "Load conforming surfaces in the Tetra Mesh tab before building a PSC mapping."
             )
             return
-    
+
         dialog = QDialog(self.host)
         dialog.setWindowTitle("Piecewise Structural Complex")
         dialog.resize(1120, 560)
         layout = QVBoxLayout(dialog)
-    
+
         selector_layout = QHBoxLayout()
         selector_layout.addWidget(QLabel("STM table"))
         table_combo = QComboBox(dialog)
@@ -368,7 +369,7 @@ class PiecewiseStructuralComplex:
         commands_layout.addWidget(use_calculated_button)
         commands_layout.addStretch(1)
         layout.addLayout(commands_layout)
-    
+
         preview_table = QTableWidget(0, 6, dialog)
         preview_table.setHorizontalHeaderLabels(
             [
@@ -388,17 +389,19 @@ class PiecewiseStructuralComplex:
         preview_table.setColumnWidth(1, 150)
         preview_table.setColumnWidth(3, 235)
         preview_table.verticalHeader().setVisible(False)
-        preview_table.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        preview_table.verticalHeader().setSectionResizeMode(
+            QHeaderView.ResizeToContents
+        )
         preview_table.setAlternatingRowColors(True)
         preview_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         preview_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         preview_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         layout.addWidget(preview_table, 1)
-    
+
         status_label = QLabel("")
         status_label.setWordWrap(True)
         layout.addWidget(status_label)
-    
+
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         assign_button = buttons.button(QDialogButtonBox.Ok)
         if assign_button is not None:
@@ -406,11 +409,11 @@ class PiecewiseStructuralComplex:
         buttons.accepted.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
         layout.addWidget(buttons)
-    
+
         preview_state = {"psc_model": None, "mapping": None, "units": [], "rows": []}
         seed_overrides: Dict[str, List[List[float]]] = {}
         seed_override_metadata: Dict[str, Dict[str, Any]] = {}
-    
+
         def unit_seed_key(unit_info: Dict[str, Any]) -> str:
             return str(
                 unit_info.get("key")
@@ -418,14 +421,17 @@ class PiecewiseStructuralComplex:
                 or unit_info.get("feature")
                 or ""
             )
-    
+
         def load_seed_overrides(table_name: str) -> None:
             seed_overrides.clear()
             seed_override_metadata.clear()
             project = self._pzero_project()
             options = {}
             if project is not None:
-                options = getattr(project, "custom_table_options", {}).get(table_name, {}) or {}
+                options = (
+                    getattr(project, "custom_table_options", {}).get(table_name, {})
+                    or {}
+                )
             raw_overrides = options.get("psc_seed_overrides", {})
             if not isinstance(raw_overrides, dict):
                 return
@@ -438,7 +444,7 @@ class PiecewiseStructuralComplex:
                 for unit_key, metadata in raw_metadata.items():
                     if str(unit_key) in seed_overrides and isinstance(metadata, dict):
                         seed_override_metadata[str(unit_key)] = dict(metadata)
-    
+
         def save_seed_overrides(table_name: str) -> None:
             project = self._pzero_project()
             if project is None:
@@ -470,7 +476,9 @@ class PiecewiseStructuralComplex:
             project = self._pzero_project()
             if project is None:
                 return None
-            options = getattr(project, "custom_table_options", {}).get(table_name, {}) or {}
+            options = (
+                getattr(project, "custom_table_options", {}).get(table_name, {}) or {}
+            )
             source_keys = options.get("psc_section_seed_selection")
             if not isinstance(source_keys, (list, tuple, set)):
                 return None
@@ -480,7 +488,9 @@ class PiecewiseStructuralComplex:
             project = self._pzero_project()
             if project is None:
                 return False
-            options = getattr(project, "custom_table_options", {}).get(table_name, {}) or {}
+            options = (
+                getattr(project, "custom_table_options", {}).get(table_name, {}) or {}
+            )
             return bool(options.get("psc_section_seed_merge_eroded", False))
 
         def save_section_seed_selection(
@@ -528,7 +538,9 @@ class PiecewiseStructuralComplex:
                 if new_key != old_key and new_key not in seed_overrides:
                     seed_overrides[new_key] = seed_overrides.pop(old_key)
                     if old_key in seed_override_metadata:
-                        seed_override_metadata[new_key] = seed_override_metadata.pop(old_key)
+                        seed_override_metadata[new_key] = seed_override_metadata.pop(
+                            old_key
+                        )
                     overrides_rekeyed = True
             if overrides_rekeyed:
                 save_seed_overrides(table_combo.currentText())
@@ -571,7 +583,7 @@ class PiecewiseStructuralComplex:
                         "psc_virtual_source": metadata.get("source", "section_seed"),
                     }
                 )
-    
+
         def refresh_preview():
             table_name = table_combo.currentText()
             psc_model = self._build_psc_model_from_stm(table_name)
@@ -579,7 +591,7 @@ class PiecewiseStructuralComplex:
             apply_seed_overrides(mapping)
             preview_state["psc_model"] = psc_model
             preview_state["mapping"] = mapping
-    
+
             rows = list(mapping.get("units", []))
             preview_state["units"] = rows
             previous_side_context = getattr(self, "_psc_side_context", {})
@@ -597,8 +609,12 @@ class PiecewiseStructuralComplex:
                     for unit_info in rows:
                         unit_key = unit_seed_key(unit_info)
                         if unit_key in seed_overrides:
-                            seed_points = [list(seed) for seed in seed_overrides[unit_key]]
-                            unit_info["seed_point"] = seed_points[0] if seed_points else None
+                            seed_points = [
+                                list(seed) for seed in seed_overrides[unit_key]
+                            ]
+                            unit_info["seed_point"] = (
+                                seed_points[0] if seed_points else None
+                            )
                             unit_info["seed_points"] = seed_points
                             unit_info["seed_override"] = True
                             continue
@@ -609,7 +625,9 @@ class PiecewiseStructuralComplex:
                             max_missing_boundaries=int(max_missing_spin.value()),
                         )
                         unit_info["seed_points"] = seed_points
-                        unit_info["seed_point"] = seed_points[0] if seed_points else None
+                        unit_info["seed_point"] = (
+                            seed_points[0] if seed_points else None
+                        )
                     assignment_payloads = self._psc_classify_seed_assignments(
                         rows,
                         psc_model,
@@ -645,7 +663,7 @@ class PiecewiseStructuralComplex:
                         preview_table.setItem(row_idx, col_idx, item)
             finally:
                 self._psc_side_context = previous_side_context
-    
+
             seed_location_count = sum(len(unit.get("seed_points", [])) for unit in rows)
             status_label.setText(
                 f"Volumes: {getattr(self, '_psc_last_volumetric_region_count', 0)} | "
@@ -676,18 +694,22 @@ class PiecewiseStructuralComplex:
 
         def update_swap_button():
             swap_seed_button.setEnabled(selected_occurrences() is not None)
-    
+
         def swap_selected_seeds():
             selected = selected_occurrences()
             if selected is None:
-                self.print_terminal("Select two seed rows belonging to different units.")
+                self.print_terminal(
+                    "Select two seed rows belonging to different units."
+                )
                 return
             first_row, second_row = selected
             first_unit = first_row["unit_info"]
             second_unit = second_row["unit_info"]
             swapped_points = self._psc_swapped_seed_points(
-                first_unit, second_unit,
-                first_row["seed_index"], second_row["seed_index"],
+                first_unit,
+                second_unit,
+                first_row["seed_index"],
+                second_row["seed_index"],
             )
             if swapped_points is None:
                 self.print_terminal(
@@ -701,7 +723,7 @@ class PiecewiseStructuralComplex:
             seed_overrides[second_key] = second_points
             save_seed_overrides(table_combo.currentText())
             refresh_preview()
-    
+
         def import_section_seeds():
             rows = list(preview_state.get("units", []))
             if not rows:
@@ -733,7 +755,9 @@ class PiecewiseStructuralComplex:
                 return
             selected_seed_rows = selection_dialog.selected_seed_rows()
             imported = self._psc_section_seed_overrides_from_rows(selected_seed_rows)
-            imported_metadata = self._psc_section_seed_metadata_from_rows(selected_seed_rows)
+            imported_metadata = self._psc_section_seed_metadata_from_rows(
+                selected_seed_rows
+            )
             if not imported:
                 self.print_terminal(
                     "No matching section seed was selected for the current PSC units."
@@ -752,7 +776,8 @@ class PiecewiseStructuralComplex:
             refresh_preview()
             seed_count = sum(len(points) for points in imported.values())
             unmatched = sum(
-                1 for row in seed_rows
+                1
+                for row in seed_rows
                 if row.get("status_key") in {"no_match", "ambiguous"}
             )
             self.print_terminal(
@@ -768,7 +793,7 @@ class PiecewiseStructuralComplex:
             seed_override_metadata.clear()
             save_seed_overrides(table_combo.currentText())
             refresh_preview()
-    
+
         def on_table_changed():
             load_seed_overrides(table_combo.currentText())
             refresh_preview()
@@ -785,7 +810,7 @@ class PiecewiseStructuralComplex:
             finally:
                 QApplication.restoreOverrideCursor()
                 recalculate_button.setEnabled(True)
-    
+
         recalculate_button.clicked.connect(recalculate)
         preview_table.itemSelectionChanged.connect(update_swap_button)
         swap_seed_button.clicked.connect(swap_selected_seeds)
@@ -795,10 +820,10 @@ class PiecewiseStructuralComplex:
         max_missing_spin.valueChanged.connect(lambda _value: refresh_preview())
         load_seed_overrides(table_combo.currentText())
         refresh_preview()
-    
+
         if dialog.exec() != QDialog.Accepted:
             return
-    
+
         table_name = table_combo.currentText()
         self.psc_model = self._build_psc_model_from_stm(table_name)
         self.psc_mapping = self._map_psc_boundaries_to_tetra_surfaces(self.psc_model)
@@ -813,13 +838,17 @@ class PiecewiseStructuralComplex:
                 "No PSC unit could be assigned. Check that STM boundaries match the loaded tetra surfaces."
             )
             return
-    
+
         seed_count = int(getattr(self, "_psc_last_seed_count", assigned_count))
         assignment_counts = getattr(self, "_psc_last_assignment_counts", {}) or {}
         self.print_terminal(
             f"Assigned {assigned_count} material(s) with "
             f"{seed_count} seed location(s) from STM table '{table_name}'."
-            + (f" Skipped {skipped_count} unit(s) without a valid seed." if skipped_count else "")
+            + (
+                f" Skipped {skipped_count} unit(s) without a valid seed."
+                if skipped_count
+                else ""
+            )
             + " Assignments: "
             + ", ".join(
                 f"{status}={assignment_counts.get(status, 0)}"
@@ -891,13 +920,15 @@ class PiecewiseStructuralComplex:
             return None
         if first_seed_index is not None or second_seed_index is not None:
             if (
-                first_seed_index is None or second_seed_index is None
+                first_seed_index is None
+                or second_seed_index is None
                 or not 0 <= first_seed_index < len(first_points)
                 or not 0 <= second_seed_index < len(second_points)
             ):
                 return None
             first_points[first_seed_index], second_points[second_seed_index] = (
-                second_points[second_seed_index], first_points[first_seed_index]
+                second_points[second_seed_index],
+                first_points[first_seed_index],
             )
             return first_points, second_points
         return (
@@ -989,10 +1020,10 @@ class PiecewiseStructuralComplex:
         """Match section XsVertexSet seeds to mapped PSC units."""
         seed_rows = self._psc_section_seed_match_rows(mapped_units, unit_seed_key)
         selected_rows = [
-            row for row in seed_rows
+            row
+            for row in seed_rows
             if row.get("target_unit_key")
-            and row.get("status_key")
-            in {"matched", "matched_feature", "eroded"}
+            and row.get("status_key") in {"matched", "matched_feature", "eroded"}
         ]
         overrides = self._psc_section_seed_overrides_from_rows(selected_rows)
         skipped = 0
@@ -1020,9 +1051,7 @@ class PiecewiseStructuralComplex:
                     "unit_info": unit_info,
                     "unit_key": unit_key,
                     "unit_name": self._psc_text(
-                        unit_info.get("name")
-                        or unit_info.get("feature")
-                        or unit_key
+                        unit_info.get("name") or unit_info.get("feature") or unit_key
                     ),
                     "material_keys": self._psc_unit_match_keys(unit_info),
                     "role_key": self._psc_key(unit_info.get("unit_role", "")),
@@ -1138,7 +1167,7 @@ class PiecewiseStructuralComplex:
                 continue
             metadata_by_key.setdefault(unit_key, dict(metadata))
         return metadata_by_key
-    
+
     def _available_stm_tables(self) -> List[str]:
         """Return STM table names from the embedded PZero project."""
         project = self._pzero_project()
@@ -1153,12 +1182,12 @@ class PiecewiseStructuralComplex:
             ],
             key=lambda value: str(value).casefold(),
         )
-    
+
     def _pzero_project(self):
         """Return the PZero project window, if PyMeshIt is embedded in PZero."""
         bridge = getattr(self, "pzero_bridge", None)
         return getattr(bridge, "_project", None)
-    
+
     @staticmethod
     def _psc_format_point(point: Any) -> str:
         """Format a point for concise PSC diagnostics."""
@@ -1171,7 +1200,7 @@ class PiecewiseStructuralComplex:
         if coords.size < 3:
             return str(point)
         return f"({coords[0]:.3f}, {coords[1]:.3f}, {coords[2]:.3f})"
-    
+
     def _psc_format_seed_list(self, seed_points: Any) -> str:
         """Format one or more PSC seed points for the preview table."""
         if not seed_points:
@@ -1266,23 +1295,25 @@ class PiecewiseStructuralComplex:
                 if placeholder:
                     details.append("Surfaces not loaded: " + ", ".join(unavailable))
 
-            rows.append({
-                "unit_info": unit_info,
-                "seed_index": seed_index,
-                "seed_override": overridden,
-                "status": status,
-                "values": [
-                    str(int(region_id) + 1) if region_id is not None else "",
-                    unit_info.get("feature") or unit_info.get("name", ""),
-                    unit_info.get("unit_role", ""),
-                    seed_text,
-                    status,
-                    "; ".join(details),
-                ],
-                "tooltip": "\n".join(tooltip_lines),
-            })
+            rows.append(
+                {
+                    "unit_info": unit_info,
+                    "seed_index": seed_index,
+                    "seed_override": overridden,
+                    "status": status,
+                    "values": [
+                        str(int(region_id) + 1) if region_id is not None else "",
+                        unit_info.get("feature") or unit_info.get("name", ""),
+                        unit_info.get("unit_role", ""),
+                        seed_text,
+                        status,
+                        "; ".join(details),
+                    ],
+                    "tooltip": "\n".join(tooltip_lines),
+                }
+            )
         return rows
-    
+
     def _psc_ambiguity_groups(
         self,
         mapped_units: List[Dict[str, Any]],
@@ -1301,11 +1332,7 @@ class PiecewiseStructuralComplex:
                 continue
             signature = (structural_keys, boundary_key in keys)
             groups.setdefault(signature, []).append(unit_info)
-        return [
-            group
-            for group in groups.values()
-            if len(group) > 1
-        ]
+        return [group for group in groups.values() if len(group) > 1]
 
     def _psc_annotate_ambiguity_groups(
         self,
@@ -1361,12 +1388,9 @@ class PiecewiseStructuralComplex:
         }
         assignments = list(unit_info.get("psc_assignments", []) or [])
         if include_rejected:
-            assignments.extend(
-                unit_info.get("psc_rejected_assignments", []) or []
-            )
+            assignments.extend(unit_info.get("psc_rejected_assignments", []) or [])
         statuses = [
-            assignment.get("status", "UNASSIGNED")
-            for assignment in assignments
+            assignment.get("status", "UNASSIGNED") for assignment in assignments
         ] or ["UNASSIGNED"]
         return max(
             statuses,
@@ -1383,7 +1407,7 @@ class PiecewiseStructuralComplex:
         if ambiguous:
             return "AMBIGUOUS"
         return "CERTAIN" if exact else "LIKELY"
-    
+
     def _psc_structural_boundary_keys_for_unit(
         self,
         unit_info: Dict[str, Any],
@@ -1395,7 +1419,7 @@ class PiecewiseStructuralComplex:
             for boundary in unit_info.get("boundaries", []) or []
             if self._psc_key(boundary) and self._psc_key(boundary) != boundary_key
         }
-    
+
     def _psc_boundary_labels_by_key(
         self,
         unit_info: Dict[str, Any],
@@ -1408,7 +1432,7 @@ class PiecewiseStructuralComplex:
             if boundary_key and boundary_key not in labels:
                 labels[boundary_key] = boundary_text
         return labels
-    
+
     def _psc_local_boundary_sets_for_unit(
         self,
         unit_info: Dict[str, Any],
@@ -1418,7 +1442,7 @@ class PiecewiseStructuralComplex:
         unit_keys = self._psc_structural_boundary_keys_for_unit(unit_info)
         if len(unit_keys) < 3:
             return []
-    
+
         boundary_key = self._psc_key("Boundary")
         has_model_boundary = any(
             self._psc_key(boundary) == boundary_key
@@ -1426,7 +1450,7 @@ class PiecewiseStructuralComplex:
         )
         unit_labels = self._psc_boundary_labels_by_key(unit_info)
         candidates: Dict[Tuple[str, ...], List[str]] = {}
-    
+
         for other_info in mapped_units or []:
             if other_info is unit_info:
                 continue
@@ -1442,12 +1466,12 @@ class PiecewiseStructuralComplex:
             if has_model_boundary:
                 labels.append("Boundary")
             candidates.setdefault(key_tuple, labels)
-    
+
         return [
             candidates[key_tuple]
             for key_tuple in sorted(candidates, key=lambda item: (-len(item), item))
         ]
-    
+
     def _psc_unit_with_local_boundaries(
         self,
         unit_info: Dict[str, Any],
@@ -1469,7 +1493,7 @@ class PiecewiseStructuralComplex:
         )
         local_info["component_name"] = base_name
         local_info["component_index"] = component_index
-    
+
         source_indices = unit_info.get("boundary_surface_indices", {}) or {}
         source_by_key = {
             self._psc_key(boundary): (boundary, indices)
@@ -1484,7 +1508,7 @@ class PiecewiseStructuralComplex:
             source_boundary, indices = source_entry
             filtered_indices[source_boundary] = list(indices or [])
         local_info["boundary_surface_indices"] = filtered_indices
-    
+
         structural_indices = []
         model_boundary_indices = []
         for boundary, indices in filtered_indices.items():
@@ -1621,9 +1645,7 @@ class PiecewiseStructuralComplex:
             if label_key and label_key not in labels_by_key:
                 labels_by_key[label_key] = label_text
         signature_keys = set(labels_by_key)
-        candidate["boundaries"] = [
-            labels_by_key[key] for key in sorted(labels_by_key)
-        ]
+        candidate["boundaries"] = [labels_by_key[key] for key in sorted(labels_by_key)]
         candidate["signature_keys"] = signature_keys
 
         observed_by_key = {}
@@ -1707,8 +1729,7 @@ class PiecewiseStructuralComplex:
                 best_by_unit[candidate["unit_key"]] = (quality, candidate)
 
         return [
-            item[1]
-            for item in sorted(best_by_unit.values(), key=lambda item: item[0])
+            item[1] for item in sorted(best_by_unit.values(), key=lambda item: item[0])
         ]
 
     def _psc_repeat_conflict_labels(
@@ -1736,7 +1757,9 @@ class PiecewiseStructuralComplex:
         bounds = self._psc_domain_bounds()
         tolerance = 1.0e-8
         if bounds is not None:
-            tolerance = max(float(np.linalg.norm(bounds[1] - bounds[0])) * 0.002, tolerance)
+            tolerance = max(
+                float(np.linalg.norm(bounds[1] - bounds[0])) * 0.002, tolerance
+            )
 
         conflicts = []
         for assignment in assignments or []:
@@ -1817,34 +1840,40 @@ class PiecewiseStructuralComplex:
         opposite_areas = []
         for vertex_idx in range(4):
             face = np.delete(points, vertex_idx, axis=0)
-            area = 0.5 * np.linalg.norm(
-                np.cross(face[1] - face[0], face[2] - face[0])
-            )
+            area = 0.5 * np.linalg.norm(np.cross(face[1] - face[0], face[2] - face[0]))
             opposite_areas.append(float(area))
         area_sum = float(sum(opposite_areas))
-        volume = abs(
-            float(
-                np.linalg.det(
-                    np.stack(
-                        (
-                            points[1] - points[0],
-                            points[2] - points[0],
-                            points[3] - points[0],
-                        ),
-                        axis=0,
+        volume = (
+            abs(
+                float(
+                    np.linalg.det(
+                        np.stack(
+                            (
+                                points[1] - points[0],
+                                points[2] - points[0],
+                                points[3] - points[0],
+                            ),
+                            axis=0,
+                        )
                     )
                 )
             )
-        ) / 6.0
+            / 6.0
+        )
         if area_sum <= 1.0e-15 or volume <= 1.0e-18:
             return np.mean(points, axis=0), 0.0
         weights = np.asarray(opposite_areas, dtype=float)
-        return np.sum(points * weights[:, None], axis=0) / area_sum, 3.0 * volume / area_sum
+        return (
+            np.sum(points * weights[:, None], axis=0) / area_sum,
+            3.0 * volume / area_sum,
+        )
 
     def _psc_surface_info_for_index(self, surface_idx: int) -> Dict[str, Any]:
         """Return conforming-surface metadata for an integer dataset index."""
         surface_data = getattr(self, "tetra_surface_data", {}) or {}
-        return surface_data.get(surface_idx, surface_data.get(str(surface_idx), {})) or {}
+        return (
+            surface_data.get(surface_idx, surface_data.get(str(surface_idx), {})) or {}
+        )
 
     def _psc_marker_surface(self, marker: Any) -> Optional[int]:
         """Map a TetGen PLC face marker to its source surface index."""
@@ -1896,7 +1925,9 @@ class PiecewiseStructuralComplex:
         if trifaces.ndim != 2 or trifaces.shape[1] < 3:
             raise ValueError("TetGen returned invalid PSC face connectivity.")
         if len(trifaces) != len(markers):
-            raise ValueError("TetGen PSC faces and face markers have different lengths.")
+            raise ValueError(
+                "TetGen PSC faces and face markers have different lengths."
+            )
 
         elements = elements[:, :4]
         trifaces = trifaces[:, :3]
@@ -2026,9 +2057,7 @@ class PiecewiseStructuralComplex:
                 if not label_key:
                     continue
                 labels_by_key.setdefault(label_key, label)
-                label_surface_indices.setdefault(label_key, []).append(
-                    int(surface_idx)
-                )
+                label_surface_indices.setdefault(label_key, []).append(int(surface_idx))
             regions.append(
                 {
                     "region_id": int(region_idx),
@@ -2090,11 +2119,15 @@ class PiecewiseStructuralComplex:
                 )
             )
         try:
-            border_indices = tuple(sorted(int(i) for i in self._get_border_surface_indices()))
+            border_indices = tuple(
+                sorted(int(i) for i in self._get_border_surface_indices())
+            )
         except Exception:
             border_indices = ()
         try:
-            fault_indices = tuple(sorted(int(i) for i in self._get_fault_surface_indices()))
+            fault_indices = tuple(
+                sorted(int(i) for i in self._get_fault_surface_indices())
+            )
         except Exception:
             fault_indices = ()
         return tuple(descriptors), border_indices, fault_indices
@@ -2127,9 +2160,7 @@ class PiecewiseStructuralComplex:
         except Exception:
             border_indices = set()
         try:
-            fault_indices = {
-                int(value) for value in self._get_fault_surface_indices()
-            }
+            fault_indices = {int(value) for value in self._get_fault_surface_indices()}
         except Exception:
             fault_indices = set()
         unit_indices = selected_surfaces - border_indices - fault_indices
@@ -2161,12 +2192,16 @@ class PiecewiseStructuralComplex:
                 )
 
             holes = []
-            collect_holes = getattr(self.host, "_collect_holes_from_constraint_tree", None)
+            collect_holes = getattr(
+                self.host, "_collect_holes_from_constraint_tree", None
+            )
             if callable(collect_holes):
                 holes = collect_holes() or []
             terminal = getattr(self.host, "print_terminal", None)
             if callable(terminal):
-                terminal("PSC: discovering connected 3D volumes from conforming surfaces...")
+                terminal(
+                    "PSC: discovering connected 3D volumes from conforming surfaces..."
+                )
             generator = TetrahedralMeshGenerator(
                 datasets=datasets,
                 selected_surfaces=selected_surfaces,
@@ -2293,7 +2328,9 @@ class PiecewiseStructuralComplex:
         if mesh is not None and hasattr(mesh, "find_containing_cell"):
             try:
                 tetra_idx = int(mesh.find_containing_cell(coords))
-                tetra_to_region = np.asarray(partition.get("tetra_to_region", []), dtype=int)
+                tetra_to_region = np.asarray(
+                    partition.get("tetra_to_region", []), dtype=int
+                )
                 if 0 <= tetra_idx < len(tetra_to_region):
                     return int(tetra_to_region[tetra_idx])
             except Exception:
@@ -2306,7 +2343,8 @@ class PiecewiseStructuralComplex:
                 regions,
                 key=lambda region: float(
                     np.linalg.norm(
-                        coords - np.asarray(region.get("seed_point", coords), dtype=float)
+                        coords
+                        - np.asarray(region.get("seed_point", coords), dtype=float)
                     )
                 ),
             ).get("region_id", -1)
@@ -2420,12 +2458,8 @@ class PiecewiseStructuralComplex:
                         "extra_count": 0,
                         "extra_labels": [],
                         "mismatch_count": 0,
-                        "observed_count": len(
-                            region.get("boundary_labels", []) or []
-                        ),
-                        "polarity": self._psc_sort_key(
-                            unit_info.get("polarity", "")
-                        ),
+                        "observed_count": len(region.get("boundary_labels", []) or []),
+                        "polarity": self._psc_sort_key(unit_info.get("polarity", "")),
                         "quality": (0, 0, 0, 0, 0),
                         "pinned": True,
                     }
@@ -2569,9 +2603,10 @@ class PiecewiseStructuralComplex:
                         for unit_info in mapped_units
                         if unit_info.get("ambiguity_group") == ambiguity_group
                     ]
-            topology_is_ambiguous = len(ambiguity_group_peers) > 1 or len(
-                {candidate["unit_key"] for candidate in topology_peers}
-            ) > 1
+            topology_is_ambiguous = (
+                len(ambiguity_group_peers) > 1
+                or len({candidate["unit_key"] for candidate in topology_peers}) > 1
+            )
             match_status = "CERTAIN" if chosen["exact"] else "LIKELY"
             status = self._psc_occurrence_status(
                 exact=bool(chosen["exact"]),
@@ -2625,9 +2660,7 @@ class PiecewiseStructuralComplex:
                 "candidate_names": candidate_names,
                 "missing_labels": list(chosen.get("missing_labels", []) or []),
                 "extra_labels": list(chosen.get("extra_labels", []) or []),
-                "blocked_repeat_labels": sorted(
-                    set(blocked_labels), key=str.casefold
-                ),
+                "blocked_repeat_labels": sorted(set(blocked_labels), key=str.casefold),
                 "assigned_before": int(assigned_before),
                 "exact": bool(chosen["exact"]),
                 "local_signature": False,
@@ -2718,9 +2751,15 @@ class PiecewiseStructuralComplex:
             seed_points = self._psc_normalize_seed_points(
                 unit_info.get("seed_points") or unit_info.get("seed_point")
             )
-            signature_entries = list(unit_info.get("seed_topology_signatures", []) or [])
+            signature_entries = list(
+                unit_info.get("seed_topology_signatures", []) or []
+            )
             for seed_index, seed_point in enumerate(seed_points):
-                entry = signature_entries[seed_index] if seed_index < len(signature_entries) else {}
+                entry = (
+                    signature_entries[seed_index]
+                    if seed_index < len(signature_entries)
+                    else {}
+                )
                 signature = dict(entry.get("signature", {}) or {})
                 boundaries = list(
                     entry.get("boundaries")
@@ -2744,8 +2783,7 @@ class PiecewiseStructuralComplex:
                     for key, value in (
                         signature.get("closest_surface_indices", {}) or {}
                     ).items()
-                    if self._psc_key(key)
-                    and isinstance(value, (int, np.integer))
+                    if self._psc_key(key) and isinstance(value, (int, np.integer))
                 }
                 # Repeat-adjacency checks need all surfaces in the intended
                 # signature, including a conformable surface omitted from
@@ -2822,8 +2860,7 @@ class PiecewiseStructuralComplex:
                         )
                     if (
                         int(scored.get("extra_count", 0)) > 0
-                        or int(scored.get("missing_count", 0))
-                        > max_missing_boundaries
+                        or int(scored.get("missing_count", 0)) > max_missing_boundaries
                     ):
                         continue
                     scored_candidates.append(scored)
@@ -2905,13 +2942,13 @@ class PiecewiseStructuralComplex:
                     "blocked_repeat_labels": sorted(
                         set(blocked_labels), key=str.casefold
                     ),
-                    "closest_surface_indices": dict(
-                        record["closest_surface_indices"]
-                    ),
+                    "closest_surface_indices": dict(record["closest_surface_indices"]),
                     "signature": dict(record["signature"]),
                 }
                 payloads.append(payload)
-                rejected_by_source.setdefault(record["source_unit_key"], []).append(payload)
+                rejected_by_source.setdefault(record["source_unit_key"], []).append(
+                    payload
+                )
                 continue
 
             best_candidate = filtered_candidates[0]
@@ -2941,9 +2978,9 @@ class PiecewiseStructuralComplex:
                 ),
             )
             assigned_before = assigned_counts.get(chosen["unit_key"], 0)
-            topology_is_ambiguous = int(
-                chosen["unit_info"].get("ambiguity_group_size", 1) or 1
-            ) > 1
+            topology_is_ambiguous = (
+                int(chosen["unit_info"].get("ambiguity_group_size", 1) or 1) > 1
+            )
             match_status = "CERTAIN" if chosen.get("exact") else "LIKELY"
             status = self._psc_occurrence_status(
                 exact=bool(chosen.get("exact")),
@@ -2980,9 +3017,7 @@ class PiecewiseStructuralComplex:
                 "candidate_names": candidate_names,
                 "missing_labels": list(chosen.get("missing_labels", []) or []),
                 "extra_labels": list(chosen.get("extra_labels", []) or []),
-                "blocked_repeat_labels": sorted(
-                    set(blocked_labels), key=str.casefold
-                ),
+                "blocked_repeat_labels": sorted(set(blocked_labels), key=str.casefold),
                 "assigned_before": int(assigned_before),
                 "exact": bool(chosen.get("exact")),
                 "local_signature": bool(chosen.get("is_local")),
@@ -3042,7 +3077,7 @@ class PiecewiseStructuralComplex:
                 include_rejected=True,
             )
         return payloads
-    
+
     @staticmethod
     def _psc_key(value: Any) -> str:
         """Return a normalized key for STM/PyMeshIt feature matching."""
@@ -3057,7 +3092,7 @@ class PiecewiseStructuralComplex:
         if text.casefold() in {"nan", "nat", "<na>", "none"}:
             return ""
         return re.sub(r"\s+", " ", text).casefold()
-    
+
     @staticmethod
     def _psc_text(value: Any) -> str:
         """Return clean display text for STM values, treating NaN as empty."""
@@ -3087,7 +3122,7 @@ class PiecewiseStructuralComplex:
             return float(value)
         except (TypeError, ValueError):
             return float("inf")
-    
+
     def _build_psc_model_from_stm(self, table_name: str) -> Dict[str, Any]:
         """Read the canonical Boundaries and Units tables from an STM model."""
         project = self._pzero_project()
@@ -3122,10 +3157,9 @@ class PiecewiseStructuralComplex:
 
         def boundary_name(value: Any) -> str:
             name = self._psc_text(value)
-            if (
-                self._psc_key(name) in model_boundary_keys
-                or self._psc_key(name) == self._psc_key("Model Boundary")
-            ):
+            if self._psc_key(name) in model_boundary_keys or self._psc_key(
+                name
+            ) == self._psc_key("Model Boundary"):
                 return "Boundary"
             return name
 
@@ -3154,8 +3188,7 @@ class PiecewiseStructuralComplex:
             self._psc_key(boundary)
             for boundaries in conformable_by_unit.values()
             for boundary in boundaries
-            if self._psc_key(boundary)
-            != self._psc_key("Boundary")
+            if self._psc_key(boundary) != self._psc_key("Boundary")
         }
         units: Dict[str, Dict[str, Any]] = {}
         boundary_features = set()
@@ -3177,7 +3210,9 @@ class PiecewiseStructuralComplex:
             boundary_order.append(
                 {
                     "feature": feature,
-                    "role": self._psc_text(boundary_info.get(stm_boundary_role_col, "")),
+                    "role": self._psc_text(
+                        boundary_info.get(stm_boundary_role_col, "")
+                    ),
                     "polarity": self._psc_sort_key(
                         boundary_info.get(stm_boundary_level_col, "")
                     ),
@@ -3211,9 +3246,7 @@ class PiecewiseStructuralComplex:
                 for column_name, value in sorted(
                     domain_items,
                     key=lambda item: int(
-                        str(item[0]).split("_", 1)[1]
-                        if "_" in str(item[0])
-                        else 1
+                        str(item[0]).split("_", 1)[1] if "_" in str(item[0]) else 1
                     ),
                 )
                 if self._psc_text(value)
@@ -3249,8 +3282,10 @@ class PiecewiseStructuralComplex:
             "model_boundary_feature": model_boundary_feature,
             "model_boundary_uid": model_boundary_uid,
         }
-    
-    def _map_psc_boundaries_to_tetra_surfaces(self, psc_model: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _map_psc_boundaries_to_tetra_surfaces(
+        self, psc_model: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Map PSC boundary features to loaded tetra-surface metadata."""
         feature_to_surfaces: Dict[str, List[Dict[str, Any]]] = {}
         boundary_surface_entries = []
@@ -3266,8 +3301,10 @@ class PiecewiseStructuralComplex:
             border_indices = set(self._get_border_surface_indices())
         except Exception:
             border_indices = set()
-    
-        for surface_idx, surface_info in getattr(self, "tetra_surface_data", {}).items():
+
+        for surface_idx, surface_info in getattr(
+            self, "tetra_surface_data", {}
+        ).items():
             try:
                 surface_idx_value = int(surface_idx)
             except (TypeError, ValueError):
@@ -3286,7 +3323,9 @@ class PiecewiseStructuralComplex:
                 feature_to_surfaces.setdefault(self._psc_key(feature), []).append(entry)
             fallback_name = str(surface_info.get("name", "")).strip()
             if fallback_name:
-                feature_to_surfaces.setdefault(self._psc_key(fallback_name), []).append(entry)
+                feature_to_surfaces.setdefault(self._psc_key(fallback_name), []).append(
+                    entry
+                )
             identity_text = " ".join(
                 str(surface_info.get(field, "") or "").casefold()
                 for field in ("name", "feature")
@@ -3317,10 +3356,12 @@ class PiecewiseStructuralComplex:
                     if entry.get("index") is not None
                 }.values()
             )
-    
+
         mapped_units = []
         for unit in psc_model.get("units", {}).values():
-            boundaries = sorted(unit.get("boundaries", set()), key=lambda value: str(value).casefold())
+            boundaries = sorted(
+                unit.get("boundaries", set()), key=lambda value: str(value).casefold()
+            )
             matched_surfaces = []
             matched_surface_indices = []
             model_boundary_indices = []
@@ -3338,8 +3379,7 @@ class PiecewiseStructuralComplex:
                         entry
                         for entry in matches
                         if expected_role
-                        and self._psc_key(entry.get("role", ""))
-                        == expected_role
+                        and self._psc_key(entry.get("role", "")) == expected_role
                     ]
                     if expected_role:
                         matches = role_matches or [
@@ -3349,13 +3389,19 @@ class PiecewiseStructuralComplex:
                         ]
                 if matches:
                     boundary_surface_indices[boundary] = [
-                        entry["index"] for entry in matches if entry.get("index") is not None
+                        entry["index"]
+                        for entry in matches
+                        if entry.get("index") is not None
                     ]
                     matched_surfaces.extend([entry["label"] for entry in matches])
                     if self._psc_key(boundary) == self._psc_key("Boundary"):
-                        model_boundary_indices.extend(boundary_surface_indices[boundary])
+                        model_boundary_indices.extend(
+                            boundary_surface_indices[boundary]
+                        )
                     else:
-                        matched_surface_indices.extend(boundary_surface_indices[boundary])
+                        matched_surface_indices.extend(
+                            boundary_surface_indices[boundary]
+                        )
                 else:
                     missing_boundaries.append(boundary)
             mapped_units.append(
@@ -3363,9 +3409,7 @@ class PiecewiseStructuralComplex:
                     "key": unit.get("key", ""),
                     "name": unit.get("name", ""),
                     "feature": unit.get("feature", ""),
-                    "unit_role": self._psc_unit_role(
-                        unit.get("unit_role", "TU")
-                    ),
+                    "unit_role": self._psc_unit_role(unit.get("unit_role", "TU")),
                     "polarity": unit.get("polarity", float("inf")),
                     "domains": list(unit.get("domains", [])),
                     "boundaries": boundaries,
@@ -3373,8 +3417,12 @@ class PiecewiseStructuralComplex:
                         unit.get("conformable_boundaries", [])
                     ),
                     "matched_surfaces": sorted(set(matched_surfaces), key=str.casefold),
-                    "matched_surface_indices": sorted(set(matched_surface_indices), key=lambda value: str(value)),
-                    "model_boundary_indices": sorted(set(model_boundary_indices), key=lambda value: str(value)),
+                    "matched_surface_indices": sorted(
+                        set(matched_surface_indices), key=lambda value: str(value)
+                    ),
+                    "model_boundary_indices": sorted(
+                        set(model_boundary_indices), key=lambda value: str(value)
+                    ),
                     "boundary_surface_indices": boundary_surface_indices,
                     "missing_boundaries": missing_boundaries,
                     "source": unit.get("source", ""),
@@ -3383,48 +3431,46 @@ class PiecewiseStructuralComplex:
             for color_name in ("color_R", "color_G", "color_B"):
                 if color_name in unit:
                     mapped_units[-1][color_name] = unit[color_name]
-    
+
         mapped_units = sorted(
             mapped_units,
             key=lambda item: str(item.get("feature", "")).casefold(),
         )
         self._psc_annotate_ambiguity_groups(mapped_units)
-    
+
         return {
             "table_name": psc_model.get("table_name", ""),
             "units": mapped_units,
         }
-    
+
     def _psc_surface_indices_for_boundary(self, boundary_feature: str) -> List[int]:
         """Return surfaces matching an STM Feature and, when available, Role."""
         key = self._psc_key(boundary_feature)
         expected_role = self._psc_key(
-            (getattr(self, "_psc_active_boundary_roles", {}) or {}).get(
-                key, ""
-            )
+            (getattr(self, "_psc_active_boundary_roles", {}) or {}).get(key, "")
         )
         try:
             border_indices = set(self._get_border_surface_indices())
         except Exception:
             border_indices = set()
-    
+
         matches = []
         role_matches = []
         roleless_matches = []
-        model_uid = self._psc_key(
-            getattr(self, "_psc_active_model_boundary_uid", "")
-        )
+        model_uid = self._psc_key(getattr(self, "_psc_active_model_boundary_uid", ""))
         model_feature = self._psc_key(
             getattr(self, "_psc_active_model_boundary_feature", "")
         )
         model_uid_matches = []
         model_feature_matches = []
-        for surface_idx, surface_info in getattr(self, "tetra_surface_data", {}).items():
+        for surface_idx, surface_info in getattr(
+            self, "tetra_surface_data", {}
+        ).items():
             try:
                 surface_idx_value = int(surface_idx)
             except (TypeError, ValueError):
                 continue
-    
+
             if key == self._psc_key("Boundary"):
                 surface_uid = self._psc_key(surface_info.get("uid", ""))
                 surface_keys = {
@@ -3444,22 +3490,19 @@ class PiecewiseStructuralComplex:
                 ):
                     matches.append(surface_idx_value)
                 continue
-    
+
             feature = surface_info.get("feature", "")
             name = surface_info.get("name", "")
             if key in {self._psc_key(feature), self._psc_key(name)}:
                 matches.append(surface_idx_value)
                 if (
                     expected_role
-                    and self._psc_key(surface_info.get("role", ""))
-                    == expected_role
+                    and self._psc_key(surface_info.get("role", "")) == expected_role
                 ):
                     role_matches.append(surface_idx_value)
-                elif expected_role and not self._psc_key(
-                    surface_info.get("role", "")
-                ):
+                elif expected_role and not self._psc_key(surface_info.get("role", "")):
                     roleless_matches.append(surface_idx_value)
-    
+
         if key == self._psc_key("Boundary"):
             preferred_matches = model_uid_matches or model_feature_matches
             if preferred_matches:
@@ -3468,7 +3511,7 @@ class PiecewiseStructuralComplex:
         if expected_role:
             selected = role_matches or roleless_matches
         return sorted(set(selected))
-    
+
     def _psc_adjacent_boundary_surface_indices(
         self,
         unit_info: Dict[str, Any],
@@ -3479,14 +3522,19 @@ class PiecewiseStructuralComplex:
         unit_key = self._psc_key(unit_info.get("feature", ""))
         current_indices = self._psc_structural_surface_indices_for_unit(unit_info)
         if not current_indices and unit_key:
-            current_indices = self._psc_surface_indices_for_boundary(unit_info.get("feature", ""))
+            current_indices = self._psc_surface_indices_for_boundary(
+                unit_info.get("feature", "")
+            )
         current_centroids = [
-            self._psc_surface_centroid(surface_idx)
-            for surface_idx in current_indices
+            self._psc_surface_centroid(surface_idx) for surface_idx in current_indices
         ]
-        current_centroids = [centroid for centroid in current_centroids if centroid is not None]
+        current_centroids = [
+            centroid for centroid in current_centroids if centroid is not None
+        ]
         if current_centroids:
-            reference_point = np.mean(np.asarray(current_centroids, dtype=float), axis=0)
+            reference_point = np.mean(
+                np.asarray(current_centroids, dtype=float), axis=0
+            )
         else:
             bounds = self._psc_domain_bounds()
             reference_point = (
@@ -3494,7 +3542,7 @@ class PiecewiseStructuralComplex:
                 if bounds is not None
                 else np.zeros(3, dtype=float)
             )
-    
+
         candidates = []
         for feature in psc_model.get("boundary_features", set()) or []:
             feature_key = self._psc_key(feature)
@@ -3502,8 +3550,7 @@ class PiecewiseStructuralComplex:
                 continue
             indices = self._psc_surface_indices_for_boundary(feature)
             centroids = [
-                self._psc_surface_centroid(surface_idx)
-                for surface_idx in indices
+                self._psc_surface_centroid(surface_idx) for surface_idx in indices
             ]
             centroids = [centroid for centroid in centroids if centroid is not None]
             if not centroids:
@@ -3511,13 +3558,13 @@ class PiecewiseStructuralComplex:
             candidate_point = np.mean(np.asarray(centroids, dtype=float), axis=0)
             distance = float(np.linalg.norm(candidate_point - reference_point))
             candidates.append((distance, str(feature), indices))
-    
+
         if not candidates:
             return [], ""
         candidates.sort(key=lambda item: (item[0], item[1].casefold()))
         _, feature, indices = candidates[0]
         return indices, feature
-    
+
     def _psc_domain_bounds(self) -> Optional[Tuple[np.ndarray, np.ndarray]]:
         """Return min/max XYZ bounds of the loaded PLC surfaces."""
         point_sets = []
@@ -3529,7 +3576,7 @@ class PiecewiseStructuralComplex:
             return None
         points = np.vstack(point_sets)
         return np.min(points, axis=0), np.max(points, axis=0)
-    
+
     def _psc_domain_axis_bounds(
         self,
         axis: np.ndarray,
@@ -3544,7 +3591,7 @@ class PiecewiseStructuralComplex:
             return None
         projections = np.vstack(point_sets).dot(axis)
         return float(np.min(projections)), float(np.max(projections))
-    
+
     def _psc_surface_vertices(self, surface_idx: int) -> np.ndarray:
         """Return loaded PLC vertices for one tetra surface."""
         surface_info = getattr(self, "tetra_surface_data", {}).get(surface_idx)
@@ -3554,7 +3601,7 @@ class PiecewiseStructuralComplex:
         if vertices.ndim != 2 or vertices.shape[0] == 0 or vertices.shape[1] < 3:
             return np.empty((0, 3), dtype=float)
         return vertices[:, :3]
-    
+
     def _psc_surface_normal(self, surface_idx: int) -> Optional[np.ndarray]:
         """Estimate a stable normal for a loaded PLC surface."""
         vertices = self._psc_surface_vertices(surface_idx)
@@ -3572,14 +3619,14 @@ class PiecewiseStructuralComplex:
         if norm <= 1e-12:
             return None
         return normal / norm
-    
+
     def _psc_surface_centroid(self, surface_idx: int) -> Optional[np.ndarray]:
         """Return the centroid of one loaded PLC surface."""
         vertices = self._psc_surface_vertices(surface_idx)
         if vertices.shape[0] == 0:
             return None
         return np.mean(vertices, axis=0)
-    
+
     def _psc_stacking_axis(self, psc_model: Dict[str, Any]) -> np.ndarray:
         """Estimate a geometric search axis without using STM levels."""
         centroids = []
@@ -3601,7 +3648,7 @@ class PiecewiseStructuralComplex:
                 normal = self._psc_surface_normal(surface_idx)
                 if normal is not None:
                     normals.append(normal)
-    
+
         if len(centroids) >= 2:
             centered = np.asarray(centroids, dtype=float) - np.mean(centroids, axis=0)
             try:
@@ -3612,20 +3659,22 @@ class PiecewiseStructuralComplex:
                     return axis / norm
             except np.linalg.LinAlgError:
                 pass
-    
+
         if normals:
             reference = np.asarray(normals[0], dtype=float)
             aligned = []
             for normal in normals:
                 normal = np.asarray(normal, dtype=float)
-                aligned.append(normal if float(np.dot(normal, reference)) >= 0.0 else -normal)
+                aligned.append(
+                    normal if float(np.dot(normal, reference)) >= 0.0 else -normal
+                )
             axis = np.mean(np.asarray(aligned), axis=0)
             norm = np.linalg.norm(axis)
             if norm > 1e-12:
                 return axis / norm
-    
+
         return np.array([0.0, 0.0, 1.0], dtype=float)
-    
+
     def _psc_surface_point_on_axis(
         self,
         surface_idx: int,
@@ -3636,7 +3685,7 @@ class PiecewiseStructuralComplex:
         vertices = self._psc_surface_vertices(surface_idx)
         if vertices.shape[0] == 0:
             return None
-    
+
         centroid = np.mean(vertices, axis=0)
         normal = self._psc_surface_normal(surface_idx)
         if normal is not None:
@@ -3646,11 +3695,13 @@ class PiecewiseStructuralComplex:
                 point = line_origin + axis * t_value
                 if np.all(np.isfinite(point)):
                     return point
-    
+
         if abs(float(axis[2])) > 0.5:
-            return self._psc_surface_reference_point(surface_idx, sample_xy=line_origin[:2])
+            return self._psc_surface_reference_point(
+                surface_idx, sample_xy=line_origin[:2]
+            )
         return centroid
-    
+
     def _psc_surface_reference_point(
         self,
         surface_idx: int,
@@ -3660,28 +3711,34 @@ class PiecewiseStructuralComplex:
         vertices = self._psc_surface_vertices(surface_idx)
         if vertices.shape[0] == 0:
             return None
-    
+
         centroid = np.mean(vertices, axis=0)
         if sample_xy is None:
             return centroid
-    
+
         normal = self._psc_surface_normal(surface_idx)
         if normal is not None and abs(float(normal[2])) > 1e-8:
-            z_value = centroid[2] - (
-                normal[0] * (sample_xy[0] - centroid[0])
-                + normal[1] * (sample_xy[1] - centroid[1])
-            ) / normal[2]
+            z_value = (
+                centroid[2]
+                - (
+                    normal[0] * (sample_xy[0] - centroid[0])
+                    + normal[1] * (sample_xy[1] - centroid[1])
+                )
+                / normal[2]
+            )
             z_min = float(np.min(vertices[:, 2]))
             z_max = float(np.max(vertices[:, 2]))
             pad = max((z_max - z_min) * 0.25, 1e-6)
             if np.isfinite(z_value) and z_min - pad <= z_value <= z_max + pad:
-                return np.array([float(sample_xy[0]), float(sample_xy[1]), float(z_value)])
-    
+                return np.array(
+                    [float(sample_xy[0]), float(sample_xy[1]), float(z_value)]
+                )
+
         xy_distances = np.linalg.norm(vertices[:, :2] - sample_xy[:2], axis=1)
         if xy_distances.size:
             return vertices[int(np.argmin(xy_distances))]
         return centroid
-    
+
     @staticmethod
     def _psc_clamp_seed_to_bounds(
         point: np.ndarray,
@@ -3696,7 +3753,7 @@ class PiecewiseStructuralComplex:
         lower = np.where(span > 0.0, bounds_min + margin, bounds_min)
         upper = np.where(span > 0.0, bounds_max - margin, bounds_max)
         return np.minimum(np.maximum(point, lower), upper)
-    
+
     def _psc_move_seed_off_boundaries(
         self,
         seed: np.ndarray,
@@ -3710,7 +3767,7 @@ class PiecewiseStructuralComplex:
         diagonal = float(np.linalg.norm(bounds_max - bounds_min))
         clearance = max(diagonal * 0.01, 1e-6)
         adjusted = np.asarray(seed, dtype=float).copy()
-    
+
         for surface_idx in surface_indices:
             vertices = self._psc_surface_vertices(surface_idx)
             normal = self._psc_surface_normal(surface_idx)
@@ -3725,15 +3782,21 @@ class PiecewiseStructuralComplex:
                 center_vector = adjusted - ((bounds_min + bounds_max) / 2.0)
                 direction = 1.0 if np.dot(center_vector, normal) >= 0.0 else -1.0
             adjusted += normal * direction * (clearance - abs(signed_distance))
-    
+
         return self._psc_clamp_seed_to_bounds(adjusted, bounds)
-    
+
     def _psc_surface_label(self, surface_idx: int) -> str:
         """Return a concise label for a loaded tetra surface."""
-        surface_info = getattr(self, "tetra_surface_data", {}).get(surface_idx, {}) or {}
-        label = surface_info.get("name") or surface_info.get("feature") or f"Surface_{surface_idx}"
+        surface_info = (
+            getattr(self, "tetra_surface_data", {}).get(surface_idx, {}) or {}
+        )
+        label = (
+            surface_info.get("name")
+            or surface_info.get("feature")
+            or f"Surface_{surface_idx}"
+        )
         return f"{surface_idx}:{label}"
-    
+
     def _psc_surface_triangles(self, surface_idx: int) -> np.ndarray:
         """Return triangle indices for one loaded PLC surface."""
         surface_info = getattr(self, "tetra_surface_data", {}).get(surface_idx)
@@ -3743,7 +3806,7 @@ class PiecewiseStructuralComplex:
         if triangles.ndim != 2 or triangles.shape[0] == 0 or triangles.shape[1] < 3:
             return np.empty((0, 3), dtype=int)
         return triangles[:, :3]
-    
+
     def _psc_surface_polydata(self, surface_idx: int):
         """Build/cache a PyVista mesh for distance queries against one PLC surface."""
         surface_info = getattr(self, "tetra_surface_data", {}).get(surface_idx)
@@ -3753,7 +3816,7 @@ class PiecewiseStructuralComplex:
         triangles = self._psc_surface_triangles(surface_idx)
         if vertices.shape[0] == 0:
             return None
-    
+
         signature = (
             id(surface_info.get("vertices", None)),
             id(surface_info.get("triangles", None)),
@@ -3764,7 +3827,7 @@ class PiecewiseStructuralComplex:
         cached = cache.get(surface_idx)
         if cached and cached[0] == signature:
             return cached[1]
-    
+
         try:
             if triangles.shape[0] > 0:
                 faces = np.empty((triangles.shape[0], 4), dtype=np.int64)
@@ -3775,11 +3838,11 @@ class PiecewiseStructuralComplex:
                 mesh = pv.PolyData(vertices)
         except Exception:
             return None
-    
+
         cache[surface_idx] = (signature, mesh)
         self._psc_surface_polydata_cache = cache
         return mesh
-    
+
     def _psc_model_boundary_polydata(self):
         """Build/cache a combined PolyData for the loaded model Boundary surfaces."""
         boundary_indices = [
@@ -3789,10 +3852,12 @@ class PiecewiseStructuralComplex:
         ]
         if not boundary_indices:
             return None
-    
+
         signature_parts = []
         for surface_idx in boundary_indices:
-            surface_info = getattr(self, "tetra_surface_data", {}).get(surface_idx, {}) or {}
+            surface_info = (
+                getattr(self, "tetra_surface_data", {}).get(surface_idx, {}) or {}
+            )
             vertices = self._psc_surface_vertices(surface_idx)
             triangles = self._psc_surface_triangles(surface_idx)
             signature_parts.append(
@@ -3808,7 +3873,7 @@ class PiecewiseStructuralComplex:
         cached = getattr(self, "_psc_model_boundary_polydata_cache", None)
         if cached and cached[0] == signature:
             return cached[1]
-    
+
         all_vertices = []
         all_faces = []
         vertex_offset = 0
@@ -3823,25 +3888,27 @@ class PiecewiseStructuralComplex:
             faces[:, 1:] = triangles[:, :3] + vertex_offset
             all_faces.append(faces)
             vertex_offset += vertices.shape[0]
-    
+
         if not all_vertices or not all_faces:
             return None
         try:
             mesh = pv.PolyData(np.vstack(all_vertices), np.vstack(all_faces).ravel())
         except Exception:
             return None
-    
+
         self._psc_model_boundary_polydata_cache = (signature, mesh)
         return mesh
-    
-    def _psc_points_inside_model_boundary(self, points: np.ndarray) -> Optional[np.ndarray]:
+
+    def _psc_points_inside_model_boundary(
+        self, points: np.ndarray
+    ) -> Optional[np.ndarray]:
         """Return a boolean mask for candidate points inside the model Boundary shell."""
         points = np.asarray(points, dtype=float)
         if points.ndim == 1:
             points = points.reshape(1, 3)
         if points.shape[0] == 0:
             return np.asarray([], dtype=bool)
-    
+
         boundary_mesh = self._psc_model_boundary_polydata()
         if boundary_mesh is None or getattr(boundary_mesh, "n_cells", 0) == 0:
             return None
@@ -3858,7 +3925,7 @@ class PiecewiseStructuralComplex:
         except Exception:
             pass
         return None
-    
+
     def _psc_points_to_surface_distances(
         self,
         points: np.ndarray,
@@ -3870,9 +3937,13 @@ class PiecewiseStructuralComplex:
             points = points.reshape(1, 3)
         if points.shape[0] == 0:
             return np.empty((0,), dtype=float)
-    
+
         mesh = self._psc_surface_polydata(surface_idx)
-        if mesh is not None and getattr(mesh, "n_points", 0) > 0 and getattr(mesh, "n_cells", 0) > 0:
+        if (
+            mesh is not None
+            and getattr(mesh, "n_points", 0) > 0
+            and getattr(mesh, "n_cells", 0) > 0
+        ):
             try:
                 probe = pv.PolyData(points)
                 result = probe.compute_implicit_distance(mesh, inplace=False)
@@ -3885,37 +3956,42 @@ class PiecewiseStructuralComplex:
                     return np.abs(distances)
             except Exception:
                 pass
-    
+
         normal = self._psc_surface_normal(surface_idx)
         centroid = self._psc_surface_centroid(surface_idx)
         if normal is not None and centroid is not None:
             return np.abs((points - centroid).dot(normal))
-    
+
         vertices = self._psc_surface_vertices(surface_idx)
         if vertices.shape[0] == 0:
             return np.full(points.shape[0], np.inf, dtype=float)
-    
+
         distances = np.full(points.shape[0], np.inf, dtype=float)
         for start in range(0, points.shape[0], 64):
             stop = min(start + 64, points.shape[0])
             chunk_min = np.full(stop - start, np.inf, dtype=float)
             for vertex_start in range(0, vertices.shape[0], 5000):
                 vertex_stop = min(vertex_start + 5000, vertices.shape[0])
-                diff = points[start:stop, None, :] - vertices[None, vertex_start:vertex_stop, :]
+                diff = (
+                    points[start:stop, None, :]
+                    - vertices[None, vertex_start:vertex_stop, :]
+                )
                 chunk_min = np.minimum(
                     chunk_min,
                     np.sqrt(np.min(np.sum(diff * diff, axis=2), axis=1)),
                 )
             distances[start:stop] = chunk_min
         return distances
-    
+
     def _psc_target_boundaries_for_unit(self, unit_info: Dict[str, Any]) -> List[str]:
         """Return the boundary feature list that defines one STM unit."""
         boundaries = list(unit_info.get("boundaries", []) or [])
-        inferred_boundary = self._psc_text(unit_info.get("topology_inferred_boundary", ""))
+        inferred_boundary = self._psc_text(
+            unit_info.get("topology_inferred_boundary", "")
+        )
         if inferred_boundary:
             boundaries.append(inferred_boundary)
-    
+
         ordered = []
         seen = set()
         for boundary in boundaries:
@@ -3926,7 +4002,7 @@ class PiecewiseStructuralComplex:
             seen.add(boundary_key)
             ordered.append(boundary_text)
         return ordered
-    
+
     def _psc_surface_indices_for_boundaries(
         self,
         boundaries: List[str],
@@ -3949,7 +4025,7 @@ class PiecewiseStructuralComplex:
                     "indices": sorted(set(indices)),
                 }
         return mapping
-    
+
     def _psc_seed_candidate_points(
         self,
         reference_seed: np.ndarray,
@@ -3961,12 +4037,12 @@ class PiecewiseStructuralComplex:
         """Generate candidate seed points in and around the expected STM unit."""
         if bounds is None:
             return np.asarray([reference_seed], dtype=float)
-    
+
         bounds_min, bounds_max = bounds
         domain_span = bounds_max - bounds_min
         domain_diagonal = float(np.linalg.norm(domain_span))
         points = []
-    
+
         def add_point(point: Any) -> None:
             try:
                 candidate = np.asarray(point, dtype=float).reshape(3)
@@ -3974,7 +4050,7 @@ class PiecewiseStructuralComplex:
                 return
             if np.all(np.isfinite(candidate)):
                 points.append(self._psc_clamp_seed_to_bounds(candidate, bounds))
-    
+
         def add_box_grid(box_min: np.ndarray, box_max: np.ndarray, count: int) -> None:
             box_min = np.asarray(box_min, dtype=float)
             box_max = np.asarray(box_max, dtype=float)
@@ -3987,27 +4063,35 @@ class PiecewiseStructuralComplex:
             box_span = box_max - box_min
             for axis_idx in range(3):
                 if box_span[axis_idx] <= max(domain_diagonal * 1e-7, 1e-9):
-                    half_width = max(domain_span[axis_idx] * 0.12, domain_diagonal * 0.005, 1e-6)
+                    half_width = max(
+                        domain_span[axis_idx] * 0.12, domain_diagonal * 0.005, 1e-6
+                    )
                     center_value = (box_min[axis_idx] + box_max[axis_idx]) / 2.0
-                    box_min[axis_idx] = max(bounds_min[axis_idx], center_value - half_width)
-                    box_max[axis_idx] = min(bounds_max[axis_idx], center_value + half_width)
+                    box_min[axis_idx] = max(
+                        bounds_min[axis_idx], center_value - half_width
+                    )
+                    box_max[axis_idx] = min(
+                        bounds_max[axis_idx], center_value + half_width
+                    )
             box_span = box_max - box_min
             margin = np.maximum(box_span * 0.03, domain_diagonal * 1e-6)
             lower = np.where(box_span > 0.0, box_min + margin, box_min)
             upper = np.where(box_span > 0.0, box_max - margin, box_max)
             axes = [
-                np.linspace(lower[axis_idx], upper[axis_idx], count)
-                if upper[axis_idx] > lower[axis_idx]
-                else np.asarray([lower[axis_idx]])
+                (
+                    np.linspace(lower[axis_idx], upper[axis_idx], count)
+                    if upper[axis_idx] > lower[axis_idx]
+                    else np.asarray([lower[axis_idx]])
+                )
                 for axis_idx in range(3)
             ]
             for x_value in axes[0]:
                 for y_value in axes[1]:
                     for z_value in axes[2]:
                         add_point([x_value, y_value, z_value])
-    
+
         add_point(reference_seed)
-    
+
         reference_clearances = []
         for surface_idx in sorted(set(target_surface_indices)):
             distances = self._psc_points_to_surface_distances(
@@ -4016,18 +4100,18 @@ class PiecewiseStructuralComplex:
             )
             if distances.size and np.isfinite(distances[0]):
                 reference_clearances.append(float(distances[0]))
-    
+
         if reference_clearances:
             local_radius = float(np.median(reference_clearances))
         else:
             local_radius = domain_diagonal * 0.03
         local_radius = max(local_radius * 3.0, domain_diagonal * 0.05, 1e-6)
         local_radius = min(local_radius, domain_diagonal * 0.12)
-    
+
         local_box_min = reference_seed - local_radius
         local_box_max = reference_seed + local_radius
         add_box_grid(local_box_min, local_box_max, 5)
-    
+
         side_clearance = max(local_radius * 0.25, domain_diagonal * 0.01, 1e-6)
         for _ in range(3):
             corrected = np.asarray(reference_seed, dtype=float).copy()
@@ -4036,7 +4120,9 @@ class PiecewiseStructuralComplex:
                 surface_idx = int(constraint.get("surface_idx"))
                 desired_sign = int(constraint.get("sign", 0))
                 normal = self._psc_oriented_surface_normal(surface_idx)
-                signed_distance = self._psc_signed_distance_to_surface(corrected, surface_idx)
+                signed_distance = self._psc_signed_distance_to_surface(
+                    corrected, surface_idx
+                )
                 if normal is None or signed_distance is None or desired_sign == 0:
                     continue
                 desired_distance = desired_sign * side_clearance
@@ -4047,12 +4133,14 @@ class PiecewiseStructuralComplex:
             if changed:
                 add_point(corrected)
                 reference_seed = corrected
-    
+
         target_vertex_sets = [
             self._psc_surface_vertices(surface_idx)
             for surface_idx in sorted(set(target_surface_indices))
         ]
-        target_vertex_sets = [vertices for vertices in target_vertex_sets if vertices.shape[0] > 0]
+        target_vertex_sets = [
+            vertices for vertices in target_vertex_sets if vertices.shape[0] > 0
+        ]
         if target_vertex_sets:
             target_vertices = np.vstack(target_vertex_sets)
             target_min = np.min(target_vertices, axis=0)
@@ -4070,21 +4158,23 @@ class PiecewiseStructuralComplex:
                     bounds_max,
                 )
                 add_box_grid(broad_min, broad_max, 5)
-    
+
         local_steps = [-0.08, -0.04, 0.0, 0.04, 0.08]
         for x_step in local_steps:
             for y_step in local_steps:
                 for z_step in local_steps:
-                    offset = local_radius * np.asarray([x_step, y_step, z_step], dtype=float)
+                    offset = local_radius * np.asarray(
+                        [x_step, y_step, z_step], dtype=float
+                    )
                     add_point(reference_seed + offset)
-    
+
         if not points:
             return np.asarray([reference_seed], dtype=float)
         point_array = np.vstack(points)
         rounded = np.round(point_array, decimals=8)
         _, unique_indices = np.unique(rounded, axis=0, return_index=True)
         return point_array[np.sort(unique_indices)]
-    
+
     def _psc_feature_distance_arrays(
         self,
         candidate_points: np.ndarray,
@@ -4095,8 +4185,12 @@ class PiecewiseStructuralComplex:
         for feature_key, feature_info in feature_surface_map.items():
             surface_distances = []
             for surface_idx in feature_info.get("indices", []):
-                distances = self._psc_points_to_surface_distances(candidate_points, int(surface_idx))
-                if distances.size == candidate_points.shape[0] and np.any(np.isfinite(distances)):
+                distances = self._psc_points_to_surface_distances(
+                    candidate_points, int(surface_idx)
+                )
+                if distances.size == candidate_points.shape[0] and np.any(
+                    np.isfinite(distances)
+                ):
                     surface_distances.append(distances)
             if surface_distances:
                 distances_by_feature[feature_key] = np.min(
@@ -4104,20 +4198,22 @@ class PiecewiseStructuralComplex:
                     axis=0,
                 )
         return distances_by_feature
-    
+
     def _psc_surface_feature(self, surface_idx: int) -> str:
         """Return the feature/name carried by a loaded representative surface."""
-        surface_info = getattr(self, "tetra_surface_data", {}).get(surface_idx, {}) or {}
+        surface_info = (
+            getattr(self, "tetra_surface_data", {}).get(surface_idx, {}) or {}
+        )
         return (
             self._psc_text(surface_info.get("feature", ""))
             or self._psc_text(surface_info.get("name", ""))
             or f"Surface_{surface_idx}"
         )
-    
+
     def _psc_oriented_surface_normal(self, surface_idx: int) -> Optional[np.ndarray]:
         """Return a geometric normal without using geological role metadata."""
         return self._psc_surface_normal(surface_idx)
-    
+
     def _psc_signed_distances_to_surface(
         self,
         points: np.ndarray,
@@ -4129,9 +4225,13 @@ class PiecewiseStructuralComplex:
             points = points.reshape(1, 3)
         if points.shape[0] == 0:
             return np.empty((0,), dtype=float)
-    
+
         mesh = self._psc_surface_polydata(surface_idx)
-        if mesh is not None and getattr(mesh, "n_points", 0) > 0 and getattr(mesh, "n_cells", 0) > 0:
+        if (
+            mesh is not None
+            and getattr(mesh, "n_points", 0) > 0
+            and getattr(mesh, "n_cells", 0) > 0
+        ):
             try:
                 probe = pv.PolyData(points)
                 result = probe.compute_implicit_distance(mesh, inplace=False)
@@ -4144,13 +4244,13 @@ class PiecewiseStructuralComplex:
                     return distances
             except Exception:
                 pass
-    
+
         centroid = self._psc_surface_centroid(surface_idx)
         normal = self._psc_oriented_surface_normal(surface_idx)
         if centroid is None or normal is None:
             return np.full(points.shape[0], np.nan, dtype=float)
         return (points - centroid).dot(normal)
-    
+
     def _psc_signed_distance_to_surface(
         self,
         point: np.ndarray,
@@ -4169,7 +4269,7 @@ class PiecewiseStructuralComplex:
         if centroid is None or normal is None:
             return None
         return float(np.dot(point_array - centroid, normal))
-    
+
     @staticmethod
     def _psc_sign(value: Optional[float], tolerance: float = 1e-8) -> int:
         """Return -1/0/+1 for a signed distance."""
@@ -4180,10 +4280,8 @@ class PiecewiseStructuralComplex:
         if value < -tolerance:
             return -1
         return 0
-    
-    def _psc_conformable_boundary_keys(
-        self, psc_model: Dict[str, Any]
-    ) -> set:
+
+    def _psc_conformable_boundary_keys(self, psc_model: Dict[str, Any]) -> set:
         """Return boundary keys explicitly linked as conformable surfaces."""
         keys = {
             self._psc_key(value)
@@ -4207,7 +4305,7 @@ class PiecewiseStructuralComplex:
             for boundary in unit_info.get("conformable_boundaries", []) or []
             if self._psc_key(boundary)
         }
-    
+
     def _psc_prepare_topology_side_context(
         self,
         psc_model: Dict[str, Any],
@@ -4220,7 +4318,7 @@ class PiecewiseStructuralComplex:
         if bounds is not None:
             diagonal = max(float(np.linalg.norm(bounds[1] - bounds[0])), 1e-9)
         tolerance = max(diagonal * 0.002, 1e-8)
-    
+
         conformable_boundary_keys = self._psc_conformable_boundary_keys(psc_model)
         conformable_surfaces: Dict[Tuple[str, int], Dict[str, Any]] = {}
         for unit_info in mapped_units:
@@ -4240,7 +4338,7 @@ class PiecewiseStructuralComplex:
                         "boundary": self._psc_text(boundary),
                         "surface_idx": surface_idx,
                     }
-    
+
         for (boundary_key, surface_idx), surface_info in conformable_surfaces.items():
             matching_signs = []
             non_matching_signs = []
@@ -4251,8 +4349,12 @@ class PiecewiseStructuralComplex:
                 }
                 if boundary_key not in unit_boundaries:
                     continue
-                reference_seed = self._psc_reference_seed_point_for_unit(dict(unit_info), psc_model)
-                signed_distance = self._psc_signed_distance_to_surface(reference_seed, surface_idx)
+                reference_seed = self._psc_reference_seed_point_for_unit(
+                    dict(unit_info), psc_model
+                )
+                signed_distance = self._psc_signed_distance_to_surface(
+                    reference_seed, surface_idx
+                )
                 sign_value = self._psc_sign(signed_distance, tolerance)
                 if sign_value == 0:
                     continue
@@ -4260,7 +4362,7 @@ class PiecewiseStructuralComplex:
                     matching_signs.append(sign_value)
                 else:
                     non_matching_signs.append(sign_value)
-    
+
             owner_sign = 0
             if matching_signs:
                 matching_sum = sum(matching_signs)
@@ -4270,12 +4372,14 @@ class PiecewiseStructuralComplex:
                 non_matching_sum = sum(non_matching_signs)
                 if non_matching_sum != 0:
                     owner_sign = -1 if non_matching_sum > 0 else 1
-    
+
             if owner_sign:
-                context["conformable_unit_signs"][(boundary_key, surface_idx)] = owner_sign
-    
+                context["conformable_unit_signs"][
+                    (boundary_key, surface_idx)
+                ] = owner_sign
+
         return context
-    
+
     def _psc_unit_side_constraints(
         self,
         unit_info: Dict[str, Any],
@@ -4287,12 +4391,9 @@ class PiecewiseStructuralComplex:
         constraints = []
         unit_conformable_keys = self._psc_unit_conformable_boundary_keys(unit_info)
         side_context = getattr(self, "_psc_side_context", {}) or {}
-        conformable_signs = (
-            side_context.get("conformable_unit_signs")
-            or {}
-        )
+        conformable_signs = side_context.get("conformable_unit_signs") or {}
         conformable_boundary_keys = self._psc_conformable_boundary_keys(psc_model)
-    
+
         for boundary_key, boundary_info in target_surface_map.items():
             if boundary_key == self._psc_key("Boundary"):
                 continue
@@ -4309,7 +4410,9 @@ class PiecewiseStructuralComplex:
                 owner_sign = conformable_signs.get((boundary_key, surface_idx))
                 if owner_sign is None:
                     owner_sign = self._psc_sign(
-                        self._psc_signed_distance_to_surface(reference_seed, surface_idx)
+                        self._psc_signed_distance_to_surface(
+                            reference_seed, surface_idx
+                        )
                     )
                 if owner_sign == 0:
                     continue
@@ -4320,14 +4423,16 @@ class PiecewiseStructuralComplex:
                         "surface_idx": surface_idx,
                         "sign": desired_sign,
                         "label": boundary_info.get("label", boundary_key),
-                        "reason": "conformable-own-side"
-                        if owns_boundary
-                        else "conformable-opposite-side",
+                        "reason": (
+                            "conformable-own-side"
+                            if owns_boundary
+                            else "conformable-opposite-side"
+                        ),
                     }
                 )
-    
+
         return constraints
-    
+
     def _psc_target_side_mismatch_count(
         self,
         candidate_seed: np.ndarray,
@@ -4351,7 +4456,7 @@ class PiecewiseStructuralComplex:
             if sign_value != int(constraint.get("sign", 0)):
                 mismatches += 1
         return mismatches, checked
-    
+
     def _psc_side_mismatch_count(
         self,
         reference_seed: np.ndarray,
@@ -4369,13 +4474,16 @@ class PiecewiseStructuralComplex:
                 continue
             reference_distance = float(np.dot(reference_seed - centroid, normal))
             candidate_distance = float(np.dot(candidate_seed - centroid, normal))
-            if abs(reference_distance) <= tolerance or abs(candidate_distance) <= tolerance:
+            if (
+                abs(reference_distance) <= tolerance
+                or abs(candidate_distance) <= tolerance
+            ):
                 continue
             checked += 1
             if reference_distance * candidate_distance < 0.0:
                 mismatches += 1
         return mismatches, checked
-    
+
     def _psc_refine_seed_by_topology_signature(
         self,
         unit_info: Dict[str, Any],
@@ -4388,7 +4496,7 @@ class PiecewiseStructuralComplex:
         bounds = self._psc_domain_bounds()
         if bounds is None:
             return reference_seed
-    
+
         unit_boundaries = self._psc_target_boundaries_for_unit(unit_info)
         target_boundaries = list(unit_boundaries)
         expected_labels_by_key = {
@@ -4401,7 +4509,8 @@ class PiecewiseStructuralComplex:
         if not target_surface_map:
             unit_info["seed_topology_signature"] = {
                 "target": [
-                    expected_labels_by_key[key] for key in sorted(expected_labels_by_key)
+                    expected_labels_by_key[key]
+                    for key in sorted(expected_labels_by_key)
                 ],
                 "closest": [],
                 "exact": False,
@@ -4415,7 +4524,7 @@ class PiecewiseStructuralComplex:
                 "inside_model": True,
             }
             return reference_seed
-    
+
         feature_candidates = list(psc_model.get("boundary_features", set()) or [])
         feature_candidates.extend(target_boundaries)
         feature_surface_map: Dict[str, Dict[str, Any]] = {}
@@ -4427,11 +4536,11 @@ class PiecewiseStructuralComplex:
             boundary_map = self._psc_surface_indices_for_boundaries([boundary_text])
             if boundary_key in boundary_map:
                 feature_surface_map[boundary_key] = boundary_map[boundary_key]
-    
+
         target_keys = [key for key in target_surface_map if key in feature_surface_map]
         if not target_keys:
             return reference_seed
-    
+
         target_surface_indices = [
             int(surface_idx)
             for key in target_keys
@@ -4444,9 +4553,7 @@ class PiecewiseStructuralComplex:
             target_surface_map,
         )
         if broad_sampling is None:
-            broad_sampling = (
-                int(unit_info.get("ambiguity_group_size", 1) or 1) > 1
-            )
+            broad_sampling = int(unit_info.get("ambiguity_group_size", 1) or 1) > 1
         candidate_points = self._psc_seed_candidate_points(
             reference_seed,
             target_surface_indices,
@@ -4456,16 +4563,18 @@ class PiecewiseStructuralComplex:
         )
         if candidate_points.shape[0] == 0:
             return reference_seed
-    
-        distance_arrays = self._psc_feature_distance_arrays(candidate_points, feature_surface_map)
+
+        distance_arrays = self._psc_feature_distance_arrays(
+            candidate_points, feature_surface_map
+        )
         if not distance_arrays:
             return reference_seed
-    
+
         target_set = set(expected_set)
         all_keys = [key for key in feature_surface_map.keys() if key in distance_arrays]
         if not all_keys:
             return reference_seed
-    
+
         bounds_min, bounds_max = bounds
         diagonal = max(float(np.linalg.norm(bounds_max - bounds_min)), 1e-9)
         min_clearance = max(diagonal * 0.004, 1e-6)
@@ -4482,11 +4591,14 @@ class PiecewiseStructuralComplex:
         best_details: Dict[str, Any] = {}
         for candidate_idx, candidate in enumerate(candidate_points):
             inside_model = True
-            if inside_model_mask is not None and inside_model_mask.size == candidate_points.shape[0]:
+            if (
+                inside_model_mask is not None
+                and inside_model_mask.size == candidate_points.shape[0]
+            ):
                 inside_model = bool(inside_model_mask[candidate_idx])
             if has_inside_candidates and not inside_model:
                 continue
-    
+
             target_distances = [
                 float(distance_arrays[key][candidate_idx])
                 for key in target_keys
@@ -4494,7 +4606,7 @@ class PiecewiseStructuralComplex:
             ]
             if not target_distances or not np.all(np.isfinite(target_distances)):
                 continue
-    
+
             ranked_keys = sorted(
                 all_keys,
                 key=lambda key: float(distance_arrays[key][candidate_idx]),
@@ -4508,16 +4620,21 @@ class PiecewiseStructuralComplex:
             missing_count = len(target_set - closest_set)
             extra_count = len(closest_set - target_set)
             exact_signature = missing_count == 0 and extra_count == 0
-    
+
             min_target_distance = min(target_distances)
             max_target_distance = max(target_distances)
             non_target_distances = [
                 float(distance_arrays[key][candidate_idx])
                 for key in non_target_keys
-                if key in distance_arrays and np.isfinite(distance_arrays[key][candidate_idx])
+                if key in distance_arrays
+                and np.isfinite(distance_arrays[key][candidate_idx])
             ]
-            nearest_non_target = min(non_target_distances) if non_target_distances else diagonal * 10.0
-            intrusion_count = sum(distance <= max_target_distance for distance in non_target_distances)
+            nearest_non_target = (
+                min(non_target_distances) if non_target_distances else diagonal * 10.0
+            )
+            intrusion_count = sum(
+                distance <= max_target_distance for distance in non_target_distances
+            )
             reference_distance = float(np.linalg.norm(candidate - reference_seed))
             side_mismatches, side_checked = self._psc_target_side_mismatch_count(
                 candidate,
@@ -4526,9 +4643,11 @@ class PiecewiseStructuralComplex:
             )
             if require_side_match and side_checked > 0 and side_mismatches > 0:
                 continue
-    
+
             clearance_term = min(min_target_distance / diagonal, 0.25)
-            separation_term = min((nearest_non_target - max_target_distance) / diagonal, 1.0)
+            separation_term = min(
+                (nearest_non_target - max_target_distance) / diagonal, 1.0
+            )
             close_penalty = max(0.0, (min_clearance - min_target_distance) / diagonal)
             score = 0.0
             if exact_signature:
@@ -4542,7 +4661,7 @@ class PiecewiseStructuralComplex:
             score -= 100.0 * close_penalty
             if inside_model_mask is not None and not inside_model:
                 score -= 5000.0
-    
+
             if score > best_score:
                 best_score = score
                 best_index = candidate_idx
@@ -4559,10 +4678,10 @@ class PiecewiseStructuralComplex:
                     "candidate_count": int(candidate_points.shape[0]),
                     "inside_model": bool(inside_model),
                 }
-    
+
         if best_index is None:
             return reference_seed
-    
+
         best_seed = self._psc_clamp_seed_to_bounds(candidate_points[best_index], bounds)
         label_by_key = {
             key: feature_surface_map.get(key, {}).get("label", key)
@@ -4573,20 +4692,15 @@ class PiecewiseStructuralComplex:
             for key in sorted(expected_set)
         ]
         closest_labels = [
-            label_by_key.get(key, key)
-            for key in best_details.get("closest_keys", [])
+            label_by_key.get(key, key) for key in best_details.get("closest_keys", [])
         ]
         missing_labels = [
             expected_labels_by_key.get(key, label_by_key.get(key, key))
-            for key in sorted(
-                expected_set - set(best_details.get("closest_keys", []))
-            )
+            for key in sorted(expected_set - set(best_details.get("closest_keys", [])))
         ]
         extra_labels = [
             label_by_key.get(key, key)
-            for key in sorted(
-                set(best_details.get("closest_keys", [])) - expected_set
-            )
+            for key in sorted(set(best_details.get("closest_keys", [])) - expected_set)
         ]
         closest_surface_indices = self._psc_closest_surface_indices_for_point(
             best_seed,
@@ -4621,8 +4735,10 @@ class PiecewiseStructuralComplex:
             ],
         }
         return best_seed
-    
-    def _psc_structural_surface_indices_for_unit(self, unit_info: Dict[str, Any]) -> List[int]:
+
+    def _psc_structural_surface_indices_for_unit(
+        self, unit_info: Dict[str, Any]
+    ) -> List[int]:
         """Return only STM structural boundary surfaces, excluding model Boundary faces."""
         indices = []
         boundary_surface_indices = unit_info.get("boundary_surface_indices", {}) or {}
@@ -4634,16 +4750,16 @@ class PiecewiseStructuralComplex:
                     indices.append(int(surface_idx))
                 except (TypeError, ValueError):
                     continue
-    
+
         if not indices:
             for surface_idx in unit_info.get("matched_surface_indices", []) or []:
                 try:
                     indices.append(int(surface_idx))
                 except (TypeError, ValueError):
                     continue
-    
+
         return sorted(set(indices))
-    
+
     def _psc_seed_between_structural_surfaces(
         self,
         surface_indices: List[int],
@@ -4663,7 +4779,7 @@ class PiecewiseStructuralComplex:
             if not centroids:
                 return None
             line_origin = np.mean(np.asarray(centroids), axis=0)
-    
+
         points = [
             self._psc_surface_point_on_axis(surface_idx, line_origin, axis)
             for surface_idx in surface_indices
@@ -4671,7 +4787,7 @@ class PiecewiseStructuralComplex:
         points = [point for point in points if point is not None]
         if not points:
             return None
-    
+
         seed = np.mean(np.asarray(points, dtype=float), axis=0)
         seed = self._psc_clamp_seed_to_bounds(seed, bounds)
         return self._psc_move_seed_off_boundaries(seed, surface_indices, bounds)
@@ -4718,7 +4834,7 @@ class PiecewiseStructuralComplex:
             list(surface_indices) + [int(value) for value in boundary_indices],
             bounds,
         )
-    
+
     def _psc_seed_between_surface_and_model_boundary(
         self,
         surface_idx: int,
@@ -4736,16 +4852,18 @@ class PiecewiseStructuralComplex:
             line_origin = self._psc_surface_centroid(surface_idx)
         if line_origin is None or axis_bounds is None:
             return None
-    
+
         surface_point = self._psc_surface_point_on_axis(surface_idx, line_origin, axis)
         if surface_point is None:
             return None
         surface_t = float(np.dot(surface_point, axis))
-    
-        adjacent_indices, adjacent_feature = self._psc_adjacent_boundary_surface_indices(
-            unit_info,
-            psc_model,
-            preferred_direction=1,
+
+        adjacent_indices, adjacent_feature = (
+            self._psc_adjacent_boundary_surface_indices(
+                unit_info,
+                psc_model,
+                preferred_direction=1,
+            )
         )
         adjacent_points = [
             self._psc_surface_point_on_axis(adjacent_idx, line_origin, axis)
@@ -4753,7 +4871,9 @@ class PiecewiseStructuralComplex:
         ]
         adjacent_points = [point for point in adjacent_points if point is not None]
         if adjacent_points:
-            adjacent_t = float(np.mean([np.dot(point, axis) for point in adjacent_points]))
+            adjacent_t = float(
+                np.mean([np.dot(point, axis) for point in adjacent_points])
+            )
             cap_t = axis_bounds[0] if adjacent_t > surface_t else axis_bounds[1]
             if record_inferred_boundary:
                 unit_info["topology_inferred_boundary"] = adjacent_feature
@@ -4763,19 +4883,19 @@ class PiecewiseStructuralComplex:
             lower_space = abs(surface_t - axis_bounds[0])
             upper_space = abs(axis_bounds[1] - surface_t)
             cap_t = axis_bounds[1] if upper_space >= lower_space else axis_bounds[0]
-    
+
         if abs(cap_t - surface_t) < 1e-9:
             diagonal = 0.0
             if bounds is not None:
                 diagonal = float(np.linalg.norm(bounds[1] - bounds[0]))
             offset = max(diagonal * 0.05, 1e-3)
             cap_t = surface_t + (offset if cap_t >= surface_t else -offset)
-    
+
         seed_t = (surface_t + cap_t) / 2.0
         seed = surface_point + axis * (seed_t - surface_t)
         seed = self._psc_clamp_seed_to_bounds(seed, bounds)
         return self._psc_move_seed_off_boundaries(seed, [surface_idx], bounds)
-    
+
     def _psc_reference_seed_point_for_unit(
         self,
         unit_info: Dict[str, Any],
@@ -4789,7 +4909,7 @@ class PiecewiseStructuralComplex:
             self._psc_key(boundary) == self._psc_key("Boundary")
             for boundary in unit_info.get("boundaries", [])
         )
-    
+
         if len(surface_indices) >= 2:
             if has_model_boundary:
                 seed = self._psc_seed_between_structural_surfaces_and_model_boundary(
@@ -4803,7 +4923,7 @@ class PiecewiseStructuralComplex:
                     psc_model,
                 )
             return seed
-    
+
         if len(surface_indices) == 1 and has_model_boundary:
             seed = self._psc_seed_between_surface_and_model_boundary(
                 surface_indices[0],
@@ -4812,22 +4932,26 @@ class PiecewiseStructuralComplex:
                 record_inferred_boundary=False,
             )
             return seed
-    
+
         if len(surface_indices) < 2:
-            adjacent_indices, adjacent_feature = self._psc_adjacent_boundary_surface_indices(
-                unit_info,
-                psc_model,
+            adjacent_indices, adjacent_feature = (
+                self._psc_adjacent_boundary_surface_indices(
+                    unit_info,
+                    psc_model,
+                )
             )
             if adjacent_indices:
                 surface_indices.extend(adjacent_indices)
                 unit_info["topology_inferred_boundary"] = adjacent_feature
-    
+
         surface_indices = [
             int(surface_idx)
-            for surface_idx in sorted(set(surface_indices), key=lambda value: str(value))
+            for surface_idx in sorted(
+                set(surface_indices), key=lambda value: str(value)
+            )
             if self._psc_surface_vertices(int(surface_idx)).shape[0] > 0
         ]
-    
+
         if len(surface_indices) == 1:
             seed = self._psc_seed_between_surface_and_model_boundary(
                 surface_indices[0],
@@ -4835,10 +4959,12 @@ class PiecewiseStructuralComplex:
                 psc_model,
             )
         elif len(surface_indices) >= 2:
-            seed = self._psc_seed_between_structural_surfaces(surface_indices, psc_model)
+            seed = self._psc_seed_between_structural_surfaces(
+                surface_indices, psc_model
+            )
         else:
             seed = None
-    
+
         if seed is None:
             return None
         return np.asarray(seed, dtype=float)
@@ -4855,14 +4981,12 @@ class PiecewiseStructuralComplex:
             self._psc_key(boundary) == self._psc_key("Boundary")
             for boundary in unit_info.get("boundaries", [])
         )
-    
+
         reference_seed = self._psc_reference_seed_point_for_unit(unit_info, psc_model)
         if reference_seed is None or not np.all(np.isfinite(reference_seed)):
             return None
-    
-        initial_broad_sampling = (
-            int(unit_info.get("ambiguity_group_size", 1) or 1) > 1
-        )
+
+        initial_broad_sampling = int(unit_info.get("ambiguity_group_size", 1) or 1) > 1
         refined_seed = self._psc_refine_seed_by_topology_signature(
             unit_info,
             psc_model,
@@ -4885,9 +5009,7 @@ class PiecewiseStructuralComplex:
                 require_side_match=require_side_match,
                 broad_sampling=True,
             )
-            broad_signature = dict(
-                unit_info.get("seed_topology_signature", {}) or {}
-            )
+            broad_signature = dict(unit_info.get("seed_topology_signature", {}) or {})
 
             def signature_quality(signature: Dict[str, Any]) -> Tuple[Any, ...]:
                 if not signature:
@@ -4912,7 +5034,7 @@ class PiecewiseStructuralComplex:
         if require_side_match and not unit_info.get("seed_topology_signature"):
             return None
         return [float(refined_seed[0]), float(refined_seed[1]), float(refined_seed[2])]
-    
+
     def _psc_seed_points_for_unit(
         self,
         unit_info: Dict[str, Any],
@@ -4937,7 +5059,7 @@ class PiecewiseStructuralComplex:
                 unit_info["seed_point"] = seed_points[0]
                 return seed_points
             return []
-    
+
         local_boundary_sets = self._psc_local_boundary_sets_for_unit(
             unit_info,
             mapped_units or [],
@@ -4950,7 +5072,7 @@ class PiecewiseStructuralComplex:
                 float(np.linalg.norm(bounds[1] - bounds[0])) * 1e-6,
                 1e-6,
             )
-    
+
         def add_candidate(
             seed_point: Optional[List[float]],
             signature: Dict[str, Any],
@@ -5051,7 +5173,7 @@ class PiecewiseStructuralComplex:
             dict(seed_signatures[0]["signature"]) if seed_signatures else {}
         )
         return seed_points
-    
+
     def _assign_psc_materials(
         self,
         psc_model: Dict[str, Any],
@@ -5104,11 +5226,13 @@ class PiecewiseStructuralComplex:
             if not seed_points:
                 skipped_count += 1
                 continue
-    
+
             material_id = len(assigned_materials)
             assigned_materials.append(
                 {
-                    "name": unit_info.get("name") or unit_info.get("feature") or f"PSC_Unit_{material_id}",
+                    "name": unit_info.get("name")
+                    or unit_info.get("feature")
+                    or f"PSC_Unit_{material_id}",
                     "locations": [list(seed) for seed in seed_points],
                     "attribute": material_id,
                     "type": "FORMATION",
@@ -5116,9 +5240,7 @@ class PiecewiseStructuralComplex:
                     "psc_table": psc_model.get("table_name", ""),
                     "psc_max_missing_boundaries": max_missing_boundaries,
                     "feature": unit_info.get("feature", ""),
-                    "unit_role": self._psc_unit_role(
-                        unit_info.get("unit_role", "TU")
-                    ),
+                    "unit_role": self._psc_unit_role(unit_info.get("unit_role", "TU")),
                     "domains": list(unit_info.get("domains", [])),
                     "boundaries": list(unit_info.get("boundaries", [])),
                     "conformable_boundaries": list(
@@ -5129,7 +5251,9 @@ class PiecewiseStructuralComplex:
                         for color_name in ("color_R", "color_G", "color_B")
                         if color_name in unit_info
                     },
-                    "matched_surface_indices": list(unit_info.get("matched_surface_indices", [])),
+                    "matched_surface_indices": list(
+                        unit_info.get("matched_surface_indices", [])
+                    ),
                     "missing_boundaries": list(unit_info.get("missing_boundaries", [])),
                     "seed_override": bool(unit_info.get("seed_override", False)),
                     "psc_virtual_unit": bool(unit_info.get("psc_virtual_unit", False)),
@@ -5138,9 +5262,7 @@ class PiecewiseStructuralComplex:
                     "psc_assignment_status": unit_info.get(
                         "psc_assignment_status", "UNASSIGNED"
                     ),
-                    "psc_assignments": list(
-                        unit_info.get("psc_assignments", []) or []
-                    ),
+                    "psc_assignments": list(unit_info.get("psc_assignments", []) or []),
                     "psc_rejected_assignments": list(
                         unit_info.get("psc_rejected_assignments", []) or []
                     ),
@@ -5149,14 +5271,13 @@ class PiecewiseStructuralComplex:
                     ),
                 }
             )
-    
+
         if not assigned_materials:
             self._psc_last_seed_count = 0
             return 0, skipped_count
-    
+
         self._psc_last_seed_count = sum(
-            len(material.get("locations", []) or [])
-            for material in assigned_materials
+            len(material.get("locations", []) or []) for material in assigned_materials
         )
         fault_materials = [
             dict(material)
@@ -5165,7 +5286,7 @@ class PiecewiseStructuralComplex:
         ]
         for offset, material in enumerate(fault_materials):
             material["attribute"] = len(assigned_materials) + offset
-    
+
         self.tetra_materials = assigned_materials + fault_materials
         self._refresh_material_list()
         if self.tetra_materials and hasattr(self, "material_list"):
@@ -5174,7 +5295,7 @@ class PiecewiseStructuralComplex:
             self._update_material_visualisation()
         if hasattr(self, "_update_material_dropdown"):
             self._update_material_dropdown()
-    
+
         return len(assigned_materials), skipped_count
 
 
@@ -5383,9 +5504,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             tolerance=tolerance,
         )
         if dom_cut_uid and not dom_cut_entries:
-            self.print_terminal(
-                "Selected DomXs produced no usable section line."
-            )
+            self.print_terminal("Selected DomXs produced no usable section line.")
             return
 
         geologic_network_geometries = [boundary_polygon.boundary] + [
@@ -5582,9 +5701,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             assignment_results[info_idx] = assignment
             unit_key = assignment.get("unit_key", "")
             if unit_key:
-                allocation_counts[unit_key] = (
-                    allocation_counts.get(unit_key, 0) + 1
-                )
+                allocation_counts[unit_key] = allocation_counts.get(unit_key, 0) + 1
                 if assignment.get("status") != "AMBIGUOUS":
                     assigned_counts[unit_key] = assigned_counts.get(unit_key, 0) + 1
 
@@ -5856,7 +5973,11 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             return None
         if len(line_strings) == 1:
             coords = list(line_strings[0].coords)
-            if len(coords) >= 4 and np.linalg.norm(np.asarray(coords[0]) - np.asarray(coords[-1])) <= 1.0e-9:
+            if (
+                len(coords) >= 4
+                and np.linalg.norm(np.asarray(coords[0]) - np.asarray(coords[-1]))
+                <= 1.0e-9
+            ):
                 candidate = polygon_cls(coords)
                 if candidate.is_valid and candidate.area > 0.0:
                     return candidate
@@ -5864,7 +5985,9 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 "Selected boundary produced one line, but it is not a valid closed polygon."
             )
 
-        polygons_geom, _dangles, _cuts, _invalids = polygonize_full(unary_union(line_strings))
+        polygons_geom, _dangles, _cuts, _invalids = polygonize_full(
+            unary_union(line_strings)
+        )
         polygons = [
             polygon
             for polygon in self._iter_geometries(polygons_geom)
@@ -5961,7 +6084,9 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                 keep.append(coord)
         return np.asarray(keep, dtype=float)
 
-    def _section_line_entries(self, line_uids, boundary_polygon, line_cls) -> List[Dict[str, Any]]:
+    def _section_line_entries(
+        self, line_uids, boundary_polygon, line_cls
+    ) -> List[Dict[str, Any]]:
         "Returns a list of line entries for the given XsPolyLine UIDs, clipped to the boundary polygon."
         project = self._pzero_project()
         geol_coll = project.geol_coll
@@ -6136,8 +6261,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                     float(tolerance or 0.0) * float(tolerance or 0.0),
                 )
                 coverage_ok = (
-                    float(boundary_polygon.difference(covered).area)
-                    <= area_tolerance
+                    float(boundary_polygon.difference(covered).area) <= area_tolerance
                     and float(covered.difference(boundary_polygon).area)
                     <= area_tolerance
                 )
@@ -6155,7 +6279,12 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         "Returns a list of boundary labels for the given polygon, based on its intersection with the boundary polygon and line entries."
         min_length = max(float(tolerance or 0.0), 1.0e-9)
         labels = []
-        if self._geometry_length(polygon.boundary.intersection(boundary_polygon.boundary)) > min_length:
+        if (
+            self._geometry_length(
+                polygon.boundary.intersection(boundary_polygon.boundary)
+            )
+            > min_length
+        ):
             labels.append("Boundary")
         seen = {self._psc_key(label) for label in labels}
         for entry in line_entries:
@@ -6163,18 +6292,17 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
             feature_key = self._psc_key(feature)
             if not feature_key or feature_key in seen:
                 continue
-            if self._geometry_length(polygon.boundary.intersection(entry["geometry"])) > min_length:
+            if (
+                self._geometry_length(polygon.boundary.intersection(entry["geometry"]))
+                > min_length
+            ):
                 labels.append(feature)
                 seen.add(feature_key)
         return labels
 
     def _unit_for_boundary_labels(self, psc_model: Dict[str, Any], labels: List[str]):
         "Returns the unit info from the PSC model that matches the given boundary labels, or None if no match is found."
-        target_keys = {
-            self._psc_key(label)
-            for label in labels
-            if self._psc_key(label)
-        }
+        target_keys = {self._psc_key(label) for label in labels if self._psc_key(label)}
         if not target_keys:
             return None
         for unit_info in (psc_model.get("units", {}) or {}).values():
@@ -6245,8 +6373,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
                     "exact": not missing_keys,
                     "missing_count": len(missing_keys),
                     "missing_labels": [
-                        unit_labels_by_key.get(key, key)
-                        for key in sorted(missing_keys)
+                        unit_labels_by_key.get(key, key) for key in sorted(missing_keys)
                     ],
                     "observed_count": len(target_keys),
                     "polarity": self._psc_sort_key(unit_info.get("polarity", "")),
@@ -6385,14 +6512,10 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         "Returns a dictionary containing the assignment payload for the given candidate, status, and candidate pool."
         candidate_pool = list(candidate_pool or [candidate])
         unit_info = candidate.get("unit_info") or {}
-        topology_is_ambiguous = int(
-            unit_info.get("ambiguity_group_size", 1) or 1
-        ) > 1
+        topology_is_ambiguous = int(unit_info.get("ambiguity_group_size", 1) or 1) > 1
         if topology_is_ambiguous:
             status = "AMBIGUOUS"
-            candidate_names = list(
-                unit_info.get("ambiguity_candidate_names", []) or []
-            )
+            candidate_names = list(unit_info.get("ambiguity_candidate_names", []) or [])
         else:
             candidate_names = [
                 self._section_unit_display_name(item.get("unit_info", {}))
@@ -6401,9 +6524,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         return {
             "status": status,
             "match_status": "CERTAIN" if candidate.get("exact") else "LIKELY",
-            "is_repeat": int(
-                assigned_counts.get(candidate.get("unit_key", ""), 0)
-            ) > 0,
+            "is_repeat": int(assigned_counts.get(candidate.get("unit_key", ""), 0)) > 0,
             "unit_info": candidate.get("unit_info"),
             "unit_key": candidate.get("unit_key", ""),
             "missing_labels": list(candidate.get("missing_labels", []) or []),
@@ -6520,9 +6641,7 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         dom_cut_side = self._psc_text(assignment.get("dom_cut_side", ""))
         if dom_cut_side:
             details.append(f"DomXs={dom_cut_side}")
-        dom_cut_parent_area_idx = int(
-            assignment.get("dom_cut_parent_area_idx", 0) or 0
-        )
+        dom_cut_parent_area_idx = int(assignment.get("dom_cut_parent_area_idx", 0) or 0)
         if dom_cut_parent_area_idx:
             details.append(f"STM match area={dom_cut_parent_area_idx}")
         candidate_names = assignment.get("candidate_names", []) or []
@@ -6540,15 +6659,12 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
 
         unit_info = assignment.get("unit_info")
         if unit_info is None:
-            self.print_terminal(
-                f"Area {area_idx}: {status} | " + " | ".join(details)
-            )
+            self.print_terminal(f"Area {area_idx}: {status} | " + " | ".join(details))
             return
 
         self.print_terminal(
             f"Area {area_idx}: {status} -> "
-            f"{self._section_unit_display_name(unit_info)} | "
-            + " | ".join(details)
+            f"{self._section_unit_display_name(unit_info)} | " + " | ".join(details)
         )
 
     def _color_for_psc_unit(
@@ -6628,7 +6744,9 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         seed_dict["vtk_obj"] = XsVertexSet(x_section_uid=section_uid, parent=project)
         seed_dict["vtk_obj"].points = np.asarray([xyz], dtype=float)
         seed_dict["vtk_obj"].auto_cells()
-        return project.geol_coll.add_entity_from_dict(entity_dict=seed_dict, color=color)
+        return project.geol_coll.add_entity_from_dict(
+            entity_dict=seed_dict, color=color
+        )
 
     def _create_area_surface(
         self,
@@ -6650,19 +6768,22 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         )
         area_dict["feature"] = feature
         area_dict["vtk_obj"] = vtk_obj
-        area_dict["properties_names"] = list(getattr(vtk_obj, "point_data_keys", []) or [])
+        area_dict["properties_names"] = list(
+            getattr(vtk_obj, "point_data_keys", []) or []
+        )
         area_dict["properties_components"] = [
-            vtk_obj.get_point_data_shape(key)[1] for key in area_dict["properties_names"]
+            vtk_obj.get_point_data_shape(key)[1]
+            for key in area_dict["properties_names"]
         ]
-        return project.geol_coll.add_entity_from_dict(entity_dict=area_dict, color=color)
+        return project.geol_coll.add_entity_from_dict(
+            entity_dict=area_dict, color=color
+        )
 
     @staticmethod
     def _psc_linked_parent_uid(section_uid: str, linked_uid: str) -> str:
         "Returns a combined UID string for the section and linked parent, or just the section UID if linked is empty."
         return ";".join(
-            str(uid).strip()
-            for uid in (section_uid, linked_uid)
-            if str(uid).strip()
+            str(uid).strip() for uid in (section_uid, linked_uid) if str(uid).strip()
         )
 
     def _triangulated_polygon_surface(self, polygon, triangulate_func):
@@ -6711,7 +6832,9 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         trisurf = TriSurf()
         vtk_points = vtkPoints()
         for point in vertices_xyz:
-            vtk_points.InsertNextPoint(float(point[0]), float(point[1]), float(point[2]))
+            vtk_points.InsertNextPoint(
+                float(point[0]), float(point[1]), float(point[2])
+            )
         vtk_cells = vtkCellArray()
         for tri_ids in triangles:
             vtk_triangle = vtkTriangle()
@@ -6762,7 +6885,10 @@ class TwoDPiecewiseStructuralComplex(PiecewiseStructuralComplex):
         try:
             return float(geometry.length)
         except Exception:
-            return sum(float(getattr(geom, "length", 0.0)) for geom in self._iter_geometries(geometry))
+            return sum(
+                float(getattr(geom, "length", 0.0))
+                for geom in self._iter_geometries(geometry)
+            )
 
     def _unique_polygons(self, polygons: List[Any]) -> List[Any]:
         "Returns a list of unique polygons from the given list, sorted by area and bounds."

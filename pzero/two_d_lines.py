@@ -42,7 +42,6 @@ from .views.view_map import ViewMap
 from .views.view_xsection import ViewXsection
 
 
-
 def _choose_draw_line_collection(self):
     collection_map = {
         "Geology": self.parent.geol_coll,
@@ -329,6 +328,7 @@ def draw_line_3d(self):
         "3D Line Drawing: Left-click on surfaces to add points, Right-click to finish"
     )
 
+
 def _get_editable_line_source_coll(self, selected_uids=None, min_selected=1):
     valid_tables = {
         "tabGeology": "geol_coll",
@@ -373,6 +373,7 @@ def start_checked_line_tool(self, tool_func, selected_uids=None, min_selected=1)
     ):
         return
     tool_func(self)
+
 
 @freeze_gui_on
 def edit_line(self):
@@ -439,9 +440,6 @@ def sort_line_nodes(self):
         #     action.setEnabled(True)
     # Deselect input line.
     self.clear_selection()
-
-
-
 
 
 def move_line(self, vector):
@@ -671,7 +669,9 @@ def split_line_line(self):
             # Create empty dictionary for the output lines.
             new_line = deepcopy(source_coll.entity_dict)
             new_line["name"] = (
-                source_coll.df.loc[source_coll.df["uid"] == current_uid_paper, "name"].values[0]
+                source_coll.df.loc[
+                    source_coll.df["uid"] == current_uid_paper, "name"
+                ].values[0]
                 + "_split"
             )
             new_line["topology"] = source_coll.df.loc[
@@ -710,8 +710,12 @@ def split_line_line(self):
             if new_line["vtk_obj"].points_number > 0:
                 # Replace VTK object
                 if replace == 1:
-                    source_coll.replace_vtk(uid=current_uid_paper, vtk_object=new_line["vtk_obj"])
-                    self.parent.signals.geom_modified.emit([current_uid_paper], source_coll)
+                    source_coll.replace_vtk(
+                        uid=current_uid_paper, vtk_object=new_line["vtk_obj"]
+                    )
+                    self.parent.signals.geom_modified.emit(
+                        [current_uid_paper], source_coll
+                    )
                     replace = 0
                     uids.append(current_uid_paper)
                 else:
@@ -720,7 +724,9 @@ def split_line_line(self):
                     uids.append(uid)
                 del new_line["vtk_obj"]
             else:
-                self.print_terminal(f" -- Split generated an empty object for {current_uid_paper} -- ")
+                self.print_terminal(
+                    f" -- Split generated an empty object for {current_uid_paper} -- "
+                )
         # Deselect input line and force redraw
 
         # self.parent.signals.geom_modified.emit(uids)  # emit uid as list to force redraw()
@@ -1643,14 +1649,18 @@ def copy_parallel(self):
         # self.enable_actions()
         return
 
-    in_line_name = source_coll.df.loc[source_coll.df["uid"] == input_uid, "name"].values[0]
+    in_line_name = source_coll.df.loc[
+        source_coll.df["uid"] == input_uid, "name"
+    ].values[0]
     out_line_name = in_line_name + "_para_" + "%d" % distance
 
     # Create empty dictionary for the output line and set name and role.
     # -----IN THE FUTURE see if other metadata should be automatically set.
     line_dict = deepcopy(source_coll.entity_dict)
     line_dict["name"] = out_line_name
-    line_dict["role"] = source_coll.df.loc[source_coll.df["uid"] == input_uid, "role"].values[0]
+    line_dict["role"] = source_coll.df.loc[
+        source_coll.df["uid"] == input_uid, "role"
+    ].values[0]
     line_dict["feature"] = source_coll.get_uid_feature(self.selected_uids[0])
     line_dict["scenario"] = source_coll.get_uid_scenario(self.selected_uids[0])
     if isinstance(self, ViewMap):
@@ -1767,13 +1777,17 @@ def copy_kink(self):
     if distance is None:
         return
 
-    in_line_name = source_coll.df.loc[source_coll.df["uid"] == input_uid, "name"].values[0]
+    in_line_name = source_coll.df.loc[
+        source_coll.df["uid"] == input_uid, "name"
+    ].values[0]
     out_line_name = in_line_name + "_kink_" + "%d" % distance
 
     # Create empty dictionary for the output line and set name and role.
     line_dict = deepcopy(source_coll.entity_dict)
     line_dict["name"] = out_line_name
-    line_dict["role"] = source_coll.df.loc[source_coll.df["uid"] == input_uid, "role"].values[0]
+    line_dict["role"] = source_coll.df.loc[
+        source_coll.df["uid"] == input_uid, "role"
+    ].values[0]
     line_dict["feature"] = source_coll.get_uid_feature(self.selected_uids[0])
     line_dict["scenario"] = source_coll.get_uid_scenario(self.selected_uids[0])
 
@@ -1882,7 +1896,9 @@ def copy_similar(self, vector):
     # Create empty dictionary for the output line and set name and role.
     # IN THE FUTURE see if other metadata should be automatically set.
     line_dict = deepcopy(source_coll.entity_dict)
-    line_dict["role"] = source_coll.df.loc[source_coll.df["uid"] == input_uid, "role"].values[0]
+    line_dict["role"] = source_coll.df.loc[
+        source_coll.df["uid"] == input_uid, "role"
+    ].values[0]
     line_dict["feature"] = source_coll.get_uid_feature(self.selected_uids[0])
     line_dict["scenario"] = source_coll.get_uid_scenario(self.selected_uids[0])
     if isinstance(self, ViewMap):
@@ -1911,7 +1927,9 @@ def copy_similar(self, vector):
     line_dict["vtk_obj"].points = outXYZ
     line_dict["vtk_obj"].auto_cells()
     # Set output line name.
-    in_line_name = source_coll.df.loc[source_coll.df["uid"] == input_uid, "name"].values[0]
+    in_line_name = source_coll.df.loc[
+        source_coll.df["uid"] == input_uid, "name"
+    ].values[0]
     distance = vector.length
     out_line_name = f"{in_line_name}_simi_{round(distance, 2)}"
 
@@ -1979,7 +1997,9 @@ def flip_line(self, uid=None, source_coll=None):
     # self.parent.geol_coll.get_uid_vtk_obj(uid).points = np_flip(self.parent.geol_coll.get_uid_vtk_obj(uid).points, 0)
     if source_coll is None:
         source_coll = self.parent.geol_coll
-    source_coll.get_uid_vtk_obj(uid).points = np_flipud(source_coll.get_uid_vtk_obj(uid).points)
+    source_coll.get_uid_vtk_obj(uid).points = np_flipud(
+        source_coll.get_uid_vtk_obj(uid).points
+    )
 
 
 def left_right(self, uid=None, source_coll=None):

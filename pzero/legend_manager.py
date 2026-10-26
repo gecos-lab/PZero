@@ -16,7 +16,6 @@ from PySide6.QtCore import QObject
 from pandas import unique as pd_unique
 from math import isnan
 
-
 legend_level_col = "Level"
 legacy_legend_time_col = "time"
 
@@ -731,9 +730,7 @@ class Legend(QObject):
     def change_mesh_color(self, parent, uid, item, button):
         legend = parent.mesh3d_coll.get_uid_legend(uid)
         color = QColorDialog.getColor(
-            initial=QColor(
-                legend["color_R"], legend["color_G"], legend["color_B"]
-            ),
+            initial=QColor(legend["color_R"], legend["color_G"], legend["color_B"]),
             title="Select color",
         )
         if not color.isValid():

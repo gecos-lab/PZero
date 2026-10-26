@@ -199,15 +199,9 @@ class ManualSTmUnitDialog(QDialog):
 
         self.unit_role_combo = QComboBox()
         self.unit_role_combo.addItems(
-            [
-                value
-                for value in stm_unit_roles
-                if value != "Discontinuity"
-            ]
+            [value for value in stm_unit_roles if value != "Discontinuity"]
         )
-        unit_role = normalise_stm_unit_role(
-            unit_info.get("unit_role", "SU")
-        )
+        unit_role = normalise_stm_unit_role(unit_info.get("unit_role", "SU"))
         role_idx = self.unit_role_combo.findText(unit_role)
         if role_idx >= 0:
             self.unit_role_combo.setCurrentIndex(role_idx)
@@ -223,9 +217,9 @@ class ManualSTmUnitDialog(QDialog):
         form_layout.addRow("Color", color_layout)
 
         domains_by_column = {
-            str(domain_info.get("column", "")).strip(): str(
-                domain_info.get("value", "")
-            ).strip()
+            str(domain_info.get("column", ""))
+            .strip(): str(domain_info.get("value", ""))
+            .strip()
             for domain_info in unit_info.get("domains", [])
             if isinstance(domain_info, dict)
         }
@@ -335,9 +329,7 @@ class STmBuildDialog(QDialog):
             "locked_conformable_connections"
         )
         self.conformable_connections.update(self.locked_conformable_connections)
-        self.unconformable_connections.difference_update(
-            self.conformable_connections
-        )
+        self.unconformable_connections.difference_update(self.conformable_connections)
         self.manual_units = self._load_manual_units()
         self.unit_renames = self._load_unit_renames()
         self.node_items = {}
@@ -349,9 +341,7 @@ class STmBuildDialog(QDialog):
         self._fit_after_show_pending = True
 
         layout = QVBoxLayout(self)
-        info_label = QLabel(
-            "Shift + click: conformable links"
-        )
+        info_label = QLabel("Shift + click: conformable links")
         layout.addWidget(info_label)
 
         self.graphics_view = ZoomableGraphicsView(self)
@@ -436,9 +426,7 @@ class STmBuildDialog(QDialog):
             self.locked_conformable_connections = self._load_graph_connections(
                 "locked_conformable_connections"
             )
-            self.conformable_connections.update(
-                self.locked_conformable_connections
-            )
+            self.conformable_connections.update(self.locked_conformable_connections)
             self.unconformable_connections.difference_update(
                 self.conformable_connections
             )
@@ -471,8 +459,7 @@ class STmBuildDialog(QDialog):
             self.editing_enabled and self._selected_generated_unit_key() is not None
         )
         self.clear_editable_button.setEnabled(
-            self.editing_enabled
-            and bool(self._editable_connections())
+            self.editing_enabled and bool(self._editable_connections())
         )
         self.add_manual_unit_button.setEnabled(self.editing_enabled)
         self.edit_manual_unit_button.setEnabled(
@@ -510,12 +497,13 @@ class STmBuildDialog(QDialog):
         """Save the current STM graph scene to a raster or SVG image."""
         scene_rect = self.scene.itemsBoundingRect().adjusted(-40, -40, 40, 40)
         if scene_rect.isEmpty():
-            QMessageBox.information(self, "Export image", "There is no STM graph to export.")
+            QMessageBox.information(
+                self, "Export image", "There is no STM graph to export."
+            )
             return
 
         safe_table_name = "".join(
-            char if char.isalnum() or char in "._-" else "_"
-            for char in self.table_name
+            char if char.isalnum() or char in "._-" else "_" for char in self.table_name
         ).strip("_")
         default_name = f"{safe_table_name or 'STM'}_graph"
         file_path, selected_filter = QFileDialog.getSaveFileName(
@@ -545,7 +533,9 @@ class STmBuildDialog(QDialog):
             generator.setSize(QSize(width, height))
             generator.setViewBox(QRect(0, 0, width, height))
             generator.setTitle(f"STM graph - {self.table_name}")
-            generator.setDescription("Structural Topology Model graph exported by PZero")
+            generator.setDescription(
+                "Structural Topology Model graph exported by PZero"
+            )
             painter = QPainter()
             if not painter.begin(generator):
                 QMessageBox.warning(
@@ -606,9 +596,7 @@ class STmBuildDialog(QDialog):
         metadata_by_feature = {}
         if callable(self.metadata_provider):
             for unit_info in self.metadata_provider() or []:
-                feature_name = str(
-                    unit_info.get(stm_feature_col, "")
-                ).strip()
+                feature_name = str(unit_info.get(stm_feature_col, "")).strip()
                 if feature_name:
                     metadata_by_feature[feature_name] = dict(unit_info)
 
@@ -627,31 +615,30 @@ class STmBuildDialog(QDialog):
         boundary_features = set(dataframe.get(stm_feature_col, []))
 
         for row_idx, row_info in enumerate(rows):
-            metadata = metadata_by_feature.get(
-                row_info[stm_feature_col], {}
-            )
+            metadata = metadata_by_feature.get(row_info[stm_feature_col], {})
             # Extra units own their colour; same-name STM boundary/unit pairs share it.
-            if row_info.get("Manual") and row_info[stm_feature_col] not in boundary_features:
+            if (
+                row_info.get("Manual")
+                and row_info[stm_feature_col] not in boundary_features
+            ):
                 metadata = {}
             row_color = self._legend_color_for_row(row_info=row_info, metadata=metadata)
             row_color_dark = row_color.darker(150)
             row_nodes = []
-            has_unit = (
-                row_info[stm_unit_role_col] != "Discontinuity"
-            )
+            has_unit = row_info[stm_unit_role_col] != "Discontinuity"
 
             if has_unit:
                 if row_info.get("Manual"):
                     unit_key = f'unit:manual:{row_info["Manual Unit ID"]}'
                 else:
-                    unit_key = f'unit:{row_info[stm_feature_col]}'
+                    unit_key = f"unit:{row_info[stm_feature_col]}"
                 default_unit_label = (
-                    f'{row_info[stm_feature_col]}_'
-                    f'{row_info[stm_unit_role_col]}'
+                    f"{row_info[stm_feature_col]}_" f"{row_info[stm_unit_role_col]}"
                 )
-                unit_label = str(
-                    row_info.get("Unit Label", default_unit_label)
-                ).strip() or default_unit_label
+                unit_label = (
+                    str(row_info.get("Unit Label", default_unit_label)).strip()
+                    or default_unit_label
+                )
                 if not row_info.get("Manual"):
                     unit_label = self.unit_renames.get(unit_key, default_unit_label)
                 unit_nodes.append(
@@ -670,19 +657,15 @@ class STmBuildDialog(QDialog):
 
             if not row_info.get("Manual"):
                 is_model_boundary = (
-                    normalise_stm_boundary_role(
-                        metadata.get("role", "")
-                    )
+                    normalise_stm_boundary_role(metadata.get("role", ""))
                     == "model_boundary"
-                    or str(
-                        row_info[stm_feature_col]
-                    ).casefold()
+                    or str(row_info[stm_feature_col]).casefold()
                     == stm_model_boundary.casefold()
                 )
                 surface_key = (
                     "surface:boundary"
                     if is_model_boundary
-                    else f'surface:{row_info[stm_feature_col]}'
+                    else f"surface:{row_info[stm_feature_col]}"
                 )
                 surface_nodes.append(
                     {
@@ -718,8 +701,7 @@ class STmBuildDialog(QDialog):
         for node_info in unit_nodes:
             item_info = self._add_node(
                 center_x=self.LEFT_X,
-                center_y=self.TOP_Y
-                + (node_info["row_idx"] + 1) * self.Y_STEP,
+                center_y=self.TOP_Y + (node_info["row_idx"] + 1) * self.Y_STEP,
                 label=node_info["label"],
                 fill_color=node_info["brush"],
                 outline_color=node_info["pen"],
@@ -733,9 +715,7 @@ class STmBuildDialog(QDialog):
         for node_info in surface_nodes:
             row_idx = node_info["row_idx"]
             node_y = (
-                self.TOP_Y
-                if row_idx < 0
-                else self.TOP_Y + (row_idx + 1) * self.Y_STEP
+                self.TOP_Y if row_idx < 0 else self.TOP_Y + (row_idx + 1) * self.Y_STEP
             )
             self.node_items[node_info["key"]] = self._add_node(
                 center_x=self.RIGHT_X,
@@ -774,11 +754,7 @@ class STmBuildDialog(QDialog):
             return rows
         ordered_df = dataframe.copy()
         if stm_level_col in ordered_df.columns:
-            ordered_df["_sort_polarity"] = ordered_df[
-                stm_level_col
-            ].apply(
-                stm_sort_key
-            )
+            ordered_df["_sort_polarity"] = ordered_df[stm_level_col].apply(stm_sort_key)
             sort_columns = ["_sort_polarity"]
             sort_ascending = [True]
             if stm_feature_col in ordered_df.columns:
@@ -794,9 +770,7 @@ class STmBuildDialog(QDialog):
             if not feature_name:
                 continue
             unit_role = normalise_stm_unit_role(
-                row.get(
-                    stm_unit_role_col, "Discontinuity"
-                )
+                row.get(stm_unit_role_col, "Discontinuity")
             )
             domains = []
             for column_name in ordered_df.columns.tolist():
@@ -809,9 +783,7 @@ class STmBuildDialog(QDialog):
                 {
                     stm_feature_col: feature_name,
                     stm_unit_role_col: unit_role,
-                    stm_level_col: stm_sort_key(
-                        row.get(stm_level_col, "")
-                    ),
+                    stm_level_col: stm_sort_key(row.get(stm_level_col, "")),
                     "Domains": domains,
                     "Manual": False,
                 }
@@ -823,13 +795,11 @@ class STmBuildDialog(QDialog):
         rows = []
         for unit_info in self.manual_units:
             feature_name = str(unit_info.get("feature", "")).strip()
-            unit_role = normalise_stm_unit_role(
-                unit_info.get("unit_role", "SU")
-            )
+            unit_role = normalise_stm_unit_role(unit_info.get("unit_role", "SU"))
             unit_id = str(unit_info.get("id", "")).strip()
             if not feature_name or not unit_id or unit_role == "Discontinuity":
-               continue
-        
+                continue
+
             domains = []
             for domain_info in unit_info.get("domains", []):
                 if not isinstance(domain_info, dict):
@@ -852,7 +822,8 @@ class STmBuildDialog(QDialog):
                     "Manual Unit ID": unit_id,
                     "Unit Label": str(
                         unit_info.get("display_name", feature_name)
-                    ).strip() or feature_name,
+                    ).strip()
+                    or feature_name,
                     "color_R": unit_info.get("color_R", 255),
                     "color_G": unit_info.get("color_G", 255),
                     "color_B": unit_info.get("color_B", 255),
@@ -874,9 +845,7 @@ class STmBuildDialog(QDialog):
                 max(0, min(255, blue)),
             )
         except (TypeError, ValueError):
-            return stm_color(
-                (row_info or {}).get(stm_feature_col, "")
-            )
+            return stm_color((row_info or {}).get(stm_feature_col, ""))
 
     def _load_graph_connections(self, option_name):
         """Load persisted graph-key connections from the table options."""
@@ -892,7 +861,9 @@ class STmBuildDialog(QDialog):
             surface_key = str(connection_info.get("surface", "")).strip()
             if not unit_key or not surface_key:
                 continue
-            if not unit_key.startswith("unit:") or not surface_key.startswith("surface:"):
+            if not unit_key.startswith("unit:") or not surface_key.startswith(
+                "surface:"
+            ):
                 continue
             connections.add((unit_key, surface_key))
         return connections
@@ -916,9 +887,7 @@ class STmBuildDialog(QDialog):
         if not callable(self.options_updater):
             return
         self.conformable_connections.update(self.locked_conformable_connections)
-        self.unconformable_connections.difference_update(
-            self.conformable_connections
-        )
+        self.unconformable_connections.difference_update(self.conformable_connections)
         self.options_updater(
             {
                 "conformable_connections": self._serialise_connections(
@@ -944,9 +913,7 @@ class STmBuildDialog(QDialog):
             if not isinstance(unit_info, dict):
                 continue
             feature_name = str(unit_info.get("feature", "")).strip()
-            unit_role = normalise_stm_unit_role(
-                unit_info.get("unit_role", "SU")
-            )
+            unit_role = normalise_stm_unit_role(unit_info.get("unit_role", "SU"))
             if not feature_name or unit_role == "Discontinuity":
                 continue
             unit_id = str(unit_info.get("id", "")).strip()
@@ -971,7 +938,8 @@ class STmBuildDialog(QDialog):
                     "plot_polarity": unit_info.get("plot_polarity", ""),
                     "display_name": str(
                         unit_info.get("display_name", feature_name)
-                    ).strip() or feature_name,
+                    ).strip()
+                    or feature_name,
                     "domains": domains,
                     "color_R": unit_info.get("color_R", 255),
                     "color_G": unit_info.get("color_G", 255),
@@ -1224,9 +1192,7 @@ class STmBuildDialog(QDialog):
                     target_item["left_anchor"][1],
                     line_pen,
                 ).setZValue(-8)
-        valid_locked = (
-            self.locked_conformable_connections & valid_conformable
-        )
+        valid_locked = self.locked_conformable_connections & valid_conformable
         changed = (
             valid_conformable != self.conformable_connections
             or valid_unconformable != self.unconformable_connections
@@ -1493,8 +1459,7 @@ class STmBuildDialog(QDialog):
             available_nodes = [
                 node_items[node_key]
                 for node_key in node_keys
-                if node_key in node_items
-                and node_items[node_key].get("side") == "unit"
+                if node_key in node_items and node_items[node_key].get("side") == "unit"
             ]
             if len(available_nodes) < 2:
                 continue
@@ -1574,7 +1539,9 @@ class ComboBoxItemDelegate(QStyledItemDelegate):
         return combo
 
     def setEditorData(self, editor, index):
-        current_value = "" if index.data(Qt.EditRole) is None else str(index.data(Qt.EditRole))
+        current_value = (
+            "" if index.data(Qt.EditRole) is None else str(index.data(Qt.EditRole))
+        )
         found_index = editor.findText(current_value)
         editor.setCurrentIndex(found_index if found_index >= 0 else 0)
 
@@ -1613,9 +1580,7 @@ class EditableDataFrameModel(QAbstractTableModel):
         self._editable = bool(editable)
         if self.rowCount() > 0 and self.columnCount() > 0:
             top_left = self.index(0, 0)
-            bottom_right = self.index(
-                self.rowCount() - 1, self.columnCount() - 1
-            )
+            bottom_right = self.index(self.rowCount() - 1, self.columnCount() - 1)
             self.dataChanged.emit(top_left, bottom_right, [Qt.DisplayRole, Qt.EditRole])
         self.layoutChanged.emit()
 
@@ -1679,11 +1644,8 @@ class EditableDataFrameModel(QAbstractTableModel):
         if (
             role == Qt.DisplayRole
             and self.model_kind == "boundaries"
-            and str(self._dataframe.columns[index.column()])
-            == stm_boundary_level_col
-            and is_stm_model_boundary(
-                self._dataframe.iloc[index.row()]
-            )
+            and str(self._dataframe.columns[index.column()]) == stm_boundary_level_col
+            and is_stm_model_boundary(self._dataframe.iloc[index.row()])
         ):
             return ""
         value = self._dataframe.iloc[index.row(), index.column()]
@@ -1796,8 +1758,12 @@ class EditableDataFrameModel(QAbstractTableModel):
         self._dataframe.at[row_index, "color_G"] = color.green()
         self._dataframe.at[row_index, "color_B"] = color.blue()
 
-        left_col = min(self._dataframe.columns.get_loc("color_R"), self.preview_column_index)
-        right_col = max(self._dataframe.columns.get_loc("color_B"), self.preview_column_index)
+        left_col = min(
+            self._dataframe.columns.get_loc("color_R"), self.preview_column_index
+        )
+        right_col = max(
+            self._dataframe.columns.get_loc("color_B"), self.preview_column_index
+        )
         top_left = self.index(row_index, left_col)
         bottom_right = self.index(row_index, right_col)
         self.dataChanged.emit(
@@ -1879,9 +1845,7 @@ class NewTableDialog(QDialog):
         remove_field_button.clicked.connect(self.remove_selected_field)
         layout.addWidget(remove_field_button)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
-        )
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -1956,9 +1920,7 @@ class NewColormapTableDialog(QDialog):
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
-        )
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -2000,9 +1962,7 @@ class NewStructuralTopologyTableDialog(QDialog):
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
-        )
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -2049,9 +2009,7 @@ class ImportStructuralTopologyUnitsDialog(QDialog):
         self.units_list = QListWidget()
         layout.addWidget(self.units_list)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
-        )
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.validate_and_accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -2063,10 +2021,7 @@ class ImportStructuralTopologyUnitsDialog(QDialog):
         selected_units = []
         for row_idx in range(self.units_list.count()):
             item = self.units_list.item(row_idx)
-            if (
-                item.flags() & Qt.ItemIsEnabled
-                and item.checkState() == Qt.Checked
-            ):
+            if item.flags() & Qt.ItemIsEnabled and item.checkState() == Qt.Checked:
                 selected_units.append(item.data(Qt.UserRole))
         return selected_units
 
@@ -2084,9 +2039,7 @@ class ImportStructuralTopologyUnitsDialog(QDialog):
             return
 
         for unit_info in units:
-            unit_name = str(
-                unit_info.get(stm_feature_col, "")
-            ).strip()
+            unit_name = str(unit_info.get(stm_feature_col, "")).strip()
             role_name = str(unit_info.get("role", "")).strip()
             if role_name.upper() in stm_non_boundary_roles:
                 continue
@@ -2095,9 +2048,7 @@ class ImportStructuralTopologyUnitsDialog(QDialog):
                 continue
             if role_name == "model_boundary":
                 continue
-            polarity_value = str(
-                unit_info.get(stm_level_col, "")
-            ).strip()
+            polarity_value = str(unit_info.get(stm_level_col, "")).strip()
             scenario = str(unit_info.get("scenario", "")).strip()
             item = QListWidgetItem(
                 f"{unit_name} - {role_name} - {scenario or '(no scenario)'}"
@@ -2206,9 +2157,7 @@ class AddModelBoundaryDialog(QDialog):
     def boundary_info(self):
         source_info = self.source_info
         return {
-            stm_feature_col: str(
-                source_info.get("name", stm_model_boundary)
-            ).strip()
+            stm_feature_col: str(source_info.get("name", stm_model_boundary)).strip()
             or stm_model_boundary,
             stm_boundary_role_col: "model_boundary",
             stm_boundary_level_col: "-inf",
@@ -2239,9 +2188,7 @@ class ExtraSTmBoundaryDialog(QDialog):
         self.setWindowTitle("Add extra boundary")
         layout = QVBoxLayout(self)
         form = QFormLayout()
-        self.feature_edit = QLineEdit(
-            str(boundary_info.get(stm_feature_col, ""))
-        )
+        self.feature_edit = QLineEdit(str(boundary_info.get(stm_feature_col, "")))
         self.role_edit = QComboBox()
         self.role_edit.addItems(
             [
@@ -2251,9 +2198,7 @@ class ExtraSTmBoundaryDialog(QDialog):
             ]
         )
         self.role_edit.setCurrentText(
-            normalise_stm_boundary_role(
-                boundary_info.get(stm_boundary_role_col, "")
-            )
+            normalise_stm_boundary_role(boundary_info.get(stm_boundary_role_col, ""))
         )
         self.polarity_edit = QLineEdit(
             str(boundary_info.get(stm_boundary_level_col, ""))
@@ -2405,8 +2350,9 @@ class UnitLevelAmbiguityDialog(QDialog):
         self.level_combo.clear()
         if self.current_unit is not None:
             values = {
-                round(solution[self.current_unit]["value"], 9):
-                solution[self.current_unit]["value"]
+                round(solution[self.current_unit]["value"], 9): solution[
+                    self.current_unit
+                ]["value"]
                 for solution in self.remaining_solutions
             }
             for key, value in sorted(values.items()):
@@ -2433,9 +2379,7 @@ class UnitLevelAmbiguityDialog(QDialog):
             self.remaining_solutions = selected
             super().accept()
             return
-        self.history.append(
-            (self.remaining_solutions, self.level_combo.currentData())
-        )
+        self.history.append((self.remaining_solutions, self.level_combo.currentData()))
         self.remaining_solutions = selected
         self._show_unit()
 
@@ -2510,13 +2454,9 @@ class ViewTable(QWidget):
         self.add_menu = QMenu("Add", self.action_menu_bar)
         self.add_row_action = self.add_menu.addAction("Add row")
         self.add_row_action.triggered.connect(self.add_row)
-        self.add_model_boundary_action = self.add_menu.addAction(
-            "Add model boundary"
-        )
+        self.add_model_boundary_action = self.add_menu.addAction("Add model boundary")
         self.add_model_boundary_action.triggered.connect(self.add_model_boundary)
-        self.add_extra_boundary_action = self.add_menu.addAction(
-            "Add extra boundary"
-        )
+        self.add_extra_boundary_action = self.add_menu.addAction("Add extra boundary")
         self.add_extra_boundary_action.triggered.connect(self.add_extra_boundary)
         self.add_boundary_separator = self.add_menu.addSeparator()
         self.generate_units_action = self.add_menu.addAction(
@@ -2631,9 +2571,7 @@ class ViewTable(QWidget):
     def _load_stm_composite(self, table_name):
         options = dict(self.parent.custom_table_options.get(table_name, {}) or {})
         tables = options.get("stm_tables", {})
-        if isinstance(tables, dict) and (
-            "boundaries" in tables or "units" in tables
-        ):
+        if isinstance(tables, dict) and ("boundaries" in tables or "units" in tables):
             boundary_records = list(tables.get("boundaries", []))
             unit_records = list(tables.get("units", []))
             recovered_colors = stm_feature_colors_from_options(options)
@@ -2642,20 +2580,15 @@ class ViewTable(QWidget):
             for record in boundary_records + unit_records:
                 if not isinstance(record, dict):
                     continue
-                feature_name = str(
-                    record.get(stm_feature_col, "")
-                ).strip()
+                feature_name = str(record.get(stm_feature_col, "")).strip()
                 if feature_name and all(
-                    channel in record
-                    for channel in ("color_R", "color_G", "color_B")
+                    channel in record for channel in ("color_R", "color_G", "color_B")
                 ):
                     recovered_colors[feature_name] = stm_color_to_dict(record)
             for record in unit_records:
                 if not isinstance(record, dict):
                     continue
-                unit_name = str(
-                    record.get(stm_feature_col, "")
-                ).strip()
+                unit_name = str(record.get(stm_feature_col, "")).strip()
                 if not unit_name:
                     continue
                 for boundary_name in stm_names(
@@ -2792,9 +2725,7 @@ class ViewTable(QWidget):
             conformable_links,
             unconformable_links,
             locked_conformable_links,
-        ) = (
-            self._reconcile_stm_relationships(edited_side)
-        )
+        ) = self._reconcile_stm_relationships(edited_side)
         links = conformable_links | unconformable_links
         options = dict(self.parent.custom_table_options.get(table_name, {}) or {})
         color_codes = dict(options.get("stm_color_codes", {}) or {})
@@ -2817,16 +2748,12 @@ class ViewTable(QWidget):
         boundary_polarities = {}
         model_boundary_names = set()
         for _, boundary_row in boundaries.iterrows():
-            boundary_name = str(
-                boundary_row.get(stm_feature_col, "")
-            ).strip()
+            boundary_name = str(boundary_row.get(stm_feature_col, "")).strip()
             if is_stm_model_boundary(boundary_row):
                 model_boundary_names.add(boundary_name)
             try:
                 boundary_polarities[boundary_name] = float(
-                    boundary_row.get(
-                        stm_boundary_level_col, ""
-                    )
+                    boundary_row.get(stm_boundary_level_col, "")
                 )
             except (TypeError, ValueError):
                 continue
@@ -2858,15 +2785,12 @@ class ViewTable(QWidget):
                         unit_color = feature_colors[boundary_name]
                         break
             if unit_color is None:
-                unit_color = stm_color_to_dict(
-                    stm_color(unit_name)
-                )
+                unit_color = stm_color_to_dict(stm_color(unit_name))
             # A generated unit has the same Feature as its source boundary.
             # Store that shared colour explicitly so its node and every link
             # remain visually identical to the boundary.
             if unit_name in boundary_polarities or any(
-                boundary_name == unit_name
-                for boundary_name in linked_boundary_names
+                boundary_name == unit_name for boundary_name in linked_boundary_names
             ):
                 unit_color = feature_colors.get(unit_name, unit_color)
             feature_colors[unit_name] = stm_color_to_dict(unit_color)
@@ -2884,9 +2808,7 @@ class ViewTable(QWidget):
                     "unit_role": normalise_stm_unit_role(
                         row.get(stm_unit_role_col, "TU")
                     ),
-                    "structural_polarity": row.get(
-                        stm_unit_level_col, ""
-                    ),
+                    "structural_polarity": row.get(stm_unit_level_col, ""),
                     "plot_polarity": plot_polarity,
                     "domains": domains,
                     "color_R": unit_color.get("color_R", 255),
@@ -2981,13 +2903,9 @@ class ViewTable(QWidget):
         for _, row in boundaries.iterrows():
             legacy_rows.append(
                 {
-                    stm_feature_col: row.get(
-                        stm_feature_col, ""
-                    ),
+                    stm_feature_col: row.get(stm_feature_col, ""),
                     stm_unit_role_col: "Discontinuity",
-                    stm_level_col: row.get(
-                        stm_boundary_level_col, ""
-                    ),
+                    stm_level_col: row.get(stm_boundary_level_col, ""),
                     "Domain_1": "",
                 }
             )
@@ -2999,10 +2917,7 @@ class ViewTable(QWidget):
             self.table_model.set_dataframe(units)
 
     def current_dataframe_column_name(self, column_index: int):
-        if (
-            column_index < 0
-            or column_index >= self.table_model.dataframe.shape[1]
-        ):
+        if column_index < 0 or column_index >= self.table_model.dataframe.shape[1]:
             return None
         return str(self.table_model.dataframe.columns[column_index])
 
@@ -3031,9 +2946,7 @@ class ViewTable(QWidget):
             if (
                 row_index is not None
                 and 0 <= row_index < len(table_model.dataframe.index)
-                and is_stm_model_boundary(
-                    table_model.dataframe.iloc[row_index]
-                )
+                and is_stm_model_boundary(table_model.dataframe.iloc[row_index])
             ):
                 return False
             return column_name not in {
@@ -3047,9 +2960,7 @@ class ViewTable(QWidget):
 
     def is_table_column_editable(self, column_index: int) -> bool:
         """Backward-compatible wrapper for code using the primary model."""
-        return self.is_table_model_column_editable(
-            self.table_model, column_index
-        )
+        return self.is_table_model_column_editable(self.table_model, column_index)
 
     def _current_domain_column_name(self):
         current_index = self.table_view.currentIndex()
@@ -3095,6 +3006,7 @@ class ViewTable(QWidget):
                     parent=self.table_view,
                 ),
             )
+
     def _available_stm_units(self, match_boundary_roles=False):
         if hasattr(self.parent, "get_structural_topology_legend_units"):
             units = list(self.parent.get_structural_topology_legend_units() or [])
@@ -3126,16 +3038,12 @@ class ViewTable(QWidget):
         if not units and legend_df is not None and not legend_df.empty:
             units = [
                 {
-                    stm_feature_col: str(
-                        row.get("feature", "")
-                    ).strip(),
+                    stm_feature_col: str(row.get("feature", "")).strip(),
                     stm_unit_role_col: "Discontinuity",
                     stm_level_col: row.get(legend_level_col, 0.0),
                     "Domain_1": "",
                     "feature": str(row.get("feature", "")).strip(),
-                    "role": normalise_stm_boundary_role(
-                        row.get("role", "")
-                    ),
+                    "role": normalise_stm_boundary_role(row.get("role", "")),
                     "scenario": str(row.get("scenario", "")).strip(),
                     "color_R": row.get("color_R", 255),
                     "color_G": row.get("color_G", 255),
@@ -3160,16 +3068,16 @@ class ViewTable(QWidget):
             )
             for boundary_info in stored_boundaries
             if isinstance(boundary_info, dict)
-            and str(
-                boundary_info.get(stm_feature_col, "")
-            ).strip()
+            and str(boundary_info.get(stm_feature_col, "")).strip()
         }
         stored_color_codes = current_options.get("stm_color_codes", {})
         feature_color_map = {}
         if isinstance(stored_color_codes, dict):
             feature_color_map = {
                 str(feature_name).strip(): stm_color_to_dict(color_info)
-                for feature_name, color_info in stored_color_codes.get("features", {}).items()
+                for feature_name, color_info in stored_color_codes.get(
+                    "features", {}
+                ).items()
                 if str(feature_name).strip()
             }
 
@@ -3207,25 +3115,25 @@ class ViewTable(QWidget):
             for feature_name, color_info in feature_color_map.items():
                 if any(key[0] == feature_name for key in available_keys):
                     continue
-                available_units.append({
-                    stm_feature_col: feature_name,
-                    stm_unit_role_col: "Discontinuity",
-                    stm_level_col: 0.0,
-                    "Domain_1": "",
-                    "feature": feature_name,
-                    "role": stored_roles.get(feature_name, ""),
-                    "scenario": stored_scenarios.get(feature_name, ""),
-                    "color_R": color_info.get("color_R", 255),
-                    "color_G": color_info.get("color_G", 255),
-                    "color_B": color_info.get("color_B", 255),
-                })
+                available_units.append(
+                    {
+                        stm_feature_col: feature_name,
+                        stm_unit_role_col: "Discontinuity",
+                        stm_level_col: 0.0,
+                        "Domain_1": "",
+                        "feature": feature_name,
+                        "role": stored_roles.get(feature_name, ""),
+                        "scenario": stored_scenarios.get(feature_name, ""),
+                        "color_R": color_info.get("color_R", 255),
+                        "color_G": color_info.get("color_G", 255),
+                        "color_B": color_info.get("color_B", 255),
+                    }
+                )
 
         return sorted(
             available_units,
             key=lambda unit_info: (
-                str(
-                    unit_info.get(stm_feature_col, "")
-                ).casefold(),
+                str(unit_info.get(stm_feature_col, "")).casefold(),
                 str(unit_info.get("role", "")).casefold(),
                 str(unit_info.get("scenario", "")).casefold(),
             ),
@@ -3338,9 +3246,7 @@ class ViewTable(QWidget):
         """React to cell edits coming from the table model."""
         if self.current_table_type == stm_table_type:
             edited_side = (
-                "boundaries"
-                if table_model is self.boundaries_table_model
-                else "units"
+                "boundaries" if table_model is self.boundaries_table_model else "units"
             )
             if (
                 edited_side == "units"
@@ -3369,11 +3275,12 @@ class ViewTable(QWidget):
                 edited_side=edited_side,
                 reset_models=True,
             )
-        if (
-            self.current_table_type == stm_table_type
-            and hasattr(self.parent, "sync_structural_topology_table_to_legend")
+        if self.current_table_type == stm_table_type and hasattr(
+            self.parent, "sync_structural_topology_table_to_legend"
         ):
-            self.parent.sync_structural_topology_table_to_legend(self.current_table_name)
+            self.parent.sync_structural_topology_table_to_legend(
+                self.current_table_name
+            )
         self._notify_custom_table_metadata_changed()
 
     def _enforce_current_stm_constraints(
@@ -3400,7 +3307,11 @@ class ViewTable(QWidget):
                 dataframe.at[row_label, stm_unit_role_col] = unit_role
                 changed = True
 
-        if changed and self.table_model.rowCount() > 0 and self.table_model.columnCount() > 0:
+        if (
+            changed
+            and self.table_model.rowCount() > 0
+            and self.table_model.columnCount() > 0
+        ):
             top_left = self.table_model.index(0, 0)
             bottom_right = self.table_model.index(
                 self.table_model.rowCount() - 1,
@@ -3472,9 +3383,7 @@ class ViewTable(QWidget):
             self._install_stm_delegates()
         self.table_model.set_show_colormap_preview(is_colormap_table)
         self.table_model.set_editable(self.editing_enabled)
-        self.boundaries_table_model.set_editable(
-            self.editing_enabled and is_stm_table
-        )
+        self.boundaries_table_model.set_editable(self.editing_enabled and is_stm_table)
         edit_triggers = (
             QAbstractItemView.DoubleClicked
             | QAbstractItemView.EditKeyPressed
@@ -3502,7 +3411,9 @@ class ViewTable(QWidget):
         )
         allow_structure_edit = self.editing_enabled and has_table
         allow_row_edit = allow_structure_edit and has_columns
-        allow_column_edit = allow_structure_edit and has_columns and not is_colormap_table
+        allow_column_edit = (
+            allow_structure_edit and has_columns and not is_colormap_table
+        )
         selected_domain_column = self._current_domain_column_name()
 
         self.editing_toggle_button.setText(
@@ -3526,9 +3437,7 @@ class ViewTable(QWidget):
         self.add_menu.menuAction().setEnabled(has_table)
         self.edit_menu.menuAction().setEnabled(has_table)
         self.build_stm_button.setVisible(is_stm_table)
-        self.build_stm_button.setEnabled(
-            is_stm_table and (has_boundaries or has_rows)
-        )
+        self.build_stm_button.setEnabled(is_stm_table and (has_boundaries or has_rows))
         self.generate_units_action.setVisible(is_stm_table)
         self.add_model_boundary_action.setVisible(is_stm_table)
         self.add_extra_boundary_action.setVisible(is_stm_table)
@@ -3592,9 +3501,8 @@ class ViewTable(QWidget):
         table_type = table_type or self.current_table_type
         if hasattr(self.parent, "refresh_table_views"):
             self.parent.refresh_table_views()
-        if (
-            table_type == PropertiesCMaps.custom_colormap_table_type
-            and hasattr(self.parent, "refresh_custom_colormaps")
+        if table_type == PropertiesCMaps.custom_colormap_table_type and hasattr(
+            self.parent, "refresh_custom_colormaps"
         ):
             self.parent.refresh_custom_colormaps()
 
@@ -3612,7 +3520,9 @@ class ViewTable(QWidget):
         """Return the default empty STM dataframe."""
         return pd_DataFrame(columns=stm_base_cols)
 
-    def _normalise_export_path(self, file_path: str, selected_filter: str) -> tuple[str, str]:
+    def _normalise_export_path(
+        self, file_path: str, selected_filter: str
+    ) -> tuple[str, str]:
         """Return a normalized output path and delimiter for textual table export."""
         delimiter_map = {
             "STM JSON files (*.json)": (".json", ","),
@@ -3622,9 +3532,7 @@ class ViewTable(QWidget):
             "DAT files (*.dat)": (".dat", ";"),
             "All files (*.*)": ("", ","),
         }
-        default_extension, delimiter = delimiter_map.get(
-            selected_filter, (".csv", ",")
-        )
+        default_extension, delimiter = delimiter_map.get(selected_filter, (".csv", ","))
 
         current_extension = os_path.splitext(file_path)[1].lower()
         if current_extension:
@@ -3765,7 +3673,9 @@ class ViewTable(QWidget):
         try:
             dataframe = self.parent.custom_tables[table_name]
             if self.current_table_type == stm_table_type:
-                export_options = dict(self.parent.custom_table_options.get(table_name, {}))
+                export_options = dict(
+                    self.parent.custom_table_options.get(table_name, {})
+                )
                 if output_path.lower().endswith(".json"):
                     (
                         boundaries,
@@ -3773,9 +3683,7 @@ class ViewTable(QWidget):
                         _conformable_links,
                         _unconformable_links,
                         locked_conformable_links,
-                    ) = (
-                        self._reconcile_stm_relationships()
-                    )
+                    ) = self._reconcile_stm_relationships()
                     feature_colors = stm_feature_colors_from_options(
                         self.current_table_options
                     )
@@ -3807,7 +3715,9 @@ class ViewTable(QWidget):
                     feature_colors.update(
                         {
                             str(feature_name).strip(): stm_color_to_dict(color_info)
-                            for feature_name, color_info in stored_color_codes.get("features", {}).items()
+                            for feature_name, color_info in stored_color_codes.get(
+                                "features", {}
+                            ).items()
                             if str(feature_name).strip()
                         }
                     )
@@ -3820,14 +3730,14 @@ class ViewTable(QWidget):
                             stm_color(feature_text)
                         )
                 for unit_info in self._available_stm_units(match_boundary_roles=True):
-                    feature_text = str(
-                        unit_info.get(stm_feature_col, "")
-                    ).strip()
+                    feature_text = str(unit_info.get(stm_feature_col, "")).strip()
                     if feature_text:
                         feature_colors[feature_text] = stm_color_to_dict(unit_info)
                 export_options["stm_color_codes"] = {"features": feature_colors}
 
-                with open(output_path, "w", encoding="utf-8", newline="") as output_stream:
+                with open(
+                    output_path, "w", encoding="utf-8", newline=""
+                ) as output_stream:
                     dataframe.to_csv(
                         output_stream,
                         sep=delimiter,
@@ -3839,9 +3749,7 @@ class ViewTable(QWidget):
                         _conformable_links,
                         _unconformable_links,
                         locked_conformable_links,
-                    ) = (
-                        self._reconcile_stm_relationships()
-                    )
+                    ) = self._reconcile_stm_relationships()
                     write_stm_export_footer(
                         output_stream,
                         build_stm_json(
@@ -3996,7 +3904,9 @@ class ViewTable(QWidget):
         if self.current_table_type == PropertiesCMaps.custom_colormap_table_type:
             dataframe = self.table_model.dataframe
             numeric_values = pd_to_numeric(dataframe["value"], errors="coerce").dropna()
-            next_value = 0.0 if numeric_values.empty else float(numeric_values.max()) + 1.0
+            next_value = (
+                0.0 if numeric_values.empty else float(numeric_values.max()) + 1.0
+            )
             self.table_model.add_row_data(
                 {
                     "value": next_value,
@@ -4036,14 +3946,9 @@ class ViewTable(QWidget):
             selected_rows = [target_view.currentIndex().row()]
         if not selected_rows:
             return
-        removed_model_boundary = (
-            target_model is self.boundaries_table_model
-            and any(
-                is_stm_model_boundary(
-                    target_model.dataframe.iloc[row_index]
-                )
-                for row_index in selected_rows
-            )
+        removed_model_boundary = target_model is self.boundaries_table_model and any(
+            is_stm_model_boundary(target_model.dataframe.iloc[row_index])
+            for row_index in selected_rows
         )
         target_model.remove_rows(selected_rows)
         if self.current_table_type == stm_table_type:
@@ -4051,15 +3956,14 @@ class ViewTable(QWidget):
                 options = dict(self.current_table_options or {})
                 options.pop("stm_model_boundary_source", None)
                 self.parent.custom_table_options[self.current_table_name] = options
-            self._persist_stm_composite(
-                edited_side=edited_side, reset_models=True
-            )
+            self._persist_stm_composite(edited_side=edited_side, reset_models=True)
         self.update_editing_ui()
-        if (
-            self.current_table_type == stm_table_type
-            and hasattr(self.parent, "sync_structural_topology_table_to_legend")
+        if self.current_table_type == stm_table_type and hasattr(
+            self.parent, "sync_structural_topology_table_to_legend"
         ):
-            self.parent.sync_structural_topology_table_to_legend(self.current_table_name)
+            self.parent.sync_structural_topology_table_to_legend(
+                self.current_table_name
+            )
         self._notify_custom_table_metadata_changed()
 
     def import_structural_topology_units(self):
@@ -4069,12 +3973,11 @@ class ViewTable(QWidget):
             return
 
         existing_boundaries = {
-            str(row.get(stm_feature_col, "")).strip():
-            str(row.get(stm_boundary_role_col, "")).strip()
+            str(row.get(stm_feature_col, ""))
+            .strip(): str(row.get(stm_boundary_role_col, ""))
+            .strip()
             for _, row in self.boundaries_table_model.dataframe.iterrows()
-            if str(
-                row.get(stm_feature_col, "")
-            ).strip()
+            if str(row.get(stm_feature_col, "")).strip()
         }
 
         dialog = ImportStructuralTopologyUnitsDialog(
@@ -4092,22 +3995,18 @@ class ViewTable(QWidget):
             self.current_table_options.get("stm_boundary_scenarios", {})
         )
         for unit_info in dialog.selected_units:
-            selected_name = str(
-                unit_info.get(stm_feature_col, "")
-            ).strip()
+            selected_name = str(unit_info.get(stm_feature_col, "")).strip()
             if not selected_name or selected_name in existing_boundaries:
                 continue
             self._set_stm_feature_color(selected_name, unit_info)
-            boundary_scenarios[selected_name] = str(unit_info.get("scenario", "")).strip()
+            boundary_scenarios[selected_name] = str(
+                unit_info.get("scenario", "")
+            ).strip()
             self.boundaries_table_model.add_row_data(
                 {
                     stm_feature_col: selected_name,
-                    stm_boundary_role_col: unit_info.get(
-                        "role", ""
-                    ),
-                    stm_boundary_level_col: unit_info.get(
-                        stm_level_col, ""
-                    ),
+                    stm_boundary_role_col: unit_info.get("role", ""),
+                    stm_boundary_level_col: unit_info.get(stm_level_col, ""),
                     stm_boundary_units_col: "",
                 }
             )
@@ -4115,9 +4014,7 @@ class ViewTable(QWidget):
         options = dict(self.current_table_options)
         options["stm_boundary_scenarios"] = boundary_scenarios
         self.parent.custom_table_options[table_name] = options
-        self._persist_stm_composite(
-            edited_side="boundaries", reset_models=True
-        )
+        self._persist_stm_composite(edited_side="boundaries", reset_models=True)
         self.update_editing_ui()
         self._notify_custom_table_metadata_changed()
 
@@ -4126,10 +4023,7 @@ class ViewTable(QWidget):
         if self.current_table_type != stm_table_type:
             return
         boundaries = self.boundaries_table_model.dataframe
-        if any(
-            is_stm_model_boundary(row)
-            for _, row in boundaries.iterrows()
-        ):
+        if any(is_stm_model_boundary(row) for _, row in boundaries.iterrows()):
             QMessageBox.information(
                 self,
                 "Model boundary already present",
@@ -4164,9 +4058,7 @@ class ViewTable(QWidget):
         options = dict(self.current_table_options or {})
         options["stm_model_boundary_source"] = dialog.source_info
         self.parent.custom_table_options[self.current_table_name] = options
-        self._persist_stm_composite(
-            edited_side="boundaries", reset_models=True
-        )
+        self._persist_stm_composite(edited_side="boundaries", reset_models=True)
         self.update_editing_ui()
         self._notify_custom_table_metadata_changed()
 
@@ -4176,7 +4068,9 @@ class ViewTable(QWidget):
             return []
         selected = sorted({index.row() for index in selection_model.selectedRows()})
         if not selected:
-            selected = sorted({index.row() for index in selection_model.selectedIndexes()})
+            selected = sorted(
+                {index.row() for index in selection_model.selectedIndexes()}
+            )
         return selected
 
     def _stm_unit_feature_counts(self):
@@ -4401,9 +4295,7 @@ class ViewTable(QWidget):
             row_index
             for row_index in selected_rows
             if 0 <= row_index < len(boundaries.index)
-            and not is_stm_model_boundary(
-                boundaries.iloc[row_index]
-            )
+            and not is_stm_model_boundary(boundaries.iloc[row_index])
         ]
         if not selected_rows:
             QMessageBox.information(
@@ -4415,9 +4307,7 @@ class ViewTable(QWidget):
             return
         existing_units = {
             str(value).strip()
-            for value in self.table_model.dataframe.get(
-                stm_feature_col, []
-            )
+            for value in self.table_model.dataframe.get(stm_feature_col, [])
             if str(value).strip()
         }
         conformable_links = self._stm_option_links("stm_conformable_links")
@@ -4429,18 +4319,16 @@ class ViewTable(QWidget):
             if row_index < 0 or row_index >= len(boundaries.index):
                 continue
             boundary_name = str(
-                boundaries.iloc[row_index].get(
-                    stm_feature_col, ""
-                )
+                boundaries.iloc[row_index].get(stm_feature_col, "")
             ).strip()
             if not boundary_name:
                 continue
             if boundary_name not in existing_units:
-                boundary_role = str(
-                    boundaries.iloc[row_index].get(
-                        stm_boundary_role_col, ""
-                    )
-                ).strip().casefold()
+                boundary_role = (
+                    str(boundaries.iloc[row_index].get(stm_boundary_role_col, ""))
+                    .strip()
+                    .casefold()
+                )
                 row_data = {
                     column_name: ""
                     for column_name in self.table_model.dataframe.columns
@@ -4449,9 +4337,7 @@ class ViewTable(QWidget):
                     {
                         stm_feature_col: boundary_name,
                         stm_unit_role_col: (
-                            stm_generated_unit_roles.get(
-                                boundary_role, "TU"
-                            )
+                            stm_generated_unit_roles.get(boundary_role, "TU")
                         ),
                         stm_unit_level_col: "",
                         stm_unconformable_boundaries_col: "",
@@ -4461,9 +4347,7 @@ class ViewTable(QWidget):
                 self.table_model.add_row_data(row_data)
                 existing_units.add(boundary_name)
             linked_units = stm_names(
-                boundaries.iloc[row_index].get(
-                    stm_boundary_units_col, ""
-                )
+                boundaries.iloc[row_index].get(stm_boundary_units_col, "")
             )
             boundaries.at[
                 boundaries.index[row_index],
@@ -4501,9 +4385,7 @@ class ViewTable(QWidget):
         feature = dialog.boundary_info[stm_feature_col]
         existing = {
             str(value).strip()
-            for value in self.boundaries_table_model.dataframe.get(
-                stm_feature_col, []
-            )
+            for value in self.boundaries_table_model.dataframe.get(stm_feature_col, [])
         }
         if feature in existing:
             QMessageBox.warning(
@@ -4512,9 +4394,7 @@ class ViewTable(QWidget):
             return
         self.boundaries_table_model.add_row_data(dialog.boundary_info)
         self._set_stm_feature_color(feature, dialog.boundary_info)
-        self._persist_stm_composite(
-            edited_side="boundaries", reset_models=True
-        )
+        self._persist_stm_composite(edited_side="boundaries", reset_models=True)
         self.update_editing_ui()
         self._notify_custom_table_metadata_changed()
 
@@ -4531,9 +4411,7 @@ class ViewTable(QWidget):
         feature = str(unit_info.get("feature", "")).strip()
         existing = {
             str(value).strip()
-            for value in self.table_model.dataframe.get(
-                stm_feature_col, []
-            )
+            for value in self.table_model.dataframe.get(stm_feature_col, [])
         }
         if feature in existing:
             QMessageBox.warning(
@@ -4542,30 +4420,25 @@ class ViewTable(QWidget):
             return
         boundary_features = {
             str(value).strip()
-            for value in self.boundaries_table_model.dataframe.get(
-                stm_feature_col, []
-            )
+            for value in self.boundaries_table_model.dataframe.get(stm_feature_col, [])
             if str(value).strip()
         }
         if feature not in boundary_features:
             self._set_stm_feature_color(feature, unit_info)
         row_data = {
-            column_name: ""
-            for column_name in self.table_model.dataframe.columns
+            column_name: "" for column_name in self.table_model.dataframe.columns
         }
         row_data.update(
             {
                 stm_feature_col: feature,
-                stm_unit_role_col: unit_info.get(
-                    "unit_role", "TU"
-                ),
+                stm_unit_role_col: unit_info.get("unit_role", "TU"),
                 stm_unit_level_col: "",
                 stm_unconformable_boundaries_col: "",
             }
         )
         for domain_info in unit_info.get("domains", []):
-            row_data[str(domain_info.get("column", "Domain_1"))] = (
-                domain_info.get("value", "")
+            row_data[str(domain_info.get("column", "Domain_1"))] = domain_info.get(
+                "value", ""
             )
         self.table_model.add_row_data(row_data)
         self._persist_stm_composite(edited_side="units", reset_models=True)
@@ -4573,9 +4446,7 @@ class ViewTable(QWidget):
         self._notify_custom_table_metadata_changed()
 
     @staticmethod
-    def _stm_level_diagnostic_messages(
-        diagnostics, severities=None, limit=8
-    ):
+    def _stm_level_diagnostic_messages(diagnostics, severities=None, limit=8):
         return stm_level_diagnostic_messages(diagnostics, severities, limit)
 
     def _confirm_stm_level_preflight(self):
@@ -4584,9 +4455,7 @@ class ViewTable(QWidget):
             self.boundaries_table_model.dataframe,
             self.table_model.dataframe,
         )
-        error_messages = self._stm_level_diagnostic_messages(
-            diagnostics, {"error"}
-        )
+        error_messages = self._stm_level_diagnostic_messages(diagnostics, {"error"})
         if error_messages:
             QMessageBox.warning(
                 self,
@@ -4596,9 +4465,7 @@ class ViewTable(QWidget):
                 + "\n\nFix these boundary levels before calculating.",
             )
             return False
-        warning_messages = self._stm_level_diagnostic_messages(
-            diagnostics, {"warning"}
-        )
+        warning_messages = self._stm_level_diagnostic_messages(diagnostics, {"warning"})
         if not warning_messages:
             return True
         confirm = QMessageBox.question(
@@ -4625,9 +4492,7 @@ class ViewTable(QWidget):
             self.boundaries_table_model.dataframe,
             self.table_model.dataframe,
             conformable_links=self._stm_option_links("stm_conformable_links"),
-            unconformable_links=self._stm_option_links(
-                "stm_unconformable_links"
-            ),
+            unconformable_links=self._stm_option_links("stm_unconformable_links"),
             locked_conformable_links=self._stm_option_links(
                 "stm_locked_conformable_links"
             ),
@@ -4667,9 +4532,9 @@ class ViewTable(QWidget):
                     result["levels_by_unit"].pop(unit_name, None)
                 for row_label in ambiguous_rows:
                     result["levels_by_row"].pop(row_label, None)
-                    result["unresolved_rows"][row_label] = (
-                        "ambiguous_topological_assignment"
-                    )
+                    result["unresolved_rows"][
+                        row_label
+                    ] = "ambiguous_topological_assignment"
         units = self.table_model.dataframe
         units[stm_unit_level_col] = ""
         for row_label, level_value in result.get("levels_by_row", {}).items():
@@ -4695,9 +4560,7 @@ class ViewTable(QWidget):
                 f"\nResolved {len(resolved_ambiguous_rows)} ambiguous unit levels."
             )
         if override_rows:
-            message += (
-                f"\nApplied {len(override_rows)} user-defined level overrides."
-            )
+            message += f"\nApplied {len(override_rows)} user-defined level overrides."
         if unresolved_rows:
             message += (
                 f"\nLeft {len(unresolved_rows)} unresolved: review conformable links, "
@@ -4820,12 +4683,16 @@ class ViewTable(QWidget):
 
         new_field_name = input_text_dialog(
             parent=self,
-            title="Rename domain"
-            if self.current_table_type == stm_table_type
-            else "Rename field",
-            label="New domain order"
-            if self.current_table_type == stm_table_type
-            else "New field name",
+            title=(
+                "Rename domain"
+                if self.current_table_type == stm_table_type
+                else "Rename field"
+            ),
+            label=(
+                "New domain order"
+                if self.current_table_type == stm_table_type
+                else "New field name"
+            ),
             default_text=(
                 str(stm_domain_order(old_field_name))
                 if self.current_table_type == stm_table_type
@@ -4843,9 +4710,7 @@ class ViewTable(QWidget):
                 domain_order_value = int(new_field_name)
                 if domain_order_value <= 0:
                     raise ValueError()
-                new_field_name = stm_domain_col(
-                    domain_order_value
-                )
+                new_field_name = stm_domain_col(domain_order_value)
             except ValueError:
                 QMessageBox.warning(
                     self,
@@ -4897,9 +4762,11 @@ class ViewTable(QWidget):
 
         confirm = QMessageBox.question(
             self,
-            "Delete domain"
-            if self.current_table_type == stm_table_type
-            else "Delete field",
+            (
+                "Delete domain"
+                if self.current_table_type == stm_table_type
+                else "Delete field"
+            ),
             (
                 f'Delete domain "{field_name}"?'
                 if self.current_table_type == stm_table_type

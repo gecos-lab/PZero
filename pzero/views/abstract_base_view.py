@@ -376,7 +376,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.actors_df[self.actors_df["uid"].isin(updated_uids)].index, inplace=True
         )
         removed_uids = set(updated_uids)
-        self.selected_uids = [uid for uid in self.selected_uids if uid not in removed_uids]
+        self.selected_uids = [
+            uid for uid in self.selected_uids if uid not in removed_uids
+        ]
         tree.remove_items_from_tree(uids_to_remove=updated_uids)
         if has_plotter:
             self.plotter.render()

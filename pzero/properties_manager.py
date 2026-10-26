@@ -14,8 +14,8 @@ import matplotlib.cm as cm
 # This makes amplitudes "pop" more than the standard diluted seismic map.
 # Colors: Cyan -> Navy -> Blue -> Gray -> Light Gray -> Maroon -> Red -> Yellow
 # Detailed gradient for maximum contrast and Petrel-like appearance.
-#seismic_pzero_colors = [[255,0,0],"blue", "gray", "lightgray", "maroon", "red", "yellow"]
-#seismic_pzero_cmap = LinearSegmentedColormap.from_list("seismic_pzero", seismic_pzero_colors, N=256)
+# seismic_pzero_colors = [[255,0,0],"blue", "gray", "lightgray", "maroon", "red", "yellow"]
+# seismic_pzero_cmap = LinearSegmentedColormap.from_list("seismic_pzero", seismic_pzero_colors, N=256)
 
 # create a custom colormap from RGB values and their value positions
 # Normalize RGB values from 0-255 to 0-1 range
@@ -25,13 +25,13 @@ import matplotlib.pyplot as plt
 seismic_pzero_cmap = LinearSegmentedColormap.from_list(
     "seismic_pzero",
     [
-        (0.0, (255/255, 255/255, 0/255)),      # Yellow
-        (0.32, (191/255, 0/255, 0/255)),       # Dark Red
-        (0.4, (97/255, 69/255, 0/255)),        # Brown
-        (0.5, (204/255, 204/255, 204/255)),    # Light Gray
-        (0.6, (77/255, 77/255, 77/255)),       # Dark Gray
-        (0.68, (0/255, 0/255, 191/255)),       # Dark Blue
-        (1.0, (161/255, 255/255, 255/255)),    # Cyan
+        (0.0, (255 / 255, 255 / 255, 0 / 255)),  # Yellow
+        (0.32, (191 / 255, 0 / 255, 0 / 255)),  # Dark Red
+        (0.4, (97 / 255, 69 / 255, 0 / 255)),  # Brown
+        (0.5, (204 / 255, 204 / 255, 204 / 255)),  # Light Gray
+        (0.6, (77 / 255, 77 / 255, 77 / 255)),  # Dark Gray
+        (0.68, (0 / 255, 0 / 255, 191 / 255)),  # Dark Blue
+        (1.0, (161 / 255, 255 / 255, 255 / 255)),  # Cyan
     ],
     N=256,
 )
@@ -39,28 +39,28 @@ seismic_pzero_cmap = LinearSegmentedColormap.from_list(
 # Register the colormap with matplotlib
 try:
     # Try modern Matplotlib API (3.5+)
-    if hasattr(mpl, 'colormaps') and hasattr(mpl.colormaps, 'register'):
+    if hasattr(mpl, "colormaps") and hasattr(mpl.colormaps, "register"):
         mpl.colormaps.register(cmap=seismic_pzero_cmap)
         # Also register with space in name for compatibility
         seismic_pzero_cmap_space = LinearSegmentedColormap.from_list(
             "seismic pzero",
             [
-                (0.0, (255/255, 255/255, 0/255)),
-                (0.32, (191/255, 0/255, 0/255)),
-                (0.4, (97/255, 69/255, 0/255)),
-                (0.5, (204/255, 204/255, 204/255)),
-                (0.6, (77/255, 77/255, 77/255)),
-                (0.68, (0/255, 0/255, 191/255)),
-                (1.0, (161/255, 255/255, 255/255)),
+                (0.0, (255 / 255, 255 / 255, 0 / 255)),
+                (0.32, (191 / 255, 0 / 255, 0 / 255)),
+                (0.4, (97 / 255, 69 / 255, 0 / 255)),
+                (0.5, (204 / 255, 204 / 255, 204 / 255)),
+                (0.6, (77 / 255, 77 / 255, 77 / 255)),
+                (0.68, (0 / 255, 0 / 255, 191 / 255)),
+                (1.0, (161 / 255, 255 / 255, 255 / 255)),
             ],
             N=256,
         )
         mpl.colormaps.register(cmap=seismic_pzero_cmap_space)
     # Try older API (via pyplot or cm)
-    elif hasattr(plt, 'register_cmap'):
+    elif hasattr(plt, "register_cmap"):
         plt.register_cmap(name="seismic_pzero", cmap=seismic_pzero_cmap)
         plt.register_cmap(name="seismic pzero", cmap=seismic_pzero_cmap)
-    elif hasattr(cm, 'register_cmap'):
+    elif hasattr(cm, "register_cmap"):
         cm.register_cmap(name="seismic_pzero", cmap=seismic_pzero_cmap)
         cm.register_cmap(name="seismic pzero", cmap=seismic_pzero_cmap)
 except ValueError:
@@ -94,7 +94,6 @@ from pandas.core.common import flatten as pd_flatten
 
 from pyvista import get_cmap_safe as pv_get_cmap_safe
 import pyvista as pv
-
 
 PROPERTY_COLLECTION_NAMES = (
     "geol_coll",
@@ -144,11 +143,11 @@ def cmap2qpixmap(cmap=None, steps=50):
         try:
             # Try replacing space with underscore if that was the issue
             if isinstance(cmap, str) and " " in cmap:
-                 colormap = pv_get_cmap_safe(cmap.replace(" ", "_"))
+                colormap = pv_get_cmap_safe(cmap.replace(" ", "_"))
             else:
-                 colormap = pv_get_cmap_safe("gray")
+                colormap = pv_get_cmap_safe("gray")
         except:
-             colormap = pv_get_cmap_safe("gray")
+            colormap = pv_get_cmap_safe("gray")
     rgbas = colormap(inds)
     q_rgbas = [
         QColor(int(r * 255), int(g * 255), int(b * 255), int(a * 255)).rgba()
@@ -190,7 +189,8 @@ def ensure_property_legend_schema(prop_legend_df=None):
         prop_legend_df["colormap"].fillna("rainbow").astype(str)
     )
     prop_legend_df["range_mode"] = (
-        prop_legend_df["range_mode"].fillna(PROPERTY_LEGEND_DEFAULTS["range_mode"])
+        prop_legend_df["range_mode"]
+        .fillna(PROPERTY_LEGEND_DEFAULTS["range_mode"])
         .astype(str)
         .str.lower()
     )
@@ -343,7 +343,9 @@ def get_property_render_settings(parent=None, property_name=None):
         settings["clim"] = (float(manual_min), float(manual_max))
         return settings
 
-    settings["clim"] = get_auto_property_range(parent=parent, property_name=property_name)
+    settings["clim"] = get_auto_property_range(
+        parent=parent, property_name=property_name
+    )
     return settings
 
 
@@ -387,10 +389,7 @@ class PropertiesCMaps(QObject):
             return
 
         try:
-            if (
-                hasattr(mpl, "colormaps")
-                and hasattr(mpl.colormaps, "unregister")
-            ):
+            if hasattr(mpl, "colormaps") and hasattr(mpl.colormaps, "unregister"):
                 try:
                     mpl.colormaps.unregister(cmap_name)
                 except Exception:
@@ -504,7 +503,9 @@ class PropertiesCMaps(QObject):
                 if idx == 0:
                     step_stops.append((position, rgb))
                     continue
-                epsilon = min(1e-6, max((position - normalized_positions[idx - 1]) / 10.0, 1e-9))
+                epsilon = min(
+                    1e-6, max((position - normalized_positions[idx - 1]) / 10.0, 1e-9)
+                )
                 step_stops.append((max(position - epsilon, 0.0), color_rows[idx - 1]))
                 step_stops.append((position, rgb))
             cmap_stops = step_stops
@@ -565,9 +566,17 @@ class PropertiesCMaps(QObject):
         auto_range = get_auto_property_range(parent=parent, property_name=property_name)
         range_mode = row["range_mode"]
         if range_mode == "manual":
-            display_min = float(row["range_min"]) if np_isfinite(row["range_min"]) else None
-            display_max = float(row["range_max"]) if np_isfinite(row["range_max"]) else None
-            if display_min is None or display_max is None or not display_min < display_max:
+            display_min = (
+                float(row["range_min"]) if np_isfinite(row["range_min"]) else None
+            )
+            display_max = (
+                float(row["range_max"]) if np_isfinite(row["range_max"]) else None
+            )
+            if (
+                display_min is None
+                or display_max is None
+                or not display_min < display_max
+            ):
                 if auto_range is not None:
                     display_min, display_max = auto_range
                 else:
@@ -594,8 +603,12 @@ class PropertiesCMaps(QObject):
         min_spin_box.last_valid_value = display_min
         max_spin_box.last_valid_value = display_max
         if auto_range is None:
-            min_spin_box.setToolTip("No valid project-wide range is currently available.")
-            max_spin_box.setToolTip("No valid project-wide range is currently available.")
+            min_spin_box.setToolTip(
+                "No valid project-wide range is currently available."
+            )
+            max_spin_box.setToolTip(
+                "No valid project-wide range is currently available."
+            )
         elif range_mode == "auto":
             min_spin_box.setToolTip("Project-wide automatic minimum.")
             max_spin_box.setToolTip("Project-wide automatic maximum.")
@@ -648,7 +661,9 @@ class PropertiesCMaps(QObject):
             coll_prop_comps = list(pd_flatten(coll_prop_comps))
             for i in range(len(coll_props)):
                 # Keep interpretation slice metadata on entities, outside the legend.
-                if isinstance(coll_props[i], str) and coll_props[i].startswith("slices_"):
+                if isinstance(coll_props[i], str) and coll_props[i].startswith(
+                    "slices_"
+                ):
                     continue
                 # if coll_prop_comps[i] == 3:
                 #     add_props = (
@@ -769,10 +784,16 @@ class PropertiesCMaps(QObject):
         header.setSectionResizeMode(QHeaderView.ResizeToContents)
         # Keep these editors compact rather than sizing for every possible value.
         metrics = parent.PropertiesTableWidget.fontMetrics()
-        cmap_width = max(
-            [metrics.horizontalAdvance("Colormap")]
-            + [metrics.horizontalAdvance(str(cmap)) for cmap in parent.prop_legend_df["colormap"]]
-        ) + 36
+        cmap_width = (
+            max(
+                [metrics.horizontalAdvance("Colormap")]
+                + [
+                    metrics.horizontalAdvance(str(cmap))
+                    for cmap in parent.prop_legend_df["colormap"]
+                ]
+            )
+            + 36
+        )
         for column, width in ((1, cmap_width), (4, 120), (5, 120)):
             header.setSectionResizeMode(column, QHeaderView.Interactive)
             parent.PropertiesTableWidget.setColumnWidth(column, width)
@@ -800,7 +821,9 @@ class PropertiesCMaps(QObject):
         ] = range_mode
 
         if range_mode == "manual":
-            auto_range = get_auto_property_range(parent=parent, property_name=this_property)
+            auto_range = get_auto_property_range(
+                parent=parent, property_name=this_property
+            )
             if auto_range is None:
                 auto_range = (0.0, 1.0)
             parent.prop_legend_df.loc[
@@ -839,7 +862,9 @@ class PropertiesCMaps(QObject):
         if not new_min < new_max:
             blocker = QSignalBlocker(sender)
             _ = blocker
-            sender.setValue(getattr(sender, "last_valid_value", float(row[sender.range_key])))
+            sender.setValue(
+                getattr(sender, "last_valid_value", float(row[sender.range_key]))
+            )
             self._print_invalid_range(parent=parent, property_name=this_property)
             return
 

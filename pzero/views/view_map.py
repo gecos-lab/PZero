@@ -482,9 +482,13 @@ class ViewMap(View2D):
                     original_prop = show_property[:pos1]
                     index = int(show_property[pos1 + 1 : pos2])
                     if original_prop in plot_entity.point_data_keys:
-                        show_property = plot_entity.get_point_data(original_prop)[:, index]
+                        show_property = plot_entity.get_point_data(original_prop)[
+                            :, index
+                        ]
                     elif original_prop in plot_entity.cell_data_keys:
-                        show_property = plot_entity.get_cell_data(original_prop)[:, index]
+                        show_property = plot_entity.get_cell_data(original_prop)[
+                            :, index
+                        ]
                         preference = "cell"
                     else:
                         show_property = None

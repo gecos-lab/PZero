@@ -4,6 +4,7 @@ Converted wells may embed JSON in INFO.COORDINATE_METADATA or provide the
 well-specific *_coordinate_metadata.json sidecar written by the converter.
 Geometry or property names alone do not establish CRS or time datum.
 """
+
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -33,7 +34,14 @@ def load_well_coordinate_metadata(path, well_name, embedded=None):
     if not isinstance(payload, dict):
         raise ValueError("Well coordinate frame must be a JSON object")
     metadata = deepcopy(payload)
-    required = ("vertical_domain", "vertical_units", "vertical_datum", "z_positive", "crs", "xy_units")
+    required = (
+        "vertical_domain",
+        "vertical_units",
+        "vertical_datum",
+        "z_positive",
+        "crs",
+        "xy_units",
+    )
     if any(key not in metadata for key in required):
         raise ValueError("Incomplete well coordinate declaration")
     conversion = metadata.get("well_conversion", {})
@@ -48,14 +56,23 @@ def validate_well_time_coordinates(metadata, points, time_values):
     if domain not in ("twt", "owt") or units not in ("ms", "s"):
         raise ValueError("Expected a well coordinate declaration in TWT/OWT and ms/s")
     if metadata.get("xy_units") != "m" or not metadata.get("crs"):
-        raise ValueError("Time-domain well coordinates require metres and a declared CRS")
+        raise ValueError(
+            "Time-domain well coordinates require metres and a declared CRS"
+        )
     positive = metadata.get("z_positive")
     if positive not in ("up", "down"):
         raise ValueError("Time-domain well coordinates require a declared Z sign")
     points = np.asarray(points, dtype=float)
     times = np.asarray(time_values, dtype=float).reshape(-1)
-    if points.ndim != 2 or points.shape[1] != 3 or len(times) != len(points) or not len(times):
-        raise ValueError("Well time samples must correspond to every trajectory station")
+    if (
+        points.ndim != 2
+        or points.shape[1] != 3
+        or len(times) != len(points)
+        or not len(times)
+    ):
+        raise ValueError(
+            "Well time samples must correspond to every trajectory station"
+        )
     if not np.isfinite(points).all() or not np.isfinite(times).all():
         raise ValueError("Well coordinates and time samples must be finite")
     expected_z = -times if positive == "up" else times

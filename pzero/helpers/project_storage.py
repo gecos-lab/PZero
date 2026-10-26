@@ -1,4 +1,5 @@
 """Checked VTK snapshots and atomic publication of completed project revisions."""
+
 import os
 from pathlib import Path
 from uuid import uuid4
@@ -47,8 +48,10 @@ def publish_project_revision(project_file, revision, crs="test_epsg"):
     """Replace the project pointer only after every revision payload is saved."""
     destination = Path(project_file)
     temporary = destination.with_name(destination.name + f".{uuid4().hex}.tmp")
-    text = ("PZero project file saved in folder with the same name, including VTK files and CSV tables.\n"
-            f"Last saved revision:\n{revision}\nCRS EPSG:\n{crs}\n")
+    text = (
+        "PZero project file saved in folder with the same name, including VTK files and CSV tables.\n"
+        f"Last saved revision:\n{revision}\nCRS EPSG:\n{crs}\n"
+    )
     try:
         with temporary.open("w", encoding="utf-8") as stream:
             stream.write(text)

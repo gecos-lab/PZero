@@ -540,7 +540,10 @@ class BaseCollection(ABC):
                     raise ValueError("destination already contains this UID")
                 source_entity = self.df.loc[self.df["uid"] == uid].iloc[0].to_dict()
                 if "topology" in destination_collection.entity_dict_keys:
-                    if source_entity.get("topology") not in destination_collection.valid_topologies:
+                    if (
+                        source_entity.get("topology")
+                        not in destination_collection.valid_topologies
+                    ):
                         raise ValueError(
                             "topology is not valid for the destination collection"
                         )
@@ -645,56 +648,58 @@ class BaseTableModel(QAbstractTableModel):
                 QAbstractTableModel.flags(self, index) | Qt.ItemIsEditable
             )
         return Qt.ItemIsEnabled | Qt.ItemIsSelectable
-    
+
     def supportedDragActions(self):
         """Enable copy action for dragging."""
         return Qt.CopyAction
-    
+
     def mimeTypes(self):
         """Return supported MIME types for drag operations."""
         return ["application/x-pzero-entity", "text/plain"]
-    
+
     def mimeData(self, indexes):
         """Create MIME data for drag operations containing entity UIDs."""
         from PySide6.QtCore import QMimeData, QByteArray
-        
+
         if not indexes:
             return None
-        
+
         # Get unique row indices to avoid duplicates when multiple columns selected
         rows = set()
         for index in indexes:
             if index.isValid():
                 rows.add(index.row())
-        
+
         if not rows:
             return None
-        
+
         # Extract UIDs (column 0) for selected rows
         uids = []
         for row in sorted(rows):
             uid = self.collection.df.iloc[row, 0]  # Column 0 is always UID
             if uid:
                 uids.append(str(uid))
-        
+
         if not uids:
             return None
-        
+
         # Get the collection key from the collection name
         collection_key = self._get_collection_key()
-        
+
         mime_data = QMimeData()
-        
+
         # Custom format: "collection_key:uid1,uid2,uid3"
         data_str = f"{collection_key}:{','.join(uids)}"
-        mime_data.setData("application/x-pzero-entity", QByteArray(data_str.encode('utf-8')))
-        
+        mime_data.setData(
+            "application/x-pzero-entity", QByteArray(data_str.encode("utf-8"))
+        )
+
         # Also set text format as fallback
         text_data = f"pzero://{collection_key}/{','.join(uids)}"
         mime_data.setText(text_data)
-        
+
         return mime_data
-    
+
     def _get_collection_key(self) -> str:
         """Get the collection key from the collection name."""
         # Map collection class names to their keys

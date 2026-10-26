@@ -1,4 +1,5 @@
 """Index/physical-coordinate conversion for rectilinear survey axes."""
+
 import numpy as np
 
 
@@ -13,8 +14,14 @@ def axis_coordinate(values, index, inverse=False):
     xp, fp = (values, indices) if inverse else (indices, values)
     x = np.asarray(index, dtype=float)
     result = np.interp(x, xp, fp)
-    result = np.where(x < xp[0], fp[0] + (x - xp[0]) * (fp[1] - fp[0]) / (xp[1] - xp[0]), result)
-    return np.where(x > xp[-1], fp[-1] + (x - xp[-1]) * (fp[-1] - fp[-2]) / (xp[-1] - xp[-2]), result)
+    result = np.where(
+        x < xp[0], fp[0] + (x - xp[0]) * (fp[1] - fp[0]) / (xp[1] - xp[0]), result
+    )
+    return np.where(
+        x > xp[-1],
+        fp[-1] + (x - xp[-1]) * (fp[-1] - fp[-2]) / (xp[-1] - xp[-2]),
+        result,
+    )
 
 
 def slice_camera_frame(center, row_span, col_span, scale, aspect, north_up=False):
@@ -37,7 +44,7 @@ def slice_camera_frame(center, row_span, col_span, scale, aspect, north_up=False
     if north_up:
         if normal[2] < 0:
             normal = -normal
-        up = np.array([0., 1., 0.]) - normal[1] * normal
+        up = np.array([0.0, 1.0, 0.0]) - normal[1] * normal
         up /= np.linalg.norm(up)
     else:
         up = col / np.linalg.norm(col)

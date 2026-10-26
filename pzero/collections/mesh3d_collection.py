@@ -55,7 +55,9 @@ class Mesh3DCollection(DIMCollection):
         removed_uids = super().remove_entities(uids)
         if removed_uids:
             legend_df = self.parent.others_legend_df
-            legend_df.drop(legend_df[legend_df["uid"].isin(removed_uids)].index, inplace=True)
+            legend_df.drop(
+                legend_df[legend_df["uid"].isin(removed_uids)].index, inplace=True
+            )
             self.parent.legend.update_widget(self.parent)
         return removed_uids
 
@@ -94,7 +96,9 @@ class Mesh3DCollection(DIMCollection):
                 [legend_df, pd_DataFrame([row])], ignore_index=True
             )
             legend_df = self.parent.others_legend_df
-            mask = (legend_df["other_collection"] == "Mesh3D") & (legend_df["uid"] == uid)
+            mask = (legend_df["other_collection"] == "Mesh3D") & (
+                legend_df["uid"] == uid
+            )
         for field, value in (
             ("color_R", color_R),
             ("color_G", color_G),

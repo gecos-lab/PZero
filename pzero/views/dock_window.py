@@ -91,7 +91,6 @@ class DockWindow(QDockWidget):
         except Exception:
             pass
 
-
     def _dispose_canvas(self):
         """Disconnect before deletion, including project changes via deleteLater."""
         if getattr(self, "_canvas_disposed", False):

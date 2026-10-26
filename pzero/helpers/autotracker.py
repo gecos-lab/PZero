@@ -18,48 +18,49 @@ class TrackingAttribute(Flag):
     Tracking attributes that can be combined using bitwise OR.
     Example: TrackingAttribute.AMPLITUDE | TrackingAttribute.EDGE
     """
+
     NONE = 0
-    AMPLITUDE = auto()      # Track by amplitude (reflection strength)
-    EDGE = auto()           # Track by edge strength (Sobel gradient)
-    PHASE = auto()          # Track by phase continuity
-    SIMILARITY = auto()     # Track by trace-to-trace similarity
-    DIP = auto()            # Track by dip direction consistency
-    WAVEFORM = auto()       # Track same wavelet/template character
-    
+    AMPLITUDE = auto()  # Track by amplitude (reflection strength)
+    EDGE = auto()  # Track by edge strength (Sobel gradient)
+    PHASE = auto()  # Track by phase continuity
+    SIMILARITY = auto()  # Track by trace-to-trace similarity
+    DIP = auto()  # Track by dip direction consistency
+    WAVEFORM = auto()  # Track same wavelet/template character
+
     @classmethod
-    def from_strings(cls, attr_list: List[str]) -> 'TrackingAttribute':
+    def from_strings(cls, attr_list: List[str]) -> "TrackingAttribute":
         """Convert list of attribute names to combined flag."""
         result = cls.NONE
         mapping = {
-            'amplitude': cls.AMPLITUDE,
-            'edge': cls.EDGE,
-            'phase': cls.PHASE,
-            'similarity': cls.SIMILARITY,
-            'dip': cls.DIP,
-            'waveform': cls.WAVEFORM,
-            'template': cls.WAVEFORM,
-            'correlation': cls.WAVEFORM,
+            "amplitude": cls.AMPLITUDE,
+            "edge": cls.EDGE,
+            "phase": cls.PHASE,
+            "similarity": cls.SIMILARITY,
+            "dip": cls.DIP,
+            "waveform": cls.WAVEFORM,
+            "template": cls.WAVEFORM,
+            "correlation": cls.WAVEFORM,
         }
         for attr in attr_list:
             if attr.lower() in mapping:
                 result |= mapping[attr.lower()]
         return result
-    
+
     def to_list(self) -> List[str]:
         """Convert flag to list of attribute names."""
         result = []
         if self & TrackingAttribute.AMPLITUDE:
-            result.append('amplitude')
+            result.append("amplitude")
         if self & TrackingAttribute.EDGE:
-            result.append('edge')
+            result.append("edge")
         if self & TrackingAttribute.PHASE:
-            result.append('phase')
+            result.append("phase")
         if self & TrackingAttribute.SIMILARITY:
-            result.append('similarity')
+            result.append("similarity")
         if self & TrackingAttribute.DIP:
-            result.append('dip')
+            result.append("dip")
         if self & TrackingAttribute.WAVEFORM:
-            result.append('waveform')
+            result.append("waveform")
         return result
 
 
@@ -85,49 +86,49 @@ class Autotracker:
 
         # Default tracking parameters
         self.tracking_params = {
-            'search_window': 15,        # Search window size (samples)
-            'smooth_sigma': 2.0,        # Gaussian smoothing sigma
-            'max_jump': 3,              # Maximum jump between slices (samples)
-            'smoothness_weight': 0.3,   # Weight for path smoothness (0-1)
-            'amplitude_weight': 0.3,    # Weight for amplitude
-            'edge_weight': 0.2,         # Weight for edge strength
-            'phase_weight': 0.25,       # Weight for phase
-            'similarity_weight': 0.25,  # Weight for similarity
-            'dip_weight': 0.15,         # Weight for dip direction
+            "search_window": 15,  # Search window size (samples)
+            "smooth_sigma": 2.0,  # Gaussian smoothing sigma
+            "max_jump": 3,  # Maximum jump between slices (samples)
+            "smoothness_weight": 0.3,  # Weight for path smoothness (0-1)
+            "amplitude_weight": 0.3,  # Weight for amplitude
+            "edge_weight": 0.2,  # Weight for edge strength
+            "phase_weight": 0.25,  # Weight for phase
+            "similarity_weight": 0.25,  # Weight for similarity
+            "dip_weight": 0.15,  # Weight for dip direction
             # Event identity tracking: reduces cycle skipping to parallel events.
-            'waveform_weight': 0.45,    # Local wavelet/template correlation weight
-            'waveform_half_window': 5,  # Samples above/below candidate for NCC
-            'reference_template_weight': 0.35,  # Keep tied to the original seed event
-            'phase_lock_weight': 0.35,  # Same instantaneous phase as seed/previous event
-            'polarity_weight': 0.20,    # Penalize peak/trough polarity flips
+            "waveform_weight": 0.45,  # Local wavelet/template correlation weight
+            "waveform_half_window": 5,  # Samples above/below candidate for NCC
+            "reference_template_weight": 0.35,  # Keep tied to the original seed event
+            "phase_lock_weight": 0.35,  # Same instantaneous phase as seed/previous event
+            "polarity_weight": 0.20,  # Penalize peak/trough polarity flips
             # Dynamic-programming path terms along the horizon on one slice.
-            'horizon_dip_weight': 0.35,       # Preserve local slope from previous horizon
-            'horizon_curvature_weight': 0.15, # Dampen row-to-row zig-zags
+            "horizon_dip_weight": 0.35,  # Preserve local slope from previous horizon
+            "horizon_curvature_weight": 0.15,  # Dampen row-to-row zig-zags
             # Fault-aware horizon tracking
             # Penalize picking too close to fault traces (prevents horizons snapping onto faults)
-            'fault_barrier_width': 2,   # Pixels (row) around fault to penalize
-            'fault_barrier_weight': 5.0,  # Penalty scale (higher = stronger avoidance)
+            "fault_barrier_width": 2,  # Pixels (row) around fault to penalize
+            "fault_barrier_weight": 5.0,  # Penalty scale (higher = stronger avoidance)
             # Do not smooth across faults: break horizon smoothing near fault traces
-            'fault_break_width': 1,     # Pixels (row) considered "on fault"
+            "fault_break_width": 1,  # Pixels (row) considered "on fault"
             # Keep points on the same side of the fault (preserve throw)
-            'fault_side_weight': 10.0,   # Penalty for switching fault side
+            "fault_side_weight": 10.0,  # Penalty for switching fault side
             # Near-fault behavior: allow larger vertical search to follow drag/rollover
-            'fault_influence_width': 4,   # Pixels (row) from fault considered "near fault"
-            'fault_search_multiplier': 2, # Multiply search_window near faults
+            "fault_influence_width": 4,  # Pixels (row) from fault considered "near fault"
+            "fault_search_multiplier": 2,  # Multiply search_window near faults
             # If a horizon point is close to a fault, attract it to the fault plane (stick to fault edge)
             # This helps handle drag/rollover and large throw near the fault.
-            'fault_snap_row_width': 3,    # Only apply snap if within this row-distance from fault
-            'fault_snap_col_range': 40,   # Search range (col) to find fault intersection depth for this row
-            'fault_snap_activation_col_tolerance': 3,  # Require previous horizon depth to be near the fault depth
-            'fault_snap_weight': 2.0,     # Penalty scale pulling horizon onto fault plane
+            "fault_snap_row_width": 3,  # Only apply snap if within this row-distance from fault
+            "fault_snap_col_range": 40,  # Search range (col) to find fault intersection depth for this row
+            "fault_snap_activation_col_tolerance": 3,  # Require previous horizon depth to be near the fault depth
+            "fault_snap_weight": 2.0,  # Penalty scale pulling horizon onto fault plane
             # Explicit fault-crossing attachment: if a horizon crosses a fault on one slice,
             # keep that contact point attached as the fault moves laterally on later slices.
-            'fault_attach_capture_width': 4,  # Max distance from fault to recognize a crossing anchor
-            'fault_attach_blend_rows': 3,     # Blend neighboring rows toward the attachment point
-            'fault_attach_depth_tolerance': 2,  # Max top/bottom shift allowed when following the same fault
-            'fault_attach_apply_row_tolerance': 8,  # Current horizon must already be near the predicted contact
-            'fault_attach_apply_col_tolerance': 4,  # Avoid forcing attachment far above/below the reflector
-            'fault_attach_candidate_weight': 6.0,  # Pull DP candidates toward known moving fault contacts
+            "fault_attach_capture_width": 4,  # Max distance from fault to recognize a crossing anchor
+            "fault_attach_blend_rows": 3,  # Blend neighboring rows toward the attachment point
+            "fault_attach_depth_tolerance": 2,  # Max top/bottom shift allowed when following the same fault
+            "fault_attach_apply_row_tolerance": 8,  # Current horizon must already be near the predicted contact
+            "fault_attach_apply_col_tolerance": 4,  # Avoid forcing attachment far above/below the reflector
+            "fault_attach_candidate_weight": 6.0,  # Pull DP candidates toward known moving fault contacts
         }
 
         # Store previous dip for consistency tracking
@@ -139,11 +140,13 @@ class Autotracker:
         self.tracking_params.update(params)
 
     @staticmethod
-    def _extract_slice_data(data_3d: np.ndarray, slice_idx: int, axis: str) -> np.ndarray:
+    def _extract_slice_data(
+        data_3d: np.ndarray, slice_idx: int, axis: str
+    ) -> np.ndarray:
         """Extract a seismic slice using the same axis convention as the view."""
-        if axis == 'Inline':
+        if axis == "Inline":
             return data_3d[slice_idx, :, :]
-        if axis == 'Crossline':
+        if axis == "Crossline":
             return data_3d[:, slice_idx, :]
         return data_3d[:, :, slice_idx]
 
@@ -164,7 +167,7 @@ class Autotracker:
             return reference
 
         h, w = slice_data.shape
-        half_window = int(self.tracking_params.get('waveform_half_window', 5))
+        half_window = int(self.tracking_params.get("waveform_half_window", 5))
         try:
             phase = self.attributes_processor.compute_phase(slice_data, depth_axis=1)
         except Exception:
@@ -177,13 +180,13 @@ class Autotracker:
             polarity = 0 if abs(sample_value) < 1e-10 else int(np.sign(sample_value))
 
             reference[row_i] = {
-                'col': col_i,
-                'waveform': self._sample_depth_window(
+                "col": col_i,
+                "waveform": self._sample_depth_window(
                     slice_data, row_i, col_i, half_window
                 ),
-                'phase': None if phase is None else float(phase[row_i, col_i]),
-                'polarity': polarity,
-                'sample': sample_value,
+                "phase": None if phase is None else float(phase[row_i, col_i]),
+                "polarity": polarity,
+                "sample": sample_value,
             }
 
         return reference
@@ -224,7 +227,7 @@ class Autotracker:
 
     @staticmethod
     def _regularize_horizon_positions(
-        positions: List[Tuple[int, int]]
+        positions: List[Tuple[int, int]],
     ) -> List[Tuple[int, int]]:
         """
         Collapse a horizon to at most one depth sample per lateral row.
@@ -265,11 +268,11 @@ class Autotracker:
         axis: str,
         slices_to_track: List[int],
         attributes: TrackingAttribute = (
-            TrackingAttribute.AMPLITUDE |
-            TrackingAttribute.EDGE |
-            TrackingAttribute.PHASE |
-            TrackingAttribute.SIMILARITY |
-            TrackingAttribute.WAVEFORM
+            TrackingAttribute.AMPLITUDE
+            | TrackingAttribute.EDGE
+            | TrackingAttribute.PHASE
+            | TrackingAttribute.SIMILARITY
+            | TrackingAttribute.WAVEFORM
         ),
         search_window: int = 15,
         smooth_sigma: float = 2.0,
@@ -286,7 +289,7 @@ class Autotracker:
         fault_attach_apply_col_tolerance: int = 4,
         fault_attach_blend_rows: int = 3,
         progress_callback: Optional[Callable] = None,
-        fault_traces_by_slice: Optional[Dict[int, List[List[Tuple[int, int]]]]] = None
+        fault_traces_by_slice: Optional[Dict[int, List[List[Tuple[int, int]]]]] = None,
     ) -> Tuple[bool, Dict[int, List[Tuple[int, int]]], str]:
         """
         Track horizon through slices using attribute-guided dynamic programming.
@@ -314,28 +317,34 @@ class Autotracker:
             - horizons_dict: {slice_idx: [(row, col), ...]} for each tracked slice
         """
         # Update parameters
-        self.tracking_params.update({
-            'search_window': search_window,
-            'smooth_sigma': smooth_sigma,
-            'max_jump': max_jump,
-            'smoothness_weight': smoothness_weight,
-            'amplitude_weight': amplitude_weight,
-            'edge_weight': edge_weight,
-            'phase_weight': phase_weight,
-            'similarity_weight': similarity_weight,
-            'dip_weight': dip_weight,
-            'fault_snap_weight': fault_snap_weight,
-            'fault_attach_depth_tolerance': fault_attach_depth_tolerance,
-            'fault_attach_apply_row_tolerance': fault_attach_apply_row_tolerance,
-            'fault_attach_apply_col_tolerance': fault_attach_apply_col_tolerance,
-            'fault_attach_blend_rows': fault_attach_blend_rows,
-        })
+        self.tracking_params.update(
+            {
+                "search_window": search_window,
+                "smooth_sigma": smooth_sigma,
+                "max_jump": max_jump,
+                "smoothness_weight": smoothness_weight,
+                "amplitude_weight": amplitude_weight,
+                "edge_weight": edge_weight,
+                "phase_weight": phase_weight,
+                "similarity_weight": similarity_weight,
+                "dip_weight": dip_weight,
+                "fault_snap_weight": fault_snap_weight,
+                "fault_attach_depth_tolerance": fault_attach_depth_tolerance,
+                "fault_attach_apply_row_tolerance": fault_attach_apply_row_tolerance,
+                "fault_attach_apply_col_tolerance": fault_attach_apply_col_tolerance,
+                "fault_attach_blend_rows": fault_attach_blend_rows,
+            }
+        )
 
         def update_progress(msg, pct=None):
             if progress_callback:
                 progress_callback(msg, pct)
 
-        attr_names = attributes.to_list() if attributes != TrackingAttribute.NONE else ['amplitude']
+        attr_names = (
+            attributes.to_list()
+            if attributes != TrackingAttribute.NONE
+            else ["amplitude"]
+        )
         update_progress(f"Starting tracking with: {', '.join(attr_names)}...", 0)
 
         horizons = {}
@@ -343,7 +352,9 @@ class Autotracker:
         horizons[seed_slice_idx] = list(current_positions)
 
         seed_slice_data = self._extract_slice_data(data_3d, seed_slice_idx, axis)
-        self._reference_horizon = self._build_reference_horizon(seed_slice_data, current_positions)
+        self._reference_horizon = self._build_reference_horizon(
+            seed_slice_data, current_positions
+        )
         previous_slice_data = seed_slice_data
 
         total_slices = len(slices_to_track)
@@ -363,7 +374,9 @@ class Autotracker:
                 prev_faults_on_slice = None
                 if fault_traces_by_slice is not None:
                     faults_on_slice = fault_traces_by_slice.get(slice_idx)
-                    prev_faults_on_slice = fault_traces_by_slice.get(prev_slice_idx_for_fault)
+                    prev_faults_on_slice = fault_traces_by_slice.get(
+                        prev_slice_idx_for_fault
+                    )
 
                 # Track horizon on this slice
                 new_positions = self._track_on_slice(
@@ -400,14 +413,21 @@ class Autotracker:
                 # Progress update every 10 slices
                 if (i + 1) % 10 == 0 or i == total_slices - 1:
                     pct = int(100 * (i + 1) / total_slices)
-                    update_progress(f"Processed slice {slice_idx} ({i+1}/{total_slices})", pct)
+                    update_progress(
+                        f"Processed slice {slice_idx} ({i+1}/{total_slices})", pct
+                    )
 
             update_progress(f"Tracking complete: {len(horizons)} slices", 100)
             return True, horizons, f"Tracked {len(horizons)} slices"
 
         except Exception as e:
             import traceback
-            return False, horizons, f"Tracking error: {str(e)}\n{traceback.format_exc()}"
+
+            return (
+                False,
+                horizons,
+                f"Tracking error: {str(e)}\n{traceback.format_exc()}",
+            )
 
     def _track_on_slice(
         self,
@@ -430,35 +450,41 @@ class Autotracker:
             List of updated (row, col) positions
         """
         h, w = slice_data.shape
-        search_window = self.tracking_params['search_window']
+        search_window = self.tracking_params["search_window"]
         seed_positions = self._regularize_horizon_positions(seed_positions)
 
         # Determine which attributes to compute based on selected flags
         attr_types = []
         if attributes & TrackingAttribute.AMPLITUDE:
-            attr_types.append('amplitude')
+            attr_types.append("amplitude")
         if attributes & TrackingAttribute.EDGE:
-            attr_types.append('edge_strength')
+            attr_types.append("edge_strength")
         if attributes & TrackingAttribute.PHASE:
-            attr_types.append('phase')
+            attr_types.append("phase")
         if attributes & TrackingAttribute.SIMILARITY:
-            attr_types.append('similarity')
+            attr_types.append("similarity")
         if attributes & TrackingAttribute.DIP:
-            attr_types.extend(['dip_azimuth', 'dip_magnitude'])
+            attr_types.extend(["dip_azimuth", "dip_magnitude"])
         if attributes & TrackingAttribute.WAVEFORM:
-            if 'phase' not in attr_types:
-                attr_types.append('phase')
+            if "phase" not in attr_types:
+                attr_types.append("phase")
 
         # Ensure at least amplitude is computed
         if not attr_types:
-            attr_types = ['amplitude']
+            attr_types = ["amplitude"]
 
         computed_attrs = self.attributes_processor.compute_slice_attributes(
             slice_data, attr_types, depth_axis=1
         )
 
-        fault_models = self._prepare_fault_models(fault_traces, w=w) if fault_traces else []
-        prev_fault_models = self._prepare_fault_models(prev_fault_traces, w=w) if prev_fault_traces else []
+        fault_models = (
+            self._prepare_fault_models(fault_traces, w=w) if fault_traces else []
+        )
+        prev_fault_models = (
+            self._prepare_fault_models(prev_fault_traces, w=w)
+            if prev_fault_traces
+            else []
+        )
         if not prev_fault_models:
             prev_fault_models = fault_models
         fault_attachment_targets = self._build_fault_attachment_targets(
@@ -481,18 +507,24 @@ class Autotracker:
             # Near faults we widen the vertical search to follow drag/rollover and throw.
             effective_search = int(search_window)
             if prev_fault_models:
-                d_prev = self._fault_distance_abs(row=row, col=expected_col, fault_models=prev_fault_models)
-                influence_w = int(self.tracking_params.get('fault_influence_width', 6))
+                d_prev = self._fault_distance_abs(
+                    row=row, col=expected_col, fault_models=prev_fault_models
+                )
+                influence_w = int(self.tracking_params.get("fault_influence_width", 6))
                 if np.isfinite(d_prev) and d_prev <= influence_w:
-                    mult = int(self.tracking_params.get('fault_search_multiplier', 2))
-                    effective_search = max(effective_search, effective_search * max(1, mult))
+                    mult = int(self.tracking_params.get("fault_search_multiplier", 2))
+                    effective_search = max(
+                        effective_search, effective_search * max(1, mult)
+                    )
 
             col_min = max(0, expected_col - effective_search)
             col_max = min(w, expected_col + effective_search + 1)
             candidate_cols = np.arange(col_min, col_max, dtype=np.int32)
             candidate_costs = np.zeros(candidate_cols.shape[0], dtype=np.float64)
 
-            preferred_side = self._fault_side_sign(row=row, col=expected_col, fault_models=prev_fault_models)
+            preferred_side = self._fault_side_sign(
+                row=row, col=expected_col, fault_models=prev_fault_models
+            )
 
             # If we're near a fault, compute the depth (col) where the fault plane intersects this row.
             # We then attract the picked horizon depth toward that fault-intersection depth, letting the
@@ -500,9 +532,11 @@ class Autotracker:
             fault_snap_target_col = None
             snap_active = False
             if fault_models:
-                snap_row_w = int(self.tracking_params.get('fault_snap_row_width', 4))
-                col_range = int(self.tracking_params.get('fault_snap_col_range', 50))
-                snap_col_tol = int(self.tracking_params.get('fault_snap_activation_col_tolerance', 3))
+                snap_row_w = int(self.tracking_params.get("fault_snap_row_width", 4))
+                col_range = int(self.tracking_params.get("fault_snap_col_range", 50))
+                snap_col_tol = int(
+                    self.tracking_params.get("fault_snap_activation_col_tolerance", 3)
+                )
 
                 # Robust "near fault" test: first find where the fault intersects this row
                 # on the PREVIOUS slice, then test distance there (not at expected_col).
@@ -517,11 +551,13 @@ class Autotracker:
 
                 if prev_intersect_col is not None:
                     prev_col_gap = abs(int(prev_intersect_col) - int(expected_col))
-                    d_prev = self._fault_distance_abs(row=row, col=prev_intersect_col, fault_models=prev_fault_models)
+                    d_prev = self._fault_distance_abs(
+                        row=row, col=prev_intersect_col, fault_models=prev_fault_models
+                    )
                     if (
-                        prev_col_gap <= snap_col_tol and
-                        np.isfinite(d_prev) and
-                        d_prev <= snap_row_w
+                        prev_col_gap <= snap_col_tol
+                        and np.isfinite(d_prev)
+                        and d_prev <= snap_row_w
                     ):
                         # Use previous intersection as anchor to follow moving fault
                         fault_snap_target_col = self._fault_intersection_col_for_row(
@@ -551,7 +587,9 @@ class Autotracker:
                     # If we are explicitly snapping/sticking to the fault, DO NOT apply the barrier.
                     # The barrier is for preventing accidental snapping when far from faults.
                     if not snap_active:
-                        cost += self._fault_barrier_cost(row=row, col=candidate_col, fault_models=fault_models)
+                        cost += self._fault_barrier_cost(
+                            row=row, col=candidate_col, fault_models=fault_models
+                        )
 
                     cost += self._fault_side_cost(
                         row=row,
@@ -565,7 +603,9 @@ class Autotracker:
                     )
                     # Keep the point hugging the moving fault plane when snap is active.
                     if snap_active:
-                        cost += self._fault_proximity_cost(row=row, col=candidate_col, fault_models=fault_models)
+                        cost += self._fault_proximity_cost(
+                            row=row, col=candidate_col, fault_models=fault_models
+                        )
 
                     cost += self._fault_attachment_candidate_cost(
                         row=row,
@@ -589,13 +629,17 @@ class Autotracker:
         )
 
         # Update previous dip for next slice
-        if attributes & TrackingAttribute.DIP and 'dip_azimuth' in computed_attrs:
+        if attributes & TrackingAttribute.DIP and "dip_azimuth" in computed_attrs:
             cols = [p[1] for p in new_positions]
             rows = [p[0] for p in new_positions]
             if cols:
-                avg_dip = np.mean([computed_attrs['dip_azimuth'][r, c] 
-                                   for r, c in zip(rows, cols) 
-                                   if 0 <= r < h and 0 <= c < w])
+                avg_dip = np.mean(
+                    [
+                        computed_attrs["dip_azimuth"][r, c]
+                        for r, c in zip(rows, cols)
+                        if 0 <= r < h and 0 <= c < w
+                    ]
+                )
                 self._prev_dip = avg_dip
 
         return new_positions
@@ -617,8 +661,8 @@ class Autotracker:
         Lower cost = better match for horizon tracking.
         """
         cost = 0.0
-        search_window = self.tracking_params['search_window']
-        smoothness_weight = self.tracking_params['smoothness_weight']
+        search_window = self.tracking_params["search_window"]
+        smoothness_weight = self.tracking_params["smoothness_weight"]
 
         # Distance penalty (prefer staying close to expected position)
         distance = abs(col - expected_col)
@@ -627,9 +671,9 @@ class Autotracker:
 
         # Amplitude-based cost (higher amplitude = lower cost)
         if tracking_attrs & TrackingAttribute.AMPLITUDE:
-            weight = self.tracking_params['amplitude_weight']
-            if 'amplitude' in attributes:
-                amp = attributes['amplitude']
+            weight = self.tracking_params["amplitude_weight"]
+            if "amplitude" in attributes:
+                amp = attributes["amplitude"]
                 amp_val = amp[row, col]
                 amp_max = amp[row, :].max()
                 amp_min = amp[row, :].min()
@@ -639,9 +683,9 @@ class Autotracker:
 
         # Edge-based cost (higher edge strength = lower cost)
         if tracking_attrs & TrackingAttribute.EDGE:
-            weight = self.tracking_params['edge_weight']
-            if 'edge_strength' in attributes:
-                edge = attributes['edge_strength']
+            weight = self.tracking_params["edge_weight"]
+            if "edge_strength" in attributes:
+                edge = attributes["edge_strength"]
                 edge_val = edge[row, col]
                 edge_max = edge[row, :].max()
                 edge_min = edge[row, :].min()
@@ -651,46 +695,58 @@ class Autotracker:
 
         # Phase-based cost (phase continuity)
         if tracking_attrs & TrackingAttribute.PHASE:
-            weight = self.tracking_params['phase_weight']
-            if 'phase' in attributes:
-                phase = attributes['phase']
+            weight = self.tracking_params["phase_weight"]
+            if "phase" in attributes:
+                phase = attributes["phase"]
                 w = phase.shape[1]
                 phase_terms = []
 
                 # Prefer the same instantaneous phase as the original seed event.
-                if reference_info is not None and reference_info.get('phase') is not None:
+                if (
+                    reference_info is not None
+                    and reference_info.get("phase") is not None
+                ):
                     phase_terms.append(
                         self._phase_difference_cost(
-                            float(phase[row, col]), float(reference_info['phase'])
+                            float(phase[row, col]), float(reference_info["phase"])
                         )
                     )
 
                 if 0 < col < w - 1:
                     # Weak fallback: prefer positions where phase changes rapidly.
-                    phase_grad = abs(phase[row, col+1] - phase[row, col-1])
+                    phase_grad = abs(phase[row, col + 1] - phase[row, col - 1])
                     phase_grads = np.abs(np.diff(phase[row, :]))
                     max_grad = phase_grads.max() if len(phase_grads) > 0 else 1.0
                     if max_grad > 0:
                         phase_terms.append(0.25 * (1.0 - phase_grad / (2 * max_grad)))
 
                 if phase_terms:
-                    phase_lock_w = float(self.tracking_params.get('phase_lock_weight', 0.35))
+                    phase_lock_w = float(
+                        self.tracking_params.get("phase_lock_weight", 0.35)
+                    )
                     phase_cost = float(np.mean(phase_terms))
                     cost += phase_cost * weight * (1.0 + phase_lock_w)
 
                 if slice_data is not None and reference_info is not None:
-                    ref_polarity = int(reference_info.get('polarity', 0))
+                    ref_polarity = int(reference_info.get("polarity", 0))
                     if ref_polarity != 0:
                         sample_value = float(slice_data[row, col])
-                        polarity = 0 if abs(sample_value) < 1e-10 else int(np.sign(sample_value))
+                        polarity = (
+                            0
+                            if abs(sample_value) < 1e-10
+                            else int(np.sign(sample_value))
+                        )
                         if polarity != 0 and polarity != ref_polarity:
-                            cost += float(self.tracking_params.get('polarity_weight', 0.2)) * weight
+                            cost += (
+                                float(self.tracking_params.get("polarity_weight", 0.2))
+                                * weight
+                            )
 
         # Similarity-based cost (higher similarity = lower cost)
         if tracking_attrs & TrackingAttribute.SIMILARITY:
-            weight = self.tracking_params['similarity_weight']
-            if 'similarity' in attributes:
-                sim = attributes['similarity']
+            weight = self.tracking_params["similarity_weight"]
+            if "similarity" in attributes:
+                sim = attributes["similarity"]
                 sim_val = sim[row, col]
                 sim_cost = 1.0 - (sim_val + 1) / 2  # Normalize [-1,1] to [0,1]
                 cost += sim_cost * weight
@@ -698,8 +754,8 @@ class Autotracker:
         # Waveform/template identity cost. Similarity enables this too because
         # both terms are testing whether the candidate belongs to the same event.
         if (
-            (tracking_attrs & TrackingAttribute.SIMILARITY) or
-            (tracking_attrs & TrackingAttribute.WAVEFORM)
+            (tracking_attrs & TrackingAttribute.SIMILARITY)
+            or (tracking_attrs & TrackingAttribute.WAVEFORM)
         ) and slice_data is not None:
             waveform_cost = self._compute_waveform_identity_cost(
                 slice_data=slice_data,
@@ -711,21 +767,25 @@ class Autotracker:
             )
             if waveform_cost is not None:
                 if tracking_attrs & TrackingAttribute.WAVEFORM:
-                    waveform_weight = float(self.tracking_params.get('waveform_weight', 0.45))
+                    waveform_weight = float(
+                        self.tracking_params.get("waveform_weight", 0.45)
+                    )
                 else:
-                    waveform_weight = 2.0 * float(self.tracking_params.get('similarity_weight', 0.25))
+                    waveform_weight = 2.0 * float(
+                        self.tracking_params.get("similarity_weight", 0.25)
+                    )
                 cost += waveform_cost * waveform_weight
 
         # Dip-based cost (prefer consistent dip direction)
         if tracking_attrs & TrackingAttribute.DIP:
-            weight = self.tracking_params['dip_weight']
-            if 'dip_azimuth' in attributes and 'dip_magnitude' in attributes:
-                dip_az = attributes['dip_azimuth']
-                dip_mag = attributes['dip_magnitude']
-                
+            weight = self.tracking_params["dip_weight"]
+            if "dip_azimuth" in attributes and "dip_magnitude" in attributes:
+                dip_az = attributes["dip_azimuth"]
+                dip_mag = attributes["dip_magnitude"]
+
                 current_dip = dip_az[row, col]
                 current_mag = dip_mag[row, col]
-                
+
                 # Prefer positions with consistent dip direction from previous slice
                 if self._prev_dip is not None:
                     # Angular difference (handle wrap-around)
@@ -758,7 +818,7 @@ class Autotracker:
         wavelet as the previous propagated pick and the original seed get lower
         cost than merely bright neighboring events.
         """
-        half_window = int(self.tracking_params.get('waveform_half_window', 5))
+        half_window = int(self.tracking_params.get("waveform_half_window", 5))
         current_window = self._sample_depth_window(slice_data, row, col, half_window)
         costs = []
 
@@ -769,10 +829,12 @@ class Autotracker:
             corr = self._normalized_correlation(current_window, previous_window)
             costs.append((1.0 - corr) * 0.5)
 
-        if reference_info is not None and reference_info.get('waveform') is not None:
-            ref_window = np.asarray(reference_info['waveform'], dtype=np.float64)
+        if reference_info is not None and reference_info.get("waveform") is not None:
+            ref_window = np.asarray(reference_info["waveform"], dtype=np.float64)
             corr = self._normalized_correlation(current_window, ref_window)
-            ref_weight = float(self.tracking_params.get('reference_template_weight', 0.35))
+            ref_weight = float(
+                self.tracking_params.get("reference_template_weight", 0.35)
+            )
             costs.append(ref_weight * ((1.0 - corr) * 0.5))
 
         if not costs:
@@ -804,9 +866,11 @@ class Autotracker:
         prev_costs = node_costs_by_row[0].astype(np.float64, copy=True)
         backptrs: List[np.ndarray] = []
 
-        dip_weight = float(self.tracking_params.get('horizon_dip_weight', 0.35))
-        curvature_weight = float(self.tracking_params.get('horizon_curvature_weight', 0.15))
-        max_jump = max(float(self.tracking_params.get('max_jump', 3)), 1.0)
+        dip_weight = float(self.tracking_params.get("horizon_dip_weight", 0.35))
+        curvature_weight = float(
+            self.tracking_params.get("horizon_curvature_weight", 0.15)
+        )
+        max_jump = max(float(self.tracking_params.get("max_jump", 3)), 1.0)
 
         for i in range(1, len(rows)):
             prev_candidates = candidate_cols_by_row[i - 1].astype(np.float64)
@@ -824,9 +888,10 @@ class Autotracker:
             # Penalize sharp kinks relative to the previous horizon shape.
             if i >= 2:
                 prev_expected_step = float(expected_cols[i - 1] - expected_cols[i - 2])
-                transition += curvature_weight * (
-                    (candidate_step - prev_expected_step) / allowed_step
-                ) ** 2
+                transition += (
+                    curvature_weight
+                    * ((candidate_step - prev_expected_step) / allowed_step) ** 2
+                )
 
             if fault_models:
                 transition *= self._fault_transition_scale(
@@ -864,17 +929,23 @@ class Autotracker:
         fault_models: List[Tuple[int, int, np.ndarray]],
     ) -> float:
         """Relax path-shape penalties when the segment is close to a fault."""
-        influence_w = int(self.tracking_params.get('fault_influence_width', 4))
-        d0 = self._fault_distance_abs(row=row0, col=expected_col0, fault_models=fault_models)
-        d1 = self._fault_distance_abs(row=row1, col=expected_col1, fault_models=fault_models)
-        if (np.isfinite(d0) and d0 <= influence_w) or (np.isfinite(d1) and d1 <= influence_w):
+        influence_w = int(self.tracking_params.get("fault_influence_width", 4))
+        d0 = self._fault_distance_abs(
+            row=row0, col=expected_col0, fault_models=fault_models
+        )
+        d1 = self._fault_distance_abs(
+            row=row1, col=expected_col1, fault_models=fault_models
+        )
+        if (np.isfinite(d0) and d0 <= influence_w) or (
+            np.isfinite(d1) and d1 <= influence_w
+        ):
             return 0.35
         return 1.0
 
     def _smooth_positions(
         self,
         positions: List[Tuple[int, int]],
-        fault_traces: Optional[List[List[Tuple[int, int]]]] = None
+        fault_traces: Optional[List[List[Tuple[int, int]]]] = None,
     ) -> List[Tuple[int, int]]:
         """
         Apply smoothing to horizon positions.
@@ -898,12 +969,17 @@ class Autotracker:
         if not fault_models:
             return self._smooth_positions_segment(positions)
 
-        break_width = int(self.tracking_params.get('fault_break_width', 1))
+        break_width = int(self.tracking_params.get("fault_break_width", 1))
 
         # Identify points that sit on/very near a fault
         is_break = []
         for r, c in positions:
-            is_break.append(self._fault_distance_abs(row=int(r), col=int(c), fault_models=fault_models) <= break_width)
+            is_break.append(
+                self._fault_distance_abs(
+                    row=int(r), col=int(c), fault_models=fault_models
+                )
+                <= break_width
+            )
 
         if not any(is_break):
             return self._smooth_positions_segment(positions)
@@ -925,7 +1001,9 @@ class Autotracker:
 
         return out
 
-    def _smooth_positions_segment(self, positions: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
+    def _smooth_positions_segment(
+        self, positions: List[Tuple[int, int]]
+    ) -> List[Tuple[int, int]]:
         """Smooth a continuous horizon segment (no fault throw inside)."""
         if len(positions) < 5:
             return positions
@@ -935,11 +1013,11 @@ class Autotracker:
 
         cols_smoothed = median_filter(cols, size=5)
 
-        sigma = self.tracking_params['smooth_sigma']
+        sigma = self.tracking_params["smooth_sigma"]
         if sigma > 0:
             cols_smoothed = gaussian_filter1d(cols_smoothed, sigma=sigma)
 
-        max_jump = self.tracking_params['max_jump']
+        max_jump = self.tracking_params["max_jump"]
         for j in range(1, len(cols_smoothed)):
             diff = cols_smoothed[j] - cols_smoothed[j - 1]
             row_gap = max(abs(int(rows[j]) - int(rows[j - 1])), 1)
@@ -951,8 +1029,7 @@ class Autotracker:
 
     @staticmethod
     def _prepare_fault_models(
-        fault_traces: Optional[List[List[Tuple[int, int]]]],
-        w: int
+        fault_traces: Optional[List[List[Tuple[int, int]]]], w: int
     ) -> List[Tuple[int, int, np.ndarray]]:
         """
         Prepare interpolated fault row=f(col) models for fast lookup.
@@ -990,12 +1067,16 @@ class Autotracker:
             if col_max <= col_min:
                 continue
             grid = np.arange(col_min, col_max + 1, dtype=np.int32)
-            rows_interp = np.interp(grid.astype(np.float64), cols_u.astype(np.float64), rows_u)
+            rows_interp = np.interp(
+                grid.astype(np.float64), cols_u.astype(np.float64), rows_u
+            )
             models.append((col_min, col_max, rows_interp.astype(np.float64)))
 
         return models
 
-    def _fault_distance_abs(self, row: int, col: int, fault_models: List[Tuple[int, int, np.ndarray]]) -> float:
+    def _fault_distance_abs(
+        self, row: int, col: int, fault_models: List[Tuple[int, int, np.ndarray]]
+    ) -> float:
         """Return absolute distance (in row pixels) to the nearest fault at this col."""
         best = np.inf
         for col_min, col_max, rows_interp in fault_models:
@@ -1005,10 +1086,12 @@ class Autotracker:
             best = min(best, abs(float(row) - fault_row))
         return float(best)
 
-    def _fault_barrier_cost(self, row: int, col: int, fault_models: List[Tuple[int, int, np.ndarray]]) -> float:
+    def _fault_barrier_cost(
+        self, row: int, col: int, fault_models: List[Tuple[int, int, np.ndarray]]
+    ) -> float:
         """Penalty for being too close to a fault (avoid snapping onto faults)."""
-        width = int(self.tracking_params.get('fault_barrier_width', 2))
-        weight = float(self.tracking_params.get('fault_barrier_weight', 2.0))
+        width = int(self.tracking_params.get("fault_barrier_width", 2))
+        weight = float(self.tracking_params.get("fault_barrier_weight", 2.0))
 
         d = self._fault_distance_abs(row=row, col=col, fault_models=fault_models)
         if not np.isfinite(d) or d > width:
@@ -1017,7 +1100,9 @@ class Autotracker:
         # Strong penalty near the fault, tapering to 0 at width
         return weight * (1.0 - (d / max(width, 1)))
 
-    def _fault_side_sign(self, row: int, col: int, fault_models: List[Tuple[int, int, np.ndarray]]) -> int:
+    def _fault_side_sign(
+        self, row: int, col: int, fault_models: List[Tuple[int, int, np.ndarray]]
+    ) -> int:
         """
         Determine which side of the nearest fault the point is on.
 
@@ -1059,7 +1144,7 @@ class Autotracker:
             return 0.0
 
         # Allow ambiguity right on the fault
-        break_w = int(self.tracking_params.get('fault_break_width', 1))
+        break_w = int(self.tracking_params.get("fault_break_width", 1))
         d = self._fault_distance_abs(row=row, col=col, fault_models=fault_models)
         if np.isfinite(d) and d <= break_w:
             return 0.0
@@ -1068,7 +1153,7 @@ class Autotracker:
         if side == 0 or side == preferred_side:
             return 0.0
 
-        return float(self.tracking_params.get('fault_side_weight', 8.0))
+        return float(self.tracking_params.get("fault_side_weight", 8.0))
 
     def _fault_intersection_col_for_row(
         self,
@@ -1093,7 +1178,7 @@ class Autotracker:
             if hi < lo:
                 continue
 
-            seg = rows_interp[(lo - col_min):(hi - col_min + 1)]
+            seg = rows_interp[(lo - col_min) : (hi - col_min + 1)]
             if seg.size == 0:
                 continue
 
@@ -1115,11 +1200,13 @@ class Autotracker:
         if target_col is None:
             return 0.0
 
-        max_delta = float(max(int(self.tracking_params.get('fault_snap_col_range', 50)), 1))
-        w = float(self.tracking_params.get('fault_snap_weight', 3.0))
+        max_delta = float(
+            max(int(self.tracking_params.get("fault_snap_col_range", 50)), 1)
+        )
+        w = float(self.tracking_params.get("fault_snap_weight", 3.0))
         # Quadratic pull to avoid drifting away as the fault moves
         x = abs(float(candidate_col) - float(target_col)) / max_delta
-        return w * (x ** 2)
+        return w * (x**2)
 
     def _fault_proximity_cost(
         self,
@@ -1133,15 +1220,17 @@ class Autotracker:
         This penalizes row-distance to the fault at the candidate depth (col). Since row is fixed,
         this effectively favors candidate depths where the fault intersects this row.
         """
-        snap_row_w = float(max(int(self.tracking_params.get('fault_snap_row_width', 4)), 1))
+        snap_row_w = float(
+            max(int(self.tracking_params.get("fault_snap_row_width", 4)), 1)
+        )
         # Use the same weight as snap (scaled down) so it doesn't override seismic attributes.
-        w = float(self.tracking_params.get('fault_snap_weight', 3.0)) * 0.5
+        w = float(self.tracking_params.get("fault_snap_weight", 3.0)) * 0.5
 
         d = self._fault_distance_abs(row=row, col=col, fault_models=fault_models)
         if not np.isfinite(d):
             return 0.0
         x = min(d / snap_row_w, 1.0)
-        return w * (x ** 2)
+        return w * (x**2)
 
     @staticmethod
     def _fault_model_width_from_traces(
@@ -1199,13 +1288,15 @@ class Autotracker:
         if not targets:
             return 0.0
 
-        row_tol = max(int(self.tracking_params.get('fault_attach_apply_row_tolerance', 8)), 1)
+        row_tol = max(
+            int(self.tracking_params.get("fault_attach_apply_row_tolerance", 8)), 1
+        )
         col_range = max(
-            int(self.tracking_params.get('fault_snap_col_range', 40)),
-            int(self.tracking_params.get('search_window', 15)),
+            int(self.tracking_params.get("fault_snap_col_range", 40)),
+            int(self.tracking_params.get("search_window", 15)),
             1,
         )
-        weight = float(self.tracking_params.get('fault_attach_candidate_weight', 6.0))
+        weight = float(self.tracking_params.get("fault_attach_candidate_weight", 6.0))
 
         best = np.inf
         for target_row, target_col in targets:
@@ -1214,7 +1305,7 @@ class Autotracker:
                 continue
             row_factor = 1.0 - (row_delta / float(row_tol + 1))
             col_delta = abs(float(candidate_col) - float(target_col)) / float(col_range)
-            cost = weight * row_factor * (col_delta ** 2)
+            cost = weight * row_factor * (col_delta**2)
             if cost < best:
                 best = cost
         return 0.0 if not np.isfinite(best) else float(best)
@@ -1277,13 +1368,15 @@ class Autotracker:
         best_point = None
         prev_sample = None
 
-        touch_tol = float(max(int(self.tracking_params.get('fault_break_width', 1)), 1))
+        touch_tol = float(max(int(self.tracking_params.get("fault_break_width", 1)), 1))
 
         for k in range(n_samples + 1):
             t = float(k) / float(n_samples)
             row = row0 + t * (row1 - row0)
             col = col0 + t * (col1 - col0)
-            offset = self._fault_signed_offset_on_model(row=row, col=col, fault_model=fault_model)
+            offset = self._fault_signed_offset_on_model(
+                row=row, col=col, fault_model=fault_model
+            )
             if offset is None:
                 continue
 
@@ -1295,8 +1388,10 @@ class Autotracker:
             if prev_sample is not None:
                 prev_row, prev_col, prev_offset = prev_sample
                 if (
-                    prev_offset == 0.0 or offset == 0.0 or
-                    (prev_offset < 0.0 < offset) or (prev_offset > 0.0 > offset)
+                    prev_offset == 0.0
+                    or offset == 0.0
+                    or (prev_offset < 0.0 < offset)
+                    or (prev_offset > 0.0 > offset)
                 ):
                     denom = abs(prev_offset) + abs(offset)
                     frac = 0.5 if denom == 0.0 else abs(prev_offset) / denom
@@ -1361,10 +1456,12 @@ class Autotracker:
 
         best_target = None
         best_score = np.inf
-        depth_tol = int(self.tracking_params.get('fault_attach_depth_tolerance', 2))
+        depth_tol = int(self.tracking_params.get("fault_attach_depth_tolerance", 2))
 
         candidate_indices = list(range(len(fault_models)))
-        if preferred_model_index is not None and 0 <= preferred_model_index < len(fault_models):
+        if preferred_model_index is not None and 0 <= preferred_model_index < len(
+            fault_models
+        ):
             candidate_indices = [preferred_model_index] + [
                 idx for idx in candidate_indices if idx != preferred_model_index
             ]
@@ -1385,11 +1482,12 @@ class Autotracker:
                 continue
             # If the current fault does not exist at nearly the same depth, do not
             # snap to the fault top/bottom just because it is nearby.
-            row_at_nearest_col = self._fault_row_on_model_at_col(fault_model, nearest_col)
+            row_at_nearest_col = self._fault_row_on_model_at_col(
+                fault_model, nearest_col
+            )
             if row_at_nearest_col is not None:
-                score = (
-                    abs(float(row_at_nearest_col) - float(anchor_row)) +
-                    0.5 * abs(float(nearest_col) - float(anchor_col))
+                score = abs(float(row_at_nearest_col) - float(anchor_row)) + 0.5 * abs(
+                    float(nearest_col) - float(anchor_col)
                 )
                 if score < best_score:
                     best_score = score
@@ -1411,10 +1509,10 @@ class Autotracker:
         if not positions:
             return False
 
-        row_tol = int(self.tracking_params.get('fault_attach_apply_row_tolerance', 8))
-        col_tol = int(self.tracking_params.get('fault_attach_apply_col_tolerance', 4))
-        snap_col_range = int(self.tracking_params.get('fault_snap_col_range', 40))
-        search_window = int(self.tracking_params.get('search_window', 15))
+        row_tol = int(self.tracking_params.get("fault_attach_apply_row_tolerance", 8))
+        col_tol = int(self.tracking_params.get("fault_attach_apply_col_tolerance", 4))
+        snap_col_range = int(self.tracking_params.get("fault_snap_col_range", 40))
+        search_window = int(self.tracking_params.get("search_window", 15))
         # DP/waveform terms can choose a nearby same-event sample before the final
         # fault-contact snap. Keep the row guard strict, but allow enough vertical
         # slack for known moving fault anchors to be applied.
@@ -1455,7 +1553,7 @@ class Autotracker:
         updated = list((int(r), int(c)) for r, c in positions)
         updated[idx] = (int(target_row), int(target_col))
 
-        blend_rows = int(self.tracking_params.get('fault_attach_blend_rows', 3))
+        blend_rows = int(self.tracking_params.get("fault_attach_blend_rows", 3))
         if blend_rows > 0:
             for j, (row, col) in enumerate(updated):
                 if j == idx:
@@ -1464,7 +1562,9 @@ class Autotracker:
                 if dist == 0 or dist > blend_rows:
                     continue
                 alpha = 1.0 - (dist / float(blend_rows + 1))
-                blended_col = int(round((1.0 - alpha) * float(col) + alpha * float(target_col)))
+                blended_col = int(
+                    round((1.0 - alpha) * float(col) + alpha * float(target_col))
+                )
                 updated[j] = (int(row), blended_col)
 
         updated.sort(key=lambda p: (int(p[0]), int(p[1])))
@@ -1480,7 +1580,12 @@ class Autotracker:
         """
         Keep horizon/fault crossing points attached as the propagated fault moves.
         """
-        if not positions or not prev_positions or not fault_traces or not prev_fault_traces:
+        if (
+            not positions
+            or not prev_positions
+            or not fault_traces
+            or not prev_fault_traces
+        ):
             return positions
 
         w = self._fault_model_width_from_traces(
@@ -1525,13 +1630,11 @@ class Autotracker:
 
         return updated
 
-    def compute_tracking_quality(self, horizons: Dict[int, List[Tuple[int, int]]]) -> Dict[str, float]:
+    def compute_tracking_quality(
+        self, horizons: Dict[int, List[Tuple[int, int]]]
+    ) -> Dict[str, float]:
         """Compute quality metrics for tracking results."""
-        metrics = {
-            'path_smoothness': 0.0,
-            'coverage': 0.0,
-            'overall_quality': 0.0
-        }
+        metrics = {"path_smoothness": 0.0, "coverage": 0.0, "overall_quality": 0.0}
 
         if not horizons:
             return metrics
@@ -1546,10 +1649,10 @@ class Autotracker:
                 smoothness_scores.append(1.0 / (1.0 + curvature))
 
         if smoothness_scores:
-            metrics['path_smoothness'] = np.mean(smoothness_scores)
+            metrics["path_smoothness"] = np.mean(smoothness_scores)
 
-        metrics['coverage'] = len(horizons)
-        metrics['overall_quality'] = metrics['path_smoothness']
+        metrics["coverage"] = len(horizons)
+        metrics["overall_quality"] = metrics["path_smoothness"]
 
         return metrics
 
@@ -1576,7 +1679,7 @@ def propagate_horizon(
     fault_attach_apply_col_tolerance: int = 4,
     fault_attach_blend_rows: int = 3,
     progress_callback: Optional[Callable] = None,
-    fault_traces_by_slice: Optional[Dict[int, List[List[Tuple[int, int]]]]] = None
+    fault_traces_by_slice: Optional[Dict[int, List[List[Tuple[int, int]]]]] = None,
 ) -> Tuple[bool, Dict[int, List[Tuple[int, int]]], str]:
     """
     Main function to propagate horizon using attribute-guided tracking.
@@ -1595,7 +1698,7 @@ def propagate_horizon(
         max_jump: Maximum allowed jump between adjacent slices (samples)
         smoothness_weight: Weight for preferring smooth paths (0-1)
         amplitude_weight: Weight for amplitude tracking
-        edge_weight: Weight for edge strength tracking  
+        edge_weight: Weight for edge strength tracking
         phase_weight: Weight for phase continuity tracking
         similarity_weight: Weight for similarity tracking
         dip_weight: Weight for dip direction tracking
@@ -1606,7 +1709,7 @@ def propagate_horizon(
     """
     # Default to event-identity tracking, not just strong-event tracking.
     if attributes is None or len(attributes) == 0:
-        attributes = ['amplitude', 'edge', 'phase', 'similarity', 'waveform']
+        attributes = ["amplitude", "edge", "phase", "similarity", "waveform"]
 
     # Convert string list to flag
     tracking_attrs = TrackingAttribute.from_strings(attributes)
@@ -1636,47 +1739,49 @@ def propagate_horizon(
         fault_attach_apply_col_tolerance=fault_attach_apply_col_tolerance,
         fault_attach_blend_rows=fault_attach_blend_rows,
         progress_callback=progress_callback,
-        fault_traces_by_slice=fault_traces_by_slice
+        fault_traces_by_slice=fault_traces_by_slice,
     )
 
 
 # ==================== FAULT TRACKING ====================
 
+
 class FaultAttribute(Flag):
     """Fault tracking attributes that can be combined."""
+
     NONE = 0
-    VERTICAL_EDGE = auto()    # Vertical edge strength (most important)
-    DISCONTINUITY = auto()    # Reflector discontinuity
-    VARIANCE = auto()         # Local variance
-    LIKELIHOOD = auto()       # Combined fault likelihood
-    
+    VERTICAL_EDGE = auto()  # Vertical edge strength (most important)
+    DISCONTINUITY = auto()  # Reflector discontinuity
+    VARIANCE = auto()  # Local variance
+    LIKELIHOOD = auto()  # Combined fault likelihood
+
     @classmethod
-    def from_strings(cls, attr_list: List[str]) -> 'FaultAttribute':
+    def from_strings(cls, attr_list: List[str]) -> "FaultAttribute":
         """Convert list of attribute names to combined flag."""
         result = cls.NONE
         mapping = {
-            'vertical_edge': cls.VERTICAL_EDGE,
-            'edge': cls.VERTICAL_EDGE,
-            'discontinuity': cls.DISCONTINUITY,
-            'variance': cls.VARIANCE,
-            'likelihood': cls.LIKELIHOOD,
+            "vertical_edge": cls.VERTICAL_EDGE,
+            "edge": cls.VERTICAL_EDGE,
+            "discontinuity": cls.DISCONTINUITY,
+            "variance": cls.VARIANCE,
+            "likelihood": cls.LIKELIHOOD,
         }
         for attr in attr_list:
             if attr.lower() in mapping:
                 result |= mapping[attr.lower()]
         return result
-    
+
     def to_list(self) -> List[str]:
         """Convert flag to list of attribute names."""
         result = []
         if self & FaultAttribute.VERTICAL_EDGE:
-            result.append('vertical_edge')
+            result.append("vertical_edge")
         if self & FaultAttribute.DISCONTINUITY:
-            result.append('discontinuity')
+            result.append("discontinuity")
         if self & FaultAttribute.VARIANCE:
-            result.append('variance')
+            result.append("variance")
         if self & FaultAttribute.LIKELIHOOD:
-            result.append('likelihood')
+            result.append("likelihood")
         return result
 
 
@@ -1696,17 +1801,17 @@ class FaultTracker:
         # Default fault tracking parameters - more aggressive than horizons
         # Faults can shift significantly between slices
         self.tracking_params = {
-            'search_window': 20,         # Wider search - faults shift more than horizons
-            'smooth_sigma': 0.8,         # Less smoothing - allow more variation
-            'max_jump': 5,               # Allow bigger jumps for faults
-            'vertical_edge_weight': 0.6, # Strong weight for vertical edges (key fault feature)
-            'discontinuity_weight': 0.4, # Discontinuity indicates fault
-            'variance_weight': 0.2,      # Variance can help
-            'smoothness_weight': 0.1,    # LOW smoothness - let attributes guide more
+            "search_window": 20,  # Wider search - faults shift more than horizons
+            "smooth_sigma": 0.8,  # Less smoothing - allow more variation
+            "max_jump": 5,  # Allow bigger jumps for faults
+            "vertical_edge_weight": 0.6,  # Strong weight for vertical edges (key fault feature)
+            "discontinuity_weight": 0.4,  # Discontinuity indicates fault
+            "variance_weight": 0.2,  # Variance can help
+            "smoothness_weight": 0.1,  # LOW smoothness - let attributes guide more
             # New: smoothness of the fault trace *along depth* (prevents zig-zag jitter)
-            'depth_smoothness_weight': 0.6,
+            "depth_smoothness_weight": 0.6,
             # New: how strongly we stay close to previous slice position (per depth sample)
-            'prior_weight': 0.4,
+            "prior_weight": 0.4,
         }
 
     def set_tracking_parameters(self, **params):
@@ -1720,7 +1825,8 @@ class FaultTracker:
         seed_slice_idx: int,
         axis: str,
         slices_to_track: List[int],
-        attributes: FaultAttribute = FaultAttribute.VERTICAL_EDGE | FaultAttribute.DISCONTINUITY,
+        attributes: FaultAttribute = FaultAttribute.VERTICAL_EDGE
+        | FaultAttribute.DISCONTINUITY,
         search_window: int = 20,
         smooth_sigma: float = 0.8,
         max_jump: int = 5,
@@ -1728,14 +1834,14 @@ class FaultTracker:
         discontinuity_weight: float = 0.4,
         variance_weight: float = 0.2,
         smoothness_weight: float = 0.1,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
     ) -> Tuple[bool, Dict[int, List[Tuple[int, int]]], str]:
         """
         Track fault through slices.
-        
+
         Faults are tracked vertically on each slice (down the rows),
         then the fault position is propagated to adjacent slices.
-        
+
         Args:
             data_3d: 3D seismic data array
             seed_points: List of (row, col) seed points on the fault
@@ -1756,45 +1862,51 @@ class FaultTracker:
             (success, faults_dict, message)
             - faults_dict: {slice_idx: [(row, col), ...]} fault trace per slice
         """
-        self.tracking_params.update({
-            'search_window': search_window,
-            'smooth_sigma': smooth_sigma,
-            'max_jump': max_jump,
-            'vertical_edge_weight': vertical_edge_weight,
-            'discontinuity_weight': discontinuity_weight,
-            'variance_weight': variance_weight,
-            'smoothness_weight': smoothness_weight,
-        })
+        self.tracking_params.update(
+            {
+                "search_window": search_window,
+                "smooth_sigma": smooth_sigma,
+                "max_jump": max_jump,
+                "vertical_edge_weight": vertical_edge_weight,
+                "discontinuity_weight": discontinuity_weight,
+                "variance_weight": variance_weight,
+                "smoothness_weight": smoothness_weight,
+            }
+        )
 
         def update_progress(msg, pct=None):
             if progress_callback:
                 progress_callback(msg, pct)
 
-        attr_names = attributes.to_list() if attributes != FaultAttribute.NONE else ['vertical_edge']
+        attr_names = (
+            attributes.to_list()
+            if attributes != FaultAttribute.NONE
+            else ["vertical_edge"]
+        )
         update_progress(f"Starting fault tracking with: {', '.join(attr_names)}...", 0)
 
         faults = {}
-        
+
         # IMPORTANT: The seed_points from the user's drawn line ARE the fault trace
         # We do NOT extend vertically - the user has already defined where the fault is
         # We just propagate this trace horizontally to adjacent slices
-        
+
         # Sort seed points by row (vertical position) and use them directly
         seed_fault = sorted(seed_points, key=lambda p: p[0])
         faults[seed_slice_idx] = seed_fault
-        
+
         current_fault = seed_fault
         total_slices = len(slices_to_track)
-        
+
         if total_slices == 0:
             return True, faults, "No slices to track"
 
         try:
             for i, slice_idx in enumerate(slices_to_track):
                 # Extract slice data
-                if axis == 'Inline':
+                if axis == "Inline":
                     slice_data = data_3d[slice_idx, :, :]
-                elif axis == 'Crossline':
+                elif axis == "Crossline":
                     slice_data = data_3d[:, slice_idx, :]
                 else:
                     slice_data = data_3d[:, :, slice_idx]
@@ -1803,63 +1915,70 @@ class FaultTracker:
                 new_fault = self._propagate_fault_to_slice(
                     slice_data, current_fault, attributes
                 )
-                
+
                 # Smooth the fault trace
                 new_fault = self._smooth_fault_trace(new_fault)
-                
+
                 faults[slice_idx] = new_fault
                 current_fault = new_fault
 
                 if (i + 1) % 10 == 0 or i == total_slices - 1:
                     pct = int(100 * (i + 1) / total_slices)
-                    update_progress(f"Processed slice {slice_idx} ({i+1}/{total_slices})", pct)
+                    update_progress(
+                        f"Processed slice {slice_idx} ({i+1}/{total_slices})", pct
+                    )
 
             update_progress(f"Fault tracking complete: {len(faults)} slices", 100)
             return True, faults, f"Tracked fault on {len(faults)} slices"
 
         except Exception as e:
             import traceback
-            return False, faults, f"Fault tracking error: {str(e)}\n{traceback.format_exc()}"
+
+            return (
+                False,
+                faults,
+                f"Fault tracking error: {str(e)}\n{traceback.format_exc()}",
+            )
 
     def _track_fault_on_slice(
         self,
         slice_data: np.ndarray,
         seed_points: List[Tuple[int, int]],
-        attributes: FaultAttribute
+        attributes: FaultAttribute,
     ) -> List[Tuple[int, int]]:
         """
         Track fault vertically on a single slice starting from seed points.
         Extends the fault trace both up and down from the seeds.
         """
         h, w = slice_data.shape
-        
+
         # Compute fault attributes
         fault_attrs = self.attributes_processor.compute_fault_attributes(slice_data)
-        
+
         # Sort seed points by row
         seed_points = sorted(seed_points, key=lambda p: p[0])
-        
+
         # Get initial column positions from seeds
         if len(seed_points) == 1:
             seed_row, seed_col = seed_points[0]
         else:
             # Use average column from multiple seeds
             seed_col = int(np.mean([p[1] for p in seed_points]))
-            seed_row = seed_points[len(seed_points)//2][0]
-        
+            seed_row = seed_points[len(seed_points) // 2][0]
+
         # Track upward from seed
         upper_trace = self._track_fault_direction(
             fault_attrs, seed_row, seed_col, -1, h, w, attributes
         )
-        
+
         # Track downward from seed
         lower_trace = self._track_fault_direction(
             fault_attrs, seed_row, seed_col, 1, h, w, attributes
         )
-        
+
         # Combine traces (upper reversed + seed + lower)
         full_trace = upper_trace[::-1] + [(seed_row, seed_col)] + lower_trace
-        
+
         return full_trace
 
     def _track_fault_direction(
@@ -1870,27 +1989,27 @@ class FaultTracker:
         direction: int,
         h: int,
         w: int,
-        attributes: FaultAttribute
+        attributes: FaultAttribute,
     ) -> List[Tuple[int, int]]:
         """
         Track fault in one direction (up or down).
-        
+
         Args:
             direction: -1 for up, +1 for down
         """
         trace = []
         current_col = start_col
-        search_window = self.tracking_params['search_window']
-        
+        search_window = self.tracking_params["search_window"]
+
         row = start_row + direction
         while 0 <= row < h:
             # Search for best column position
             col_min = max(0, current_col - search_window)
             col_max = min(w, current_col + search_window + 1)
-            
+
             best_col = current_col
-            best_cost = float('inf')
-            
+            best_cost = float("inf")
+
             for candidate_col in range(col_min, col_max):
                 cost = self._compute_fault_cost(
                     fault_attrs, row, candidate_col, current_col, attributes
@@ -1898,27 +2017,27 @@ class FaultTracker:
                 if cost < best_cost:
                     best_cost = cost
                     best_col = candidate_col
-            
+
             trace.append((row, best_col))
             current_col = best_col
             row += direction
-        
+
         return trace
 
     def _propagate_fault_to_slice(
         self,
         slice_data: np.ndarray,
         prev_fault: List[Tuple[int, int]],
-        attributes: FaultAttribute
+        attributes: FaultAttribute,
     ) -> List[Tuple[int, int]]:
         """
         Propagate fault from previous slice to current slice.
-        
+
         For faults:
         - Each point has (row, col) where row=X position, col=Z/depth position
         - The fault is vertical (varying col/Z)
         - As we move through slices, the fault shifts horizontally (in row/X)
-        
+
         So we keep the Z position (col) fixed and search in X (row) direction.
         """
         h, w = slice_data.shape
@@ -1936,10 +2055,10 @@ class FaultTracker:
 
         norm_attrs = self._normalize_fault_attrs(fault_attrs)
 
-        search_window = int(self.tracking_params['search_window'])
-        max_jump = max(1, int(self.tracking_params['max_jump']))
-        depth_smooth_w = float(self.tracking_params.get('depth_smoothness_weight', 0.6))
-        prior_w = float(self.tracking_params.get('prior_weight', 0.4))
+        search_window = int(self.tracking_params["search_window"])
+        max_jump = max(1, int(self.tracking_params["max_jump"]))
+        depth_smooth_w = float(self.tracking_params.get("depth_smoothness_weight", 0.6))
+        prior_w = float(self.tracking_params.get("prior_weight", 0.4))
 
         # Limit between-depth step to keep shape coherent, but allow real dip changes.
         max_step = max(3, int(round(max_jump * 2)))
@@ -1955,7 +2074,9 @@ class FaultTracker:
             row_max = min(h - 1, expected + search_window)
             cand_rows = np.arange(row_min, row_max + 1, dtype=np.int32)
 
-            base_cost = self._fault_attribute_cost_vector(norm_attrs, cand_rows, col, attributes)
+            base_cost = self._fault_attribute_cost_vector(
+                norm_attrs, cand_rows, col, attributes
+            )
             prior_cost = prior_w * ((cand_rows - expected) / max(search_window, 1)) ** 2
             node_cost = base_cost + prior_cost
 
@@ -2003,11 +2124,15 @@ class FaultTracker:
             if j < 0:
                 break
 
-        new_fault = [(int(path_rows[i]), int(col_grid[i])) for i in range(col_grid.shape[0])]
+        new_fault = [
+            (int(path_rows[i]), int(col_grid[i])) for i in range(col_grid.shape[0])
+        ]
         return new_fault
 
     @staticmethod
-    def _build_expected_row_by_col(prev_fault: List[Tuple[int, int]], w: int) -> Tuple[np.ndarray, np.ndarray]:
+    def _build_expected_row_by_col(
+        prev_fault: List[Tuple[int, int]], w: int
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Convert a previous fault polyline into an expected row for each depth sample (col).
 
@@ -2042,11 +2167,15 @@ class FaultTracker:
             return np.array([], dtype=np.int32), np.array([], dtype=np.float64)
 
         col_grid = np.arange(col_min, col_max + 1, dtype=np.int32)
-        expected_rows = np.interp(col_grid.astype(np.float64), cols_u.astype(np.float64), rows_u)
+        expected_rows = np.interp(
+            col_grid.astype(np.float64), cols_u.astype(np.float64), rows_u
+        )
         return col_grid, expected_rows
 
     @staticmethod
-    def _normalize_fault_attrs(fault_attrs: Dict[str, np.ndarray]) -> Dict[str, np.ndarray]:
+    def _normalize_fault_attrs(
+        fault_attrs: Dict[str, np.ndarray],
+    ) -> Dict[str, np.ndarray]:
         """Normalize attribute maps to 0..1 for stable weighting."""
         norm = {}
         for k, arr in fault_attrs.items():
@@ -2064,7 +2193,7 @@ class FaultTracker:
         norm_attrs: Dict[str, np.ndarray],
         cand_rows: np.ndarray,
         col: int,
-        attributes: FaultAttribute
+        attributes: FaultAttribute,
     ) -> np.ndarray:
         """
         Vectorized attribute cost for a fixed col and multiple candidate rows.
@@ -2072,28 +2201,28 @@ class FaultTracker:
         """
         cost = np.zeros(cand_rows.shape[0], dtype=np.float64)
 
-        if attributes & FaultAttribute.VERTICAL_EDGE and 'vertical_edge' in norm_attrs:
-            w_edge = float(self.tracking_params['vertical_edge_weight'])
-            val = norm_attrs['vertical_edge'][cand_rows, col].astype(np.float64)
+        if attributes & FaultAttribute.VERTICAL_EDGE and "vertical_edge" in norm_attrs:
+            w_edge = float(self.tracking_params["vertical_edge_weight"])
+            val = norm_attrs["vertical_edge"][cand_rows, col].astype(np.float64)
             cost += w_edge * np.sqrt(np.clip(1.0 - val, 0.0, 1.0))
 
-        if attributes & FaultAttribute.DISCONTINUITY and 'discontinuity' in norm_attrs:
-            w_disc = float(self.tracking_params['discontinuity_weight'])
-            val = norm_attrs['discontinuity'][cand_rows, col].astype(np.float64)
+        if attributes & FaultAttribute.DISCONTINUITY and "discontinuity" in norm_attrs:
+            w_disc = float(self.tracking_params["discontinuity_weight"])
+            val = norm_attrs["discontinuity"][cand_rows, col].astype(np.float64)
             cost += w_disc * np.sqrt(np.clip(1.0 - val, 0.0, 1.0))
 
-        if attributes & FaultAttribute.VARIANCE and 'variance' in norm_attrs:
-            w_var = float(self.tracking_params['variance_weight'])
-            val = norm_attrs['variance'][cand_rows, col].astype(np.float64)
+        if attributes & FaultAttribute.VARIANCE and "variance" in norm_attrs:
+            w_var = float(self.tracking_params["variance_weight"])
+            val = norm_attrs["variance"][cand_rows, col].astype(np.float64)
             cost += w_var * np.sqrt(np.clip(1.0 - val, 0.0, 1.0))
 
-        if attributes & FaultAttribute.LIKELIHOOD and 'fault_likelihood' in norm_attrs:
+        if attributes & FaultAttribute.LIKELIHOOD and "fault_likelihood" in norm_attrs:
             w_like = 0.4  # keep consistent with prior behavior
-            val = norm_attrs['fault_likelihood'][cand_rows, col].astype(np.float64)
+            val = norm_attrs["fault_likelihood"][cand_rows, col].astype(np.float64)
             cost += w_like * np.sqrt(np.clip(1.0 - val, 0.0, 1.0))
 
         return cost
-    
+
     def _compute_fault_cost_global(
         self,
         fault_attrs: Dict[str, np.ndarray],
@@ -2101,75 +2230,77 @@ class FaultTracker:
         row: int,
         col: int,
         expected_row: int,
-        attributes: FaultAttribute
+        attributes: FaultAttribute,
     ) -> float:
         """
         Compute cost using global normalization for stronger attribute detection.
         """
         cost = 0.0
-        search_window = self.tracking_params['search_window']
+        search_window = self.tracking_params["search_window"]
         # Lower smoothness weight for faults - they shift more than horizons
-        smoothness_weight = self.tracking_params['smoothness_weight'] * 0.3
-        
+        smoothness_weight = self.tracking_params["smoothness_weight"] * 0.3
+
         # Distance penalty (much weaker for faults to allow more movement)
         distance = abs(row - expected_row)
         distance_cost = (distance / max(search_window * 2, 1)) ** 2
         cost += distance_cost * smoothness_weight
-        
+
         total_attr_weight = 0.0
-        
+
         # Vertical edge (higher = better for faults)
         if attributes & FaultAttribute.VERTICAL_EDGE:
-            weight = self.tracking_params['vertical_edge_weight']
-            if 'vertical_edge' in fault_attrs and 'vertical_edge' in attr_norms:
-                edge = fault_attrs['vertical_edge']
+            weight = self.tracking_params["vertical_edge_weight"]
+            if "vertical_edge" in fault_attrs and "vertical_edge" in attr_norms:
+                edge = fault_attrs["vertical_edge"]
                 edge_val = edge[row, col]
-                edge_min, edge_max = attr_norms['vertical_edge']
+                edge_min, edge_max = attr_norms["vertical_edge"]
                 if edge_max > edge_min:
                     # High edge = low cost (inverted and scaled strongly)
                     normalized = (edge_val - edge_min) / (edge_max - edge_min)
-                    edge_cost = (1.0 - normalized) ** 0.5  # Square root makes it more sensitive
+                    edge_cost = (
+                        1.0 - normalized
+                    ) ** 0.5  # Square root makes it more sensitive
                     cost += edge_cost * weight
                     total_attr_weight += weight
-        
+
         # Discontinuity (higher = better for faults)
         if attributes & FaultAttribute.DISCONTINUITY:
-            weight = self.tracking_params['discontinuity_weight']
-            if 'discontinuity' in fault_attrs and 'discontinuity' in attr_norms:
-                disc = fault_attrs['discontinuity']
+            weight = self.tracking_params["discontinuity_weight"]
+            if "discontinuity" in fault_attrs and "discontinuity" in attr_norms:
+                disc = fault_attrs["discontinuity"]
                 disc_val = disc[row, col]
-                disc_min, disc_max = attr_norms['discontinuity']
+                disc_min, disc_max = attr_norms["discontinuity"]
                 if disc_max > disc_min:
                     normalized = (disc_val - disc_min) / (disc_max - disc_min)
                     disc_cost = (1.0 - normalized) ** 0.5
                     cost += disc_cost * weight
                     total_attr_weight += weight
-        
+
         # Variance
         if attributes & FaultAttribute.VARIANCE:
-            weight = self.tracking_params['variance_weight']
-            if 'variance' in fault_attrs and 'variance' in attr_norms:
-                var = fault_attrs['variance']
+            weight = self.tracking_params["variance_weight"]
+            if "variance" in fault_attrs and "variance" in attr_norms:
+                var = fault_attrs["variance"]
                 var_val = var[row, col]
-                var_min, var_max = attr_norms['variance']
+                var_min, var_max = attr_norms["variance"]
                 if var_max > var_min:
                     normalized = (var_val - var_min) / (var_max - var_min)
                     var_cost = (1.0 - normalized) ** 0.5
                     cost += var_cost * weight
                     total_attr_weight += weight
-        
+
         # Fault likelihood
         if attributes & FaultAttribute.LIKELIHOOD:
-            if 'fault_likelihood' in fault_attrs and 'fault_likelihood' in attr_norms:
-                likelihood = fault_attrs['fault_likelihood']
+            if "fault_likelihood" in fault_attrs and "fault_likelihood" in attr_norms:
+                likelihood = fault_attrs["fault_likelihood"]
                 like_val = likelihood[row, col]
-                like_min, like_max = attr_norms['fault_likelihood']
+                like_min, like_max = attr_norms["fault_likelihood"]
                 if like_max > like_min:
                     normalized = (like_val - like_min) / (like_max - like_min)
                     like_cost = (1.0 - normalized) ** 0.5
                     cost += like_cost * 0.4
                     total_attr_weight += 0.4
-        
+
         return cost
 
     def _compute_fault_cost(
@@ -2178,32 +2309,32 @@ class FaultTracker:
         row: int,
         col: int,
         expected_row: int,
-        attributes: FaultAttribute
+        attributes: FaultAttribute,
     ) -> float:
         """
         Compute cost for a candidate fault position.
         Lower cost = better fault location.
-        
+
         For fault propagation:
         - We search in the row (X/horizontal) direction
         - col (Z/depth) is kept fixed
         - We want to find the row that has the best fault attributes
         """
         cost = 0.0
-        search_window = self.tracking_params['search_window']
-        smoothness_weight = self.tracking_params['smoothness_weight']
-        
+        search_window = self.tracking_params["search_window"]
+        smoothness_weight = self.tracking_params["smoothness_weight"]
+
         # Distance penalty (prefer staying close to expected row position)
         distance = abs(row - expected_row)
         distance_cost = (distance / max(search_window, 1)) ** 2
         cost += distance_cost * smoothness_weight
-        
+
         # Vertical edge (higher = better for faults, so lower cost)
         # Normalize along the column since we're searching in row direction
         if attributes & FaultAttribute.VERTICAL_EDGE:
-            weight = self.tracking_params['vertical_edge_weight']
-            if 'vertical_edge' in fault_attrs:
-                edge = fault_attrs['vertical_edge']
+            weight = self.tracking_params["vertical_edge_weight"]
+            if "vertical_edge" in fault_attrs:
+                edge = fault_attrs["vertical_edge"]
                 edge_val = edge[row, col]
                 # Normalize along the column (all rows at this col)
                 edge_max = edge[:, col].max()
@@ -2212,12 +2343,12 @@ class FaultTracker:
                     # High edge = low cost
                     edge_cost = 1.0 - (edge_val - edge_min) / (edge_max - edge_min)
                     cost += edge_cost * weight
-        
+
         # Discontinuity (higher = better for faults)
         if attributes & FaultAttribute.DISCONTINUITY:
-            weight = self.tracking_params['discontinuity_weight']
-            if 'discontinuity' in fault_attrs:
-                disc = fault_attrs['discontinuity']
+            weight = self.tracking_params["discontinuity_weight"]
+            if "discontinuity" in fault_attrs:
+                disc = fault_attrs["discontinuity"]
                 disc_val = disc[row, col]
                 # Normalize along the column
                 disc_max = disc[:, col].max()
@@ -2225,12 +2356,12 @@ class FaultTracker:
                 if disc_max > disc_min:
                     disc_cost = 1.0 - (disc_val - disc_min) / (disc_max - disc_min)
                     cost += disc_cost * weight
-        
+
         # Variance (higher = potentially fault zone)
         if attributes & FaultAttribute.VARIANCE:
-            weight = self.tracking_params['variance_weight']
-            if 'variance' in fault_attrs:
-                var = fault_attrs['variance']
+            weight = self.tracking_params["variance_weight"]
+            if "variance" in fault_attrs:
+                var = fault_attrs["variance"]
                 var_val = var[row, col]
                 # Normalize along the column
                 var_max = var[:, col].max()
@@ -2238,11 +2369,11 @@ class FaultTracker:
                 if var_max > var_min:
                     var_cost = 1.0 - (var_val - var_min) / (var_max - var_min)
                     cost += var_cost * weight
-        
+
         # Fault likelihood (combined attribute)
         if attributes & FaultAttribute.LIKELIHOOD:
-            if 'fault_likelihood' in fault_attrs:
-                likelihood = fault_attrs['fault_likelihood']
+            if "fault_likelihood" in fault_attrs:
+                likelihood = fault_attrs["fault_likelihood"]
                 like_val = likelihood[row, col]
                 # Normalize along the column
                 like_max = likelihood[:, col].max()
@@ -2252,39 +2383,41 @@ class FaultTracker:
                     cost += like_cost * 0.3
                 else:
                     cost += (1.0 - like_val) * 0.3
-        
+
         return cost
 
-    def _smooth_fault_trace(self, fault: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
+    def _smooth_fault_trace(
+        self, fault: List[Tuple[int, int]]
+    ) -> List[Tuple[int, int]]:
         """
         Apply light smoothing to fault trace to remove noise while preserving the fault's dip.
-        
+
         For faults:
         - rows = X positions (these vary as the fault dips/shifts)
         - cols = Z positions (these stay fixed, defining the vertical extent)
-        
+
         We smooth the row (X) values lightly to remove outliers without killing the trend.
         """
         if len(fault) < 3:
             return fault
-        
+
         rows = np.array([p[0] for p in fault], dtype=np.float64)
         cols = np.array([p[1] for p in fault])
-        
+
         # Only apply very light median filter to remove obvious outliers
         if len(rows) >= 5:
             rows_smoothed = median_filter(rows, size=3)
         else:
             rows_smoothed = rows.copy()
-        
+
         # Very light Gaussian smoothing - faults should NOT be perfectly smooth
-        sigma = self.tracking_params['smooth_sigma']
+        sigma = self.tracking_params["smooth_sigma"]
         if sigma > 0 and len(rows_smoothed) > 3:
             rows_smoothed = gaussian_filter1d(rows_smoothed, sigma=min(sigma, 1.0))
-        
+
         # DO NOT apply max_jump constraint - faults can have variable dip
         # The attribute tracking should have already found reasonable positions
-        
+
         return [(int(round(rows_smoothed[j])), int(cols[j])) for j in range(len(cols))]
 
 
@@ -2302,11 +2435,11 @@ def propagate_fault(
     discontinuity_weight: float = 0.4,
     variance_weight: float = 0.2,
     smoothness_weight: float = 0.1,
-    progress_callback: Optional[Callable] = None
+    progress_callback: Optional[Callable] = None,
 ) -> Tuple[bool, Dict[int, List[Tuple[int, int]]], str]:
     """
     Main function to propagate fault using attribute-guided tracking.
-    
+
     Args:
         data_3d: 3D seismic data array
         seed_points: List of (row, col) seed points on the fault
@@ -2327,12 +2460,12 @@ def propagate_fault(
         (success, faults_dict, message)
     """
     if attributes is None or len(attributes) == 0:
-        attributes = ['vertical_edge', 'discontinuity']
-    
+        attributes = ["vertical_edge", "discontinuity"]
+
     tracking_attrs = FaultAttribute.from_strings(attributes)
-    
+
     tracker = FaultTracker()
-    
+
     return tracker.track_fault(
         data_3d=data_3d,
         seed_points=seed_points,
@@ -2347,5 +2480,5 @@ def propagate_fault(
         discontinuity_weight=discontinuity_weight,
         variance_weight=variance_weight,
         smoothness_weight=smoothness_weight,
-        progress_callback=progress_callback
+        progress_callback=progress_callback,
     )

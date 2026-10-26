@@ -14,7 +14,9 @@ TPS_GLOBAL_POINT_LIMIT = 1200
 TPS_LOCAL_NEIGHBORS = 128
 
 
-def _unique_xy_samples(xy: np.ndarray, values: np.ndarray, decimals: int = 12) -> Tuple[np.ndarray, np.ndarray]:
+def _unique_xy_samples(
+    xy: np.ndarray, values: np.ndarray, decimals: int = 12
+) -> Tuple[np.ndarray, np.ndarray]:
     xy = np.asarray(xy, dtype=float)
     values = np.asarray(values, dtype=float)
     if xy.ndim != 2 or len(xy) == 0:
@@ -38,35 +40,44 @@ def _tps_neighbors_for_count(n_samples: int) -> Optional[int]:
         return None
     return min(TPS_LOCAL_NEIGHBORS, max(32, n_samples - 1))
 
+
 # Try to import triunsuitable bridge helpers.
 try:
     from . import triangle_callback
+
     HAS_TRIANGLE_CALLBACK_BRIDGE = True
 except ImportError:
     HAS_TRIANGLE_CALLBACK_BRIDGE = False
     triangle_callback = None
-    print("WARNING (triangle_direct): triangle_callback not found. Constrained triangulation might be limited.")    
+    print(
+        "WARNING (triangle_direct): triangle_callback not found. Constrained triangulation might be limited."
+    )
+
 
 class DirectTriangleWrapper:
     """
     PERFORMANCE-OPTIMIZED wrapper for Triangle library.
-    
+
     Major performance improvements:
     - Removed expensive interior grid point generation (was creating 1000s of points)
     - Simplified Triangle options for faster execution
     - Direct Triangle library calls without complex callbacks
     - Minimal preprocessing overhead
     - Fast hull computation methods
-    
+
     This provides 5-10x speed improvement over the original implementation
     while maintaining mesh quality for geological surfaces.
     """
-    
-    def __init__(self, gradient: float = 2.0, min_angle: float = 20.0, 
-                base_size: Optional[float] = None):
+
+    def __init__(
+        self,
+        gradient: float = 2.0,
+        min_angle: float = 20.0,
+        base_size: Optional[float] = None,
+    ):
         """
         Initialize the DirectTriangleWrapper with refinement parameters.
-        
+
         Args:
             gradient: Gradient control parameter (default: 2.0)
             min_angle: Minimum angle for triangle quality (default: 20.0)
@@ -84,14 +95,14 @@ class DirectTriangleWrapper:
         self.triunsuitable_max_iterations = 4
         self.triunsuitable_max_new_points = 1000
         self.triunsuitable_min_point_spacing = None
-        
+
     def set_feature_points(self, points: np.ndarray, sizes: np.ndarray):
         """
         Set feature points and their associated sizes.
-        
+
         These points influence the mesh density with a smooth transition
         based on the gradient parameter.
-        
+
         Args:
             points: Array of feature points (N, 2)
             sizes: Array of sizes for each feature point (N,)
@@ -103,7 +114,9 @@ class DirectTriangleWrapper:
         if pts.ndim != 2 or pts.shape[1] != 2:
             raise ValueError("Feature points must have shape (N, 2)")
         if sz.size == 0:
-            sz = np.full((pts.shape[0],), float(self.base_size if self.base_size else 1.0))
+            sz = np.full(
+                (pts.shape[0],), float(self.base_size if self.base_size else 1.0)
+            )
         elif sz.size == 1 and pts.shape[0] > 1:
             sz = np.full((pts.shape[0],), float(sz[0]))
         elif sz.size != pts.shape[0]:
@@ -114,18 +127,24 @@ class DirectTriangleWrapper:
         self.feature_points = pts
         self.feature_sizes = np.clip(sz, 1e-12, np.inf)
 
-    def triangulate(self, points: np.ndarray, segments: Optional[np.ndarray] = None,
-                   holes: Optional[np.ndarray] = None, create_feature_points: bool = False,
-                   create_transition: bool = False, uniform: bool = True) -> Dict:
+    def triangulate(
+        self,
+        points: np.ndarray,
+        segments: Optional[np.ndarray] = None,
+        holes: Optional[np.ndarray] = None,
+        create_feature_points: bool = False,
+        create_transition: bool = False,
+        uniform: bool = True,
+    ) -> Dict:
         """
         PERFORMANCE-OPTIMIZED triangulation using Triangle with minimal overhead.
-        
+
         Key optimizations:
-        - Removed expensive interior grid point generation 
+        - Removed expensive interior grid point generation
         - Simplified Triangle options
         - Removed complex feature point calculations
         - Direct Triangle library calls
-        
+
         Args:
             points: Input points (N, 2)
             segments: Optional segment indices (M, 2) for constraining triangulation
@@ -133,23 +152,25 @@ class DirectTriangleWrapper:
             create_feature_points: IGNORED for performance (was causing major slowdowns)
             create_transition: IGNORED for performance (was causing major slowdowns)
             uniform: Whether to use uniform mesh generation (simplified for speed)
-            
+
         Returns:
             Dictionary with triangulation results (vertices, triangles)
         """
         import triangle as tr
-        
+
         # Ensure inputs are numpy arrays
         points = np.asarray(points, dtype=np.float64)
-        
+
         if segments is not None:
             segments = np.asarray(segments, dtype=np.int32)
-        
+
         if holes is not None:
             holes = np.asarray(holes, dtype=np.float64)
-            
-        self.logger.info(f"FAST triangulation: {len(points)} points, {len(segments) if segments is not None else 0} segments")
-        
+
+        self.logger.info(
+            f"FAST triangulation: {len(points)} points, {len(segments) if segments is not None else 0} segments"
+        )
+
         # Calculate base_size if not provided (simplified calculation)
         if self.base_size is None:
             if len(points) > 1:
@@ -160,62 +181,70 @@ class DirectTriangleWrapper:
                 self.base_size = diagonal / 15.0
             else:
                 self.base_size = 1.0
-            
+
         # PERFORMANCE: Skip expensive feature point generation entirely
         # The old implementation created thousands of interior points causing massive slowdowns
         # For geological surfaces, good boundary conformity is more important than dense interiors
-        
+
         # Set up Triangle input (minimal and fast)
-        tri_input = {'vertices': points}
-        
+        tri_input = {"vertices": points}
+
         if segments is not None and len(segments) > 0:
-            tri_input['segments'] = segments
-            
+            tri_input["segments"] = segments
+
         if holes is not None and len(holes) > 0:
-            tri_input['holes'] = holes
+            tri_input["holes"] = holes
 
         # PERFORMANCE: Optimized Triangle options for speed
         if uniform:
             # Check if C++ MeshIt compatible mode is requested
-            use_cpp_switches = getattr(self, 'use_cpp_switches', False)
-            
+            use_cpp_switches = getattr(self, "use_cpp_switches", False)
+
             if use_cpp_switches:
                 # C++ MeshIt compatible switches with better area control
                 # Use "pzY" (no boundary insertion) with area constraint
                 # The C++ version actually uses "pzYYu" but 'u' needs external callback
                 area_constraint = self.base_size * self.base_size * 0.5
-                tri_options = f'pzYYa{area_constraint:.8f}'
-                self.logger.info(f"Using C++ MeshIt compatible Triangle options: '{tri_options}'")
+                tri_options = f"pzYYa{area_constraint:.8f}"
+                self.logger.info(
+                    f"Using C++ MeshIt compatible Triangle options: '{tri_options}'"
+                )
             else:
                 # Original fast approach
                 effective_min_angle = self.min_angle
                 area_constraint = self.base_size * self.base_size * 0.5
-                
+
                 # Simplified options - no expensive callbacks or complex features
-                tri_options = f'pzYYa{area_constraint:.8f}'
+                tri_options = f"pzYYa{area_constraint:.8f}"
         else:
             # Non-uniform approach for complex cases
             hull_points = self._get_hull_points_fast(points)
-            tri_input, tri_options = self._setup_complex_triangulation_fast(tri_input, hull_points)
-
-        # Allow custom Triangle options override
-        if hasattr(self, 'triangle_opts') and self.triangle_opts:
-            tri_options = self.triangle_opts
-            self.logger.info(f"Using custom Triangle options: '{tri_options}'")
-        
-        self.logger.info(f"Using fast Triangle options: '{tri_options}'")
-        
-        # PERFORMANCE: Direct Triangle call with error handling and C++ fallback
-        try:
-            use_cpp_switches = getattr(self, 'use_cpp_switches', False)
-            use_triunsuitable_bridge = (
-                use_cpp_switches and
-                self.feature_points is not None and
-                self.feature_sizes is not None and
-                len(self.feature_points) > 0
+            tri_input, tri_options = self._setup_complex_triangulation_fast(
+                tri_input, hull_points
             )
 
-            if use_triunsuitable_bridge and HAS_TRIANGLE_CALLBACK_BRIDGE and hasattr(triangle_callback, "triangulate_with_cpp_triunsuitable"):
+        # Allow custom Triangle options override
+        if hasattr(self, "triangle_opts") and self.triangle_opts:
+            tri_options = self.triangle_opts
+            self.logger.info(f"Using custom Triangle options: '{tri_options}'")
+
+        self.logger.info(f"Using fast Triangle options: '{tri_options}'")
+
+        # PERFORMANCE: Direct Triangle call with error handling and C++ fallback
+        try:
+            use_cpp_switches = getattr(self, "use_cpp_switches", False)
+            use_triunsuitable_bridge = (
+                use_cpp_switches
+                and self.feature_points is not None
+                and self.feature_sizes is not None
+                and len(self.feature_points) > 0
+            )
+
+            if (
+                use_triunsuitable_bridge
+                and HAS_TRIANGLE_CALLBACK_BRIDGE
+                and hasattr(triangle_callback, "triangulate_with_cpp_triunsuitable")
+            ):
                 self.logger.info(
                     "Using C++ triunsuitable bridge with %d feature point(s)",
                     len(self.feature_points),
@@ -239,138 +268,150 @@ class DirectTriangleWrapper:
                         "falling back to standard Triangle call"
                     )
                 result = tr.triangulate(tri_input, tri_options)
-            
-            if 'triangles' in result and len(result['triangles']) > 0:
-                self.logger.info(f"FAST triangulation complete: {len(result['triangles'])} triangles, {len(result['vertices'])} vertices")
+
+            if "triangles" in result and len(result["triangles"]) > 0:
+                self.logger.info(
+                    f"FAST triangulation complete: {len(result['triangles'])} triangles, {len(result['vertices'])} vertices"
+                )
                 return result
             else:
                 # Primary triangulation failed, try fallbacks
                 raise RuntimeError("Primary triangulation produced no triangles")
-                
+
         except Exception as e:
             self.logger.warning(f"Primary triangulation failed: {e}")
-            
+
             # Try C++ compatible fallback if not already using it
-            if not getattr(self, 'use_cpp_switches', False) and uniform:
+            if not getattr(self, "use_cpp_switches", False) and uniform:
                 self.logger.warning("Trying C++ MeshIt compatible fallback switches")
                 area_constraint = self.base_size * self.base_size * 0.5
-                cpp_options = f'pzYa{area_constraint:.8f}'
+                cpp_options = f"pzYa{area_constraint:.8f}"
                 try:
                     result = tr.triangulate(tri_input, cpp_options)
-                    if 'triangles' in result and len(result['triangles']) > 0:
-                        self.logger.info(f"C++ compatible fallback succeeded: {len(result['triangles'])} triangles")
+                    if "triangles" in result and len(result["triangles"]) > 0:
+                        self.logger.info(
+                            f"C++ compatible fallback succeeded: {len(result['triangles'])} triangles"
+                        )
                         return result
                 except Exception as e2:
                     self.logger.warning(f"C++ compatible fallback also failed: {e2}")
-            
+
             # Quick fallback without area constraint
             self.logger.warning("Trying minimal constraint fallback")
             try:
                 if uniform:
                     effective_min_angle = self.min_angle
-                    fallback_options = f'pzq{effective_min_angle:.1f}'
+                    fallback_options = f"pzq{effective_min_angle:.1f}"
                 else:
-                    fallback_options = 'pz'
+                    fallback_options = "pz"
                 result = tr.triangulate(tri_input, fallback_options)
-                
-                if 'triangles' in result and len(result['triangles']) > 0:
-                    self.logger.info(f"Fast fallback successful: {len(result['triangles'])} triangles")
+
+                if "triangles" in result and len(result["triangles"]) > 0:
+                    self.logger.info(
+                        f"Fast fallback successful: {len(result['triangles'])} triangles"
+                    )
                     return result
                 else:
                     raise RuntimeError("Fast fallback also failed")
             except Exception as e3:
                 self.logger.warning(f"Minimal constraint fallback failed: {e3}")
-                    
+
         except Exception as e:
             self.logger.error(f"All triangulation strategies failed: {e}")
             # Ultimate fallback - basic Delaunay only
             try:
-                ultimate_options = 'pz'
+                ultimate_options = "pz"
                 result = tr.triangulate(tri_input, ultimate_options)
-                self.logger.warning(f"Ultimate fallback (basic Delaunay): {len(result.get('triangles', []))} triangles")
+                self.logger.warning(
+                    f"Ultimate fallback (basic Delaunay): {len(result.get('triangles', []))} triangles"
+                )
                 return result
             except Exception as e2:
                 self.logger.error(f"All triangulation attempts failed: {e2}")
                 raise RuntimeError(f"Complete triangulation failure: {e2}")
-        
+
         return {}
-    
-    
+
     def _get_hull_points_fast(self, points: np.ndarray) -> np.ndarray:
         """Fast convex hull computation for complex triangulation cases."""
         if len(points) <= 3:
             return points
-            
+
         try:
             from scipy.spatial import ConvexHull
+
             hull_indices = ConvexHull(points).vertices
             return points[hull_indices]
         except Exception:
             # Fallback: use bounding box corners
             min_coords = np.min(points, axis=0)
             max_coords = np.max(points, axis=0)
-            return np.array([
-                [min_coords[0], min_coords[1]],
-                [max_coords[0], min_coords[1]], 
-                [max_coords[0], max_coords[1]],
-                [min_coords[0], max_coords[1]]
-            ])
-    
-    def _setup_complex_triangulation_fast(self, tri_input: Dict, hull_points: np.ndarray) -> Tuple[Dict, str]:
+            return np.array(
+                [
+                    [min_coords[0], min_coords[1]],
+                    [max_coords[0], min_coords[1]],
+                    [max_coords[0], max_coords[1]],
+                    [min_coords[0], max_coords[1]],
+                ]
+            )
+
+    def _setup_complex_triangulation_fast(
+        self, tri_input: Dict, hull_points: np.ndarray
+    ) -> Tuple[Dict, str]:
         """Fast setup for complex triangulation cases (simplified from original)."""
         # For complex cases, we add a minimal set of interior points
         # Much faster than the original grid generation
-        
+
         if len(hull_points) < 3:
-            return tri_input, f'pzq{self.min_angle:.1f}'
-        
+            return tri_input, f"pzq{self.min_angle:.1f}"
+
         # Add a few strategic interior points for better quality (not thousands like before)
         centroid = np.mean(hull_points, axis=0)
-        
+
         # Add centroid and a few nearby points
         interior_points = [centroid]
-        
-        # Add 4 points around centroid for better quality  
+
+        # Add 4 points around centroid for better quality
         radius = np.mean([np.linalg.norm(pt - centroid) for pt in hull_points]) * 0.3
-        for angle in [0, np.pi/2, np.pi, 3*np.pi/2]:
+        for angle in [0, np.pi / 2, np.pi, 3 * np.pi / 2]:
             pt = centroid + radius * np.array([np.cos(angle), np.sin(angle)])
             interior_points.append(pt)
-        
+
         # Combine original points with minimal interior points
-        all_points = np.vstack([tri_input['vertices'], np.array(interior_points)])
-        tri_input['vertices'] = all_points
-        
+        all_points = np.vstack([tri_input["vertices"], np.array(interior_points)])
+        tri_input["vertices"] = all_points
+
         # Simple area constraint
         area_constraint = self.base_size * self.base_size * 0.5
-        tri_options = f'pzq{self.min_angle:.1f}a{area_constraint:.8f}'
-        
+        tri_options = f"pzq{self.min_angle:.1f}a{area_constraint:.8f}"
+
         return tri_input, tri_options
 
     def __del__(self):
         """Clean up C++ resources when the wrapper is destroyed."""
-        # No explicit cleanup needed, the Python-C++ binding handles this 
+        # No explicit cleanup needed, the Python-C++ binding handles this
 
     def set_triangle_options(self, options: str):
         """
         Set custom options for the Triangle library.
-        
+
         This allows direct control over Triangle's behavior by passing specific
         options string that will override the default options generated.
-        
+
         Args:
             options: String with Triangle options (e.g., 'pzq30a40')
         """
         self.triangle_opts = options
-        self.logger.info(f"Setting custom Triangle options: {options}") 
+        self.logger.info(f"Setting custom Triangle options: {options}")
 
     def set_cpp_compatible_mode(self, enable: bool = True):
         """
         Enable or disable C++ MeshIt compatible Triangle switches.
-        
+
         When enabled, uses C++-compatible Triangle switches and (if feature points
         are provided) the triunsuitable bridge that emulates MeshIt's `-u` grading.
         This can produce denser, higher quality meshes that are more compatible with TetGen.
-        
+
         Args:
             enable: Whether to enable C++ compatible mode
         """
@@ -378,8 +419,13 @@ class DirectTriangleWrapper:
         if enable:
             self.logger.info("Enabled C++ MeshIt compatible Triangle switches")
         else:
-            self.logger.info("Disabled C++ MeshIt compatible mode, using standard switches")
-    def _sanitize_segments(self, segments: Optional[np.ndarray], n_vertices: int) -> np.ndarray:
+            self.logger.info(
+                "Disabled C++ MeshIt compatible mode, using standard switches"
+            )
+
+    def _sanitize_segments(
+        self, segments: Optional[np.ndarray], n_vertices: int
+    ) -> np.ndarray:
         """
         Remove degenerate/duplicate/out-of-range segments for robust PSLG input.
         """
@@ -392,9 +438,11 @@ class DirectTriangleWrapper:
 
         # Drop degenerate or out-of-range segments
         valid_mask = (
-            (segs[:, 0] != segs[:, 1]) &
-            (segs[:, 0] >= 0) & (segs[:, 1] >= 0) &
-            (segs[:, 0] < n_vertices) & (segs[:, 1] < n_vertices)
+            (segs[:, 0] != segs[:, 1])
+            & (segs[:, 0] >= 0)
+            & (segs[:, 1] >= 0)
+            & (segs[:, 0] < n_vertices)
+            & (segs[:, 1] < n_vertices)
         )
         segs = segs[valid_mask]
         if len(segs) == 0:
@@ -405,8 +453,9 @@ class DirectTriangleWrapper:
         _, unique_idx = np.unique(segs_sorted, axis=0, return_index=True)
         return segs[unique_idx]
 
-    def _filter_short_segments(self, segments: Optional[np.ndarray], points_2d: np.ndarray,
-                               min_len: float) -> np.ndarray:
+    def _filter_short_segments(
+        self, segments: Optional[np.ndarray], points_2d: np.ndarray, min_len: float
+    ) -> np.ndarray:
         """
         Drop segments that are effectively zero-length in 2D (numerical robustness).
         """
@@ -423,23 +472,27 @@ class DirectTriangleWrapper:
             return np.empty((0, 2), dtype=np.int32)
         return segs
 
-    def _remove_intersecting_segments(self, segments: np.ndarray, points_2d: np.ndarray) -> np.ndarray:
+    def _remove_intersecting_segments(
+        self, segments: np.ndarray, points_2d: np.ndarray
+    ) -> np.ndarray:
         """
         Remove segments that intersect other segments (not at endpoints).
         This prevents Triangle's "Topological inconsistency" errors.
-        
+
         Uses a simple O(n^2) approach - fine for typical segment counts (<1000).
         """
         if segments is None or len(segments) < 2:
-            return segments if segments is not None else np.empty((0, 2), dtype=np.int32)
-        
+            return (
+                segments if segments is not None else np.empty((0, 2), dtype=np.int32)
+            )
+
         segs = np.asarray(segments, dtype=np.int32)
         n_segs = len(segs)
-        
+
         def ccw(A, B, C):
             """Check if three points are in counter-clockwise order."""
             return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0])
-        
+
         def segments_intersect(p1, p2, p3, p4):
             """Check if segment (p1,p2) intersects segment (p3,p4) not at endpoints."""
             # First check if they share an endpoint (allowed)
@@ -448,31 +501,33 @@ class DirectTriangleWrapper:
                 for pb in [p3, p4]:
                     if np.linalg.norm(pa - pb) < eps:
                         return False  # Shared endpoint is OK
-            
+
             # Standard intersection test
-            if ccw(p1, p3, p4) != ccw(p2, p3, p4) and ccw(p1, p2, p3) != ccw(p1, p2, p4):
+            if ccw(p1, p3, p4) != ccw(p2, p3, p4) and ccw(p1, p2, p3) != ccw(
+                p1, p2, p4
+            ):
                 return True
             return False
-        
+
         # Track which segments to keep
         keep = np.ones(n_segs, dtype=bool)
         intersection_count = np.zeros(n_segs, dtype=int)
-        
+
         # Check all pairs for intersections
         for i in range(n_segs):
             if not keep[i]:
                 continue
             p1, p2 = points_2d[segs[i, 0]], points_2d[segs[i, 1]]
-            
+
             for j in range(i + 1, n_segs):
                 if not keep[j]:
                     continue
                 p3, p4 = points_2d[segs[j, 0]], points_2d[segs[j, 1]]
-                
+
                 if segments_intersect(p1, p2, p3, p4):
                     intersection_count[i] += 1
                     intersection_count[j] += 1
-        
+
         # Remove segments with intersections (prefer removing those with more intersections)
         # Iteratively remove worst offenders
         removed = 0
@@ -480,33 +535,38 @@ class DirectTriangleWrapper:
             worst_idx = np.argmax(intersection_count)
             if intersection_count[worst_idx] == 0:
                 break
-            
+
             keep[worst_idx] = False
             removed += 1
-            
+
             # Recount intersections for remaining segments
             intersection_count[worst_idx] = 0
             p1, p2 = points_2d[segs[worst_idx, 0]], points_2d[segs[worst_idx, 1]]
-            
+
             for j in range(n_segs):
                 if not keep[j] or j == worst_idx:
                     continue
                 p3, p4 = points_2d[segs[j, 0]], points_2d[segs[j, 1]]
                 if segments_intersect(p1, p2, p3, p4):
                     intersection_count[j] = max(0, intersection_count[j] - 1)
-        
+
         if removed > 0:
-            self.logger.warning(f"Removed {removed} intersecting segments to prevent Triangle errors")
-        
+            self.logger.warning(
+                f"Removed {removed} intersecting segments to prevent Triangle errors"
+            )
+
         return segs[keep]
 
-    def _fallback_standard_triangulation(self, points_3d: np.ndarray,
-                                         segments: Optional[np.ndarray],
-                                         uniform: bool,
-                                         interpolator: str = 'tps',
-                                         smoothing: float = 0.0,
-                                         reference_mesh_3d: Optional[np.ndarray] = None,
-                                         reference_triangles: Optional[np.ndarray] = None) -> Dict:
+    def _fallback_standard_triangulation(
+        self,
+        points_3d: np.ndarray,
+        segments: Optional[np.ndarray],
+        uniform: bool,
+        interpolator: str = "tps",
+        smoothing: float = 0.0,
+        reference_mesh_3d: Optional[np.ndarray] = None,
+        reference_triangles: Optional[np.ndarray] = None,
+    ) -> Dict:
         """
         Fallback to standard 2D projected triangulation.
 
@@ -533,31 +593,44 @@ class DirectTriangleWrapper:
             # For folded surfaces with reference mesh, try limb-separated triangulation first
             # This prevents cross-limb connections that cause overlapping triangles
             if reference_mesh_3d is not None and len(reference_mesh_3d) > 0:
-                self.logger.info("Attempting limb-separated triangulation for folded surface")
+                self.logger.info(
+                    "Attempting limb-separated triangulation for folded surface"
+                )
                 limb_result = self._triangulate_limb_separated(
-                    points_3d, segments, reference_mesh_3d,
-                    u_axis, v_axis, w_axis, centroid, uniform
+                    points_3d,
+                    segments,
+                    reference_mesh_3d,
+                    u_axis,
+                    v_axis,
+                    w_axis,
+                    centroid,
+                    uniform,
                 )
 
-                if limb_result is not None and 'vertices' in limb_result:
+                if limb_result is not None and "vertices" in limb_result:
                     # Post-process to remove any overlapping triangles
-                    vertices_3d = limb_result['vertices']
-                    triangles = limb_result['triangles']
+                    vertices_3d = limb_result["vertices"]
+                    triangles = limb_result["triangles"]
 
-                    valid_mask = self._detect_overlapping_triangles(vertices_3d, triangles)
+                    valid_mask = self._detect_overlapping_triangles(
+                        vertices_3d, triangles
+                    )
                     n_invalid = np.sum(~valid_mask)
 
                     if n_invalid > 0:
-                        self.logger.info(f"Removed {n_invalid} overlapping/inverted triangles")
+                        self.logger.info(
+                            f"Removed {n_invalid} overlapping/inverted triangles"
+                        )
                         triangles = triangles[valid_mask]
 
-                    self.logger.info(f"Limb-separated triangulation: {len(vertices_3d)} vertices, {len(triangles)} triangles")
-                    return {
-                        'vertices': vertices_3d,
-                        'triangles': triangles
-                    }
+                    self.logger.info(
+                        f"Limb-separated triangulation: {len(vertices_3d)} vertices, {len(triangles)} triangles"
+                    )
+                    return {"vertices": vertices_3d, "triangles": triangles}
                 else:
-                    self.logger.info("Limb-separated triangulation returned None, falling back to standard method")
+                    self.logger.info(
+                        "Limb-separated triangulation returned None, falling back to standard method"
+                    )
 
             u_coords = np.dot(centered, u_axis)
             v_coords = np.dot(centered, v_axis)
@@ -571,11 +644,13 @@ class DirectTriangleWrapper:
 
             if reference_mesh_3d is not None and len(reference_mesh_3d) > 0:
                 from scipy.spatial import cKDTree
-                
+
                 # Project reference mesh to 2D
                 ref_centered = reference_mesh_3d - centroid
-                ref_2d = np.column_stack([np.dot(ref_centered, u_axis), np.dot(ref_centered, v_axis)])
-                
+                ref_2d = np.column_stack(
+                    [np.dot(ref_centered, u_axis), np.dot(ref_centered, v_axis)]
+                )
+
                 # Add ALL reference points as Steiner guides (no interior filtering)
                 # For folded surfaces, Delaunay/convex hull tests fail due to 2D collapse
                 # Instead, just filter by distance from constraints and let Triangle handle it
@@ -586,48 +661,62 @@ class DirectTriangleWrapper:
                     dists, _ = constraint_tree.query(ref_2d, k=1)
                     far_enough_mask = dists > min_dist
                     interior_ref_2d = ref_2d[far_enough_mask]
-                    
-                    self.logger.info(f"Adding {len(interior_ref_2d)}/{len(ref_2d)} reference points as Steiner guides (filtered by distance)")
-                    
+
+                    self.logger.info(
+                        f"Adding {len(interior_ref_2d)}/{len(ref_2d)} reference points as Steiner guides (filtered by distance)"
+                    )
+
                     if len(interior_ref_2d) > 0:
                         # Subsample if too many points (keep it manageable)
                         max_interior = min(1000, len(interior_ref_2d))
                         if len(interior_ref_2d) > max_interior:
-                            indices = np.random.choice(len(interior_ref_2d), max_interior, replace=False)
+                            indices = np.random.choice(
+                                len(interior_ref_2d), max_interior, replace=False
+                            )
                             interior_ref_2d = interior_ref_2d[indices]
-                        
+
                         # Add reference points as Steiner guides
                         augmented_points_2d = np.vstack([points_2d, interior_ref_2d])
-                        self.logger.info(f"Added {len(interior_ref_2d)} interior reference points as Steiner guides for fold structure")
+                        self.logger.info(
+                            f"Added {len(interior_ref_2d)} interior reference points as Steiner guides for fold structure"
+                        )
                 except Exception as e:
                     self.logger.warning(f"Could not add interior Steiner guides: {e}")
-            
+
             # Use standard triangulation with augmented points
             result_2d = self.triangulate(augmented_points_2d, segments, uniform=uniform)
-            
+
             # Restore original base_size
             self.base_size = original_base_size
-            
-            if 'vertices' not in result_2d:
+
+            if "vertices" not in result_2d:
                 return result_2d
-            
+
             # Project back to 3D
-            vertices_2d = result_2d['vertices']
-            vertices_3d = centroid + vertices_2d[:, 0:1] * u_axis + vertices_2d[:, 1:2] * v_axis
-            
+            vertices_2d = result_2d["vertices"]
+            vertices_3d = (
+                centroid + vertices_2d[:, 0:1] * u_axis + vertices_2d[:, 1:2] * v_axis
+            )
+
             # Interpolate Z values - use reference mesh if provided (Refine Mesh case)
             if reference_mesh_3d is not None and len(reference_mesh_3d) > 0:
                 # Use reference mesh for Z-interpolation to preserve fold structure
                 from scipy.spatial import cKDTree
 
-                self.logger.info(f"Using reference mesh ({len(reference_mesh_3d)} pts) for Z-interpolation to preserve fold structure")
+                self.logger.info(
+                    f"Using reference mesh ({len(reference_mesh_3d)} pts) for Z-interpolation to preserve fold structure"
+                )
                 ref_centered = reference_mesh_3d - centroid
                 ref_z = np.dot(ref_centered, vh[2])
-                ref_2d = np.column_stack([np.dot(ref_centered, u_axis), np.dot(ref_centered, v_axis)])
+                ref_2d = np.column_stack(
+                    [np.dot(ref_centered, u_axis), np.dot(ref_centered, v_axis)]
+                )
 
                 # If reference triangles available, use barycentric interpolation for better accuracy
                 if reference_triangles is not None and len(reference_triangles) > 0:
-                    self.logger.info("Using barycentric interpolation from reference mesh triangles")
+                    self.logger.info(
+                        "Using barycentric interpolation from reference mesh triangles"
+                    )
 
                     z_new = np.zeros(len(vertices_2d))
                     ref_tree = cKDTree(ref_2d)
@@ -638,7 +727,7 @@ class DirectTriangleWrapper:
                         # Find which reference triangle this point is in
                         best_tri = None
                         best_bary = None
-                        min_dist_to_tri = float('inf')
+                        min_dist_to_tri = float("inf")
 
                         # First find nearby reference vertices to limit triangle search
                         _, nearby_verts = ref_tree.query(pt_2d, k=min(20, len(ref_2d)))
@@ -649,7 +738,11 @@ class DirectTriangleWrapper:
                         nearby_vert_set = set(nearby_verts)
                         candidate_tris = []
                         for tri in reference_triangles:
-                            if int(tri[0]) in nearby_vert_set or int(tri[1]) in nearby_vert_set or int(tri[2]) in nearby_vert_set:
+                            if (
+                                int(tri[0]) in nearby_vert_set
+                                or int(tri[1]) in nearby_vert_set
+                                or int(tri[2]) in nearby_vert_set
+                            ):
                                 candidate_tris.append(tri)
 
                         # If no candidates found, search all triangles
@@ -725,7 +818,9 @@ class DirectTriangleWrapper:
 
                 else:
                     # Fallback: limb-aware IDW when no reference triangles
-                    self.logger.info("Using limb-aware IDW interpolation for folded surface")
+                    self.logger.info(
+                        "Using limb-aware IDW interpolation for folded surface"
+                    )
 
                     # Get constraint points Z values for limb detection
                     constraint_z = np.dot(centered, vh[2])
@@ -747,7 +842,9 @@ class DirectTriangleWrapper:
 
                     # Compute Z range for limb filtering threshold
                     z_range = np.ptp(ref_z)
-                    limb_threshold = z_range * 0.3  # Points within 30% of Z range are "same limb"
+                    limb_threshold = (
+                        z_range * 0.3
+                    )  # Points within 30% of Z range are "same limb"
 
                     z_new = np.zeros(len(vertices_2d))
                     for i in range(len(vertices_2d)):
@@ -769,7 +866,7 @@ class DirectTriangleWrapper:
                             filtered_z = neighbor_z[:5]
 
                         # IDW interpolation
-                        weights = 1.0 / np.maximum(filtered_dists ** 2, 1e-10)
+                        weights = 1.0 / np.maximum(filtered_dists**2, 1e-10)
                         weights_norm = weights / weights.sum()
                         z_new[i] = np.sum(weights_norm * filtered_z)
 
@@ -778,44 +875,51 @@ class DirectTriangleWrapper:
                 # Standard interpolation for non-folded surfaces
                 z_orig = np.dot(centered, vh[2])
                 orig_2d = points_2d
-                
+
                 z_new = None
-                
-                if interpolator is not None and 'idw' in interpolator.lower():
-                     self.logger.info("Fallback: Using IDW interpolation")
-                     tree = cKDTree(orig_2d)
-                     k = min(12, len(orig_2d))
-                     dists, indices = tree.query(vertices_2d, k=k)
-                     
-                     if dists.ndim == 1:
-                         dists = dists[:, np.newaxis]
-                         indices = indices[:, np.newaxis]
-                     
-                     weights = 1.0 / np.maximum(dists ** 2, 1e-10)
-                     weights_sum = weights.sum(axis=1, keepdims=True)
-                     weights_norm = weights / weights_sum
-                     
-                     z_new = np.sum(weights_norm * z_orig[indices], axis=1)
-                     
-                elif interpolator is not None and 'linear' in interpolator.lower():
+
+                if interpolator is not None and "idw" in interpolator.lower():
+                    self.logger.info("Fallback: Using IDW interpolation")
+                    tree = cKDTree(orig_2d)
+                    k = min(12, len(orig_2d))
+                    dists, indices = tree.query(vertices_2d, k=k)
+
+                    if dists.ndim == 1:
+                        dists = dists[:, np.newaxis]
+                        indices = indices[:, np.newaxis]
+
+                    weights = 1.0 / np.maximum(dists**2, 1e-10)
+                    weights_sum = weights.sum(axis=1, keepdims=True)
+                    weights_norm = weights / weights_sum
+
+                    z_new = np.sum(weights_norm * z_orig[indices], axis=1)
+
+                elif interpolator is not None and "linear" in interpolator.lower():
                     self.logger.info("Fallback: Using Linear interpolation")
                     from scipy.interpolate import LinearNDInterpolator
+
                     try:
                         lin_interp = LinearNDInterpolator(orig_2d, z_orig)
                         z_new = lin_interp(vertices_2d)
-                        
+
                         nan_mask = np.isnan(z_new)
                         if np.any(nan_mask):
                             from scipy.interpolate import NearestNDInterpolator
+
                             near_interp = NearestNDInterpolator(orig_2d, z_orig)
                             z_new[nan_mask] = near_interp(vertices_2d[nan_mask])
                     except Exception as e:
-                        self.logger.warning(f"Fallback Linear interpolation failed: {e}")
-                
+                        self.logger.warning(
+                            f"Fallback Linear interpolation failed: {e}"
+                        )
+
                 if z_new is None:
                     try:
-                        self.logger.info(f"Fallback: Using TPS interpolation (smoothing={smoothing})")
+                        self.logger.info(
+                            f"Fallback: Using TPS interpolation (smoothing={smoothing})"
+                        )
                         from scipy.interpolate import RBFInterpolator
+
                         tps_xy, tps_z = _unique_xy_samples(orig_2d, z_orig)
                         if len(tps_xy) < 4:
                             raise ValueError("not enough unique TPS samples")
@@ -829,7 +933,7 @@ class DirectTriangleWrapper:
                         rbf = RBFInterpolator(
                             tps_xy,
                             tps_z,
-                            kernel='thin_plate_spline',
+                            kernel="thin_plate_spline",
                             smoothing=smoothing,
                             neighbors=tps_neighbors,
                             degree=1,
@@ -842,24 +946,25 @@ class DirectTriangleWrapper:
                     vertices_3d = vertices_3d + z_new[:, np.newaxis] * vh[2]
 
             # Post-process to remove overlapping triangles for folded surfaces
-            triangles = result_2d['triangles']
+            triangles = result_2d["triangles"]
             if reference_mesh_3d is not None and len(reference_mesh_3d) > 0:
                 valid_mask = self._detect_overlapping_triangles(vertices_3d, triangles)
                 n_invalid = np.sum(~valid_mask)
                 if n_invalid > 0:
-                    self.logger.info(f"Removed {n_invalid} overlapping/inverted triangles from fallback triangulation")
+                    self.logger.info(
+                        f"Removed {n_invalid} overlapping/inverted triangles from fallback triangulation"
+                    )
                     triangles = triangles[valid_mask]
 
-            return {
-                'vertices': vertices_3d,
-                'triangles': triangles
-            }
-            
+            return {"vertices": vertices_3d, "triangles": triangles}
+
         except Exception as e:
             self.logger.error(f"Fallback triangulation failed: {e}")
             return {}
 
-    def _detect_overlapping_triangles(self, vertices_3d: np.ndarray, triangles: np.ndarray) -> np.ndarray:
+    def _detect_overlapping_triangles(
+        self, vertices_3d: np.ndarray, triangles: np.ndarray
+    ) -> np.ndarray:
         """
         Detect overlapping/inverted triangles in a 3D mesh.
 
@@ -886,6 +991,7 @@ class DirectTriangleWrapper:
 
         # Build adjacency: which triangles share edges
         from collections import defaultdict
+
         edge_to_triangles = defaultdict(list)
         for tri_idx, tri in enumerate(triangles):
             for i in range(3):
@@ -982,9 +1088,15 @@ class DirectTriangleWrapper:
 
         return valid_mask
 
-    def _classify_points_into_limbs(self, points_3d: np.ndarray, reference_mesh_3d: np.ndarray,
-                                    u_axis: np.ndarray, v_axis: np.ndarray, w_axis: np.ndarray,
-                                    centroid: np.ndarray) -> np.ndarray:
+    def _classify_points_into_limbs(
+        self,
+        points_3d: np.ndarray,
+        reference_mesh_3d: np.ndarray,
+        u_axis: np.ndarray,
+        v_axis: np.ndarray,
+        w_axis: np.ndarray,
+        centroid: np.ndarray,
+    ) -> np.ndarray:
         """
         Classify points into fold limbs based on their Z position relative to reference mesh.
 
@@ -993,14 +1105,15 @@ class DirectTriangleWrapper:
         from scipy.spatial import cKDTree
 
         # Project to 2D for finding nearest reference points
-        points_2d = np.column_stack([
-            np.dot(points_3d - centroid, u_axis),
-            np.dot(points_3d - centroid, v_axis)
-        ])
+        points_2d = np.column_stack(
+            [np.dot(points_3d - centroid, u_axis), np.dot(points_3d - centroid, v_axis)]
+        )
         points_z = np.dot(points_3d - centroid, w_axis)
 
         ref_centered = reference_mesh_3d - centroid
-        ref_2d = np.column_stack([np.dot(ref_centered, u_axis), np.dot(ref_centered, v_axis)])
+        ref_2d = np.column_stack(
+            [np.dot(ref_centered, u_axis), np.dot(ref_centered, v_axis)]
+        )
         ref_z = np.dot(ref_centered, w_axis)
 
         # Build tree for reference points
@@ -1045,10 +1158,17 @@ class DirectTriangleWrapper:
 
         return limb_labels
 
-    def _triangulate_limb_separated(self, points_3d: np.ndarray, segments: Optional[np.ndarray],
-                                    reference_mesh_3d: np.ndarray, u_axis: np.ndarray,
-                                    v_axis: np.ndarray, w_axis: np.ndarray, centroid: np.ndarray,
-                                    uniform: bool = False) -> Dict:
+    def _triangulate_limb_separated(
+        self,
+        points_3d: np.ndarray,
+        segments: Optional[np.ndarray],
+        reference_mesh_3d: np.ndarray,
+        u_axis: np.ndarray,
+        v_axis: np.ndarray,
+        w_axis: np.ndarray,
+        centroid: np.ndarray,
+        uniform: bool = False,
+    ) -> Dict:
         """
         Triangulate folded surface using limb-separated approach.
 
@@ -1068,11 +1188,15 @@ class DirectTriangleWrapper:
             self.logger.info("All points on same limb, using standard triangulation")
             return None  # Caller will use standard method
 
-        self.logger.info(f"Detected {len(unique_limbs)} limbs for limb-separated triangulation")
+        self.logger.info(
+            f"Detected {len(unique_limbs)} limbs for limb-separated triangulation"
+        )
 
         # Project all points to 2D
         centered = points_3d - centroid
-        points_2d = np.column_stack([np.dot(centered, u_axis), np.dot(centered, v_axis)])
+        points_2d = np.column_stack(
+            [np.dot(centered, u_axis), np.dot(centered, v_axis)]
+        )
         points_z = np.dot(centered, w_axis)
 
         # Triangulate each limb separately
@@ -1090,7 +1214,9 @@ class DirectTriangleWrapper:
                 self.logger.warning(f"Limb {limb} has fewer than 3 points, skipping")
                 continue
 
-            self.logger.info(f"Triangulating limb {limb} with {len(limb_points_2d)} points")
+            self.logger.info(
+                f"Triangulating limb {limb} with {len(limb_points_2d)} points"
+            )
 
             # Filter segments to this limb
             limb_segments = None
@@ -1119,20 +1245,22 @@ class DirectTriangleWrapper:
 
                 area_constraint = patch_base_size * patch_base_size * 0.5
 
-                tri_input = {'vertices': limb_points_2d}
+                tri_input = {"vertices": limb_points_2d}
                 if limb_segments is not None and len(limb_segments) > 0:
-                    limb_segments = self._sanitize_segments(limb_segments, len(limb_points_2d))
+                    limb_segments = self._sanitize_segments(
+                        limb_segments, len(limb_points_2d)
+                    )
                     if len(limb_segments) > 0:
-                        tri_input['segments'] = limb_segments
+                        tri_input["segments"] = limb_segments
 
-                p_switch = 'p' if 'segments' in tri_input else ''
-                tri_options = f'{p_switch}zYYa{area_constraint:.8f}'
+                p_switch = "p" if "segments" in tri_input else ""
+                tri_options = f"{p_switch}zYYa{area_constraint:.8f}"
 
                 result = tr.triangulate(tri_input, tri_options)
 
-                if result and 'vertices' in result and 'triangles' in result:
-                    result_verts_2d = result['vertices']
-                    result_tris = result['triangles']
+                if result and "vertices" in result and "triangles" in result:
+                    result_verts_2d = result["vertices"]
+                    result_tris = result["triangles"]
 
                     # Map output vertices back to 3D
                     n_orig = len(limb_points_2d)
@@ -1154,18 +1282,22 @@ class DirectTriangleWrapper:
                             dists = dists[:, np.newaxis]
                             indices = indices[:, np.newaxis]
 
-                        weights = 1.0 / np.maximum(dists ** 2, 1e-10)
+                        weights = 1.0 / np.maximum(dists**2, 1e-10)
                         weights_sum = weights.sum(axis=1, keepdims=True)
                         weights_norm = weights / weights_sum
 
-                        steiner_z = np.sum(weights_norm * limb_points_z[indices], axis=1)
+                        steiner_z = np.sum(
+                            weights_norm * limb_points_z[indices], axis=1
+                        )
                         result_z[n_orig:] = steiner_z
 
                     # Convert to 3D
-                    result_verts_3d = (centroid +
-                                       result_verts_2d[:, 0:1] * u_axis +
-                                       result_verts_2d[:, 1:2] * v_axis +
-                                       result_z[:, np.newaxis] * w_axis)
+                    result_verts_3d = (
+                        centroid
+                        + result_verts_2d[:, 0:1] * u_axis
+                        + result_verts_2d[:, 1:2] * v_axis
+                        + result_z[:, np.newaxis] * w_axis
+                    )
 
                     # Add to global mesh
                     all_vertices.append(result_verts_3d)
@@ -1189,16 +1321,19 @@ class DirectTriangleWrapper:
             merged_vertices, merged_triangles, all_vertices, all_triangles
         )
 
-        self.logger.info(f"Limb-separated triangulation: {len(merged_vertices)} vertices, {len(merged_triangles)} triangles")
+        self.logger.info(
+            f"Limb-separated triangulation: {len(merged_vertices)} vertices, {len(merged_triangles)} triangles"
+        )
 
-        return {
-            'vertices': merged_vertices,
-            'triangles': merged_triangles
-        }
+        return {"vertices": merged_vertices, "triangles": merged_triangles}
 
-    def _stitch_limbs_at_hinge(self, vertices: np.ndarray, triangles: np.ndarray,
-                               limb_vertices_list: List[np.ndarray],
-                               limb_triangles_list: List[np.ndarray]) -> Tuple[np.ndarray, np.ndarray]:
+    def _stitch_limbs_at_hinge(
+        self,
+        vertices: np.ndarray,
+        triangles: np.ndarray,
+        limb_vertices_list: List[np.ndarray],
+        limb_triangles_list: List[np.ndarray],
+    ) -> Tuple[np.ndarray, np.ndarray]:
         """
         Stitch separate limb meshes at the fold hinge.
 
@@ -1212,6 +1347,7 @@ class DirectTriangleWrapper:
         # Find boundary vertices of each limb mesh
         def get_boundary_vertices(tris, n_verts):
             from collections import Counter
+
             edge_count = Counter()
             for tri in tris:
                 for i in range(3):
@@ -1237,8 +1373,12 @@ class DirectTriangleWrapper:
 
         for i in range(len(limb_vertices_list)):
             for j in range(i + 1, len(limb_vertices_list)):
-                boundary_i = get_boundary_vertices(limb_triangles_list[i], len(limb_vertices_list[i]))
-                boundary_j = get_boundary_vertices(limb_triangles_list[j], len(limb_vertices_list[j]))
+                boundary_i = get_boundary_vertices(
+                    limb_triangles_list[i], len(limb_vertices_list[i])
+                )
+                boundary_j = get_boundary_vertices(
+                    limb_triangles_list[j], len(limb_vertices_list[j])
+                )
 
                 if len(boundary_i) == 0 or len(boundary_j) == 0:
                     continue
@@ -1258,12 +1398,14 @@ class DirectTriangleWrapper:
         if len(merge_pairs) == 0:
             return vertices, triangles
 
-        self.logger.info(f"Found {len(merge_pairs)} boundary vertex pairs to merge at fold hinge")
+        self.logger.info(
+            f"Found {len(merge_pairs)} boundary vertex pairs to merge at fold hinge"
+        )
 
         # Merge vertices: keep first vertex, remap second to first
         # Build remap table
         remap = np.arange(len(vertices))
-        for (v1, v2) in merge_pairs:
+        for v1, v2 in merge_pairs:
             # Use the lower index as the target
             target = min(v1, v2)
             source = max(v1, v2)
@@ -1285,10 +1427,13 @@ class DirectTriangleWrapper:
 
         return vertices, new_triangles
 
-    def _triangulate_with_reference_insertion(self, constraint_points_3d: np.ndarray,
-                                              segments: Optional[np.ndarray],
-                                              reference_vertices_3d: np.ndarray,
-                                              reference_triangles: np.ndarray) -> Optional[Dict]:
+    def _triangulate_with_reference_insertion(
+        self,
+        constraint_points_3d: np.ndarray,
+        segments: Optional[np.ndarray],
+        reference_vertices_3d: np.ndarray,
+        reference_triangles: np.ndarray,
+    ) -> Optional[Dict]:
         """
         Triangulate by inserting constraint points into the reference mesh topology.
 
@@ -1309,24 +1454,32 @@ class DirectTriangleWrapper:
         if len(reference_triangles) == 0:
             return None
 
-        self.logger.info(f"Reference mesh insertion: {len(constraint_points_3d)} constraints into "
-                        f"{len(reference_vertices_3d)} vertices, {len(reference_triangles)} triangles")
+        self.logger.info(
+            f"Reference mesh insertion: {len(constraint_points_3d)} constraints into "
+            f"{len(reference_vertices_3d)} vertices, {len(reference_triangles)} triangles"
+        )
 
         # Project everything to local 2D coordinate system
         all_points = np.vstack([reference_vertices_3d, constraint_points_3d])
         centroid = all_points.mean(axis=0)
         centered = all_points - centroid
 
-        _, _, vh = np.linalg.svd(centered[:len(reference_vertices_3d)], full_matrices=False)
+        _, _, vh = np.linalg.svd(
+            centered[: len(reference_vertices_3d)], full_matrices=False
+        )
         u_axis, v_axis, w_axis = vh[0], vh[1], vh[2]
 
         # Project reference mesh to 2D
         ref_centered = reference_vertices_3d - centroid
-        ref_2d = np.column_stack([np.dot(ref_centered, u_axis), np.dot(ref_centered, v_axis)])
+        ref_2d = np.column_stack(
+            [np.dot(ref_centered, u_axis), np.dot(ref_centered, v_axis)]
+        )
 
         # Project constraint points to 2D
         con_centered = constraint_points_3d - centroid
-        con_2d = np.column_stack([np.dot(con_centered, u_axis), np.dot(con_centered, v_axis)])
+        con_2d = np.column_stack(
+            [np.dot(con_centered, u_axis), np.dot(con_centered, v_axis)]
+        )
 
         # Build reference mesh edge set
         ref_edges = set()
@@ -1358,10 +1511,9 @@ class DirectTriangleWrapper:
 
         # Build combined point set for triangulation
         combined_centered = new_vertices_3d - centroid
-        combined_2d = np.column_stack([
-            np.dot(combined_centered, u_axis),
-            np.dot(combined_centered, v_axis)
-        ])
+        combined_2d = np.column_stack(
+            [np.dot(combined_centered, u_axis), np.dot(combined_centered, v_axis)]
+        )
 
         # Remap segments to new vertex indices
         if segments is not None and len(segments) > 0:
@@ -1371,7 +1523,9 @@ class DirectTriangleWrapper:
                 new_p2 = constraint_to_vertex.get(int(seg[1]), int(seg[1]))
                 if new_p1 != new_p2:
                     remapped_segments.append([new_p1, new_p2])
-            segments = np.array(remapped_segments, dtype=int) if remapped_segments else None
+            segments = (
+                np.array(remapped_segments, dtype=int) if remapped_segments else None
+            )
 
         # Use Triangle with all points but respecting reference structure
         # Strategy: Triangulate with points, then project original reference triangles' connectivity
@@ -1385,26 +1539,26 @@ class DirectTriangleWrapper:
                 diagonal = np.sqrt(np.sum((max_coords - min_coords) ** 2))
                 area_constraint = (diagonal / 10.0) ** 2 * 0.5
             else:
-                area_constraint = self.base_size ** 2 * 0.5
+                area_constraint = self.base_size**2 * 0.5
 
-            tri_input = {'vertices': combined_2d}
+            tri_input = {"vertices": combined_2d}
 
             if segments is not None and len(segments) > 0:
                 segments = self._sanitize_segments(segments, len(combined_2d))
                 if len(segments) > 0:
-                    tri_input['segments'] = segments
+                    tri_input["segments"] = segments
 
-            p_switch = 'p' if 'segments' in tri_input else ''
-            tri_options = f'{p_switch}zYYa{area_constraint:.8f}'
+            p_switch = "p" if "segments" in tri_input else ""
+            tri_options = f"{p_switch}zYYa{area_constraint:.8f}"
 
             result = tr.triangulate(tri_input, tri_options)
 
-            if not result or 'vertices' not in result or 'triangles' not in result:
+            if not result or "vertices" not in result or "triangles" not in result:
                 self.logger.warning("Reference insertion triangulation failed")
                 return None
 
-            result_verts_2d = result['vertices']
-            result_tris = result['triangles']
+            result_verts_2d = result["vertices"]
+            result_tris = result["triangles"]
 
         except Exception as e:
             self.logger.warning(f"Reference insertion triangulation error: {e}")
@@ -1442,7 +1596,7 @@ class DirectTriangleWrapper:
                 # Find which reference triangle this point is in (or closest to)
                 best_tri = None
                 best_bary = None
-                min_dist_to_tri = float('inf')
+                min_dist_to_tri = float("inf")
 
                 for tri in reference_triangles:
                     t0, t1, t2 = int(tri[0]), int(tri[1]), int(tri[2])
@@ -1495,15 +1649,17 @@ class DirectTriangleWrapper:
                     w0, w1, w2 = best_bary
 
                     # Interpolate 3D position from reference triangle vertices
-                    interp_3d = (w0 * reference_vertices_3d[t0] +
-                                w1 * reference_vertices_3d[t1] +
-                                w2 * reference_vertices_3d[t2])
+                    interp_3d = (
+                        w0 * reference_vertices_3d[t0]
+                        + w1 * reference_vertices_3d[t1]
+                        + w2 * reference_vertices_3d[t2]
+                    )
                     result_verts_3d[n_combined + i] = interp_3d
                 else:
                     # Fallback: IDW from nearest reference vertices
                     neighbor_dists = dists[i]
                     neighbor_indices = indices[i]
-                    weights = 1.0 / np.maximum(neighbor_dists ** 2, 1e-10)
+                    weights = 1.0 / np.maximum(neighbor_dists**2, 1e-10)
                     weights_norm = weights / weights.sum()
 
                     interp_3d = np.zeros(3)
@@ -1516,25 +1672,31 @@ class DirectTriangleWrapper:
         n_invalid = np.sum(~valid_mask)
 
         if n_invalid > 0:
-            self.logger.info(f"Reference insertion: removed {n_invalid} problematic triangles")
+            self.logger.info(
+                f"Reference insertion: removed {n_invalid} problematic triangles"
+            )
             result_tris = result_tris[valid_mask]
 
         # If too many triangles were removed, this approach failed
         if len(result_tris) < len(reference_triangles) * 0.5:
-            self.logger.warning(f"Too many triangles removed ({n_invalid}), reference insertion failed")
+            self.logger.warning(
+                f"Too many triangles removed ({n_invalid}), reference insertion failed"
+            )
             return None
 
-        self.logger.info(f"Reference insertion complete: {len(result_verts_3d)} vertices, {len(result_tris)} triangles")
+        self.logger.info(
+            f"Reference insertion complete: {len(result_verts_3d)} vertices, {len(result_tris)} triangles"
+        )
 
-        return {
-            'vertices': result_verts_3d,
-            'triangles': result_tris
-        }
+        return {"vertices": result_verts_3d, "triangles": result_tris}
 
-    def _refine_mesh_with_constraints(self, constraint_points_3d: np.ndarray,
-                                      segments: Optional[np.ndarray],
-                                      reference_vertices_3d: np.ndarray,
-                                      reference_triangles: np.ndarray) -> Optional[Dict]:
+    def _refine_mesh_with_constraints(
+        self,
+        constraint_points_3d: np.ndarray,
+        segments: Optional[np.ndarray],
+        reference_vertices_3d: np.ndarray,
+        reference_triangles: np.ndarray,
+    ) -> Optional[Dict]:
         """
         Refine mesh using 2D CDT with per-triangle barycentric Z-interpolation.
 
@@ -1559,8 +1721,10 @@ class DirectTriangleWrapper:
         if len(reference_triangles) == 0:
             return None
 
-        self.logger.info(f"CDT with barycentric Z: {len(constraint_points_3d)} constraints, "
-                        f"{len(reference_vertices_3d)} ref verts, {len(reference_triangles)} ref tris")
+        self.logger.info(
+            f"CDT with barycentric Z: {len(constraint_points_3d)} constraints, "
+            f"{len(reference_vertices_3d)} ref verts, {len(reference_triangles)} ref tris"
+        )
 
         # Step 1: Project reference mesh to 2D using PCA
         ref_centroid = reference_vertices_3d.mean(axis=0)
@@ -1568,18 +1732,16 @@ class DirectTriangleWrapper:
         _, _, vh = np.linalg.svd(ref_centered, full_matrices=False)
         u_axis, v_axis, w_axis = vh[0], vh[1], vh[2]
 
-        ref_2d = np.column_stack([
-            np.dot(ref_centered, u_axis),
-            np.dot(ref_centered, v_axis)
-        ])
+        ref_2d = np.column_stack(
+            [np.dot(ref_centered, u_axis), np.dot(ref_centered, v_axis)]
+        )
         ref_z = np.dot(ref_centered, w_axis)
 
         # Step 2: Project constraint points to 2D
         con_centered = constraint_points_3d - ref_centroid
-        con_2d = np.column_stack([
-            np.dot(con_centered, u_axis),
-            np.dot(con_centered, v_axis)
-        ])
+        con_2d = np.column_stack(
+            [np.dot(con_centered, u_axis), np.dot(con_centered, v_axis)]
+        )
         con_z = np.dot(con_centered, w_axis)  # Original Z for exact matching
 
         # Step 3: Build triangle lookup for barycentric interpolation
@@ -1598,18 +1760,27 @@ class DirectTriangleWrapper:
             dot11 = np.dot(v1, v1)
             denom = dot00 * dot11 - dot01 * dot01
 
-            tri_data.append({
-                'indices': (t0, t1, t2),
-                'p0': p0, 'p1': p1, 'p2': p2,
-                'z0': z0, 'z1': z1, 'z2': z2,
-                'v0': v0, 'v1': v1,
-                'dot00': dot00, 'dot01': dot01, 'dot11': dot11,
-                'denom': denom,
-                'center': (p0 + p1 + p2) / 3
-            })
+            tri_data.append(
+                {
+                    "indices": (t0, t1, t2),
+                    "p0": p0,
+                    "p1": p1,
+                    "p2": p2,
+                    "z0": z0,
+                    "z1": z1,
+                    "z2": z2,
+                    "v0": v0,
+                    "v1": v1,
+                    "dot00": dot00,
+                    "dot01": dot01,
+                    "dot11": dot11,
+                    "denom": denom,
+                    "center": (p0 + p1 + p2) / 3,
+                }
+            )
 
         # Build KD-tree of triangle centers for fast lookup
-        tri_centers = np.array([td['center'] for td in tri_data])
+        tri_centers = np.array([td["center"] for td in tri_data])
         tri_center_tree = cKDTree(tri_centers)
 
         def find_containing_triangle_and_interpolate_z(point_2d):
@@ -1624,17 +1795,17 @@ class DirectTriangleWrapper:
 
             for tri_idx in candidates:
                 td = tri_data[tri_idx]
-                if abs(td['denom']) < 1e-12:
+                if abs(td["denom"]) < 1e-12:
                     continue
 
                 # Compute barycentric coordinates
-                v2 = point_2d - td['p0']
-                dot02 = np.dot(td['v0'], v2)
-                dot12 = np.dot(td['v1'], v2)
+                v2 = point_2d - td["p0"]
+                dot02 = np.dot(td["v0"], v2)
+                dot12 = np.dot(td["v1"], v2)
 
-                inv_denom = 1.0 / td['denom']
-                u = (td['dot11'] * dot02 - td['dot01'] * dot12) * inv_denom
-                v = (td['dot00'] * dot12 - td['dot01'] * dot02) * inv_denom
+                inv_denom = 1.0 / td["denom"]
+                u = (td["dot11"] * dot02 - td["dot01"] * dot12) * inv_denom
+                v = (td["dot00"] * dot12 - td["dot01"] * dot02) * inv_denom
                 w = 1.0 - u - v
 
                 # Check if inside triangle (with small tolerance)
@@ -1655,7 +1826,11 @@ class DirectTriangleWrapper:
             if best_tri_idx is not None and best_bary is not None:
                 td = tri_data[best_tri_idx]
                 # Barycentric interpolation of Z
-                z = best_bary[0] * td['z0'] + best_bary[1] * td['z1'] + best_bary[2] * td['z2']
+                z = (
+                    best_bary[0] * td["z0"]
+                    + best_bary[1] * td["z1"]
+                    + best_bary[2] * td["z2"]
+                )
                 return z, best_tri_idx
 
             # Fallback: nearest reference vertex
@@ -1669,13 +1844,13 @@ class DirectTriangleWrapper:
                 segments = self._filter_short_segments(segments, con_2d, min_len)
 
         # Step 5: Run Triangle CDT
-        tri_input = {'vertices': con_2d}
+        tri_input = {"vertices": con_2d}
         if segments is not None and len(segments) > 0:
-            tri_input['segments'] = segments
+            tri_input["segments"] = segments
 
         # Use area constraint based on reference mesh density
         if self.base_size:
-            area_constraint = self.base_size ** 2 * 0.5
+            area_constraint = self.base_size**2 * 0.5
         else:
             # Estimate from reference mesh
             ref_areas = []
@@ -1687,8 +1862,8 @@ class DirectTriangleWrapper:
                 ref_areas.append(area)
             area_constraint = np.median(ref_areas) * 2 if ref_areas else 100.0
 
-        p_switch = 'p' if segments is not None and len(segments) > 0 else ''
-        tri_options = f'{p_switch}zYYa{area_constraint:.8f}'
+        p_switch = "p" if segments is not None and len(segments) > 0 else ""
+        tri_options = f"{p_switch}zYYa{area_constraint:.8f}"
 
         self.logger.info(f"Running 2D CDT with options: '{tri_options}'")
 
@@ -1697,18 +1872,20 @@ class DirectTriangleWrapper:
         except Exception as e:
             self.logger.warning(f"CDT failed: {e}, trying without area constraint")
             try:
-                result = tr.triangulate(tri_input, f'{p_switch}zYY')
+                result = tr.triangulate(tri_input, f"{p_switch}zYY")
             except Exception as e2:
                 self.logger.error(f"CDT fallback also failed: {e2}")
                 return None
 
-        if 'vertices' not in result or 'triangles' not in result:
+        if "vertices" not in result or "triangles" not in result:
             return None
 
-        result_2d = result['vertices']
-        result_tris = result['triangles']
+        result_2d = result["vertices"]
+        result_tris = result["triangles"]
 
-        self.logger.info(f"CDT produced: {len(result_2d)} vertices, {len(result_tris)} triangles")
+        self.logger.info(
+            f"CDT produced: {len(result_2d)} vertices, {len(result_tris)} triangles"
+        )
 
         # Step 6: Recover Z values using barycentric interpolation
         n_constraints = len(con_2d)
@@ -1742,13 +1919,17 @@ class DirectTriangleWrapper:
                 result_z[i] = ref_z[nearest_ref]
                 fallback_count += 1
 
-        self.logger.info(f"Z recovery: {matched_count} matched, {interpolated_count} interpolated, {fallback_count} fallback")
+        self.logger.info(
+            f"Z recovery: {matched_count} matched, {interpolated_count} interpolated, {fallback_count} fallback"
+        )
 
         # Step 7: Convert back to 3D
-        result_3d = (ref_centroid +
-                    result_2d[:, 0:1] * u_axis +
-                    result_2d[:, 1:2] * v_axis +
-                    result_z[:, np.newaxis] * w_axis)
+        result_3d = (
+            ref_centroid
+            + result_2d[:, 0:1] * u_axis
+            + result_2d[:, 1:2] * v_axis
+            + result_z[:, np.newaxis] * w_axis
+        )
 
         # Step 8: Verify constraint edges are present
         if segments is not None and len(segments) > 0:
@@ -1765,12 +1946,18 @@ class DirectTriangleWrapper:
                     edges = [(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])]
                     for e0, e1 in edges:
                         # Match by position
-                        if np.linalg.norm(result_2d[e0] - con_2d[s0]) < match_threshold and \
-                           np.linalg.norm(result_2d[e1] - con_2d[s1]) < match_threshold:
+                        if (
+                            np.linalg.norm(result_2d[e0] - con_2d[s0]) < match_threshold
+                            and np.linalg.norm(result_2d[e1] - con_2d[s1])
+                            < match_threshold
+                        ):
                             found = True
                             break
-                        if np.linalg.norm(result_2d[e1] - con_2d[s0]) < match_threshold and \
-                           np.linalg.norm(result_2d[e0] - con_2d[s1]) < match_threshold:
+                        if (
+                            np.linalg.norm(result_2d[e1] - con_2d[s0]) < match_threshold
+                            and np.linalg.norm(result_2d[e0] - con_2d[s1])
+                            < match_threshold
+                        ):
                             found = True
                             break
                     if found:
@@ -1778,14 +1965,15 @@ class DirectTriangleWrapper:
                 if found:
                     edge_count += 1
 
-            self.logger.info(f"Constraint edge verification: {edge_count}/{len(segments)} edges present")
+            self.logger.info(
+                f"Constraint edge verification: {edge_count}/{len(segments)} edges present"
+            )
 
-        self.logger.info(f"CDT refinement complete: {len(result_3d)} vertices, {len(result_tris)} triangles")
+        self.logger.info(
+            f"CDT refinement complete: {len(result_3d)} vertices, {len(result_tris)} triangles"
+        )
 
-        return {
-            'vertices': result_3d,
-            'triangles': result_tris
-        }
+        return {"vertices": result_3d, "triangles": result_tris}
 
     def _edge_exists_in_mesh(self, triangles: List, v0: int, v1: int) -> bool:
         """Check if edge (v0, v1) exists in the mesh."""
@@ -1797,8 +1985,9 @@ class DirectTriangleWrapper:
                     return True
         return False
 
-    def _segment_segment_intersection_3d(self, a0: np.ndarray, a1: np.ndarray,
-                                         b0: np.ndarray, b1: np.ndarray) -> Optional[np.ndarray]:
+    def _segment_segment_intersection_3d(
+        self, a0: np.ndarray, a1: np.ndarray, b0: np.ndarray, b1: np.ndarray
+    ) -> Optional[np.ndarray]:
         """Find intersection point of two 3D segments if they cross (with tolerance for near-coplanar)."""
         da = a1 - a0
         db = b1 - b0
@@ -1826,7 +2015,9 @@ class DirectTriangleWrapper:
 
         return None
 
-    def _try_flip_toward_target(self, triangles: List, vertices: List, v_start: int, v_target: int) -> bool:
+    def _try_flip_toward_target(
+        self, triangles: List, vertices: List, v_start: int, v_target: int
+    ) -> bool:
         """
         Try to flip edges around v_start to create path toward v_target.
         Returns True if a flip was made.
@@ -1887,7 +2078,9 @@ class DirectTriangleWrapper:
 
             if dist_after < dist_before:
                 # Check if flip is valid (convex quadrilateral)
-                if self._can_flip_edge(vertices, apex, opp_edge[0], opp_edge[1], fourth_v):
+                if self._can_flip_edge(
+                    vertices, apex, opp_edge[0], opp_edge[1], fourth_v
+                ):
                     # Perform flip
                     triangles[tri_idx] = [apex, opp_edge[0], fourth_v]
                     triangles[adj_tri_idx] = [apex, fourth_v, opp_edge[1]]
@@ -1895,7 +2088,9 @@ class DirectTriangleWrapper:
 
         return False
 
-    def _can_flip_edge(self, vertices: List, v0: int, v1: int, v2: int, v3: int) -> bool:
+    def _can_flip_edge(
+        self, vertices: List, v0: int, v1: int, v2: int, v3: int
+    ) -> bool:
         """Check if edge (v1, v2) can be flipped in quadrilateral (v0, v1, v3, v2)."""
         p0 = np.array(vertices[v0])
         p1 = np.array(vertices[v1])
@@ -1930,8 +2125,14 @@ class DirectTriangleWrapper:
 
         return all(s >= 0 for s in signs) or all(s <= 0 for s in signs)
 
-    def _find_containing_triangle_3d_v2(self, point: np.ndarray, vertices: List,
-                                        triangles: List, centroid_tree, tri_centroids) -> Optional[int]:
+    def _find_containing_triangle_3d_v2(
+        self,
+        point: np.ndarray,
+        vertices: List,
+        triangles: List,
+        centroid_tree,
+        tri_centroids,
+    ) -> Optional[int]:
         """Find triangle containing point using 3D barycentric coordinates."""
         if len(tri_centroids) == 0:
             return None
@@ -1963,7 +2164,9 @@ class DirectTriangleWrapper:
 
         return None
 
-    def _compute_bary_3d(self, point: np.ndarray, p0: np.ndarray, p1: np.ndarray, p2: np.ndarray):
+    def _compute_bary_3d(
+        self, point: np.ndarray, p0: np.ndarray, p1: np.ndarray, p2: np.ndarray
+    ):
         """Compute barycentric coordinates projecting point onto triangle plane."""
         v0 = p1 - p0
         v1 = p2 - p0
@@ -1995,4 +2198,3 @@ class DirectTriangleWrapper:
         u = 1.0 - v - w
 
         return (u, v, w)
-

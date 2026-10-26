@@ -23,7 +23,9 @@ class PZeroEntityRecord:
     role: str = ""
     feature: str = ""
     scenario: str = ""
-    face_id: Optional[int] = None  # For boundary faces: 0=bottom, 1=top, 2=front, 3=back, 4=left, 5=right
+    face_id: Optional[int] = (
+        None  # For boundary faces: 0=bottom, 1=top, 2=front, 3=back, 4=left, 5=right
+    )
 
 
 class PZeroPymeshitBridge:
@@ -95,10 +97,14 @@ class PZeroPymeshitBridge:
             if "uid" not in collection.df.columns:
                 continue
 
-            topology_column = "topology" if "topology" in collection.df.columns else None
+            topology_column = (
+                "topology" if "topology" in collection.df.columns else None
+            )
             role_column = "role" if "role" in collection.df.columns else None
             feature_column = "feature" if "feature" in collection.df.columns else None
-            scenario_column = "scenario" if "scenario" in collection.df.columns else None
+            scenario_column = (
+                "scenario" if "scenario" in collection.df.columns else None
+            )
             name_column = "name" if "name" in collection.df.columns else None
 
             for _, row in collection.df.iterrows():
@@ -109,11 +115,13 @@ class PZeroPymeshitBridge:
                 point_count = _count_points(vtk_obj)
                 if point_count == 0:
                     continue
-                
+
                 # Special handling for boundary collection: export 6 faces separately
                 if attr_name == "boundary_coll" and _is_boundary_cube(vtk_obj):
                     face_names = ["Bottom", "Top", "Front", "Back", "Left", "Right"]
-                    base_name = str(row.get(name_column, uid)) if name_column else str(uid)
+                    base_name = (
+                        str(row.get(name_column, uid)) if name_column else str(uid)
+                    )
                     for face_id, face_name in enumerate(face_names):
                         record = PZeroEntityRecord(
                             collection_key=attr_name,
@@ -121,9 +129,21 @@ class PZeroPymeshitBridge:
                             uid=uid,
                             name=f"{base_name} - {face_name}",
                             topology="BORDER",  # Mark as BORDER for PyMeshIt
-                            role=_collection_value_as_text(row.get(role_column, "")) if role_column else "",
-                            feature=_collection_value_as_text(row.get(feature_column, "")) if feature_column else "",
-                            scenario=_collection_value_as_text(row.get(scenario_column, "")) if scenario_column else "",
+                            role=(
+                                _collection_value_as_text(row.get(role_column, ""))
+                                if role_column
+                                else ""
+                            ),
+                            feature=(
+                                _collection_value_as_text(row.get(feature_column, ""))
+                                if feature_column
+                                else ""
+                            ),
+                            scenario=(
+                                _collection_value_as_text(row.get(scenario_column, ""))
+                                if scenario_column
+                                else ""
+                            ),
                             point_count=4,  # Each face has 4 points
                             face_id=face_id,
                         )
@@ -133,11 +153,27 @@ class PZeroPymeshitBridge:
                         collection_key=attr_name,
                         collection_label=label,
                         uid=uid,
-                        name=str(row.get(name_column, uid)) if name_column else str(uid),
-                        topology=str(row.get(topology_column, "")) if topology_column else "",
-                        role=_collection_value_as_text(row.get(role_column, "")) if role_column else "",
-                        feature=_collection_value_as_text(row.get(feature_column, "")) if feature_column else "",
-                        scenario=_collection_value_as_text(row.get(scenario_column, "")) if scenario_column else "",
+                        name=(
+                            str(row.get(name_column, uid)) if name_column else str(uid)
+                        ),
+                        topology=(
+                            str(row.get(topology_column, "")) if topology_column else ""
+                        ),
+                        role=(
+                            _collection_value_as_text(row.get(role_column, ""))
+                            if role_column
+                            else ""
+                        ),
+                        feature=(
+                            _collection_value_as_text(row.get(feature_column, ""))
+                            if feature_column
+                            else ""
+                        ),
+                        scenario=(
+                            _collection_value_as_text(row.get(scenario_column, ""))
+                            if scenario_column
+                            else ""
+                        ),
                         point_count=point_count,
                     )
                     records.append(record)
@@ -209,12 +245,15 @@ class PZeroPymeshitBridge:
         return sorted(records, key=key_func, reverse=reverse)
 
     def load_points(
-        self, collection_key: str, uid: str, face_id: Optional[int] = None,
-        extension_factor: float = 0.2
+        self,
+        collection_key: str,
+        uid: str,
+        face_id: Optional[int] = None,
+        extension_factor: float = 0.2,
     ) -> Optional[np.ndarray]:
         """
         Return the XYZ coordinates for the requested entity, or None.
-        
+
         Parameters
         ----------
         collection_key : str
@@ -226,7 +265,7 @@ class PZeroPymeshitBridge:
         extension_factor : float
             Factor by which to extend boundary faces (default 0.2 = 20% extension)
             Only applies to boundary faces. Increase this if intersections are incomplete.
-        
+
         Returns
         -------
         Optional[np.ndarray]
@@ -238,11 +277,11 @@ class PZeroPymeshitBridge:
         if not hasattr(collection, "get_uid_vtk_obj"):
             return None
         vtk_obj = collection.get_uid_vtk_obj(uid)
-        
+
         # Extract specific face for boundary cubes
         if face_id is not None and collection_key == "boundary_coll":
             return _extract_boundary_face(vtk_obj, face_id, extension_factor)
-        
+
         return _vtk_dataset_to_points(vtk_obj)
 
     def load_triangles(
@@ -250,14 +289,14 @@ class PZeroPymeshitBridge:
     ) -> Optional[Tuple[np.ndarray, np.ndarray]]:
         """
         Extract triangles and vertices from a TriSurf entity.
-        
+
         Parameters
         ----------
         collection_key : str
             Key identifying the collection (e.g., 'geol_coll')
         uid : str
             Unique identifier of the TriSurf entity
-        
+
         Returns
         -------
         Optional[Tuple[np.ndarray, np.ndarray]]
@@ -270,21 +309,22 @@ class PZeroPymeshitBridge:
             return None
         if not hasattr(collection, "get_uid_vtk_obj"):
             return None
-        
+
         vtk_obj = collection.get_uid_vtk_obj(uid)
         if vtk_obj is None:
             return None
-        
+
         # Check if it's a TriSurf
         from pzero.entities_factory import TriSurf
+
         if not isinstance(vtk_obj, TriSurf):
             return None
-        
+
         # Extract vertices
         vertices = _vtk_dataset_to_points(vtk_obj)
         if vertices is None or len(vertices) == 0:
             return None
-        
+
         # Extract triangles using TriSurf's cells property
         try:
             cells = vtk_obj.cells  # Returns (N, 3) array of triangle indices
@@ -293,7 +333,7 @@ class PZeroPymeshitBridge:
             triangles = np.asarray(cells, dtype=np.int32)
         except Exception:
             return None
-        
+
         return vertices, triangles
 
     def load_trisurf_components(
@@ -344,18 +384,18 @@ class PZeroPymeshitBridge:
     ) -> Optional[np.ndarray]:
         """
         Extract the actual boundary edges from a TriSurf entity.
-        
+
         This extracts the true boundary polylines preserving their exact shape,
         including concave features. Unlike a convex hull, this captures the
         actual outline of the surface.
-        
+
         Parameters
         ----------
         collection_key : str
             Key identifying the collection (e.g., 'geol_coll')
         uid : str
             Unique identifier of the TriSurf entity
-        
+
         Returns
         -------
         Optional[np.ndarray]
@@ -367,27 +407,28 @@ class PZeroPymeshitBridge:
             return None
         if not hasattr(collection, "get_uid_vtk_obj"):
             return None
-        
+
         vtk_obj = collection.get_uid_vtk_obj(uid)
         if vtk_obj is None:
             return None
-        
+
         # Check if it's a TriSurf
         from pzero.entities_factory import TriSurf
+
         if not isinstance(vtk_obj, TriSurf):
             return None
-        
+
         # Extract boundary using TriSurf's get_clean_boundary method
         try:
             boundary_polydata = vtk_obj.get_clean_boundary()
             if boundary_polydata is None:
                 return None
-            
+
             # Extract ordered boundary points from the VTK polylines
             boundary_points = _extract_ordered_boundary_points(boundary_polydata)
             if boundary_points is None or len(boundary_points) == 0:
                 return None
-            
+
             return boundary_points
         except Exception:
             return None
@@ -471,9 +512,14 @@ def _split_triangles_by_cell_labels(
             continue
         component_global_triangles = triangles[tri_indices]
         used_point_ids = np.unique(component_global_triangles.ravel())
-        point_id_map = {int(old_id): new_id for new_id, old_id in enumerate(used_point_ids)}
+        point_id_map = {
+            int(old_id): new_id for new_id, old_id in enumerate(used_point_ids)
+        }
         local_triangles = np.array(
-            [[point_id_map[int(point_id)] for point_id in tri] for tri in component_global_triangles],
+            [
+                [point_id_map[int(point_id)] for point_id in tri]
+                for tri in component_global_triangles
+            ],
             dtype=np.int32,
         )
         local_vertices = vertices[used_point_ids].copy()
@@ -524,9 +570,14 @@ def _split_triangles_by_connected_components(
 
         component_global_triangles = triangles[component_tri_indices]
         used_point_ids = np.unique(component_global_triangles.ravel())
-        point_id_map = {int(old_id): new_id for new_id, old_id in enumerate(used_point_ids)}
+        point_id_map = {
+            int(old_id): new_id for new_id, old_id in enumerate(used_point_ids)
+        }
         local_triangles = np.array(
-            [[point_id_map[int(point_id)] for point_id in tri] for tri in component_global_triangles],
+            [
+                [point_id_map[int(point_id)] for point_id in tri]
+                for tri in component_global_triangles
+            ],
             dtype=np.int32,
         )
         local_vertices = vertices[used_point_ids].copy()
@@ -577,7 +628,9 @@ def _split_tube_surface_by_direction_changes(
     if len(ring) < 4:
         return []
 
-    corner_positions = _major_direction_break_positions(unique_xy[ring], target_count=target_count)
+    corner_positions = _major_direction_break_positions(
+        unique_xy[ring], target_count=target_count
+    )
     if len(corner_positions) < 2:
         return []
 
@@ -594,11 +647,18 @@ def _split_tube_surface_by_direction_changes(
         if len(tri_indices) < min_triangles:
             return []
 
-        component_global_triangles = triangles[np.asarray(tri_indices, dtype=np.int32), :3]
+        component_global_triangles = triangles[
+            np.asarray(tri_indices, dtype=np.int32), :3
+        ]
         used_point_ids = np.unique(component_global_triangles.ravel())
-        point_id_map = {int(old_id): new_id for new_id, old_id in enumerate(used_point_ids)}
+        point_id_map = {
+            int(old_id): new_id for new_id, old_id in enumerate(used_point_ids)
+        }
         local_triangles = np.array(
-            [[point_id_map[int(point_id)] for point_id in tri] for tri in component_global_triangles],
+            [
+                [point_id_map[int(point_id)] for point_id in tri]
+                for tri in component_global_triangles
+            ],
             dtype=np.int32,
         )
         local_vertices = vertices[used_point_ids].copy()
@@ -608,7 +668,9 @@ def _split_tube_surface_by_direction_changes(
     return components
 
 
-def _tube_unique_xy_columns(vertices: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _tube_unique_xy_columns(
+    vertices: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return unique XY columns and the per-vertex column ids."""
     xy = np.round(np.asarray(vertices, dtype=float)[:, :2], decimals=6)
     unique_xy, vertex_column_ids, xy_counts = np.unique(
@@ -628,7 +690,9 @@ def _trace_xy_column_ring(
     """Trace the closed XY column loop of a tube side surface."""
     adjacency: Dict[int, set] = {}
     for tri in triangles[:, :3]:
-        tri_columns = sorted({int(vertex_column_ids[int(point_id)]) for point_id in tri})
+        tri_columns = sorted(
+            {int(vertex_column_ids[int(point_id)]) for point_id in tri}
+        )
         if len(tri_columns) != 2:
             continue
         a, b = tri_columns
@@ -684,7 +748,20 @@ def _major_direction_break_positions(
 
     best_indices = None
     best_delta = None
-    for fraction in (0.10, 0.09, 0.08, 0.07, 0.06, 0.05, 0.04, 0.03, 0.02, 0.015, 0.01, 0.005):
+    for fraction in (
+        0.10,
+        0.09,
+        0.08,
+        0.07,
+        0.06,
+        0.05,
+        0.04,
+        0.03,
+        0.02,
+        0.015,
+        0.01,
+        0.005,
+    ):
         indices = _rdp_closed_loop_indices(loop_xy, bbox_diag * fraction)
         if len(indices) < target_count:
             continue
@@ -716,7 +793,9 @@ def _rdp_closed_loop_indices(points: np.ndarray, epsilon: float) -> List[int]:
     return unique_indices
 
 
-def _rdp_open_polyline_indices(points: np.ndarray, epsilon: float, offset: int = 0) -> List[int]:
+def _rdp_open_polyline_indices(
+    points: np.ndarray, epsilon: float, offset: int = 0
+) -> List[int]:
     """Ramer-Douglas-Peucker simplification returning source indices."""
     if len(points) <= 2:
         return [offset, offset + len(points) - 1]
@@ -735,11 +814,15 @@ def _rdp_open_polyline_indices(points: np.ndarray, epsilon: float, offset: int =
         return [offset, offset + len(points) - 1]
 
     left = _rdp_open_polyline_indices(points[: max_local_idx + 1], epsilon, offset)
-    right = _rdp_open_polyline_indices(points[max_local_idx:], epsilon, offset + max_local_idx)
+    right = _rdp_open_polyline_indices(
+        points[max_local_idx:], epsilon, offset + max_local_idx
+    )
     return left[:-1] + right
 
 
-def _point_to_segment_distance(point: np.ndarray, start: np.ndarray, end: np.ndarray) -> float:
+def _point_to_segment_distance(
+    point: np.ndarray, start: np.ndarray, end: np.ndarray
+) -> float:
     segment = end - start
     denom = float(np.dot(segment, segment))
     if denom <= 0.0:
@@ -759,7 +842,9 @@ def _select_polygon_corners_by_area(
     if len(candidate_indices) <= target_count:
         return candidate_indices
     if len(candidate_indices) > 24:
-        local_positions = _largest_turn_positions(loop_xy[candidate_indices], target_count)
+        local_positions = _largest_turn_positions(
+            loop_xy[candidate_indices], target_count
+        )
         return [candidate_indices[pos] for pos in local_positions]
 
     best_combo = None
@@ -770,7 +855,9 @@ def _select_polygon_corners_by_area(
         if area > best_area:
             best_combo = combo
             best_area = area
-    return list(best_combo) if best_combo is not None else candidate_indices[:target_count]
+    return (
+        list(best_combo) if best_combo is not None else candidate_indices[:target_count]
+    )
 
 
 def _polygon_area_2d(points: np.ndarray) -> float:
@@ -795,13 +882,19 @@ def _largest_turn_positions(loop_xy: np.ndarray, target_count: int) -> List[int]
         if len1 <= 0.0 or len2 <= 0.0:
             angle = 0.0
         else:
-            angle = float(np.degrees(np.arccos(np.clip(np.dot(v1 / len1, v2 / len2), -1.0, 1.0))))
+            angle = float(
+                np.degrees(np.arccos(np.clip(np.dot(v1 / len1, v2 / len2), -1.0, 1.0)))
+            )
         turns.append((angle, idx))
 
     selected = []
     min_separation = max(1, len(loop_xy) // max(1, target_count * 4))
     for _angle, idx in sorted(turns, reverse=True):
-        if all(min((idx - prev) % len(loop_xy), (prev - idx) % len(loop_xy)) >= min_separation for prev in selected):
+        if all(
+            min((idx - prev) % len(loop_xy), (prev - idx) % len(loop_xy))
+            >= min_separation
+            for prev in selected
+        ):
             selected.append(idx)
         if len(selected) == target_count:
             break
@@ -833,7 +926,11 @@ def _component_boundary_loop(
     edge_counts: Dict[Tuple[int, int], int] = {}
     for tri in triangles:
         tri_ids = [int(tri[0]), int(tri[1]), int(tri[2])]
-        for a, b in ((tri_ids[0], tri_ids[1]), (tri_ids[1], tri_ids[2]), (tri_ids[2], tri_ids[0])):
+        for a, b in (
+            (tri_ids[0], tri_ids[1]),
+            (tri_ids[1], tri_ids[2]),
+            (tri_ids[2], tri_ids[0]),
+        ):
             edge = (a, b) if a < b else (b, a)
             edge_counts[edge] = edge_counts.get(edge, 0) + 1
 
@@ -863,7 +960,11 @@ def _component_boundary_loop(
             previous = chain[-2] if len(chain) > 1 else None
             next_candidates = []
             for candidate in adjacency.get(current, []):
-                edge = (current, candidate) if current < candidate else (candidate, current)
+                edge = (
+                    (current, candidate)
+                    if current < candidate
+                    else (candidate, current)
+                )
                 if edge in unused_edges and candidate != previous:
                     next_candidates.append(candidate)
             if not next_candidates:
@@ -893,15 +994,15 @@ def _component_boundary_loop(
 def _extract_ordered_boundary_points(boundary_polydata) -> Optional[np.ndarray]:
     """
     Extract ordered boundary points from VTK polydata containing polylines.
-    
+
     This preserves the exact boundary shape, including concave features,
     by following the connectivity of the polylines.
-    
+
     Parameters
     ----------
     boundary_polydata : vtkPolyData
         VTK polydata containing boundary polylines (from get_clean_boundary)
-    
+
     Returns
     -------
     Optional[np.ndarray]
@@ -910,39 +1011,39 @@ def _extract_ordered_boundary_points(boundary_polydata) -> Optional[np.ndarray]:
     """
     if boundary_polydata is None:
         return None
-    
+
     # Get all points from the polydata
     all_points = _vtk_dataset_to_points(boundary_polydata)
     if all_points is None or len(all_points) == 0:
         return None
-    
+
     # Get the number of cells (polylines)
     num_cells = boundary_polydata.GetNumberOfCells()
     if num_cells == 0:
         return all_points  # Fallback to all points if no cells
-    
+
     # Extract ordered points from all polyline cells
     ordered_points_list = []
-    
+
     for cell_idx in range(num_cells):
         cell = boundary_polydata.GetCell(cell_idx)
         if cell is None:
             continue
-        
+
         num_points_in_cell = cell.GetNumberOfPoints()
         if num_points_in_cell < 2:
             continue
-        
+
         # Get point IDs in order from this cell
         cell_points = []
         for pt_idx in range(num_points_in_cell):
             point_id = cell.GetPointId(pt_idx)
             if point_id >= 0 and point_id < len(all_points):
                 cell_points.append(all_points[point_id])
-        
+
         if len(cell_points) >= 2:
             ordered_points_list.append(np.array(cell_points))
-    
+
     if not ordered_points_list:
         return all_points  # Fallback to all points if no valid cells
 
@@ -954,7 +1055,9 @@ def _extract_ordered_boundary_points(boundary_polydata) -> Optional[np.ndarray]:
 
     result_points = []
     for pt in primary_ring:
-        if len(result_points) == 0 or not np.allclose(result_points[-1], pt, atol=1e-10):
+        if len(result_points) == 0 or not np.allclose(
+            result_points[-1], pt, atol=1e-10
+        ):
             result_points.append(pt)
 
     if len(result_points) < 3:
@@ -969,27 +1072,29 @@ def _extract_ordered_boundary_points(boundary_polydata) -> Optional[np.ndarray]:
 def _is_boundary_cube(vtk_obj) -> bool:
     """
     Check if a VTK object is a boundary cube (has exactly 8 points).
-    
+
     A PZero boundary cube is defined by 8 corner vertices forming a box.
     """
     return _count_points(vtk_obj) == 8
 
 
-def _extract_boundary_face(vtk_obj, face_id: int, extension_factor: float = 0.2) -> Optional[np.ndarray]:
+def _extract_boundary_face(
+    vtk_obj, face_id: int, extension_factor: float = 0.2
+) -> Optional[np.ndarray]:
     """
     Extract one face from a PZero boundary cube and extend it outward.
-    
+
     The cube has 8 vertices arranged as:
     - Bottom layer (z=bottom): points 0, 1, 2, 3
     - Top layer (z=top): points 4, 5, 6, 7
-    
+
     Point arrangement:
       3 ---- 2      7 ---- 6
       |      |      |      |
       |      |      |      |
       0 ---- 1      4 ---- 5
       (bottom)      (top)
-    
+
     Parameters
     ----------
     vtk_obj : VTK object
@@ -1004,7 +1109,7 @@ def _extract_boundary_face(vtk_obj, face_id: int, extension_factor: float = 0.2)
         - 5: Right face, max X (points 1, 2, 6, 5)
     extension_factor : float
         Factor by which to extend the face beyond its original bounds (default 0.2 = 20%)
-    
+
     Returns
     -------
     Optional[np.ndarray]
@@ -1014,7 +1119,7 @@ def _extract_boundary_face(vtk_obj, face_id: int, extension_factor: float = 0.2)
     all_points = _vtk_dataset_to_points(vtk_obj)
     if all_points is None or len(all_points) != 8:
         return None
-    
+
     # Define face vertex indices
     face_indices = {
         0: [0, 1, 2, 3],  # Bottom
@@ -1024,26 +1129,28 @@ def _extract_boundary_face(vtk_obj, face_id: int, extension_factor: float = 0.2)
         4: [0, 3, 7, 4],  # Left (min X)
         5: [1, 2, 6, 5],  # Right (max X)
     }
-    
+
     if face_id not in face_indices:
         return None
-    
+
     indices = face_indices[face_id]
     face_points = all_points[indices].copy()
-    
+
     # Extend the face outward to ensure proper intersection with internal geometry
     extended_face = _extend_boundary_face(face_points, face_id, extension_factor)
-    
+
     return extended_face
 
 
-def _extend_boundary_face(face_points: np.ndarray, face_id: int, extension_factor: float) -> np.ndarray:
+def _extend_boundary_face(
+    face_points: np.ndarray, face_id: int, extension_factor: float
+) -> np.ndarray:
     """
     Extend a boundary face outward from its center.
-    
+
     This ensures that border faces properly cross-cut internal geometry (like faults)
     during intersection calculations.
-    
+
     Parameters
     ----------
     face_points : np.ndarray
@@ -1052,7 +1159,7 @@ def _extend_boundary_face(face_points: np.ndarray, face_id: int, extension_facto
         Face identifier (0-5)
     extension_factor : float
         Factor by which to extend the face (0.2 = 20% extension on each side)
-    
+
     Returns
     -------
     np.ndarray
@@ -1060,12 +1167,11 @@ def _extend_boundary_face(face_points: np.ndarray, face_id: int, extension_facto
     """
     # Calculate face center
     center = np.mean(face_points, axis=0)
-    
+
     # Extend each point away from center
     extended_points = np.zeros_like(face_points)
     for i in range(4):
         direction = face_points[i] - center
         extended_points[i] = face_points[i] + direction * extension_factor
-    
-    return extended_points
 
+    return extended_points
