@@ -24,12 +24,7 @@ shapely
 sphinx
 sphinx_rtd_theme
 vtk>=9.3, <9.4
-xarray
-
-# Native meshing backends used by the integrated PyMeshIt workflow.
 tetgen==0.8.2
 # The 2025 release provides ARM Mac wheels; Intel Mac wheels are in 20230923.
 triangle==20250106; sys_platform != "darwin" or platform_machine != "x86_64"
 triangle==20230923; sys_platform == "darwin" and platform_machine == "x86_64"
-# Imported directly by the packaged update checker.
-packaging
