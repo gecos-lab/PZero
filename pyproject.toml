@@ -1,33 +1,19 @@
 [tool.semantic_release]
 commit_parser = "conventional"
-# [skip ci] stops the release commit from re-running the whole pipeline.
+# [skip ci] stops the release commit from re-running the whole pipeline
 commit_message = "chore(release): {version} [skip ci]"
 
 [tool.semantic_release.commit_parser_options]
-ignore_merge_commits = true
-
-# Only these trigger releases
-# Conventional commits detect major releases from ! or a BREAKING CHANGE: footer.
-# major_tags is retained from the original configuration but ignored by this parser.
-major_tags = ["BREAKING CHANGE"]
+# Only these bump the version
 minor_tags = ["feat"]
-patch_tags = ["fix"]
+patch_tags = ["fix"]          # feat! / fix! => major, handled automatically
 
-# These NEVER trigger releases
-# allowed_tags includes feat and fix too; only the other types have no version bump.
+# All recognized types (must include feat and fix); the others never release
 allowed_tags = [
-    "feat",
-    "fix",
-    "build",
-    "chore",
-    "ci",
-    "docs",
-    "style",
-    "refactor",
-    "perf",
-    "test"
+    "feat", "fix",
+    "build", "chore", "ci", "docs", "style", "refactor", "perf", "test",
 ]
 
-# Preserve the release policy currently used on main.
 default_bump_level = 0         # anything else => no release
 parse_squash_commits = false   # don't look for feat:/fix: lines inside a squash body
+ignore_merge_commits = true    # "Merge pull request ..." commits never count
