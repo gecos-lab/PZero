@@ -281,6 +281,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionRetriangulateSurface.setObjectName("actionRetriangulateSurface")
         self.actionRetriangulateSurface.setText("Retriangulate")
         self.menuSurfaces.addAction(self.actionRetriangulateSurface)
+        self.actionFixGeometry = QAction("Fix Geometry", self)
+        self.actionFixGeometry.setObjectName("actionFixGeometry")
+        self.actionFixGeometry.triggered.connect(self.show_fix_geometry_dialog)
+        self.menuSurfaces.addAction(self.actionFixGeometry)
 
         """Connect actionQuit.triggered SIGNAL to self.close SLOT"""
         self.actionQuit.triggered.connect(self.close)
@@ -568,6 +572,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             )
             table_view._transfer_context_handler = handler
             table_view.customContextMenuRequested.connect(handler)
+
+    def show_fix_geometry_dialog(self):
+        """Open the surface repair tool from the project window."""
+        from pzero.helpers.fix_geometry import open_fix_geometry_dialog
+
+        open_fix_geometry_dialog(self)
 
     def get_selected_uids_from_table(self, table_view=None) -> list:
         """Get selected entity UIDs from a given table view."""

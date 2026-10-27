@@ -724,7 +724,7 @@ class FixGeometryDialog(QDialog):
 
     Usage
     -----
-    ``FixGeometryDialog(view).exec()``
+    ``FixGeometryDialog(project, view).show()``
 
     The dialog reads the list of TriSurf entities from the project
     collections, renders a live preview in ``view.plotter`` and, on
@@ -732,10 +732,11 @@ class FixGeometryDialog(QDialog):
     ``collection.replace_vtk`` (which in turn updates all open views).
     """
 
-    def __init__(self, view, parent=None):
-        super().__init__(parent or view)
+    def __init__(self, project, view):
+        super().__init__(view)
         self.view = view
-        self.project = view.parent
+        self.project = project
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
 
         self.setWindowTitle("Fix Geometry")
         self.setModal(False)
@@ -757,7 +758,7 @@ class FixGeometryDialog(QDialog):
         self._populate_candidates()
 
         if self._candidates:
-            self._on_entity_changed(0)
+            self._on_entity_changed(self.entity_combo.currentIndex())
 
     # ------------------------------------------------------------------ UI ---
 
@@ -1114,7 +1115,9 @@ class FixGeometryDialog(QDialog):
         self.entity_combo.blockSignals(False)
 
         # Prefer the currently selected uid if it is a TriSurf.
-        selected = getattr(self.view, "selected_uids", None) or []
+        selected = getattr(self.project, "selected_uids", None) or []
+        if not selected:
+            selected = getattr(self.view, "selected_uids", None) or []
         for uid in selected:
             idx = self._candidate_index(uid)
             if idx is not None:
@@ -1208,8 +1211,10 @@ class FixGeometryDialog(QDialog):
 
     def _on_entity_changed(self, index: int) -> None:
         """Target entity changed: restore the previous one and hook the new one."""
+        self._debounce.stop()
         self._restore_original_actor()
         self._remove_preview_actor()
+        self._last_result = None
 
         if index < 0 or index >= len(self._candidates):
             self._current_uid = None
@@ -1237,6 +1242,7 @@ class FixGeometryDialog(QDialog):
 
     def _rebuild_preview(self) -> None:
         """Actually run the pipeline and update the preview actor."""
+        self._last_result = None
         original = self._current_original()
         if original is None:
             return
@@ -1249,7 +1255,7 @@ class FixGeometryDialog(QDialog):
             return
 
         self._last_result = result
-        if not _has_active_fix_params(params):
+        if not self.preview_check.isChecked() or not _has_active_fix_params(params):
             self._remove_preview_actor()
             self._restore_original_actor()
             self._update_stats(source, result)
@@ -1404,10 +1410,12 @@ class FixGeometryDialog(QDialog):
         """Commit the current preview as the new vtk object of the entity."""
         if self._current_uid is None or self._current_coll is None:
             return
+        # Recompute even if preview is disabled or a debounce is pending, so
+        # Apply always uses the current entity and parameter values.
+        self._debounce.stop()
+        self._rebuild_preview()
         if self._last_result is None:
-            self._rebuild_preview()
-            if self._last_result is None:
-                return
+            return
         if self._last_result.n_points == 0 or self._last_result.n_cells == 0:
             QMessageBox.warning(
                 self,
@@ -1437,11 +1445,15 @@ class FixGeometryDialog(QDialog):
         self._original_visibility = None
         self._remove_preview_actor()
         # Re-ghost with the freshly rebuilt actor for continued tweaking.
-        self._ghost_original_actor()
-        self._schedule_preview()
+        if self.preview_check.isChecked():
+            self._ghost_original_actor()
+            self._schedule_preview()
 
     def _on_accept(self) -> None:
         self._on_apply()
+        self._debounce.stop()
+        self._remove_preview_actor()
+        self._restore_original_actor()
         self.accept()
 
     def _on_cancel(self) -> None:
@@ -1465,19 +1477,36 @@ class FixGeometryDialog(QDialog):
 # -----------------------------------------------------------------------------
 
 
-def open_fix_geometry_dialog(view) -> None:
-    """Open the Fix Geometry dialog attached to `view`.
+def open_fix_geometry_dialog(project) -> None:
+    """Open surface repair from the project, using a 3D view for preview."""
+    for dialog in project.findChildren(FixGeometryDialog):
+        if dialog.isVisible():
+            dialog.raise_()
+            dialog.activateWindow()
+            return
 
-    Shows a warning message box instead of opening the dialog when the
-    project does not contain any TriSurf entity.
-    """
-    dialog = FixGeometryDialog(view)
-    if not dialog._candidates:
+    # Do not create an empty 3D view if there is nothing to repair.
+    for coll_name in TRISURF_COLLECTIONS:
+        collection = getattr(project, coll_name, None)
+        if collection is not None and collection.get_topology_uids("TriSurf"):
+            break
+    else:
         QMessageBox.information(
-            view,
-            "Fix Geometry",
-            "No TriSurf entity is available in the project.",
+            project, "Fix Geometry", "No TriSurf entity is available in the project."
         )
-        dialog.deleteLater()
         return
+
+    from ..views.dock_window import DockWindow, View3D
+
+    docks = [
+        dock for dock in project.findChildren(DockWindow)
+        if isinstance(getattr(dock, "canvas", None), View3D)
+        and not getattr(dock, "_canvas_disposed", False)
+    ]
+    dock = next((item for item in docks if item.isVisible()), None)
+    if dock is None:
+        dock = docks[0] if docks else DockWindow(parent=project, window_type="View3D")
+    dock.show()
+    dock.raise_()
+    dialog = FixGeometryDialog(project, dock.canvas)
     dialog.show()
