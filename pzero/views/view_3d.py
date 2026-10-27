@@ -65,10 +65,11 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QWidget,
     QDoubleSpinBox,
+    QProgressDialog,
 )
 import time
 from PySide6.QtGui import QAction
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QEventLoop
 from PySide6.QtCore import Signal as pyqtSignal
 from PySide6.QtWidgets import QWidget
 
@@ -85,6 +86,7 @@ from ..helpers.helper_dialogs import (
 )
 from ..helpers.helper_functions import best_fitting_plane, gen_frame, freeze_gui_off
 from ..helpers.extend_surface import extend_geology_entity
+from ..properties_manager import _get_collection_property_datasets
 from ..collections.geological_collection import GeologicalCollection
 from ..entities_factory import PolyData, Attitude, PolyLine, TriSurf
 from ..two_d_lines import draw_line_3d
@@ -308,10 +310,68 @@ class View3D(ViewVTK):
             color_RGB = self._legend_color_for_uid(main_uid)
             return scalar_array, cmap, clim, color_RGB
 
-        settings = self._get_property_render_settings(property_name=prop_text)
+        # Slice movement does not change the project-wide scalar range. Avoid
+        # scanning entire seismic volumes again for every slider/widget event.
+        legend = self.parent.prop_legend_df
+        row = legend.loc[legend["property_name"] == prop_text]
+        signature = (
+            tuple(row.astype(str).to_numpy().ravel()),
+            tuple(
+                (str(dataset.__this__), dataset.GetMTime())
+                for dataset in _get_collection_property_datasets(self.parent)
+            ),
+        )
+        if not hasattr(self, "_slicer_style_cache"):
+            self._slicer_style_cache = {}
+        cached = self._slicer_style_cache.get(prop_text)
+        if cached is None or cached[0] != signature:
+            settings = self._get_property_render_settings(property_name=prop_text)
+            self._slicer_style_cache[prop_text] = (signature, settings)
+        else:
+            settings = cached[1]
         cmap = settings.get("cmap")
         clim = settings.get("clim")
         return scalar_array, cmap, clim, color_RGB
+
+    def _update_slicer_actor(self, slice_uid, slice_data, prop_text, main_uid):
+        """Replace slice geometry without losing its scalar selection or colours."""
+        scalars, cmap, clim, color = self._resolve_slice_actor_style(
+            slice_data=slice_data, prop_text=prop_text, main_uid=main_uid
+        )
+        actor = self.slice_actors.get(slice_uid)
+        if actor is None:
+            actor = self.plotter.add_mesh(
+                slice_data,
+                name=slice_uid,
+                scalars=scalars,
+                cmap=cmap,
+                clim=clim,
+                color=color,
+                show_scalar_bar=False,
+                interpolate_before_map=True,
+                reset_camera=False,
+                render=False,
+            )
+            self.slice_actors[slice_uid] = actor
+        else:
+            mapper = actor.mapper
+            mapper.dataset = slice_data
+            if scalars is None:
+                mapper.scalar_visibility = False
+                if color is not None:
+                    actor.prop.color = color
+            else:
+                values = (
+                    slice_data.get_array(scalars, preference="point")
+                    if isinstance(scalars, str)
+                    else scalars
+                )
+                # Rebind component/coordinate arrays as well as named arrays.
+                # SetInputData alone drops the array selected by the old mapper.
+                mapper.set_scalars(values, scalars_name=prop_text, cmap=cmap, clim=clim)
+                mapper.scalar_visibility = True
+            mapper.Update()
+        return actor
 
     # Called by View3D.toggle_property after main actor's property changes via tree combo
     def on_property_toggled(self, collection_name=None, uid=None, prop_text=None):
@@ -413,22 +473,8 @@ class View3D(ViewVTK):
                         self.actors_df["uid"] == main_uid, "show_property"
                     ].values[0]
             # Style
-            scalar_array, cmap, clim, color_RGB = self._resolve_slice_actor_style(
-                slice_data=slice_data, prop_text=prop_text, main_uid=main_uid
-            )
             vis = actor.GetVisibility()
-            self.plotter.remove_actor(actor)
-            self.slice_actors[slice_uid] = self.plotter.add_mesh(
-                slice_data,
-                name=slice_uid,
-                scalars=scalar_array,
-                cmap=cmap,
-                clim=clim,
-                show_scalar_bar=False,
-                opacity=1.0,
-                interpolate_before_map=True,
-                color=color_RGB,
-            )
+            self._update_slicer_actor(slice_uid, slice_data, prop_text, main_uid)
             self.slice_actors[slice_uid].SetVisibility(vis)
         except Exception:
             pass
@@ -726,58 +772,31 @@ class View3D(ViewVTK):
 
         if slice_type == "X":
             rows, cols = ny, nz
-
-            def point_and_id(row, col):
-                j = row
-                k = col
-                point = origin + slice_index * a0 + j * a1 + k * a2
-                point_id = slice_index + j * nx + k * nx * ny
-                return point, point_id
-
         elif slice_type == "Y":
             rows, cols = nx, nz
-
-            def point_and_id(row, col):
-                i = row
-                k = col
-                point = origin + i * a0 + slice_index * a1 + k * a2
-                point_id = i + slice_index * nx + k * nx * ny
-                return point, point_id
-
         else:
             rows, cols = nx, ny
-
-            def point_and_id(row, col):
-                i = row
-                j = col
-                point = origin + i * a0 + j * a1 + slice_index * a2
-                point_id = i + j * nx + slice_index * nx * ny
-                return point, point_id
-
-        points = []
-        point_ids = []
-        for row in range(rows):
-            for col in range(cols):
-                point, point_id = point_and_id(row, col)
-                points.append(point)
-                point_ids.append(point_id)
-
-        if not points:
+        if rows <= 0 or cols <= 0:
             return None
 
-        points = np.asarray(points, dtype=float)
-        point_ids = np.asarray(point_ids, dtype=int)
+        # Vectorize the same row-major indexing; large seismic slices can contain
+        # hundreds of thousands of vertices, making Python loops very expensive.
+        row, col = np.indices((rows, cols)).reshape(2, -1)
+        indices = np.empty((row.size, 3), dtype=np.int64)
+        axis = self._slice_axis_index(slice_type)
+        indices[:, axis] = slice_index
+        other_axes = [index for index in range(3) if index != axis]
+        indices[:, other_axes[0]] = row
+        indices[:, other_axes[1]] = col
+        points = origin + indices @ np.column_stack((a0, a1, a2)).T
+        point_ids = indices @ np.asarray([1, nx, nx * ny], dtype=np.int64)
 
         if rows > 1 and cols > 1:
-            faces = []
-            for row in range(rows - 1):
-                for col in range(cols - 1):
-                    p0 = row * cols + col
-                    p1 = p0 + 1
-                    p2 = (row + 1) * cols + col + 1
-                    p3 = (row + 1) * cols + col
-                    faces.extend([4, p0, p1, p2, p3])
-            slice_surface = pv.PolyData(points, np.asarray(faces, dtype=np.int64))
+            p0 = (np.arange(rows - 1)[:, None] * cols + np.arange(cols - 1)).ravel()
+            faces = np.column_stack(
+                (np.full(p0.size, 4), p0, p0 + 1, p0 + cols + 1, p0 + cols)
+            )
+            slice_surface = pv.PolyData(points, faces.ravel())
         else:
             slice_surface = pv.PolyData(points)
 
@@ -1001,22 +1020,8 @@ class View3D(ViewVTK):
                     prop_text = self.actors_df.loc[
                         self.actors_df["uid"] == main_uid, "show_property"
                     ].values[0]
-            scalar_array, cmap, clim, color_RGB = self._resolve_slice_actor_style(
-                slice_data=slice_data, prop_text=prop_text, main_uid=main_uid
-            )
             vis = actor.GetVisibility()
-            self.plotter.remove_actor(actor)
-            self.slice_actors[slice_uid] = self.plotter.add_mesh(
-                slice_data,
-                name=slice_uid,
-                scalars=scalar_array,
-                cmap=cmap,
-                clim=clim,
-                show_scalar_bar=False,
-                opacity=1.0,
-                interpolate_before_map=True,
-                color=color_RGB,
-            )
+            self._update_slicer_actor(slice_uid, slice_data, prop_text, main_uid)
             self.slice_actors[slice_uid].SetVisibility(vis)
         except Exception:
             pass
@@ -1079,20 +1084,14 @@ class View3D(ViewVTK):
                 return
 
             # Find the enable manipulation checkbox
-            enable_manip_checkbox = None
             for checkbox in dialog.findChildren(QCheckBox):
-                if checkbox.text() == "Enable Direct Manipulation":
-                    enable_manip_checkbox = checkbox
-                    break
-
-            if enable_manip_checkbox is None or not enable_manip_checkbox.isChecked():
-                return
-
-            # Toggle manipulation off and on to refresh widgets with new bounds
-            print("Refreshing plane widgets for new vertical exaggeration...")
-            enable_manip_checkbox.setChecked(False)
-            QApplication.processEvents()
-            enable_manip_checkbox.setChecked(True)
+                if (
+                    checkbox.text() == "Enable Direct Manipulation"
+                    and checkbox.isChecked()
+                ):
+                    # Refresh the active mode, including multi-slice widgets.
+                    checkbox.setChecked(False)
+                    checkbox.setChecked(True)
 
         except Exception as e:
             print(f"Error refreshing plane widgets: {e}")
@@ -1641,6 +1640,12 @@ class View3D(ViewVTK):
         u_slice_check = QCheckBox("U Slice")
         v_slice_check = QCheckBox("V Slice")
         w_slice_check = QCheckBox("W Slice")
+        for name, check in [
+            ("u", u_slice_check),
+            ("v", v_slice_check),
+            ("w", w_slice_check),
+        ]:
+            check.setObjectName(f"{name}_slice_check")
 
         slice_toggle_layout.addWidget(u_slice_check)
         slice_toggle_layout.addWidget(v_slice_check)
@@ -1671,6 +1676,8 @@ class View3D(ViewVTK):
             label = QLabel(label_text)
             value_label = QLabel("0.50")
             value_input = SlicerLineEdit()  # Use our custom line edit class
+            value_input.setObjectName(f"mesh_slicer_{slice_type}_input")
+            slider.setObjectName(f"mesh_slicer_{slice_type}_slider")
             value_input.setFixedWidth(80)
             value_input.setText(
                 "50"
@@ -1819,6 +1826,13 @@ class View3D(ViewVTK):
             is_checked = state == Qt.CheckState.Checked.value
             print(f"Multi-slice direct manipulation: {is_checked}")
 
+            # Release the previous widgets before validating a new selection.
+            self._remove_slicer_plane_widgets(getattr(self, "multi_plane_widgets", []))
+            self.multi_plane_widgets = []
+            if not is_checked:
+                self.plotter.render()
+                return
+
             # Get the current entity
             entity_name = multi_entity_combo.currentText()
             if not entity_name:
@@ -1834,22 +1848,6 @@ class View3D(ViewVTK):
             # Get direction and slice type
             direction = direction_combo.currentText()
             slice_type = direction_to_slice_type(direction)
-
-            # --- Start Modification ---
-            # Always clean up existing widgets first
-            if hasattr(self, "multi_plane_widgets"):
-                for widget in self.multi_plane_widgets:
-                    try:
-                        if hasattr(widget, "SetEnabled"):
-                            widget.SetEnabled(0)
-                        if hasattr(self.plotter, "remove_widget"):
-                            self.plotter.remove_widget(widget)
-                        elif hasattr(self.plotter.iren, "remove_widget"):
-                            self.plotter.iren.remove_widget(widget)
-                    except Exception as e:
-                        print(f"Warning: Error removing widget: {e}")
-                self.multi_plane_widgets = []
-                self.plotter.render()  # Render after removing old widgets
 
             if is_checked:
                 # Enable manipulation: Create a widget for EACH existing grid slice
@@ -2189,6 +2187,8 @@ class View3D(ViewVTK):
 
             print(f"Removing grid slices for {entity_name} along {direction}")
 
+            multi_direct_manip.setChecked(False)
+
             # Get all grid slices for this direction and entity
             grid_slices = [
                 uid
@@ -2199,7 +2199,7 @@ class View3D(ViewVTK):
             for uid in grid_slices:
                 if uid in self.slice_actors:
                     actor = self.slice_actors[uid]
-                    self.plotter.remove_actor(actor)
+                    self.plotter.remove_actor(actor, render=False)
                     del self.slice_actors[uid]
                     try:
                         if hasattr(self, "slice_meta") and uid in self.slice_meta:
@@ -2212,83 +2212,60 @@ class View3D(ViewVTK):
 
         # Connect buttons for multi-slice mode (single-pass creation with property sync)
         def create_grid_slices_sync():
+            """Create or replace the requested grid, including changed ranges/counts."""
             entity_name = multi_entity_combo.currentText()
-            direction = direction_combo.currentText()
-            if not entity_name:
-                print("No entity selected for grid slices")
+            if not entity_name or getattr(self, "_slicer_building", False):
                 return
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
-                print(f"Entity {entity_name} not found")
+            update_entity_cache(entity_name)
+            if self._slicer_entity_cache["entity"] is None:
                 return
-            if not isinstance(entity, pv.DataSet):
-                entity = pv.wrap(entity)
-            bounds = entity.bounds
-            slice_type = direction_to_slice_type(direction)
-            start_norm = start_slider.value() / 100.0
-            end_norm = end_slider.value() / 100.0
-            import numpy as np
-
-            positions = np_linspace(start_norm, end_norm, slices_spin.value())
-            # Resolve property once
-            main_uid = self.get_entity_uid_by_name(entity_name)
-            prop_text = None
-            if (
-                hasattr(self, "slice_prop_by_entity")
-                and entity_name in self.slice_prop_by_entity
-            ):
-                prop_text = self.slice_prop_by_entity[entity_name]
-            elif main_uid is not None:
-                prop_text = self.actors_df.loc[
-                    self.actors_df["uid"] == main_uid, "show_property"
-                ].values[0]
-            for i, normalized_pos in enumerate(positions):
-                slice_id = f"{entity_name}_{slice_type}_grid_{i}"
-                if slice_id in self.slice_actors:
-                    print(f"Slice {slice_id} already exists, skipping")
-                    continue
-                try:
-                    slice_data = extract_slice_data_for_position(
-                        entity, slice_type, normalized_pos, bounds
+            slice_type = direction_to_slice_type(direction_combo.currentText())
+            positions = np_linspace(
+                start_slider.value() / 100.0,
+                end_slider.value() / 100.0,
+                slices_spin.value(),
+            )
+            prefix = f"{entity_name}_{slice_type}_grid_"
+            requested_ids = {f"{prefix}{index}" for index in range(len(positions))}
+            restore_manipulation = multi_direct_manip.isChecked()
+            self._slicer_building = True
+            create_btn.setEnabled(False)
+            progress = QProgressDialog(
+                "Creating slices...", "", 0, len(positions), control_panel
+            )
+            progress.setCancelButton(None)
+            progress.setWindowModality(Qt.ApplicationModal)
+            progress.setMinimumDuration(0)
+            progress.show()
+            QApplication.processEvents(QEventLoop.ExcludeUserInputEvents)
+            try:
+                multi_direct_manip.setChecked(False)
+                for index, normalized_pos in enumerate(positions):
+                    progress.setLabelText(
+                        f"Creating slice {index + 1} of {len(positions)}..."
                     )
-                    if slice_data.n_points <= 0:
-                        print(f"Skipping empty slice at position {normalized_pos}")
-                        continue
-                    (
-                        scalar_array,
-                        cmap,
-                        clim,
-                        color_RGB,
-                    ) = self._resolve_slice_actor_style(
-                        slice_data=slice_data,
-                        prop_text=prop_text,
-                        main_uid=main_uid,
+                    update_slice_visualization(
+                        entity_name,
+                        slice_type,
+                        float(normalized_pos),
+                        fast_update=True,
+                        specific_slice_id=f"{prefix}{index}",
                     )
-                    actor = self.plotter.add_mesh(
-                        slice_data,
-                        name=slice_id,
-                        scalars=scalar_array,
-                        cmap=cmap,
-                        clim=clim,
-                        show_scalar_bar=False,
-                        opacity=1.0,
-                        interpolate_before_map=True,
-                        color=color_RGB,
-                    )
-                    self.slice_actors[slice_id] = actor
-                    try:
-                        if hasattr(self, "slice_meta"):
-                            self.slice_meta[slice_id] = (entity_name, slice_type)
-                    except Exception:
-                        pass
-                    print(f"Created slice {slice_id}")
-                except Exception as e:
-                    print(f"Error creating grid slice: {e}")
-                    import traceback
-
-                    traceback.print_exc()
-                    continue
-            self.plotter.render()
+                    progress.setValue(index + 1)
+                # A smaller requested count must not leave the old extra slices behind.
+                for slice_id in list(self.slice_actors):
+                    if slice_id.startswith(prefix) and slice_id not in requested_ids:
+                        self.plotter.remove_actor(
+                            self.slice_actors.pop(slice_id), render=False
+                        )
+                        self.slice_meta.pop(slice_id, None)
+                self.plotter.render()
+            finally:
+                progress.close()
+                progress.deleteLater()
+                self._slicer_building = False
+                create_btn.setEnabled(True)
+                multi_direct_manip.setChecked(restore_manipulation)
 
         def create_section_from_slice():
             """Create one XSection from an indexed multi-slice position and open its view."""
@@ -2432,7 +2409,7 @@ class View3D(ViewVTK):
             for slice_uid, actor in list(self.slice_actors.items()):
                 try:
                     print(f"Removing slice {slice_uid}")
-                    self.plotter.remove_actor(actor)
+                    self.plotter.remove_actor(actor, render=False)
                 except Exception as e:
                     print(f"Error removing slice {slice_uid}: {e}")
             self.slice_actors = {}
@@ -2660,7 +2637,9 @@ class View3D(ViewVTK):
                     normalized_pos = calculate_normalized_from_real(
                         entity, "X", original_input
                     )
+                    u_slider.blockSignals(True)
                     u_slider.setValue(int(normalized_pos * 100))
+                    u_slider.blockSignals(False)
                     update_slice_visualization(entity_name, "X", normalized_pos)
                     u_value.setText(f"{normalized_pos:.2f}")
 
@@ -2697,7 +2676,9 @@ class View3D(ViewVTK):
                     normalized_pos = calculate_normalized_from_real(
                         entity, "Y", original_input
                     )
+                    v_slider.blockSignals(True)
                     v_slider.setValue(int(normalized_pos * 100))
+                    v_slider.blockSignals(False)
                     update_slice_visualization(entity_name, "Y", normalized_pos)
                     v_value.setText(f"{normalized_pos:.2f}")
 
@@ -2734,7 +2715,9 @@ class View3D(ViewVTK):
                     normalized_pos = calculate_normalized_from_real(
                         entity, "Z", original_input
                     )
+                    w_slider.blockSignals(True)
                     w_slider.setValue(int(normalized_pos * 100))
+                    w_slider.blockSignals(False)
                     update_slice_visualization(entity_name, "Z", normalized_pos)
                     w_value.setText(f"{normalized_pos:.2f}")
 
@@ -2748,9 +2731,6 @@ class View3D(ViewVTK):
         # Helper function to update entity cache
         def update_entity_cache(entity_name):
             """Update the entity cache for fast slice updates."""
-            if self._slicer_entity_cache["entity_name"] == entity_name:
-                return  # Already cached
-
             entity = self.get_entity_by_name(entity_name)
             if not entity:
                 return
@@ -2846,91 +2826,28 @@ class View3D(ViewVTK):
                             slice_uid
                         ].GetVisibility()
 
-                if fast_update and slice_uid in self.slice_actors:
-                    # For fast updates (like slider dragging or direct manipulation), just update the existing actor's geometry
-                    try:
-                        mapper = self.slice_actors[slice_uid].GetMapper()
-                        if mapper:
-                            # Update the mapper's input data directly
-                            mapper.SetInputData(slice_data)
-                            mapper.Update()
-                        # Ensure visibility is maintained during fast update
-                        self.slice_actors[slice_uid].SetVisibility(current_visibility)
-                    except Exception as e:
-                        print(
-                            f"Error in fast update: {e}. Falling back to full update."
-                        )
-                        fast_update = False  # Fallback
-
-                if not fast_update or slice_uid not in self.slice_actors:
-                    # For non-fast updates or when the actor doesn't exist yet,
-                    # get fresh scalar and colormap based on the main entity property
-                    scalar_array = None
-                    cmap = None
-                    color_RGB = None
-                    try:
-                        # Use cached main_uid if available
-                        if self._slicer_entity_cache["entity_name"] == entity_name:
-                            main_uid = self._slicer_entity_cache["main_uid"]
-                        else:
-                            main_uid = self.get_entity_uid_by_name(entity_name)
-
-                        # Get current property - prefer persisted, then actors_df
-                        current_prop = None
-                        if (
-                            hasattr(self, "slice_prop_by_entity")
-                            and entity_name in self.slice_prop_by_entity
-                        ):
-                            current_prop = self.slice_prop_by_entity[entity_name]
-                        if current_prop is None and main_uid is not None:
-                            current_prop = self.actors_df.loc[
-                                self.actors_df["uid"] == main_uid, "show_property"
-                            ].values[0]
-
-                        (
-                            scalar_array,
-                            cmap,
-                            clim,
-                            color_RGB,
-                        ) = self._resolve_slice_actor_style(
-                            slice_data=slice_data,
-                            prop_text=current_prop,
-                            main_uid=main_uid,
-                        )
-                    except Exception:
-                        pass
-
-                    # Remove existing actor if it exists
-                    if slice_uid in self.slice_actors:
-                        self.plotter.remove_actor(self.slice_actors[slice_uid])
-
-                    # Create a new actor with the latest scalar properties
-                    self.slice_actors[slice_uid] = self.plotter.add_mesh(
-                        slice_data,
-                        name=slice_uid,
-                        scalars=scalar_array,
-                        cmap=cmap,
-                        clim=clim,
-                        show_scalar_bar=False,
-                        opacity=1.0,
-                        interpolate_before_map=True,
-                        color=color_RGB,
-                    )
-
-                    # Restore visibility
-                    self.slice_actors[slice_uid].SetVisibility(current_visibility)
-
-                    # Record/update slice metadata
-                    try:
-                        if hasattr(self, "slice_meta"):
-                            self.slice_meta[slice_uid] = (entity_name, slice_type)
-                    except Exception:
-                        pass
+                # Always bind the selected scalars and colour map to the new
+                # geometry. Updating the input alone loses component arrays.
+                current_prop = getattr(self, "slice_prop_by_entity", {}).get(
+                    entity_name
+                )
+                if current_prop is None and main_uid is not None:
+                    rows = self.actors_df.loc[
+                        self.actors_df["uid"] == main_uid, "show_property"
+                    ]
+                    if not rows.empty:
+                        current_prop = rows.iloc[0]
+                actor = self._update_slicer_actor(
+                    slice_uid, slice_data, current_prop, main_uid
+                )
+                actor.SetVisibility(current_visibility)
+                self.slice_meta[slice_uid] = (entity_name, slice_type)
 
                 # Skip render for fast updates - the calling function handles it
                 # This avoids double-rendering and improves performance
                 if not fast_update:
                     self.plotter.render()
+                return actor
 
             except Exception as e:
                 print(f"Error updating slice {slice_uid}: {e}")
@@ -3003,8 +2920,6 @@ class View3D(ViewVTK):
             if slice_uid in self.slice_actors:
                 # Update existing slice - fast path
                 self.slice_actors[slice_uid].SetVisibility(checked)
-                self.plotter.render()
-                return  # Early return for fast visibility toggle
             elif checked:
                 # Create new slice - ensure cache is populated first
                 if self._slicer_entity_cache["entity_name"] != entity_name:
@@ -3072,7 +2987,7 @@ class View3D(ViewVTK):
 
             self.plotter.render()
 
-        def on_slider_changed(slider_type):
+        def on_slider_changed(slider_type, force=False):
             """Handle slider value changes."""
             if (
                 hasattr(self, "_updating_visualization")
@@ -3086,7 +3001,7 @@ class View3D(ViewVTK):
 
             # Throttle updates for smoother performance
             current_time = time.time()
-            if current_time - self.last_slider_update < slider_throttle:
+            if not force and current_time - self.last_slider_update < slider_throttle:
                 return
 
             try:
@@ -3191,6 +3106,7 @@ class View3D(ViewVTK):
         manipulation_layout = QVBoxLayout()
 
         enable_manipulation = QCheckBox("Enable Direct Manipulation")
+        enable_manipulation.setObjectName("enable_manipulation")
         enable_manipulation.setChecked(False)  # Default to disabled
 
         # Connect the manipulation toggle
@@ -3210,6 +3126,11 @@ class View3D(ViewVTK):
         u_slider.valueChanged.connect(lambda: on_slider_changed(u_slider))
         v_slider.valueChanged.connect(lambda: on_slider_changed(v_slider))
         w_slider.valueChanged.connect(lambda: on_slider_changed(w_slider))
+        # Always apply the final position, even if the last drag event was throttled.
+        for slider in (u_slider, v_slider, w_slider):
+            slider.sliderReleased.connect(
+                lambda current=slider: on_slider_changed(current, force=True)
+            )
 
         # Connect text input events to their specific handlers
         u_input.editingFinished.connect(on_u_input_entered)
@@ -3229,6 +3150,13 @@ class View3D(ViewVTK):
         )
 
         entity_combo.currentTextChanged.connect(initialize_entity_controls)
+        # A widget belongs to the entity/direction it was created for.
+        multi_entity_combo.currentTextChanged.connect(
+            lambda _text: multi_direct_manip.setChecked(False)
+        )
+        direction_combo.currentTextChanged.connect(
+            lambda _text: multi_direct_manip.setChecked(False)
+        )
 
         # Mode switching
         # --------------
@@ -3273,6 +3201,10 @@ class View3D(ViewVTK):
                             self.slice_actors[slice_uid].SetVisibility(True)
 
             else:  # Multi-slice mode
+                # Restore grids hidden when returning to single-slice mode.
+                for slice_uid, actor in self.slice_actors.items():
+                    if "_grid_" in slice_uid:
+                        actor.SetVisibility(True)
                 # Disable single-slice manipulation if enabled
                 if enable_manipulation.isChecked():
                     enable_manipulation.setChecked(False)
@@ -4570,6 +4502,19 @@ class View3D(ViewVTK):
                 "Z": w_slider.value() / 100.0,
             }
 
+            # A typed slice index can be more precise than the 0-100 slider.
+            for axis in normalized_positions:
+                actor = self.slice_actors.get(f"{entity_name}_{axis}")
+                if actor is not None:
+                    normalized_positions[axis] = (
+                        self._normalized_slicer_position_from_point(
+                            dataset=pv_entity,
+                            slice_type=axis,
+                            point=actor.GetCenter(),
+                            display_coordinates=True,
+                        )
+                    )
+
             # Clean up any existing plane widgets
             self.cleanup_plane_widgets()
 
@@ -4705,35 +4650,34 @@ class View3D(ViewVTK):
         v_slider.setStyleSheet(style)
         w_slider.setStyleSheet(style)
 
+    def _remove_slicer_plane_widgets(self, widgets):
+        """Release only the slicer's widgets, leaving other view tools intact."""
+        registered = getattr(self.plotter, "plane_widgets", [])
+        for widget in list(widgets):
+            widget.Off()
+            widget.RemoveAllObservers()
+            if widget in registered:
+                registered.remove(widget)
+        widgets.clear()
+        active_widgets = getattr(self, "plane_widgets", []) + getattr(
+            self, "multi_plane_widgets", []
+        )
+        if hasattr(self, "_slicer_previous_picking_manager") and not any(
+            widget in registered for widget in active_widgets
+        ):
+            manager = self.plotter.iren.interactor.GetPickingManager()
+            manager.SetEnabled(self._slicer_previous_picking_manager)
+            del self._slicer_previous_picking_manager
+            interactor = self.plotter.iren.interactor
+            for tag in getattr(self, "_slicer_middle_button_observers", {}).values():
+                interactor.RemoveObserver(tag)
+            if hasattr(self, "_slicer_middle_button_observers"):
+                del self._slicer_middle_button_observers
+
     def cleanup_plane_widgets(self):
-        """Clean up all plane widgets"""
-        if not hasattr(self, "plane_widgets"):
-            self.plane_widgets = []
-            return
-
-        num_widgets = len(self.plane_widgets)
-        if num_widgets > 0:
-            print(f"Cleaning up {num_widgets} plane widgets")
-
-        # Remove each plane widget - plane_widgets is a list, not a dict
-        for widget in list(self.plane_widgets):
-            try:
-                if widget is not None:
-                    # Try to disable the widget
-                    if hasattr(widget, "SetEnabled"):
-                        widget.SetEnabled(0)
-                    # Try to remove from plotter
-                    if hasattr(self.plotter, "remove_widget"):
-                        self.plotter.remove_widget(widget)
-                    elif hasattr(self.plotter, "clear_widgets"):
-                        self.plotter.clear_widgets()
-            except Exception as e:
-                print(f"Error cleaning up widget: {e}")
-
-        # Clear the list
+        """Clean up single-slice manipulation widgets."""
+        self._remove_slicer_plane_widgets(getattr(self, "plane_widgets", []))
         self.plane_widgets = []
-
-        # Force render to update display
         self.plotter.render()
 
     def get_world_positions(self, normalized_positions, bounds):
@@ -4744,82 +4688,28 @@ class View3D(ViewVTK):
         # Add this method to the View3D class
 
     def update_slices_for_property_change(self, property_name):
-        """Update all slices when a property's colormap changes"""
-        if not hasattr(self, "slice_actors") or not self.slice_actors:
-            return
-
-        print(f"Updating slice visualizations for property '{property_name}'")
-
-        # Update all slices
-        for slice_uid, actor in list(self.slice_actors.items()):
-            # Retrieve metadata if available, otherwise fallback-parse
-            entity_name, slice_type = (None, None)
-            if hasattr(self, "slice_meta") and slice_uid in self.slice_meta:
-                entity_name, slice_type = self.slice_meta[slice_uid]
-            else:
-                if "_grid_" in slice_uid:
-                    try:
-                        before, _, _ = slice_uid.rpartition("_grid_")
-                        entity_name, _, slice_type = before.rpartition("_")
-                    except Exception:
-                        continue
-                else:
-                    parts = slice_uid.rsplit("_", 1)
-                    if len(parts) == 2:
-                        entity_name, slice_type = parts[0], parts[1]
-                    else:
-                        continue
-
-            entity = self.get_entity_by_name(entity_name)
-            if not entity:
-                continue
-            pv_entity = pv.wrap(entity)
-            if property_name not in pv_entity.array_names:
-                continue
-
-            print(f"Updating slice {slice_uid} for property {property_name}")
-            visible = actor.GetVisibility()
-            normalized_pos = self._normalized_slicer_position_from_point(
-                dataset=pv_entity,
-                slice_type=slice_type,
-                point=actor.GetCenter(),
-                display_coordinates=True,
+        """Restyle only slices displaying the property whose legend changed."""
+        getattr(self, "_slicer_style_cache", {}).pop(property_name, None)
+        for slice_uid, actor in list(getattr(self, "slice_actors", {}).items()):
+            entity_name, axis = getattr(self, "slice_meta", {}).get(
+                slice_uid, (None, None)
             )
-            slice_data, _plane_info = self._extract_slice_data_for_slicer(
-                dataset=pv_entity,
-                slice_type=slice_type,
-                normalized_position=normalized_pos,
-            )
-
-            # Skip if slice is still empty
-            if slice_data is None or slice_data.n_points == 0:
-                print(f"Warning: Slice {slice_uid} is empty, skipping update")
+            if entity_name is None:
+                prefix = slice_uid.rsplit("_grid_", 1)[0]
+                entity_name, _, axis = prefix.rpartition("_")
+            main_uid = self.get_entity_uid_by_name(entity_name)
+            selected_prop = getattr(self, "slice_prop_by_entity", {}).get(entity_name)
+            if main_uid is not None:
+                rows = self.actors_df.loc[
+                    self.actors_df["uid"] == main_uid, "show_property"
+                ]
+                if not rows.empty:
+                    selected_prop = rows.iloc[0]
+            if selected_prop != property_name:
                 continue
-
-            # Skip if slice is still empty
-            if slice_data is None or slice_data.n_points == 0:
-                print(f"Warning: Slice {slice_uid} is empty, skipping update")
-                continue
-
-            scalar_array, cmap, clim, color_RGB = self._resolve_slice_actor_style(
-                slice_data=slice_data, prop_text=property_name, main_uid=None
-            )
-
-            self.plotter.remove_actor(actor)
-            self.slice_actors[slice_uid] = self.plotter.add_mesh(
-                slice_data,
-                name=slice_uid,
-                scalars=scalar_array,
-                cmap=cmap,
-                clim=clim,
-                show_scalar_bar=False,
-                opacity=1.0,
-                interpolate_before_map=True,
-                color=color_RGB,
-            )
-            self.slice_actors[slice_uid].SetVisibility(visible)
-
-        # Force render
+            data = actor.mapper.dataset
+            if data is not None and data.n_points > 0:
+                self._update_slicer_actor(slice_uid, data, selected_prop, main_uid)
         self.plotter.render()
 
     def create_single_plane_widget(
@@ -4863,13 +4753,61 @@ class View3D(ViewVTK):
 
             # Create the plane widget with the properly scaled bounds
             try:
+
+                def move_slice(_normal, widget_origin, widget):
+                    # Constrain dragging to the source's U/V/W plane, including
+                    # rotated grids, exact slice indices and vertical exaggeration.
+                    position = self._normalized_slicer_position_from_point(
+                        dataset=entity,
+                        slice_type=slice_type,
+                        point=widget_origin,
+                        display_coordinates=True,
+                    )
+                    plane = self._slice_plane_from_dataset(entity, slice_type, position)
+                    if plane is None:
+                        return
+                    center = np.asarray(plane["center"], dtype=float).copy()
+                    center[2] *= v_exag
+                    widget.SetOrigin(center)
+                    widget.SetNormal(normal)
+                    update_callback(normal, center)
+                    self.plotter.render()
+
                 plane_widget = self.plotter.add_plane_widget(
-                    update_callback,
+                    move_slice,
                     normal=normal.tolist(),
                     origin=origin.tolist(),
                     bounds=widget_bounds,
+                    color="white",
                     normal_rotation=False,  # Disable normal rotation on manipulator
+                    factor=1.0,
+                    pass_widget=True,
+                    test_callback=False,
+                    interaction_event="end",
                 )
+                # VTK needs a nonzero opacity to pick the plane for mouse dragging.
+                plane_widget.GetPlaneProperty().SetOpacity(0.5)
+                # Right-click must not resize the manipulation box.
+                plane_widget.ScaleEnabledOff()
+                plane_widget.GetSelectedOutlineProperty().SetColor(1.0, 1.0, 1.0)
+                # Coordinate overlapping widgets so the nearest clicked slice wins.
+                manager = self.plotter.iren.interactor.GetPickingManager()
+                if not hasattr(self, "_slicer_previous_picking_manager"):
+                    self._slicer_previous_picking_manager = manager.GetEnabled()
+                manager.EnabledOn()
+                # Middle-button dragging translates the whole VTK plane/box.
+                # Block it only while slicer manipulation widgets are active.
+                if not hasattr(self, "_slicer_middle_button_observers"):
+                    tags = self._slicer_middle_button_observers = {}
+
+                    def block_middle_button(interactor, event):
+                        interactor.GetCommand(tags[event]).SetAbortFlag(1)
+
+                    interactor = self.plotter.iren.interactor
+                    for event in ("MiddleButtonPressEvent", "MiddleButtonReleaseEvent"):
+                        tags[event] = interactor.AddObserver(
+                            event, block_middle_button, 10.0
+                        )
                 return plane_widget
             except Exception as e:
                 print(f"Error creating plane widget with PyVista: {e}")
