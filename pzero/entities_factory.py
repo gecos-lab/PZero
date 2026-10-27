@@ -65,6 +65,7 @@ from vtk import (
     vtkImageData,
     vtkStructuredGrid,
     vtkPolyDataConnectivityFilter,
+    vtkExtractCellsByType,
     vtkPolyDataMapper,
     vtkPCANormalEstimation,
     vtkEuclideanClusterExtraction,
@@ -81,6 +82,7 @@ from vtkmodules.numpy_interface.dataset_adapter import (
     vtkDataArrayToVTKArray,
 )
 from vtkmodules.util.numpy_support import vtk_to_numpy
+from vtkmodules.util.vtkConstants import VTK_LINE, VTK_POLY_LINE
 from vtkmodules.vtkFiltersCore import vtkThresholdPoints
 from vtkmodules.vtkFiltersPoints import vtkConvertToPointCloud
 
@@ -646,8 +648,18 @@ class PolyData(vtkPolyData):
         Returns None in case it is called for a VertexSet, so it works for PolyLine and TriSurf only.
         """
         if isinstance(self, (PolyLine, TriSurf)):
+            if isinstance(self, PolyLine) and not self.GetNumberOfLines():
+                return []
             connectivity_filter = vtkPolyDataConnectivityFilter()
-            connectivity_filter.SetInputData(self)
+            if isinstance(self, PolyLine):
+                # Vertex cells imported/merged into a line must not survive splitting.
+                line_cells = vtkExtractCellsByType()
+                line_cells.SetInputData(self)
+                line_cells.AddCellType(VTK_LINE)
+                line_cells.AddCellType(VTK_POLY_LINE)
+                connectivity_filter.SetInputConnection(line_cells.GetOutputPort())
+            else:
+                connectivity_filter.SetInputData(self)
             connectivity_filter.SetExtractionModeToAllRegions()
             connectivity_filter.ColorRegionsOn()
             connectivity_filter.Update()
@@ -664,6 +676,12 @@ class PolyData(vtkPolyData):
                     cleaner.ConvertLinesToPointsOff()
                 cleaner.SetInputConnection(connectivity_filter.GetOutputPort())
                 cleaner.Update()
+                if (
+                    isinstance(self, PolyLine)
+                    and not cleaner.GetOutput().GetNumberOfLines()
+                ):
+                    # A wholly collapsed part can retain an unused point, but no line.
+                    continue
                 if isinstance(self, PolyLine):
                     vtk_out_obj = PolyLine()
                 elif isinstance(self, TriSurf):

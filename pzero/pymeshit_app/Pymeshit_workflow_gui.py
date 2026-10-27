@@ -63,6 +63,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QDialog,
     QFormLayout,
+    QLayout,
     QButtonGroup,
     QMenu,
     QListWidget,
@@ -2368,7 +2369,7 @@ class MeshItWorkflowGUI(QWidget):
         # 3. Create Custom Status Bar (Label) - MUST be done BEFORE any _setup_*_tab() calls
         self._status_label = QLabel("Ready")
         self._status_label.setStyleSheet(
-            "border-top: 1px solid #999; color: #333; padding: 2px;"
+            "border-top: 1px solid palette(mid); padding: 2px;"
         )
         self.main_layout.addWidget(self._status_label)
 
@@ -2413,6 +2414,8 @@ class MeshItWorkflowGUI(QWidget):
         self.notebook.addTab(self.tetra_mesh_tab, "8. Tetra Mesh")
         self._setup_tetra_mesh_tab()
 
+        self._make_workflow_tabs_scrollable()
+
         if self._pending_pzero_bridge:
             self.attach_pzero_bridge(self._pending_pzero_bridge)
             self._pending_pzero_bridge = None
@@ -2451,6 +2454,42 @@ class MeshItWorkflowGUI(QWidget):
         if auto_show:
             self.show()
         self._update_statistics()  # Initial update
+
+    def _make_workflow_tabs_scrollable(self):
+        """Keep each tab's controls at their natural size inside the host window."""
+        current_index = self.notebook.currentIndex()
+        for index in range(self.notebook.count()):
+            page = self.notebook.widget(index)
+            title = self.notebook.tabText(index)
+            icon = self.notebook.tabIcon(index)
+            tooltip = self.notebook.tabToolTip(index)
+
+            # Splitter children otherwise allow their layouts to shrink below the
+            # space required by their controls. Qt recomputes these minimums when
+            # the application font or display scale changes.
+            page.layout().setSizeConstraint(QLayout.SetMinimumSize)
+            for splitter in page.findChildren(QSplitter):
+                splitter.setChildrenCollapsible(False)
+                for child_index in range(splitter.count()):
+                    layout = splitter.widget(child_index).layout()
+                    if layout is not None:
+                        layout.setSizeConstraint(QLayout.SetMinimumSize)
+
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.NoFrame)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            self.notebook.removeTab(index)
+            scroll.setWidget(page)
+            self.notebook.insertTab(index, scroll, icon, title)
+            self.notebook.setTabToolTip(index, tooltip)
+        self.notebook.setCurrentIndex(current_index)
+
+    def _workflow_tab_at(self, index):
+        """Return the workflow page, rather than its scrolling container."""
+        widget = self.notebook.widget(index)
+        return widget.widget() if isinstance(widget, QScrollArea) else widget
 
     def _new_hsplitter(self, sizes: List[int]) -> QSplitter:
         """Create a horizontal splitter tuned for docked/resizable workflows."""
@@ -2701,7 +2740,6 @@ class MeshItWorkflowGUI(QWidget):
 
         # 3.1  material list
         self.material_list = QListWidget()
-        self.material_list.setMaximumHeight(100)
         self.material_list.currentRowChanged.connect(self._on_material_selected)
         v_main.addWidget(QLabel("Material regions:"))
         v_main.addWidget(self.material_list)
@@ -2710,8 +2748,6 @@ class MeshItWorkflowGUI(QWidget):
         h_mat_btns.setSpacing(4)
         b_add_mat = QPushButton("+")
         b_del_mat = QPushButton("-")
-        b_add_mat.setMaximumWidth(40)
-        b_del_mat.setMaximumWidth(40)
         b_add_mat.clicked.connect(self._add_material)
         b_del_mat.clicked.connect(self._remove_material)
         h_mat_btns.addWidget(b_add_mat)
@@ -2721,7 +2757,6 @@ class MeshItWorkflowGUI(QWidget):
 
         # 3.2  seed-location list
         self.material_location_list = QListWidget()
-        self.material_location_list.setMaximumHeight(80)
         self.material_location_list.currentRowChanged.connect(
             self._on_location_selected
         )
@@ -2734,8 +2769,6 @@ class MeshItWorkflowGUI(QWidget):
         btn_del_loc = QPushButton("-")
         btn_auto_loc = QPushButton("Auto")
         btn_psc = QPushButton("PSC")
-        btn_add_loc.setMaximumWidth(50)
-        btn_del_loc.setMaximumWidth(50)
         btn_psc.setToolTip("Build material mapping from a Structural Topology model")
         btn_add_loc.clicked.connect(self._add_location)
         btn_del_loc.clicked.connect(self._remove_location)
@@ -2758,19 +2791,6 @@ class MeshItWorkflowGUI(QWidget):
         self.material_mouse_mode_btn.setCheckable(True)
         self.material_mouse_mode_btn.setChecked(False)
         self.material_mouse_mode_btn.clicked.connect(self._toggle_material_mouse_mode)
-        self.material_mouse_mode_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #4a4a4a;
-                color: white;
-                padding: 4px;
-                border: 1px solid #666;
-                border-radius: 3px;
-            }
-            QPushButton:checked {
-                background-color: #2e7d32;
-                border-color: #4caf50;
-            }
-        """)
         mouse_layout.addWidget(self.material_mouse_mode_btn)
 
         # Compact instructions
@@ -2780,13 +2800,11 @@ class MeshItWorkflowGUI(QWidget):
             "3. LEFT-CLICK on any surface to place seed\n"
             "   → New location added automatically!"
         )
-        self.material_mouse_instructions.setStyleSheet("color: #888; font-size: 9px;")
         self.material_mouse_instructions.setWordWrap(True)
         mouse_layout.addWidget(self.material_mouse_instructions)
 
         # Status label
         self.material_mouse_status = QLabel("")
-        self.material_mouse_status.setStyleSheet("color: #4caf50; font-size: 9px;")
         mouse_layout.addWidget(self.material_mouse_status)
 
         v_main.addWidget(mouse_group)
@@ -5144,23 +5162,6 @@ class MeshItWorkflowGUI(QWidget):
         self.points_export_figure_btn.setToolTip(
             "Export high-resolution figure of the loaded point and polyline visualization"
         )
-        self.points_export_figure_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1565C0;
-                color: white;
-                font-weight: bold;
-                padding: 6px;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-                color: #666666;
-            }
-        """)
         control_layout.addWidget(self.points_export_figure_btn)
         control_layout.addStretch()
 
@@ -5280,23 +5281,6 @@ class MeshItWorkflowGUI(QWidget):
         self.hull_export_figure_btn.setToolTip(
             "Export high-resolution figure of convex hull visualization"
         )
-        self.hull_export_figure_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1565C0;
-                color: white;
-                font-weight: bold;
-                padding: 6px;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-                color: #666666;
-            }
-        """)
         control_layout.addWidget(self.hull_export_figure_btn)
         # Navigation buttons
         nav_layout = QHBoxLayout()
@@ -5639,23 +5623,6 @@ class MeshItWorkflowGUI(QWidget):
         self.segment_export_figure_btn.setToolTip(
             "Export high-resolution figure of segmentation visualization"
         )
-        self.segment_export_figure_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1565C0;
-                color: white;
-                font-weight: bold;
-                padding: 6px;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-                color: #666666;
-            }
-        """)
         control_layout.addWidget(self.segment_export_figure_btn)
         # Navigation buttons
         nav_layout = QHBoxLayout()
@@ -5834,23 +5801,6 @@ class MeshItWorkflowGUI(QWidget):
         self.tri_export_figure_btn.setToolTip(
             "Export high-resolution figure of triangulation visualization"
         )
-        self.tri_export_figure_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1565C0;
-                color: white;
-                font-weight: bold;
-                padding: 6px;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-                color: #666666;
-            }
-        """)
         control_layout.addWidget(self.tri_export_figure_btn)
         # Navigation buttons (remain the same)
         # ... (nav_layout setup remains the same) ...
@@ -5898,7 +5848,6 @@ class MeshItWorkflowGUI(QWidget):
         # Add information label
         info_label = QLabel("Compute intersections between surfaces and polylines:")
         info_label.setWordWrap(True)
-        info_label.setStyleSheet("font-size: 12px; color: #555;")
         layout.addWidget(info_label)
 
         # Horizontal layout for controls
@@ -5924,23 +5873,6 @@ class MeshItWorkflowGUI(QWidget):
         self.intersection_export_figure_btn.setToolTip(
             "Export high-resolution figure of intersection visualization"
         )
-        self.intersection_export_figure_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1565C0;
-                color: white;
-                font-weight: bold;
-                padding: 6px;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-                color: #666666;
-            }
-        """)
         controls_layout.addWidget(self.intersection_export_figure_btn)
         controls_layout.addStretch()
         layout.addLayout(controls_layout)
@@ -6107,19 +6039,6 @@ class MeshItWorkflowGUI(QWidget):
         self.refine_export_figure_btn.setToolTip(
             "Export one figure containing the Intersections, Meshes, and Segments refine views."
         )
-        self.refine_export_figure_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1565C0;
-                color: white;
-                font-weight: bold;
-                padding: 6px;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-        """)
         ag.addWidget(self.refine_export_figure_btn)
 
         # Mesh settings (compact form)
@@ -6370,14 +6289,8 @@ class MeshItWorkflowGUI(QWidget):
         st = QVBoxLayout(stats_tab)
         self.refinement_summary_label = QLabel("Refinement summary will appear here.")
         self.refinement_summary_label.setWordWrap(True)
-        self.refinement_summary_label.setStyleSheet("font-size: 10px; color: #444;")
-        self.refinement_summary_label.setMaximumHeight(90)
         self.conforming_mesh_summary_label = QLabel("Mesh stats will appear here.")
         self.conforming_mesh_summary_label.setWordWrap(True)
-        self.conforming_mesh_summary_label.setStyleSheet(
-            "font-size: 10px; color: #444;"
-        )
-        self.conforming_mesh_summary_label.setMaximumHeight(90)
         st.addWidget(self.refinement_summary_label)
         st.addWidget(self.conforming_mesh_summary_label)
         st.addStretch()
@@ -10122,23 +10035,6 @@ class MeshItWorkflowGUI(QWidget):
             self._validate_conforming_meshes_for_tetgen
         )
         self.validate_for_tetgen_btn.setEnabled(False)
-        self.validate_for_tetgen_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #4CAF50;
-                    color: white;
-                    font-weight: bold;
-                    padding: 8px;
-                    border: none;
-                    border-radius: 4px;
-                }
-                QPushButton:hover {
-                    background-color: #45a049;
-                }
-                QPushButton:disabled {
-                    background-color: #cccccc;
-                    color: #666666;
-                }
-            """)
         surface_layout.addWidget(self.validate_for_tetgen_btn)
 
         # --- Surface Selection Group ---
@@ -10157,7 +10053,6 @@ class MeshItWorkflowGUI(QWidget):
         self.conforming_surface_tree.itemChanged.connect(
             self._on_conforming_surface_tree_item_changed
         )
-        self.conforming_surface_tree.setMaximumHeight(250)
         selection_layout.addWidget(QLabel("Conforming Surface Selection:"))
         selection_layout.addWidget(self.conforming_surface_tree)
 
@@ -15357,7 +15252,7 @@ segmentation, triangulation, and visualization.
     def _refresh_seg_view_if_active(self):
         """If Segmentation tab is active, force a fresh 3D redraw from current dataset['segments']."""
         try:
-            if self.notebook.widget(self.notebook.currentIndex()) == self.segment_tab:
+            if self._workflow_tab_at(self.notebook.currentIndex()) == self.segment_tab:
                 self._clear_segment_plot()
                 # Prefer 3D always when available
                 self.view_3d_enabled = True
@@ -17592,7 +17487,7 @@ segmentation, triangulation, and visualization.
                 self.notebook.setCurrentIndex(saved_tab_index)
             self.notebook.blockSignals(False)
 
-            current_tab_widget = self.notebook.widget(saved_tab_index)
+            current_tab_widget = self._workflow_tab_at(saved_tab_index)
 
             if current_tab_widget == self.file_tab:
                 self._visualize_all_points()
@@ -20613,7 +20508,7 @@ segmentation, triangulation, and visualization.
         """Handle tab changes to update visualizations as needed"""
         logger.debug(f"Tab changed to index {index}")
         # Get the widget associated with the current index
-        current_tab_widget = self.notebook.widget(index)
+        current_tab_widget = self._workflow_tab_at(index)
 
         if not self.datasets:
             logger.debug("No datasets loaded, clearing visualizations.")
@@ -22792,7 +22687,6 @@ segmentation, triangulation, and visualization.
 
         # Surface list display (compact)
         self.loaded_surfaces_list = QListWidget()
-        self.loaded_surfaces_list.setMaximumHeight(70)
         self.loaded_surfaces_list.setToolTip("Loaded surfaces with mesh data")
         transfer_layout.addWidget(self.loaded_surfaces_list)
 
@@ -22821,7 +22715,6 @@ segmentation, triangulation, and visualization.
 
         # Checkbox list for fault selection (like C++ material2dList)
         self.material2d_list = QListWidget()
-        self.material2d_list.setMaximumHeight(120)
         self.material2d_list.setToolTip(
             "Check surfaces to treat them as 2D fault materials (no volumetric regions)"
         )
@@ -22848,7 +22741,6 @@ segmentation, triangulation, and visualization.
 
         # Checkbox list for well selection
         self.material1d_list = QListWidget()
-        self.material1d_list.setMaximumHeight(80)
         self.material1d_list.setToolTip("Check wells to include as 1D edge constraints")
         self.material1d_list.itemChanged.connect(self._on_well_checkbox_changed)
         well_material_layout.addWidget(self.material1d_list)
@@ -22857,10 +22749,8 @@ segmentation, triangulation, and visualization.
         well_btn_layout = QHBoxLayout()
         well_btn_layout.setSpacing(4)
         self.select_all_wells_btn = QPushButton("All")
-        self.select_all_wells_btn.setMaximumWidth(60)
         self.select_all_wells_btn.clicked.connect(self._select_all_wells_for_export)
         self.clear_all_wells_btn = QPushButton("None")
-        self.clear_all_wells_btn.setMaximumWidth(60)
         self.clear_all_wells_btn.clicked.connect(self._clear_all_wells_for_export)
         well_btn_layout.addWidget(self.select_all_wells_btn)
         well_btn_layout.addWidget(self.clear_all_wells_btn)
@@ -22947,23 +22837,6 @@ segmentation, triangulation, and visualization.
         self.export_figure_btn.setToolTip(
             "Export high-resolution figures with colorbar and annotations"
         )
-        self.export_figure_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #1565C0;
-                color: white;
-                font-weight: bold;
-                padding: 6px;
-                border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-                color: #666666;
-            }
-        """)
         generate_layout.addWidget(self.export_figure_btn)
         control_layout.addWidget(generate_group)
 
@@ -23424,7 +23297,10 @@ segmentation, triangulation, and visualization.
             return
 
         if hasattr(self, "notebook") and hasattr(self, "tetra_mesh_tab"):
-            self.notebook.setCurrentWidget(self.tetra_mesh_tab)
+            for index in range(self.notebook.count()):
+                if self._workflow_tab_at(index) is self.tetra_mesh_tab:
+                    self.notebook.setCurrentIndex(index)
+                    break
 
         self._clear_tetgen_failed_facet_actors()
         self.tetgen_failed_facet_entries = entries
