@@ -63,8 +63,12 @@ def file_identity(path):
     return {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
 
 
-def inspect_segy(path, endian="auto", headers=None, header_widths=None):
+def inspect_segy(
+    path, endian="auto", headers=None, header_widths=None, progress_callback=None
+):
     """Inspect revision 0/1/2 fixed-length traces and discover vendor mappings."""
+    if progress_callback is not None:
+        progress_callback(0.0, "Reading SEG-Y file headers...")
     path = Path(path)
     identity = file_identity(path)
     repairs = []
@@ -195,6 +199,8 @@ def inspect_segy(path, endian="auto", headers=None, header_widths=None):
     records = np.memmap(path, mode="r", dtype=dtype, offset=offset, shape=(count,))
     try:
         raw = records["header"]
+        if progress_callback is not None:
+            progress_callback(0.05, f"Detecting header layout for {count:,} traces...")
         if headers is None:
             mapping, widths, evidence = detect_mapping(raw, text, endian)
         else:
@@ -231,15 +237,21 @@ def inspect_segy(path, endian="auto", headers=None, header_widths=None):
                 "time_scalar": (214, "i2"),
             }
         )
-        values = {
-            key: np.ascontiguousarray(
-                raw[:, pos : pos + np.dtype(marker + typ).itemsize]
+        values = {}
+        for index, (key, (pos, typ)) in enumerate(fields.items(), 1):
+            values[key] = (
+                np.ascontiguousarray(
+                    raw[:, pos : pos + np.dtype(marker + typ).itemsize]
+                )
+                .view(marker + typ)
+                .ravel()
+                .copy()
             )
-            .view(marker + typ)
-            .ravel()
-            .copy()
-            for key, (pos, typ) in fields.items()
-        }
+            if progress_callback is not None:
+                progress_callback(
+                    0.05 + 0.9 * index / len(fields),
+                    f"Reading trace headers: field {index}/{len(fields)} ({count:,} traces)",
+                )
     finally:
         records._mmap.close()
     if np.any((values["ns"] != 0) & (values["ns"] != ns)) and ns <= 65535:
@@ -262,6 +274,8 @@ def inspect_segy(path, endian="auto", headers=None, header_widths=None):
         raise ValueError(
             "Trace recording delays differ; a common sampling axis is required."
         )
+    if progress_callback is not None:
+        progress_callback(1.0, f"Read headers for {count:,} traces.")
     return {
         "path": str(path.resolve()),
         "identity": identity,
@@ -585,10 +599,12 @@ def prepare_geometry(survey, options):
     }
 
 
-def read_grid(path, options, survey=None):
+def read_grid(path, options, survey=None, progress_callback=None):
     """Import amplitudes and coordinates with the same explicit trace ordering."""
     import pyvista as pv
 
+    if progress_callback is not None:
+        progress_callback(0.0, "Checking SEG-Y layout...")
     if isinstance(options, dict):
         options = SegyImportOptions(**options)
     if not isinstance(options, SegyImportOptions):
@@ -597,7 +613,15 @@ def read_grid(path, options, survey=None):
         )
     if survey is None:
         survey = inspect_segy(
-            path, options.endian, options.headers, options.header_widths
+            path,
+            options.endian,
+            options.headers,
+            options.header_widths,
+            progress_callback=(
+                (lambda fraction, text: progress_callback(0.1 * fraction, text))
+                if progress_callback is not None
+                else None
+            ),
         )
     if survey["path"] != str(Path(path).resolve()) or survey[
         "identity"
@@ -616,11 +640,16 @@ def read_grid(path, options, survey=None):
         raise ValueError(
             "Header settings changed after inspection. Preview the survey again."
         )
+    if progress_callback is not None:
+        progress_callback(0.1, "Preparing seismic geometry...")
     geometry = prepare_geometry(survey, options)
     ns = survey["num_samples"]
     nt = len(geometry["xy"])
     amplitude_type = np.float64 if survey["format_code"] in (6, 9, 12) else np.float32
     amplitudes = np.full((ns, nt), np.nan, dtype=amplitude_type)
+    completed = 0
+    if progress_callback is not None:
+        progress_callback(0.15, f"Reading traces: 0 / {survey['trace_count']:,}")
     for indices, block in iter_trace_samples(survey):
         if not np.all(np.isfinite(block)):
             raise ValueError(
@@ -629,10 +658,18 @@ def read_grid(path, options, survey=None):
         amplitudes[:, geometry["grid_ids"][indices]] = block[
             :, geometry["sample_order"]
         ].T
+        completed += len(indices)
+        if progress_callback is not None:
+            progress_callback(
+                0.15 + 0.7 * completed / survey["trace_count"],
+                f"Reading traces: {completed:,} / {survey['trace_count']:,}",
+            )
     if survey["identity"] != file_identity(path):
         raise ValueError(
             "The SEG-Y file changed while reading amplitudes. Import it again."
         )
+    if progress_callback is not None:
+        progress_callback(0.85, "Building seismic grid...")
     points = np.empty((ns, nt, 3), dtype=np.float64)
     points[:, :, :2] = geometry["xy"]
     points[:, :, 2] = geometry["z"][:, None]
@@ -646,6 +683,8 @@ def read_grid(path, options, survey=None):
             np.where(np.isnan(amplitudes), 2, 0).astype(np.uint8).ravel()
         )
     grid.set_active_scalars("intensity")
+    if progress_callback is not None:
+        progress_callback(0.95, "Storing seismic metadata...")
     metadata = {
         "schema_version": 1,
         "source_file": survey["path"],
@@ -685,6 +724,8 @@ def read_grid(path, options, survey=None):
         )
     ):
         grid.field_data[f"seismic_axis_{axis}"] = parameters
+    if progress_callback is not None:
+        progress_callback(1.0, f"Loaded {completed:,} traces.")
     return grid
 
 

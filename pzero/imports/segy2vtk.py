@@ -28,29 +28,34 @@ def segy2vtk(self, in_file_name):
         return None
     self.disable_actions()
     try:
-        grid = _run_segy_task(
+
+        def add_volume(grid):
+            entity = deepcopy(self.image_coll.entity_dict)
+            entity["uid"] = str(uuid4())
+            entity["name"] = dialog.import_options.name
+            entity["topology"] = "Seismics"
+            entity["vtk_obj"] = Seismics()
+            entity["vtk_obj"].ShallowCopy(grid)
+            entity["properties_names"] = entity["vtk_obj"].point_data_keys
+            entity["properties_components"] = entity["vtk_obj"].point_data_components
+            entity["properties_types"] = entity["vtk_obj"].point_data_types
+            entity["seismic_source_file"] = os_path.abspath(in_file_name)
+            self.image_coll.add_entity_from_dict(entity_dict=entity)
+            self.print_terminal(
+                f"Imported {entity['name']} with validated coordinates and {dialog.import_options.domain} sampling."
+            )
+            return entity["uid"]
+
+        return _run_segy_task(
             self,
             "Loading SEG-Y volume...",
             read_segy_file,
             in_file_name,
             dialog.import_options,
             survey=dialog.survey,
+            report_progress=True,
+            finalize=add_volume,
         )
-        entity = deepcopy(self.image_coll.entity_dict)
-        entity["uid"] = str(uuid4())
-        entity["name"] = dialog.import_options.name
-        entity["topology"] = "Seismics"
-        entity["vtk_obj"] = Seismics()
-        entity["vtk_obj"].ShallowCopy(grid)
-        entity["properties_names"] = entity["vtk_obj"].point_data_keys
-        entity["properties_components"] = entity["vtk_obj"].point_data_components
-        entity["properties_types"] = entity["vtk_obj"].point_data_types
-        entity["seismic_source_file"] = os_path.abspath(in_file_name)
-        self.image_coll.add_entity_from_dict(entity_dict=entity)
-        self.print_terminal(
-            f"Imported {entity['name']} with validated coordinates and {dialog.import_options.domain} sampling."
-        )
-        return entity["uid"]
     except Exception as error:
         self.print_terminal(f"SEG-Y import failed: {error}")
         QMessageBox.warning(self, "SEG-Y import failed", str(error))
@@ -61,7 +66,9 @@ def segy2vtk(self, in_file_name):
         self.enable_actions()
 
 
-def read_segy_file(in_file_name=None, options=None, survey=None):
+def read_segy_file(
+    in_file_name=None, options=None, survey=None, progress_callback=None
+):
     """Automatically standardize recoverable layouts after the import review."""
     from dataclasses import replace
     from pathlib import Path
@@ -75,6 +82,11 @@ def read_segy_file(in_file_name=None, options=None, survey=None):
     )
     from pzero.processing.segy_standardizer import standardize_segy_for_pzero
 
+    def phase(start, span):
+        if progress_callback is None:
+            return None
+        return lambda fraction, text: progress_callback(start + span * fraction, text)
+
     if isinstance(options, dict):
         options = SegyImportOptions(**options)
     if not isinstance(options, SegyImportOptions):
@@ -82,7 +94,11 @@ def read_segy_file(in_file_name=None, options=None, survey=None):
             "SEG-Y import options are required; review the input data first."
         )
     survey = survey or inspect_segy(
-        in_file_name, options.endian, options.headers, options.header_widths
+        in_file_name,
+        options.endian,
+        options.headers,
+        options.header_widths,
+        progress_callback=phase(0.0, 0.1),
     )
     if (
         (options.headers is not None and options.headers != survey["headers"])
@@ -98,18 +114,24 @@ def read_segy_file(in_file_name=None, options=None, survey=None):
     # Fail before conversion for invalid domains, mappings or prestack geometry.
     prepare_geometry(survey, options)
     if not survey["requires_standardization"]:
-        return read_grid(in_file_name, options, survey=survey)
+        return read_grid(
+            in_file_name, options, survey=survey, progress_callback=phase(0.1, 0.9)
+        )
     with TemporaryDirectory(prefix="pzero-segy-") as folder:
         normalized = Path(folder) / "standardized.sgy"
         standardize_segy_for_pzero(
-            in_file_name, normalized, print_fn=lambda _: None, survey=survey
+            in_file_name,
+            normalized,
+            print_fn=lambda _: None,
+            survey=survey,
+            progress_callback=phase(0.1, 0.4),
         )
         canonical = replace(
             options,
             headers=DEFAULT_HEADERS.copy(),
             header_widths=dict.fromkeys(DEFAULT_HEADERS, 4),
         )
-        grid = read_grid(normalized, canonical)
+        grid = read_grid(normalized, canonical, progress_callback=phase(0.5, 0.5))
     metadata = get_seismic_metadata(grid)
     metadata.update(
         source_file=survey["path"],

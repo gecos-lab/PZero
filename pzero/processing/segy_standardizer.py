@@ -115,13 +115,17 @@ def ibm_to_ieee(ibm_bytes):
     return ieee_value
 
 
-def standardize_segy_for_pzero(input_file, output_file, print_fn=print, survey=None):
+def standardize_segy_for_pzero(
+    input_file, output_file, print_fn=print, survey=None, progress_callback=None
+):
     """Write IEEE samples and canonical geometry fields without changing navigation.
 
     Original byte order and unrelated trace fields are retained. When remapping,
     the original textual header is retained as an extended textual header.
     Output is validated before atomically replacing the destination.
     """
+    if progress_callback is not None:
+        progress_callback(0.0, "Preparing SEG-Y conversion...")
     source_path, destination = Path(input_file).resolve(), Path(output_file).resolve()
     if source_path == destination or (
         destination.exists() and os.path.samefile(source_path, destination)
@@ -177,6 +181,7 @@ def standardize_segy_for_pzero(input_file, output_file, print_fn=print, survey=N
             for block in texts[1:]:
                 target.write(block)
             with source_path.open("rb") as raw:
+                completed = 0
                 for indices, samples in iter_trace_samples(survey):
                     if not np.all(np.isfinite(samples)):
                         raise ValueError("Non-finite amplitudes during conversion.")
@@ -205,6 +210,14 @@ def standardize_segy_for_pzero(input_file, output_file, print_fn=print, survey=N
                         target.write(
                             values.astype(marker + ("f8" if wide else "f4")).tobytes()
                         )
+                    completed += len(indices)
+                    if progress_callback is not None:
+                        progress_callback(
+                            0.1 + 0.8 * completed / survey["trace_count"],
+                            f"Converting traces: {completed:,} / {survey['trace_count']:,}",
+                        )
+        if progress_callback is not None:
+            progress_callback(0.95, "Verifying converted SEG-Y...")
         verify_segy_structure(temporary, print_fn=print_fn)
         if file_identity(source_path) != survey["identity"]:
             raise ValueError("The source SEG-Y changed during conversion.")
@@ -213,6 +226,8 @@ def standardize_segy_for_pzero(input_file, output_file, print_fn=print, survey=N
         print_fn(
             f"Standardized {survey['trace_count']} traces; navigation and sampling preserved."
         )
+        if progress_callback is not None:
+            progress_callback(1.0, f"Converted {survey['trace_count']:,} traces.")
         return True
     finally:
         if temporary is not None:

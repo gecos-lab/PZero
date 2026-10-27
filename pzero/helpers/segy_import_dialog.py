@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, QTimer
+from PySide6.QtCore import Qt, QThread, QTimer, QEventLoop, Signal, Slot
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -32,20 +32,56 @@ from pzero.imports.segy_reader import (
 )
 
 
-def _run_segy_task(parent, message, task, *args, **kwargs):
+def _run_segy_task(
+    parent,
+    message,
+    task,
+    *args,
+    report_progress=False,
+    finalize=None,
+    finalize_message="Adding seismic volume to the project and updating views...",
+    **kwargs,
+):
     """Keep the wait bar animated while SEG-Y file operations run off the GUI thread."""
 
     class Worker(QThread):
+        progress_changed = Signal(float, str)
         result = None
         error = None
 
         def run(self):
             try:
+                if report_progress:
+                    kwargs["progress_callback"] = self.progress_changed.emit
                 self.result = task(*args, **kwargs)
             except Exception as error:
                 self.error = error
 
     class WaitDialog(QProgressDialog):
+        @Slot(float, str)
+        def update_progress(self, fraction, text):
+            # Reserve the final portion for adding the volume and updating views.
+            limit = 900 if finalize is not None else 1000
+            self.setLabelText(text)
+            self.setValue(round(limit * max(0.0, min(1.0, fraction))))
+
+        @Slot()
+        def finish(self):
+            worker.wait()
+            if worker.error is None:
+                try:
+                    if finalize is not None:
+                        self.setLabelText(finalize_message)
+                        self.setRange(0, 1000)
+                        self.setValue(950)
+                        self.repaint()
+                        QApplication.processEvents(QEventLoop.ExcludeUserInputEvents)
+                        worker.result = finalize(worker.result)
+                    self.setValue(self.maximum())
+                except Exception as error:
+                    worker.error = error
+            self.accept()
+
         # The reader cannot safely be cancelled halfway through an import.
         def reject(self):
             pass
@@ -53,14 +89,17 @@ def _run_segy_task(parent, message, task, *args, **kwargs):
         def closeEvent(self, event):
             event.ignore()
 
-    progress = WaitDialog(message, "", 0, 0, parent)
+    progress = WaitDialog(message, "", 0, 1000 if report_progress else 0, parent)
     progress.setWindowTitle("Loading SEG-Y")
     progress.setCancelButton(None)
     progress.setWindowFlag(Qt.WindowCloseButtonHint, False)
     progress.setWindowModality(Qt.ApplicationModal)
     progress.setMinimumDuration(0)
+    progress.setAutoClose(False)
+    progress.setAutoReset(False)
     worker = Worker(parent)
-    worker.finished.connect(progress.accept)
+    worker.progress_changed.connect(progress.update_progress)
+    worker.finished.connect(progress.finish)
     try:
         worker.start()
         progress.exec()
@@ -349,28 +388,9 @@ class SegyImportDialog(QDialog):
         self.import_button.setEnabled(False)
         self.scan_button.setEnabled(False)
         QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            self.survey = _run_segy_task(
-                self,
-                "Reading SEG-Y headers...",
-                inspect_segy,
-                self.path,
-                self.endian_combo.currentData(),
-                (
-                    None
-                    if self.auto_headers.isChecked()
-                    else {key: spin.value() for key, spin in self.header_spins.items()}
-                ),
-                (
-                    None
-                    if self.auto_headers.isChecked()
-                    else {
-                        key: combo.currentData()
-                        for key, combo in self.header_widths.items()
-                    }
-                ),
-            )
-            survey = self.survey
+
+        def apply_survey(survey):
+            self.survey = survey
             self._updating = True
             for key in self.header_spins:
                 self.header_spins[key].setValue(survey["headers"][key])
@@ -432,6 +452,32 @@ class SegyImportDialog(QDialog):
                 self.summary_label.heightForWidth(max(self.width() - 50, 200))
             )
             self._sampling_changed()
+            return survey
+
+        try:
+            self.survey = _run_segy_task(
+                self,
+                "Reading SEG-Y headers...",
+                inspect_segy,
+                self.path,
+                self.endian_combo.currentData(),
+                (
+                    None
+                    if self.auto_headers.isChecked()
+                    else {key: spin.value() for key, spin in self.header_spins.items()}
+                ),
+                (
+                    None
+                    if self.auto_headers.isChecked()
+                    else {
+                        key: combo.currentData()
+                        for key, combo in self.header_widths.items()
+                    }
+                ),
+                report_progress=True,
+                finalize=apply_survey,
+                finalize_message="Updating SEG-Y header preview...",
+            )
         except Exception as error:
             self.survey = None
             self.summary_label.setText("SEG-Y could not be inspected.")
