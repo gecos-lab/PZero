@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QThread, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPlainTextEdit,
+    QProgressDialog,
     QPushButton,
     QScrollArea,
     QSpinBox,
@@ -29,6 +30,49 @@ from pzero.imports.segy_reader import (
     inspect_segy,
     prepare_geometry,
 )
+
+
+def _run_segy_task(parent, message, task, *args, **kwargs):
+    """Keep the wait bar animated while SEG-Y file operations run off the GUI thread."""
+
+    class Worker(QThread):
+        result = None
+        error = None
+
+        def run(self):
+            try:
+                self.result = task(*args, **kwargs)
+            except Exception as error:
+                self.error = error
+
+    class WaitDialog(QProgressDialog):
+        # The reader cannot safely be cancelled halfway through an import.
+        def reject(self):
+            pass
+
+        def closeEvent(self, event):
+            event.ignore()
+
+    progress = WaitDialog(message, "", 0, 0, parent)
+    progress.setWindowTitle("Loading SEG-Y")
+    progress.setCancelButton(None)
+    progress.setWindowFlag(Qt.WindowCloseButtonHint, False)
+    progress.setWindowModality(Qt.ApplicationModal)
+    progress.setMinimumDuration(0)
+    worker = Worker(parent)
+    worker.finished.connect(progress.accept)
+    try:
+        worker.start()
+        progress.exec()
+        worker.wait()
+        if worker.error is not None:
+            raise worker.error
+        return worker.result
+    finally:
+        worker.wait()
+        progress.accept()
+        progress.deleteLater()
+        worker.deleteLater()
 
 
 class SegyImportDialog(QDialog):
@@ -306,7 +350,10 @@ class SegyImportDialog(QDialog):
         self.scan_button.setEnabled(False)
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            self.survey = inspect_segy(
+            self.survey = _run_segy_task(
+                self,
+                "Reading SEG-Y headers...",
+                inspect_segy,
                 self.path,
                 self.endian_combo.currentData(),
                 (

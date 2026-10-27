@@ -19,7 +19,7 @@ from pzero.imports.segy_reader import read_grid, set_seismic_metadata
 
 def segy2vtk(self, in_file_name):
     """Review input settings before importing a volume into the image collection."""
-    from pzero.helpers.segy_import_dialog import SegyImportDialog
+    from pzero.helpers.segy_import_dialog import SegyImportDialog, _run_segy_task
 
     dialog = SegyImportDialog(in_file_name, parent=self)
     if dialog.exec() != QDialog.Accepted:
@@ -28,7 +28,14 @@ def segy2vtk(self, in_file_name):
         return None
     self.disable_actions()
     try:
-        grid = read_segy_file(in_file_name, dialog.import_options, survey=dialog.survey)
+        grid = _run_segy_task(
+            self,
+            "Loading SEG-Y volume...",
+            read_segy_file,
+            in_file_name,
+            dialog.import_options,
+            survey=dialog.survey,
+        )
         entity = deepcopy(self.image_coll.entity_dict)
         entity["uid"] = str(uuid4())
         entity["name"] = dialog.import_options.name
