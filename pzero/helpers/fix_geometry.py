@@ -1499,7 +1499,8 @@ def open_fix_geometry_dialog(project) -> None:
     from ..views.dock_window import DockWindow, View3D
 
     docks = [
-        dock for dock in project.findChildren(DockWindow)
+        dock
+        for dock in project.findChildren(DockWindow)
         if isinstance(getattr(dock, "canvas", None), View3D)
         and not getattr(dock, "_canvas_disposed", False)
     ]
