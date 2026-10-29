@@ -1280,7 +1280,7 @@ class AdvancedConstraintSelectionDialog(QDialog):
                 "No refined surface constraints are available.",
                 position="upper_edge",
                 color="black",
-            )
+            ).SetMaximumFontSize(14)
             self._safe_render()
             return
 
@@ -1439,7 +1439,7 @@ class AdvancedConstraintSelectionDialog(QDialog):
                 "Select a surface to inspect its constraints.",
                 position="upper_edge",
                 color="black",
-            )
+            ).SetMaximumFontSize(14)
             self._safe_render()
             return
 
@@ -1524,7 +1524,7 @@ class AdvancedConstraintSelectionDialog(QDialog):
                 "Green: hull points   Orange: intersection points",
                 position="upper_edge",
                 color="black",
-            )
+            ).SetMaximumFontSize(14)
             self.plotter.add_axes()
             if (
                 preserve_camera
@@ -1542,7 +1542,7 @@ class AdvancedConstraintSelectionDialog(QDialog):
                 "No hull or intersection geometry was found for this surface.",
                 position="upper_edge",
                 color="black",
-            )
+            ).SetMaximumFontSize(14)
 
         self._safe_render()
 
@@ -4989,11 +4989,11 @@ class MeshItWorkflowGUI(QWidget):
 
         file_layout.addLayout(buttons_layout)
 
-        self.load_from_pzero_btn = QPushButton("Advanced Import...")
+        self.load_from_pzero_btn = QPushButton("Import from Project...")
         self.load_from_pzero_btn.setToolTip(
-            "Open dialog with advanced options:\n"
-            "- Load TriSurf or PolyLine as XYZ points\n"
-            "- Per-geometry extension factor\n"
+            "Import entities from the current PZero project.\n"
+            "Select surfaces, polylines or point clouds, with optional\n"
+            "conversion to XYZ points and per-geometry extension.\n"
             "Use the embedded table below for quick loading."
         )
         self.load_from_pzero_btn.clicked.connect(self._open_pzero_loader_dialog)
@@ -5927,11 +5927,14 @@ class MeshItWorkflowGUI(QWidget):
         if True:
             from pyvistaqt import QtInteractor
 
-            self.intersection_plotter = QtInteractor(self.intersection_view_frame)
+            # Redraw on changes and interaction, without retrying hidden views on a timer.
+            self.intersection_plotter = QtInteractor(
+                self.intersection_view_frame, auto_update=False
+            )
             self.intersection_plot_layout.addWidget(
                 self.intersection_plotter.interactor
             )
-            self.intersection_plotter.set_background("white")
+            self.intersection_plotter.set_background([0.318, 0.341, 0.431])
             self._apply_vertical_exaggeration_to_plotter(self.intersection_plotter)
             # Connect selection change now that plotter exists
             self.intersection_list.itemSelectionChanged.connect(
@@ -6331,40 +6334,38 @@ class MeshItWorkflowGUI(QWidget):
             self.plotters = getattr(self, "plotters", {})
 
             # Intersections plotter
-            self.intersections_plotter = QtInteractor(self.intersections_viz_frame)
+            self.intersections_plotter = QtInteractor(
+                self.intersections_viz_frame, auto_update=False
+            )
             self.intersections_plot_layout.addWidget(
                 self.intersections_plotter.interactor
             )
             self.intersections_plotter.set_background([0.318, 0.341, 0.431])
             self._apply_vertical_exaggeration_to_plotter(self.intersections_plotter)
-            self.intersections_plotter.add_text(
-                "Refine intersections to visualize refined intersection lines.",
-                position="upper_edge",
-                color="white",
+            self.statusBar().showMessage(
+                "Refine intersections to visualize refined intersection lines."
             )
             self.plotters["intersections"] = self.intersections_plotter
 
             # Meshes plotter
-            self.meshes_plotter = QtInteractor(self.meshes_viz_frame)
+            self.meshes_plotter = QtInteractor(self.meshes_viz_frame, auto_update=False)
             self.meshes_plot_layout.addWidget(self.meshes_plotter.interactor)
             self.meshes_plotter.set_background([0.318, 0.341, 0.431])
             self._apply_vertical_exaggeration_to_plotter(self.meshes_plotter)
-            self.meshes_plotter.add_text(
-                "Generate conforming meshes to visualize surface meshes.",
-                position="upper_edge",
-                color="white",
+            self.statusBar().showMessage(
+                "Generate conforming meshes to visualize surface meshes."
             )
             self.plotters["meshes"] = self.meshes_plotter
 
             # Segments plotter
-            self.segments_plotter = QtInteractor(self.segments_viz_frame)
+            self.segments_plotter = QtInteractor(
+                self.segments_viz_frame, auto_update=False
+            )
             self.segments_plot_layout.addWidget(self.segments_plotter.interactor)
             self.segments_plotter.set_background([0.318, 0.341, 0.431])
             self._apply_vertical_exaggeration_to_plotter(self.segments_plotter)
-            self.segments_plotter.add_text(
-                "Click on constraint segments to select/deselect them.",
-                position="upper_edge",
-                color="white",
+            self.statusBar().showMessage(
+                "Click on constraint segments to select/deselect them."
             )
             self.plotters["segments"] = self.segments_plotter
 
@@ -6527,14 +6528,14 @@ class MeshItWorkflowGUI(QWidget):
 
         # Create and attach the interactor widget
         try:
-            self.segments_plotter = QtInteractor(self.segments_viz_frame)
+            self.segments_plotter = QtInteractor(
+                self.segments_viz_frame, auto_update=False
+            )
             self.segments_plot_layout.addWidget(self.segments_plotter.interactor)
             self.segments_plotter.set_background([0.318, 0.341, 0.431])
             self._apply_vertical_exaggeration_to_plotter(self.segments_plotter)
-            self.segments_plotter.add_text(
-                "Click on constraint segments to select/deselect them.",
-                position="upper_edge",
-                color="white",
+            self.statusBar().showMessage(
+                "Click on constraint segments to select/deselect them."
             )
             if not hasattr(self, "plotters") or self.plotters is None:
                 self.plotters = {}
@@ -10093,14 +10094,12 @@ class MeshItWorkflowGUI(QWidget):
         if True:
             from pyvistaqt import QtInteractor
 
-            plotter = QtInteractor(self.pre_tetramesh_viz_frame)
+            plotter = QtInteractor(self.pre_tetramesh_viz_frame, auto_update=False)
             self.pre_tetramesh_plot_layout.addWidget(plotter.interactor)
             plotter.set_background([0.2, 0.2, 0.25])  # Darker background
             self._apply_vertical_exaggeration_to_plotter(plotter)
-            plotter.add_text(
-                "Load conforming meshes from Refine tab to visualize.\nC++ core.cpp workflow: surfaces → conforming meshes → selection → tetgen",
-                position="upper_edge",
-                color="white",
+            self.pre_tetramesh_viz_frame.setToolTip(
+                "Load conforming meshes from the Refine & Mesh tab to visualize them."
             )
             self.plotters["pre_tetramesh"] = plotter
             self.pre_tetramesh_plotter = plotter
@@ -10126,11 +10125,6 @@ class MeshItWorkflowGUI(QWidget):
         plotter = self.plotters.get("pre_tetramesh")
         if plotter:
             plotter.clear()
-            plotter.add_text(
-                "Load conforming meshes from Refine tab to visualize.\nC++ core.cpp workflow: surfaces → conforming meshes → selection → tetgen",
-                position="upper_edge",
-                color="white",
-            )
             plotter.reset_camera()
         elif hasattr(self, "pre_tetramesh_plot_layout"):  # Fallback
             # ... (similar clearing logic as _clear_refine_mesh_plot if plotter is None)
@@ -10140,11 +10134,7 @@ class MeshItWorkflowGUI(QWidget):
         """Clear the tetra mesh plot."""
         if hasattr(self, "tetra_plotter") and self.tetra_plotter:
             self.tetra_plotter.clear()
-            self.tetra_plotter.add_text(
-                "Load surfaces from Pre-Tetra tab to begin.",
-                position="upper_edge",
-                color="white",
-            )
+            self.statusBar().showMessage("Load surfaces from Pre-Tetramesh to begin.")
             self.tetra_plotter.render()
         logger.debug("Tetra mesh plot cleared.")
 
@@ -10349,10 +10339,8 @@ class MeshItWorkflowGUI(QWidget):
             self.pre_tetramesh_plotter.clear()
 
             if not self.selected_conforming_surfaces:
-                self.pre_tetramesh_plotter.add_text(
-                    "No conforming surfaces selected.\nSelect surfaces in the tree to visualize.",
-                    position="upper_edge",
-                    color="white",
+                self.statusBar().showMessage(
+                    "Select conforming surfaces in the tree to visualize them."
                 )
                 return
 
@@ -10432,16 +10420,14 @@ class MeshItWorkflowGUI(QWidget):
 
             self.pre_tetramesh_plotter.add_text(
                 legend_text, position="upper_edge", color="white", font_size=12
-            )
+            ).SetMaximumFontSize(14)
 
             # Reset camera and render
             self.pre_tetramesh_plotter.reset_camera()
 
         except Exception as e:
             logger.error(f"Error updating conforming surface visualization: {e}")
-            self.pre_tetramesh_plotter.add_text(
-                f"Visualization error: {str(e)}", position="upper_edge", color="red"
-            )
+            self.statusBar().showMessage(f"Visualization error: {str(e)}")
 
     def _validate_conforming_meshes_for_tetgen(self):
         """
@@ -13036,16 +13022,14 @@ class MeshItWorkflowGUI(QWidget):
                     position="upper_edge",
                     color="white",
                     font_size=12,
-                )
+                ).SetMaximumFontSize(14)
 
                 # Add legend if there are conforming meshes
                 if surfaces_with_meshes > 0:
                     self.refine_mesh_plotter.add_legend(bcolor="white", face="r")
             else:
-                self.refine_mesh_plotter.add_text(
-                    "No data to display.\nRun 'Refine Intersection Lines' and 'Generate Conforming Surface Meshes' first.",
-                    position="upper_edge",
-                    color="white",
+                self.statusBar().showMessage(
+                    "No data to display.\nRun 'Refine Intersection Lines' and 'Generate Conforming Surface Meshes' first."
                 )
 
             # Update plotter
@@ -13055,9 +13039,7 @@ class MeshItWorkflowGUI(QWidget):
             logger.error(
                 f"Error updating conforming mesh visualization: {e}", exc_info=True
             )
-            self.refine_mesh_plotter.add_text(
-                f"Visualization error: {str(e)}", position="upper_edge", color="red"
-            )
+            self.statusBar().showMessage(f"Visualization error: {str(e)}")
 
     def _update_conforming_mesh_summary(
         self, successful_surfaces, total_surfaces, failed_surfaces
@@ -16632,9 +16614,8 @@ segmentation, triangulation, and visualization.
                     else:
                         surface_intersections += 1
 
-        # Due to double-counting (each intersection is stored for both datasets),
-        # we divide surface-surface intersections count by 2
-        unique_surface_intersections = surface_intersections // 2
+        # Each intersection is stored once, keyed by the lower dataset id.
+        unique_surface_intersections = surface_intersections
         triple_point_count = (
             len(self.triple_points) if hasattr(self, "triple_points") else 0
         )
@@ -16795,30 +16776,13 @@ segmentation, triangulation, and visualization.
                 self.mean_edge_label.setText("Mean edge: 0.0")
                 self.uniformity_label.setText("Uniformity: 0.0")
 
-            # Intersection statistics
+            # Intersection statistics cover all datasets, like the intersection view.
             if hasattr(self, "surface_intersection_count_label"):
-                # Count dataset-specific intersections
-                dataset_surface_intersections = 0
-                dataset_polyline_intersections = 0
-
-                if (
-                    hasattr(self, "datasets_intersections")
-                    and self.current_dataset_index in self.datasets_intersections
-                ):
-                    for intersection in self.datasets_intersections[
-                        self.current_dataset_index
-                    ]:
-                        if intersection["is_polyline_mesh"]:
-                            dataset_polyline_intersections += 1
-                        else:
-                            dataset_surface_intersections += 1
-
-                # Update UI with dataset-specific intersection counts
                 self.surface_intersection_count_label.setText(
-                    f"Surface-Surface: {dataset_surface_intersections}"
+                    f"Surface-Surface: {unique_surface_intersections}"
                 )
                 self.polyline_intersection_count_label.setText(
-                    f"Polyline-Surface: {dataset_polyline_intersections}"
+                    f"Polyline-Surface: {polyline_intersections}"
                 )
                 self.triple_point_count_label.setText(
                     f"Triple Points: {triple_point_count}"
@@ -18573,11 +18537,7 @@ segmentation, triangulation, and visualization.
             not hasattr(self, "datasets_intersections")
             or not self.datasets_intersections
         ):
-            plotter.add_text(
-                "No refined intersections to display.",
-                position="upper_edge",
-                color="white",
-            )
+            self.statusBar().showMessage("No refined intersections to display.")
             plotter.reset_camera()
             return
 
@@ -18919,10 +18879,10 @@ segmentation, triangulation, and visualization.
 
             plotter.add_text(
                 stats_text, position="lower_left", font_size=10, color="white"
-            )
+            ).SetMaximumFontSize(14)
             plotter.add_text(
                 legend_text, position="upper_right", font_size=9, color="white"
-            )
+            ).SetMaximumFontSize(14)
 
             plotter.add_axes()
             plotter.reset_camera()
@@ -18932,11 +18892,7 @@ segmentation, triangulation, and visualization.
                 "Updated refined intersections view with enhanced special point visualization."
             )
         else:
-            plotter.add_text(
-                "No valid data to display in refined view.",
-                position="upper_edge",
-                color="white",
-            )
+            self.statusBar().showMessage("No valid data to display in refined view.")
             plotter.reset_camera()
 
     def _clear_refine_mesh_plot(self):
@@ -18964,10 +18920,8 @@ segmentation, triangulation, and visualization.
                         try:
                             interactor.isVisible()  # Will raise RuntimeError if deleted
                             plotter.clear()
-                            plotter.add_text(
-                                "Refine intersections to visualize or load data.",
-                                position="upper_edge",
-                                color="white",
+                            self.statusBar().showMessage(
+                                "Refine intersections to visualize or load data."
                             )
                             plotter.reset_camera()
                         except RuntimeError:
@@ -19615,7 +19569,7 @@ segmentation, triangulation, and visualization.
                 details.append("Selected only")
             if details:
                 msg += " (" + ", ".join(details) + ")"
-            plotter.add_text(msg, position="upper_edge", color="white")
+            self.statusBar().showMessage(msg)
         else:
             label_datasets = [
                 dataset
@@ -20279,7 +20233,7 @@ segmentation, triangulation, and visualization.
         import pyvista as pv
         import numpy as np
 
-        plotter = QtInteractor(parent=parent_frame)
+        plotter = QtInteractor(parent=parent_frame, auto_update=False)
         setattr(
             self, f"{view_type}_plotter", plotter
         )  # Store reference to the new plotter
@@ -20495,10 +20449,8 @@ segmentation, triangulation, and visualization.
             self._apply_vertical_exaggeration_to_plotter(plotter)
             plotter.reset_camera()
         else:
-            plotter.add_text(
-                f"No valid data to display for '{view_type}' view.",
-                position="upper_edge",
-                color="white",
+            self.statusBar().showMessage(
+                f"No valid data to display for '{view_type}' view."
             )
 
         plotter.enable()
@@ -20623,11 +20575,6 @@ segmentation, triangulation, and visualization.
             else:
                 if hasattr(self, "tetra_plotter") and self.tetra_plotter:
                     self.tetra_plotter.clear()
-                    self.tetra_plotter.add_text(
-                        "Load surfaces from Pre-Tetra tab to begin",
-                        position="upper_edge",
-                        color="white",
-                    )
                     self.tetra_plotter.render()
                 self.statusBar().showMessage(
                     "Ready to load constrained surfaces from Pre-Tetra mesh tab."
@@ -20745,6 +20692,7 @@ segmentation, triangulation, and visualization.
     def _run_batch_computation(self, compute_type, total_items):
         """Runs a batch computation using a worker thread."""
         logger.info(f"Starting batch computation: {compute_type}")
+        self._batch_compute_type = compute_type
         self._disable_compute_buttons()  # Disable buttons first
 
         # Setup progress dialog
@@ -20829,11 +20777,12 @@ segmentation, triangulation, and visualization.
                 else:
                     item.setForeground(QColor(Qt.red))
 
+    @Slot(int, int, float)
     def handle_batch_finished(self, success_count, total_eligible, elapsed_time):
         """Handles the completion of a batch computation."""
         # Determine if this was the global intersection task
-        is_intersection_task = total_eligible == 1 and hasattr(
-            self.worker, "compute_global_intersections_task"
+        is_intersection_task = (
+            getattr(self, "_batch_compute_type", None) == "intersections"
         )
 
         if is_intersection_task:
@@ -20900,10 +20849,16 @@ segmentation, triangulation, and visualization.
             self._on_tab_changed(current_index)  # This will update only the current tab
             self._update_statistics()
         else:
-            # For intersections, the updates are already scheduled via QTimer.singleShot
-            # but we can ensure stats are updated one last time here just in case.
+            # Update Qt widgets and VTK only on the GUI thread, after computation.
             self._update_statistics()
+            self._update_intersection_list()
+            if (
+                self._workflow_tab_at(self.notebook.currentIndex())
+                == self.intersection_tab
+            ):
+                self._visualize_intersections()
 
+    @Slot(str)
     def handle_computation_error(self, error_message):
         """Handles errors reported by the worker thread."""
         logger.error(f"Computation error: {error_message}")
@@ -21135,12 +21090,7 @@ segmentation, triangulation, and visualization.
             )
         except ImportError as e:
             logger.error(f"Failed to import intersection utilities: {e}")
-            QMessageBox.critical(
-                self,
-                "Import Error",
-                f"Failed to import intersection utilities: {e}\nPlease ensure meshit.intersection_utils is available.",
-            )
-            return False
+            raise ImportError(f"Failed to import intersection utilities: {e}") from e
 
         # Eligible surfaces require triangulations
         eligible_surface_indices = [
@@ -21152,12 +21102,9 @@ segmentation, triangulation, and visualization.
             logger.warning(
                 "Need at least one triangulated surface to compute intersections."
             )
-            QMessageBox.warning(
-                self,
-                "Not Enough Data",
-                "Need at least one triangulated surface to compute intersections.",
+            raise ValueError(
+                "Need at least one triangulated surface to compute intersections."
             )
-            return False
 
         # Collect wells (polylines) regardless of triangulation
         well_indices = [
@@ -21175,12 +21122,9 @@ segmentation, triangulation, and visualization.
             logger.warning(
                 "Need at least two objects (surfaces and/or wells) to compute intersections."
             )
-            QMessageBox.warning(
-                self,
-                "Not Enough Data",
-                "Need at least two objects (surfaces and/or wells) to compute intersections.",
+            raise ValueError(
+                "Need at least two objects (surfaces and/or wells) to compute intersections."
             )
-            return False
 
         # Model wrapper compatible with intersection_utils
         class ModelWrapper:
@@ -21352,7 +21296,6 @@ segmentation, triangulation, and visualization.
         # Run workflow
         def progress_callback(message):
             logger.debug(f"Intersection util progress: {message.strip()}")
-            QApplication.processEvents()
 
         try:
             logger.info("Calling run_intersection_workflow...")
@@ -21372,8 +21315,7 @@ segmentation, triangulation, and visualization.
         except Exception as e:
             error_msg = f"Error during run_intersection_workflow: {str(e)}"
             logger.error(error_msg, exc_info=True)
-            QMessageBox.critical(self, "Intersection Computation Error", error_msg)
-            return False
+            raise RuntimeError(error_msg) from e
 
         # Store results
         self.datasets_intersections = {}
@@ -21455,10 +21397,6 @@ segmentation, triangulation, and visualization.
             f"Stored {found_intersections_count} intersections across datasets and {len(self.triple_points)} triple points."
         )
 
-        QTimer.singleShot(0, self._update_statistics)
-        QTimer.singleShot(0, self._update_intersection_list)
-        QTimer.singleShot(0, self._visualize_intersections)
-
         logger.info("Global intersection computation successful.")
         return True
 
@@ -21513,7 +21451,7 @@ segmentation, triangulation, and visualization.
 
             # Add a header item for this dataset
             dataset_item = QListWidgetItem(f"{dataset_name} Intersections:")
-            dataset_item.setBackground(QColor(240, 240, 240))
+            dataset_item.setBackground(self.intersection_list.palette().alternateBase())
             dataset_item.setFlags(dataset_item.flags() & ~Qt.ItemIsSelectable)
             self.intersection_list.addItem(dataset_item)
 
@@ -21591,9 +21529,7 @@ segmentation, triangulation, and visualization.
             or intersection_index >= len(self.datasets_intersections[dataset_index])
         ):
             logger.warning("Selected intersection data not found.")
-            plotter.add_text(
-                "Selected intersection not found.", position="upper_edge", color="red"
-            )
+            self.statusBar().showMessage("Selected intersection not found.")
             return
 
         selected_intersection = self.datasets_intersections[dataset_index][
@@ -21743,11 +21679,7 @@ segmentation, triangulation, and visualization.
                     )
             logger.info("Updated embedded view for selected intersection.")
         else:
-            plotter.add_text(
-                "Could not display selected intersection.",
-                position="upper_edge",
-                color="white",
-            )
+            self.statusBar().showMessage("Could not display selected intersection.")
             logger.warning("No content added when visualizing selected intersection.")
 
     def _visualize_intersections(self):
@@ -21766,9 +21698,7 @@ segmentation, triangulation, and visualization.
             not hasattr(self, "datasets_intersections")
             or not self.datasets_intersections
         ):
-            plotter.add_text(
-                "No intersections computed yet.", position="upper_edge", color="white"
-            )
+            self.statusBar().showMessage("No intersections computed yet.")
             plotter.reset_camera()
             return
 
@@ -22086,11 +22016,7 @@ segmentation, triangulation, and visualization.
             if hasattr(self, "intersection_export_figure_btn"):
                 self.intersection_export_figure_btn.setEnabled(True)
         else:
-            plotter.add_text(
-                "No valid intersection data to display.",
-                position="upper_edge",
-                color="white",
-            )
+            self.statusBar().showMessage("No valid intersection data to display.")
             logger.info("Embedded intersection view updated, but no content added.")
 
     def _visualize_selected_intersection(self, dataset_index, intersection_index):
@@ -22111,9 +22037,7 @@ segmentation, triangulation, and visualization.
             or intersection_index >= len(self.datasets_intersections[dataset_index])
         ):
             logger.warning("Selected intersection data not found.")
-            plotter.add_text(
-                "Selected intersection not found.", position="upper_edge", color="red"
-            )
+            self.statusBar().showMessage("Selected intersection not found.")
             return
 
         selected_intersection = self.datasets_intersections[dataset_index][
@@ -22306,11 +22230,7 @@ segmentation, triangulation, and visualization.
                     )
             logger.info("Updated embedded view for selected intersection.")
         else:
-            plotter.add_text(
-                "Could not display selected intersection.",
-                position="upper_edge",
-                color="white",
-            )
+            self.statusBar().showMessage("Could not display selected intersection.")
             logger.warning("No content added when visualizing selected intersection.")
 
     def show_intersections_3d_view(self):
@@ -23006,7 +22926,7 @@ segmentation, triangulation, and visualization.
         if True:
             from pyvistaqt import QtInteractor
 
-            self.tetra_plotter = QtInteractor(viz_panel)
+            self.tetra_plotter = QtInteractor(viz_panel, auto_update=False)
             self.tetra_plotter.set_background([0.15, 0.15, 0.2])
             self._apply_vertical_exaggeration_to_plotter(self.tetra_plotter)
             viz_layout.addWidget(self.tetra_plotter.interactor)
@@ -24874,9 +24794,7 @@ segmentation, triangulation, and visualization.
                     # After first reset, disable further resets to preserve user's view
                     self._allow_camera_reset = False
             else:
-                self.tetra_plotter.add_text(
-                    "No surfaces loaded", position="upper_edge", color="white"
-                )
+                self.statusBar().showMessage("No surfaces loaded.")
 
             self.tetra_plotter.render()
             # Count wells for logging
@@ -24887,9 +24805,7 @@ segmentation, triangulation, and visualization.
 
         except Exception as e:
             logger.error(f"Error visualizing surfaces: {e}")
-            self.tetra_plotter.add_text(
-                f"Visualization error: {str(e)}", position="upper_edge", color="red"
-            )
+            self.statusBar().showMessage(f"Visualization error: {str(e)}")
 
     def _toggle_tetra_wireframe(self, enabled):
         """Toggle wireframe display for loaded surfaces and tetrahedral mesh"""
@@ -25513,9 +25429,7 @@ segmentation, triangulation, and visualization.
                 mesh = self.tetrahedral_mesh
 
             if mesh is None:
-                self.tetra_plotter.add_text(
-                    "No mesh data available", position="upper_edge", color="red"
-                )
+                self.statusBar().showMessage("No mesh data available")
                 return
 
             # Store full mesh for later use
@@ -25572,9 +25486,7 @@ segmentation, triangulation, and visualization.
 
         except Exception as e:
             logger.error(f"Error visualizing tetrahedral mesh: {e}")
-            self.tetra_plotter.add_text(
-                f"Visualization error: {str(e)}", position="upper_edge", color="red"
-            )
+            self.statusBar().showMessage(f"Visualization error: {str(e)}")
 
     def _add_tetrahedral_mesh_visualization(self, mesh):
         """Add tetrahedral mesh visualization like C++ version (surface + internal combined)"""
@@ -28190,11 +28102,11 @@ segmentation, triangulation, and visualization.
                     f"No {title.lower()} to display.",
                     position="upper_edge",
                     color=panel_text_color,
-                )
+                ).SetMaximumFontSize(14)
 
             plotter.add_text(
                 title, position="upper_left", font_size=12, color=panel_text_color
-            )
+            ).SetMaximumFontSize(14)
             self._apply_vertical_exaggeration_to_plotter(plotter)
             self._apply_generic_camera_view(
                 plotter,
@@ -32702,10 +32614,8 @@ segmentation, triangulation, and visualization.
         """Clear the tetrahedral mesh plot."""
         if hasattr(self, "tetra_plotter") and self.tetra_plotter:
             self.tetra_plotter.clear()
-            self.tetra_plotter.add_text(
-                "Select surfaces and generate tetrahedral mesh to visualize.",
-                position="upper_edge",
-                color="white",
+            self.statusBar().showMessage(
+                "Select surfaces and generate tetrahedral mesh to visualize."
             )
 
         # Reset mesh data
@@ -33182,7 +33092,7 @@ segmentation, triangulation, and visualization.
         try:
             from pyvistaqt import QtInteractor
 
-            plotter = QtInteractor(parent_widget)
+            plotter = QtInteractor(parent_widget, auto_update=False)
 
             # Set background with error handling
             try:
@@ -33384,9 +33294,7 @@ segmentation, triangulation, and visualization.
             not hasattr(self, "constraint_manager")
             or not self.constraint_manager.surface_constraints
         ):
-            plotter.add_text(
-                "No constraints to display.", position="upper_edge", color="white"
-            )
+            self.statusBar().showMessage("No constraints to display.")
             plotter.render()
             return
 
@@ -33449,10 +33357,8 @@ segmentation, triangulation, and visualization.
                     continue
 
         if not constraints_drawn:
-            plotter.add_text(
-                "Constraints generated, but none could be rendered.",
-                position="upper_edge",
-                color="white",
+            self.statusBar().showMessage(
+                "Constraints generated, but none could be rendered."
             )
 
         plotter.reset_camera()
