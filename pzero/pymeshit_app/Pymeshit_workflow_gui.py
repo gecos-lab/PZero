@@ -106,7 +106,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QGridLayout,
 )
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, Slot, QEventLoop
 
 # Import PyVista for 3D visualization (required)
 import pyvista as pv
@@ -467,6 +467,15 @@ class ComputationWorker(QObject):
     def stop(self):
         logger.debug("ComputationWorker stop requested.")
         self._is_running = False
+
+    @Slot()
+    def run(self):
+        """Enter the batch through a bound slot so it runs on the worker thread."""
+        try:
+            self.run_batch_task(self.compute_type)
+        except Exception as error:
+            self.error_occurred.emit(str(error))
+            self.batch_finished.emit(0, 0, 0.0)
 
     def run_batch_task(self, compute_type):
         """Generic worker method to run batch computation for any compute type."""
@@ -2366,6 +2375,21 @@ class MeshItWorkflowGUI(QWidget):
         self.notebook = QTabWidget()
         self.main_layout.addWidget(self.notebook)
 
+        navigation = QHBoxLayout()
+        self.workflow_previous_btn = QPushButton("Previous")
+        self.workflow_next_btn = QPushButton("Next")
+        self.workflow_previous_btn.clicked.connect(
+            lambda: self.notebook.setCurrentIndex(self.notebook.currentIndex() - 1)
+        )
+        self.workflow_next_btn.clicked.connect(
+            lambda: self.notebook.setCurrentIndex(self.notebook.currentIndex() + 1)
+        )
+        navigation.addWidget(self.workflow_previous_btn)
+        navigation.addStretch()
+        navigation.addWidget(self.workflow_next_btn)
+        self.main_layout.addLayout(navigation)
+        self.notebook.currentChanged.connect(self._update_workflow_navigation)
+
         # 3. Create Custom Status Bar (Label) - MUST be done BEFORE any _setup_*_tab() calls
         self._status_label = QLabel("Ready")
         self._status_label.setStyleSheet(
@@ -2454,6 +2478,59 @@ class MeshItWorkflowGUI(QWidget):
         if auto_show:
             self.show()
         self._update_statistics()  # Initial update
+        self._update_workflow_navigation()
+
+    def _update_workflow_navigation(self, *_):
+        index = self.notebook.currentIndex()
+        self.workflow_previous_btn.setEnabled(index > 0)
+        self.workflow_next_btn.setEnabled(index < self.notebook.count() - 1)
+
+    def _run_mesh_task(self, message, task, *args, **kwargs):
+        """Keep the GUI responsive, showing progress only for work over 0.5 seconds."""
+
+        class Worker(QThread):
+            result = None
+            error = None
+
+            def run(self):
+                try:
+                    self.result = task(*args, **kwargs)
+                except Exception as error:
+                    self.error = error
+
+        class Progress(QProgressDialog):
+            # Native mesh operations cannot safely be cancelled halfway through.
+            def reject(self):
+                pass
+
+            def closeEvent(self, event):
+                event.ignore()
+
+        progress = Progress(message, "", 0, 0, self)
+        progress.setWindowTitle("Processing mesh")
+        progress.setCancelButton(None)
+        progress.setWindowFlag(Qt.WindowCloseButtonHint, False)
+        progress.setWindowModality(Qt.ApplicationModal)
+        progress.setMinimumDuration(500)
+        progress.setAutoClose(False)
+        progress.setValue(0)
+        worker = Worker(self)
+        loop = QEventLoop(self)
+        worker.finished.connect(loop.quit)
+        try:
+            worker.start()
+            loop.exec(QEventLoop.ExcludeUserInputEvents)
+            worker.wait()
+            if worker.error is not None:
+                raise worker.error
+            return worker.result
+        finally:
+            worker.wait()
+            progress.reset()
+            progress.accept()
+            progress.deleteLater()
+            worker.deleteLater()
+            loop.deleteLater()
 
     def _make_workflow_tabs_scrollable(self):
         """Keep each tab's controls at their natural size inside the host window."""
@@ -5126,12 +5203,6 @@ class MeshItWorkflowGUI(QWidget):
         self.delete_selected_btn.clicked.connect(self.delete_selected_surface)
         dataset_buttons_layout.addWidget(self.delete_selected_btn)
 
-        self.refresh_pzero_btn = QPushButton("Refresh PZero")
-        self.refresh_pzero_btn.setToolTip("Refresh connection to PZero")
-        self.refresh_pzero_btn.clicked.connect(self._refresh_pzero_connection)
-        self.refresh_pzero_btn.setEnabled(False)
-        dataset_buttons_layout.addWidget(self.refresh_pzero_btn)
-
         datasets_layout.addLayout(dataset_buttons_layout)
 
         control_layout.addWidget(datasets_group)
@@ -5282,18 +5353,6 @@ class MeshItWorkflowGUI(QWidget):
             "Export high-resolution figure of convex hull visualization"
         )
         control_layout.addWidget(self.hull_export_figure_btn)
-        # Navigation buttons
-        nav_layout = QHBoxLayout()
-
-        prev_btn = QPushButton("← Previous")
-        prev_btn.clicked.connect(lambda: self.notebook.setCurrentIndex(0))
-        nav_layout.addWidget(prev_btn)
-
-        next_btn = QPushButton("Next →")
-        next_btn.clicked.connect(lambda: self.notebook.setCurrentIndex(2))
-        nav_layout.addWidget(next_btn)
-
-        control_layout.addLayout(nav_layout)
         control_layout.addStretch()
 
         # --- Visualization Area (right side) ---
@@ -5624,18 +5683,6 @@ class MeshItWorkflowGUI(QWidget):
             "Export high-resolution figure of segmentation visualization"
         )
         control_layout.addWidget(self.segment_export_figure_btn)
-        # Navigation buttons
-        nav_layout = QHBoxLayout()
-
-        prev_btn = QPushButton("← Previous")
-        prev_btn.clicked.connect(lambda: self.notebook.setCurrentIndex(1))
-        nav_layout.addWidget(prev_btn)
-
-        next_btn = QPushButton("Next →")
-        next_btn.clicked.connect(lambda: self.notebook.setCurrentIndex(3))
-        nav_layout.addWidget(next_btn)
-
-        control_layout.addLayout(nav_layout)
         control_layout.addStretch()
 
         # --- Visualization Area (right side) ---
@@ -5802,15 +5849,6 @@ class MeshItWorkflowGUI(QWidget):
             "Export high-resolution figure of triangulation visualization"
         )
         control_layout.addWidget(self.tri_export_figure_btn)
-        # Navigation buttons (remain the same)
-        # ... (nav_layout setup remains the same) ...
-        nav_layout = QHBoxLayout()  # Added for completeness
-        prev_btn = QPushButton("← Previous")  # Added for completeness
-        prev_btn.clicked.connect(
-            lambda: self.notebook.setCurrentIndex(2)
-        )  # Added for completeness
-        nav_layout.addWidget(prev_btn)  # Added for completeness
-        control_layout.addLayout(nav_layout)  # Added for completeness
         control_layout.addStretch()  # Added for completeness
 
         # --- Visualization Area (right side) --- (remain the same)
@@ -5856,12 +5894,10 @@ class MeshItWorkflowGUI(QWidget):
         # Create compute buttons
         self.compute_intersections_btn = QPushButton("Compute Intersections")
         self.compute_intersections_btn.setObjectName("compute_intersections_btn")
-        self.compute_intersections_btn.setIcon(QIcon.fromTheme("system-run", QIcon()))
         self.compute_intersections_btn.clicked.connect(self.compute_intersections)
         controls_layout.addWidget(self.compute_intersections_btn)
 
         self.clear_intersections_btn = QPushButton("Clear Results")
-        self.clear_intersections_btn.setIcon(QIcon.fromTheme("edit-clear", QIcon()))
         self.clear_intersections_btn.clicked.connect(self._clear_intersection_results)
         controls_layout.addWidget(self.clear_intersections_btn)
         # High-quality figure export button
@@ -10005,7 +10041,7 @@ class MeshItWorkflowGUI(QWidget):
         surface_layout = QVBoxLayout(surface_group)
 
         self.load_conforming_meshes_btn = QPushButton(
-            "📥 Load Conforming Meshes from Refine Tab"
+            "Load Conforming Meshes from Refine Tab"
         )
         self.load_conforming_meshes_btn.setToolTip(
             "Load pre-computed conforming surface meshes from the refine mesh tab.\n"
@@ -10019,14 +10055,18 @@ class MeshItWorkflowGUI(QWidget):
         # Status label showing loaded conforming meshes
         self.conforming_mesh_status_label = QLabel("No conforming meshes loaded")
         self.conforming_mesh_status_label.setWordWrap(True)
+        self.conforming_mesh_status_label.setTextFormat(Qt.PlainText)
+        self.conforming_mesh_status_label.setTextInteractionFlags(
+            Qt.TextSelectableByMouse
+        )
         self.conforming_mesh_status_label.setStyleSheet(
-            "background-color: #f0f0f0; padding: 5px; border: 1px solid #ccc; border-radius: 3px;"
+            "color: palette(text); padding: 4px 0;"
         )
         surface_layout.addWidget(self.conforming_mesh_status_label)
 
         # Add tetgen validation button
         self.validate_for_tetgen_btn = QPushButton(
-            "✅ Validate Conforming Meshes for TetGen"
+            "Validate Conforming Meshes for TetGen"
         )
         self.validate_for_tetgen_btn.setToolTip(
             "Check if selected conforming surface meshes are ready for tetgen tetrahedralization.\n"
@@ -10194,11 +10234,8 @@ class MeshItWorkflowGUI(QWidget):
 
         # Update status label
         self.conforming_mesh_status_label.setText(
-            f"<b>Loaded {conforming_surfaces_found} conforming surface meshes</b><br>"
-            f"Ready for selection and tetgen validation"
-        )
-        self.conforming_mesh_status_label.setStyleSheet(
-            "background-color: #e8f5e8; padding: 5px; border: 1px solid #4CAF50; border-radius: 3px;"
+            f"Loaded {conforming_surfaces_found} conforming surface meshes.\n"
+            "Ready for selection and TetGen validation."
         )
 
         # Enable validation button
@@ -10470,7 +10507,11 @@ class MeshItWorkflowGUI(QWidget):
         try:
             from Pymeshit.intersection_utils import validate_surfaces_for_tetgen
 
-            validation_results = validate_surfaces_for_tetgen(selected_datasets)
+            validation_results = self._run_mesh_task(
+                f"Validating {len(selected_datasets)} conforming surfaces...",
+                validate_surfaces_for_tetgen,
+                selected_datasets,
+            )
 
             # Show detailed validation results
             self._show_validation_results_dialog(validation_results)
@@ -11750,8 +11791,12 @@ class MeshItWorkflowGUI(QWidget):
                             refine_hull_3d_along_surface,
                         )
 
-                        refined_hull_3d = refine_hull_3d_along_surface(
-                            raw_hull_points, scattered_points, config_3d
+                        refined_hull_3d = self._run_mesh_task(
+                            f"Refining hull {temp_surface_idx + 1} / {len(temp_model.surfaces)}...",
+                            refine_hull_3d_along_surface,
+                            raw_hull_points,
+                            scattered_points,
+                            config_3d,
                         )
                         logger.info(
                             f"3D hull refinement complete for surface {temp_surface_idx}"
@@ -11764,8 +11809,12 @@ class MeshItWorkflowGUI(QWidget):
                         refined_hull_3d = raw_hull_points
                 else:
                     # Standard 2D projection refinement for flat surfaces
-                    refined_hull_3d = refine_hull_with_interpolation(
-                        raw_hull_points, scattered_points, config
+                    refined_hull_3d = self._run_mesh_task(
+                        f"Refining hull {temp_surface_idx + 1} / {len(temp_model.surfaces)}...",
+                        refine_hull_with_interpolation,
+                        raw_hull_points,
+                        scattered_points,
+                        config,
                     )
 
                 # Convert refined hull back to Vector3D while preserving point annotations.
@@ -12172,7 +12221,9 @@ class MeshItWorkflowGUI(QWidget):
                             tps_smoothing = cfg.get("smoothing", 0.0)
                             interp_method = cfg.get("interp", "Thin Plate Spline (TPS)")
 
-                            tri_res = isomap_triangulator.triangulate_with_constraints(
+                            tri_res = self._run_mesh_task(
+                                f"Generating conforming mesh: {name}...",
+                                isomap_triangulator.triangulate_with_constraints,
                                 points_3d=boundary_points,  # Only boundary points are triangulated
                                 segments=seg_arr,
                                 base_size=per_surface_target,
@@ -12242,7 +12293,9 @@ class MeshItWorkflowGUI(QWidget):
                             [[h.x, h.y, h.z] for h in holes], dtype=float
                         )
 
-                    success = self._run_edge_boundary_triangulation(
+                    success = self._run_mesh_task(
+                        f"Generating conforming mesh: {name}...",
+                        self._run_edge_boundary_triangulation,
                         dataset_index=s_idx,
                         dataset=ds,
                         all_pts=all_pts,
@@ -12299,7 +12352,9 @@ class MeshItWorkflowGUI(QWidget):
                     cfg, well_feature_pts_3d, well_feature_sizes, centroid, basis
                 )
 
-                v3d, tris, _ = run_constrained_triangulation_py(
+                v3d, tris, _ = self._run_mesh_task(
+                    f"Generating conforming mesh: {name}...",
+                    run_constrained_triangulation_py,
                     pts2d,
                     seg_arr,
                     holes_2d,
@@ -17572,9 +17627,6 @@ segmentation, triangulation, and visualization.
             self.load_from_pzero_btn.setEnabled(bool(bridge))
         if hasattr(self, "export_to_pzero_btn"):
             self._update_export_to_pzero_button_state()
-        # Enable refresh button for unified table
-        if hasattr(self, "refresh_pzero_btn"):
-            self.refresh_pzero_btn.setEnabled(bool(bridge))
         if bridge:
             self.statusBar().showMessage(
                 "Connected to PZero - drag entities to Datasets table"
@@ -17650,20 +17702,6 @@ segmentation, triangulation, and visualization.
                 "Import Failed",
                 "None of the pending entities provided usable point data.",
             )
-
-    def _refresh_pzero_connection(self):
-        """Refresh connection to PZero and update status."""
-        if self.pzero_bridge:
-            try:
-                count = len(self.pzero_bridge.list_entities())
-                self.statusBar().showMessage(
-                    f"PZero connected: {count} entities available for drag-drop"
-                )
-            except Exception as exc:
-                logger.error("Failed to refresh PZero connection: %s", exc)
-                self.statusBar().showMessage("Error connecting to PZero")
-        else:
-            self.statusBar().showMessage("PZero not connected")
 
     def _open_pzero_loader_dialog(self):
         """Show a dialog that lets the user pick PZero entities to import."""
@@ -19702,8 +19740,10 @@ segmentation, triangulation, and visualization.
         if getattr(self, "current_refine_view", 0) != 2:
             return
 
-        if getattr(self, "_segments_batched_mode", False):
-            # Rebuild the batched view in a single pass
+        if getattr(self, "_segments_batched_mode", False) or (
+            self.show_selected_only_checkbox.isChecked()
+        ):
+            # Rebuild batched actors, or replace actors hidden by Selected Only.
             self._update_refined_visualization()
             return
 
@@ -19952,6 +19992,7 @@ segmentation, triangulation, and visualization.
             self._refine_updating_constraint_tree = False
 
         # -------- refresh 3-D actors (only for non-mouse triggered changes) ----
+        self._refresh_segment_map_from_tree()
         # Skip batch update if this was triggered by mouse selection (already handled individually)
         if not getattr(self, "_mouse_triggered_change", False):
             self._update_all_segment_actors()
@@ -20705,11 +20746,13 @@ segmentation, triangulation, and visualization.
         self.progress_dialog.setWindowModality(Qt.WindowModal)
         self.progress_dialog.setAutoClose(False)  # We will close it manually
         self.progress_dialog.setAutoReset(False)  # We will reset manually
+        self.progress_dialog.setMinimumDuration(500)
         self.progress_dialog.setValue(0)
         self.progress_dialog.canceled.connect(
             self.cancel_computation
         )  # Connect cancel signal
-        self.progress_dialog.show()
+        if compute_type == "intersections":
+            self.progress_dialog.setRange(0, 0)
 
         # Initialize counters for progress tracking
         self.processed_count = 0
@@ -20717,6 +20760,7 @@ segmentation, triangulation, and visualization.
 
         # Setup worker and thread
         self.worker = ComputationWorker(self)  # Pass GUI instance
+        self.worker.compute_type = compute_type
         self.thread = QThread()
         self.worker.moveToThread(self.thread)
 
@@ -20731,9 +20775,7 @@ segmentation, triangulation, and visualization.
             self.worker.dataset_finished.connect(self.handle_dataset_finished)
             self.worker.batch_finished.connect(self.handle_batch_finished)
             self.worker.error_occurred.connect(self.handle_computation_error)
-            self.thread.started.connect(
-                lambda: self.worker.run_batch_task(compute_type)
-            )
+            self.thread.started.connect(self.worker.run)
 
         # Common signals for thread management
         self.worker.batch_finished.connect(
@@ -20751,6 +20793,16 @@ segmentation, triangulation, and visualization.
         self.thread.start()
         logger.info(f"Worker thread started for {compute_type}.")
 
+    def _close_batch_progress(self):
+        """Stop the delayed-show timer and dispose of the completed dialog."""
+        progress = getattr(self, "progress_dialog", None)
+        self.progress_dialog = None
+        if progress is not None:
+            progress.reset()
+            progress.accept()
+            progress.deleteLater()
+
+    @Slot(int, str, bool)
     def handle_dataset_finished(self, index, name, success):
         """Handles the completion of computation for a single dataset."""
         # REMOVED old progress update logic here
@@ -20780,6 +20832,7 @@ segmentation, triangulation, and visualization.
     @Slot(int, int, float)
     def handle_batch_finished(self, success_count, total_eligible, elapsed_time):
         """Handles the completion of a batch computation."""
+        self._close_batch_progress()
         # Determine if this was the global intersection task
         is_intersection_task = (
             getattr(self, "_batch_compute_type", None) == "intersections"
@@ -20806,15 +20859,6 @@ segmentation, triangulation, and visualization.
 
         if any(d.get("segments") is not None for d in self.datasets):
             self._refresh_seg_view_if_active()
-
-        # Close progress dialog if it exists
-        if hasattr(self, "progress_dialog") and self.progress_dialog:
-            # If it was the global intersection task, set value to max to show completion
-            if is_intersection_task:
-                self.progress_dialog.setValue(self.progress_dialog.maximum())
-            self.progress_dialog.close()
-            self.progress_dialog = None
-            logger.debug("Progress dialog closed.")
 
         # Thread cleanup (moved thread check inside)
         if hasattr(self, "thread") and self.thread and self.thread.isRunning():
@@ -20861,17 +20905,13 @@ segmentation, triangulation, and visualization.
     @Slot(str)
     def handle_computation_error(self, error_message):
         """Handles errors reported by the worker thread."""
+        self._close_batch_progress()
         logger.error(f"Computation error: {error_message}")
         QMessageBox.critical(
             self,
             "Computation Error",
             f"An error occurred during computation:\n{error_message}",
         )
-
-        if self.progress_dialog:
-            self.progress_dialog.close()
-            self.progress_dialog = None
-            logger.debug("Progress dialog closed due to error.")
 
         if self.thread and self.thread.isRunning():
             logger.info("Attempting to stop worker thread due to error.")
@@ -25099,9 +25139,11 @@ segmentation, triangulation, and visualization.
         self.statusBar().showMessage(
             "Generating 3D tetrahedral mesh... This may take a while."
         )
-        QApplication.processEvents()
-
-        grid = self.tetra_mesh_generator.generate_tetrahedral_mesh(tetgen_switches)
+        grid = self._run_mesh_task(
+            "Generating tetrahedral mesh (TetGen)...",
+            self.tetra_mesh_generator.generate_tetrahedral_mesh,
+            tetgen_switches,
+        )
 
         if grid:
             self.tetrahedral_mesh = grid
@@ -34937,23 +34979,28 @@ segmentation, triangulation, and visualization.
                 surface_item = root.child(i)
                 for j in range(surface_item.childCount()):
                     constraint_type_item = surface_item.child(j)
-                    item_text = constraint_type_item.text(0)
+                    item_type = (constraint_type_item.data(0, Qt.UserRole) or {}).get(
+                        "type"
+                    )
 
                     # Check intersection constraints, uncheck hull constraints
-                    if "Intersection Line" in item_text:
+                    if item_type == "intersection_group":
                         constraint_type_item.setCheckState(0, Qt.Checked)
                         # Also check all children
                         for k in range(constraint_type_item.childCount()):
                             constraint_type_item.child(k).setCheckState(0, Qt.Checked)
-                    elif "Hull" in item_text:
+                    elif item_type == "hull_group":
                         constraint_type_item.setCheckState(0, Qt.Unchecked)
                         # Also uncheck all children
                         for k in range(constraint_type_item.childCount()):
                             constraint_type_item.child(k).setCheckState(0, Qt.Unchecked)
 
+            self._sync_refine_tree_parent_states_from_children()
+            self._refresh_segment_map_from_tree()
             logger.info("Tab 6: Selected intersection constraints only")
         finally:
             self._refine_updating_constraint_tree = False
+        self._update_all_segment_actors()
 
     def _refine_select_hull_constraints_only(self):
         """Select only hull constraints in Tab 6, deselect intersection constraints"""
@@ -34968,23 +35015,28 @@ segmentation, triangulation, and visualization.
                 surface_item = root.child(i)
                 for j in range(surface_item.childCount()):
                     constraint_type_item = surface_item.child(j)
-                    item_text = constraint_type_item.text(0)
+                    item_type = (constraint_type_item.data(0, Qt.UserRole) or {}).get(
+                        "type"
+                    )
 
                     # Check hull constraints, uncheck intersection constraints
-                    if "Hull" in item_text:
+                    if item_type == "hull_group":
                         constraint_type_item.setCheckState(0, Qt.Checked)
                         # Also check all children
                         for k in range(constraint_type_item.childCount()):
                             constraint_type_item.child(k).setCheckState(0, Qt.Checked)
-                    elif "Intersection Line" in item_text:
+                    elif item_type == "intersection_group":
                         constraint_type_item.setCheckState(0, Qt.Unchecked)
                         # Also uncheck all children
                         for k in range(constraint_type_item.childCount()):
                             constraint_type_item.child(k).setCheckState(0, Qt.Unchecked)
 
+            self._sync_refine_tree_parent_states_from_children()
+            self._refresh_segment_map_from_tree()
             logger.info("Tab 6: Selected hull constraints only")
         finally:
             self._refine_updating_constraint_tree = False
+        self._update_all_segment_actors()
 
     def _refine_select_well_constraints_only(self):
         """Select only well constraints in Tab 6, deselect hull and intersection constraints."""
@@ -35216,6 +35268,13 @@ segmentation, triangulation, and visualization.
                             and other_intersection.get("dataset_id2")
                             == intersection_data.get("dataset_id1")
                         ):
+
+                            # Multiple curves can connect the same pair of surfaces.
+                            if not self._segments_match(
+                                other_intersection.get("points", []),
+                                intersection_data.get("points", []),
+                            ):
+                                continue
 
                             # This is the matching intersection, update its checked state
                             if group_item.checkState(0) != (
