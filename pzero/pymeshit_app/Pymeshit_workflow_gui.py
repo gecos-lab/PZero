@@ -30208,9 +30208,14 @@ segmentation, triangulation, and visualization.
             if "details" in validation_results:
                 for detail in validation_results["details"]:
                     details_text += f"{detail}\n"
-            elif "surface_reports" in validation_results:
-                for surface_report in validation_results["surface_reports"]:
-                    surface_name = surface_report.get("surface_name", "Unknown")
+            else:
+                surface_reports = validation_results.get(
+                    "surfaces", validation_results.get("surface_reports", [])
+                )
+                for surface_report in surface_reports:
+                    surface_name = surface_report.get(
+                        "name", surface_report.get("surface_name", "Unknown")
+                    )
                     status = surface_report.get("status", "Unknown")
                     details_text += f"Surface: {surface_name} - Status: {status}\n"
 
@@ -30218,6 +30223,17 @@ segmentation, triangulation, and visualization.
                         for issue in surface_report["issues"]:
                             details_text += f"  • {issue}\n"
                     details_text += "\n"
+
+            if validation_results.get("issues"):
+                details_text += "General issues:\n"
+                for issue in validation_results["issues"]:
+                    details_text += f"  • {issue}\n"
+                details_text += "\n"
+
+            if validation_results.get("recommendations"):
+                details_text += "Recommendations:\n"
+                for recommendation in validation_results["recommendations"]:
+                    details_text += f"  • {recommendation}\n"
 
             text_area.setPlainText(details_text)
             layout.addWidget(text_area)
