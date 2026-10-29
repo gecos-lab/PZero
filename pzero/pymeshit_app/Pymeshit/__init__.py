@@ -56,10 +56,7 @@ try:
         TriplePoint,
         GradientControl,
     )
-except ImportError as e:
-    print(f"Warning: Could not import core components: {e}", file=sys.stderr)
-    print("Using Python fallback implementations", file=sys.stderr)
-
+except ImportError:
     # Minimal fallback classes
     class MeshItModel:
         def __init__(self):

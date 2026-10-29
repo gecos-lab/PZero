@@ -17,12 +17,7 @@ try:
         TriplePoint,
         GradientControl,
     )
-except ImportError as e:
-    import sys
-
-    print(f"Warning: C++ extensions not available: {e}", file=sys.stderr)
-    print("Using Python fallback implementations", file=sys.stderr)
-
+except ImportError:
     # Provide dummy classes when C++ extensions are not available
     class Vector3D:
         def __init__(self, x=0, y=0, z=0):

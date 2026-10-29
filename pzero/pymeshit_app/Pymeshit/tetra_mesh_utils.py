@@ -21,7 +21,7 @@ try:
     logger.info("netCDF4 library available for NetCDF export")
 except ImportError:
     HAS_NETCDF = False
-    logger.warning("netCDF4 library not available. NetCDF export will be disabled.")
+    logger.debug("netCDF4 library not available. NetCDF export will be disabled.")
 
 
 class TetrahedralMeshGenerator:
