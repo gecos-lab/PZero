@@ -23339,21 +23339,21 @@ segmentation, triangulation, and visualization.
                 x_pos = bounds[0] + (bounds[1] - bounds[0]) * (
                     self.x_cut_slider.value() / 100.0
                 )
-                processed_mesh = processed_mesh.clip("x", value=x_pos)
+                processed_mesh = processed_mesh.clip("x", origin=(x_pos, 0, 0))
 
             # Apply Y cutting plane
             if self.y_cut_enable.isChecked():
                 y_pos = bounds[2] + (bounds[3] - bounds[2]) * (
                     self.y_cut_slider.value() / 100.0
                 )
-                processed_mesh = processed_mesh.clip("y", value=y_pos)
+                processed_mesh = processed_mesh.clip("y", origin=(0, y_pos, 0))
 
             # Apply Z cutting plane
             if self.z_cut_enable.isChecked():
                 z_pos = bounds[4] + (bounds[5] - bounds[4]) * (
                     self.z_cut_slider.value() / 100.0
                 )
-                processed_mesh = processed_mesh.clip("z", value=z_pos)
+                processed_mesh = processed_mesh.clip("z", origin=(0, 0, z_pos))
         except Exception as e:
             logger.warning(f"Error applying cutting planes: {e}")
             return mesh
