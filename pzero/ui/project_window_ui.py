@@ -599,7 +599,7 @@ class Ui_ProjectWindow(object):
             QCoreApplication.translate("ProjectWindow", "LoopStructural Implicit", None)
         )
         self.actionPymeshit.setText(
-            QCoreApplication.translate("ProjectWindow", "Pymeshit", None)
+            QCoreApplication.translate("ProjectWindow", "PyMeshIt", None)
         )
         self.actionSurfaceSmoothing.setText(
             QCoreApplication.translate("ProjectWindow", "Surface Smoothing", None)

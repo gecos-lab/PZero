@@ -6,7 +6,7 @@ refine (subdivide), fill holes, and clip a triangulated surface, with
 live 3D preview inside the current PZero 3D view.
 
 The goal is to produce a TriSurf whose geometry is numerically well
-conditioned for downstream re-meshing in PyMeshIT (i.e. no duplicated
+conditioned for downstream re-meshing in PyMeshIt (i.e. no duplicated
 points, no degenerate / near-degenerate triangles, no tiny holes, low
 curvature relative to the target edge length).
 

@@ -1,5 +1,5 @@
 """
-PyMeshit - Complete mesh generation and manipulation package with GUI
+PyMeshIt - Complete mesh generation and manipulation package with GUI
 
 This package provides a comprehensive solution for mesh generation and manipulation,
 including a graphical user interface for the complete workflow.

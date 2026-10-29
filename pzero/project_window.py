@@ -1481,7 +1481,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 entity.locator = octree
 
     def _locate_pymeshit_sources(self) -> Optional[Path]:
-        """Return the directory containing the Pymeshit workflow GUI entry point."""
+        """Return the directory containing the PyMeshIt workflow GUI entry point."""
         pzero_dir = Path(__file__).resolve().parent
         repo_root = pzero_dir.parent
 
@@ -1524,7 +1524,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         pymeshit_dir = self._locate_pymeshit_sources()
         if pymeshit_dir is None:
             raise FileNotFoundError(
-                "Pymeshit sources were not found. Place the 'MeshIt-master' folder next to "
+                "PyMeshIt sources were not found. Place the 'MeshIt-master' folder next to "
                 "PZero or set the PZERO_PYMESHIT_PATH environment variable."
             )
 
@@ -1542,7 +1542,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 PYMESHIT_MODULE_NAME, str(entry_path)
             )
             if spec is None or spec.loader is None:
-                raise ImportError("Could not create module spec for Pymeshit GUI")
+                raise ImportError("Could not create module spec for PyMeshIt GUI")
             pymeshit_module = importlib.util.module_from_spec(spec)
             sys.modules[PYMESHIT_MODULE_NAME] = pymeshit_module
             spec.loader.exec_module(pymeshit_module)
@@ -1567,7 +1567,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     attach = getattr(widget, "attach_pzero_bridge", None)
                     if callable(attach):
                         attach(bridge)
-                self.print_terminal("Pymeshit dock reopened")
+                self.print_terminal("PyMeshIt dock reopened")
                 return
             except RuntimeError:
                 self._pymeshit_dock = None
@@ -1576,16 +1576,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         try:
             pymeshit_module, meshit_gui_cls = self._load_pymeshit_gui_class()
             module_path = Path(getattr(pymeshit_module, "__file__", "")).resolve()
-            self.print_terminal(f"Pymeshit module loaded from: {module_path}")
+            self.print_terminal(f"PyMeshIt module loaded from: {module_path}")
         except FileNotFoundError as exc:
             message = str(exc)
             self.print_terminal(message)
-            QMessageBox.warning(self, "Pymeshit not found", message)
+            QMessageBox.warning(self, "PyMeshIt not found", message)
             return
         except (ImportError, AttributeError) as exc:
-            error_msg = f"Error importing Pymeshit GUI: {exc}"
+            error_msg = f"Error importing PyMeshIt GUI: {exc}"
             self.print_terminal(error_msg)
-            QMessageBox.critical(self, "Pymeshit import error", error_msg)
+            QMessageBox.critical(self, "PyMeshIt import error", error_msg)
             return
 
         try:
@@ -1651,12 +1651,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self._pymeshit_dock = dock
             self._pymeshit_dialog = None
 
-            self.print_terminal("Pymeshit GUI opened as docked panel")
+            self.print_terminal("PyMeshIt GUI opened as docked panel")
 
         except Exception as exc:
-            error_msg = f"Error opening Pymeshit GUI: {exc}"
+            error_msg = f"Error opening PyMeshIt GUI: {exc}"
             self.print_terminal(error_msg)
-            QMessageBox.critical(self, "Pymeshit error", error_msg)
+            QMessageBox.critical(self, "PyMeshIt error", error_msg)
             self._pymeshit_widget = None
             self._pymeshit_dock = None
 
@@ -1826,12 +1826,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         except FileNotFoundError as exc:
             message = str(exc)
             self.print_terminal(message)
-            QMessageBox.warning(self, "Pymeshit not found", message)
+            QMessageBox.warning(self, "PyMeshIt not found", message)
             return
         except (ImportError, AttributeError) as exc:
-            error_msg = f"Error importing Pymeshit GUI: {exc}"
+            error_msg = f"Error importing PyMeshIt GUI: {exc}"
             self.print_terminal(error_msg)
-            QMessageBox.critical(self, "Pymeshit import error", error_msg)
+            QMessageBox.critical(self, "PyMeshIt import error", error_msg)
             return
 
         temp_gui = None
