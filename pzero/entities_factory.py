@@ -672,7 +672,10 @@ class PolyData(vtkPolyData):
                 connectivity_filter.Update()
                 cleaner = vtkCleanPolyData()
                 if isinstance(self, PolyLine):
-                    # Drop collapsed segments instead of rendering them as points.
+                    # Merge only coincident points and drop segments that collapse
+                    # rather than converting them into visible vertex cells.
+                    cleaner.PointMergingOn()
+                    cleaner.SetTolerance(0.0)
                     cleaner.ConvertLinesToPointsOff()
                 cleaner.SetInputConnection(connectivity_filter.GetOutputPort())
                 cleaner.Update()
