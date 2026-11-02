@@ -7790,20 +7790,9 @@ class MeshItWorkflowGUI(QWidget):
         surface_group = QGroupBox("Conforming Surface Selection")
         surface_layout = QVBoxLayout(surface_group)
 
-        self.load_conforming_meshes_btn = QPushButton(
-            "Load Conforming Meshes from Refine Tab"
+        self.conforming_mesh_status_label = QLabel(
+            "Generate conforming meshes in Refine & Mesh to see them here."
         )
-        self.load_conforming_meshes_btn.setToolTip(
-            "Load pre-computed conforming surface meshes from the refine mesh tab.\n"
-            "Follows C++ core.cpp workflow: surfaces → conforming meshes → selection → tetgen"
-        )
-        self.load_conforming_meshes_btn.clicked.connect(
-            self._load_conforming_meshes_from_refine_tab
-        )
-        surface_layout.addWidget(self.load_conforming_meshes_btn)
-
-        # Status label showing loaded conforming meshes
-        self.conforming_mesh_status_label = QLabel("No conforming meshes loaded")
         self.conforming_mesh_status_label.setWordWrap(True)
         self.conforming_mesh_status_label.setTextFormat(Qt.PlainText)
         self.conforming_mesh_status_label.setTextInteractionFlags(
@@ -7844,7 +7833,9 @@ class MeshItWorkflowGUI(QWidget):
         self.conforming_surface_tree.itemChanged.connect(
             self._on_conforming_surface_tree_item_changed
         )
-        selection_layout.addWidget(QLabel("Conforming Surface Selection:"))
+        selection_hint = QLabel("Uncheck surfaces to exclude them from TetGen.")
+        selection_hint.setWordWrap(True)
+        selection_layout.addWidget(selection_hint)
         selection_layout.addWidget(self.conforming_surface_tree)
 
         # Quick selection buttons for surfaces
@@ -7889,7 +7880,7 @@ class MeshItWorkflowGUI(QWidget):
             plotter.set_background([0.2, 0.2, 0.25])  # Darker background
             self._apply_vertical_exaggeration_to_plotter(plotter)
             self.pre_tetramesh_viz_frame.setToolTip(
-                "Load conforming meshes from the Refine & Mesh tab to visualize them."
+                "Selected conforming meshes from Refine & Mesh appear here."
             )
             self.plotters["pre_tetramesh"] = plotter
             self.pre_tetramesh_plotter = plotter
@@ -7935,20 +7926,17 @@ class MeshItWorkflowGUI(QWidget):
         This follows the C++ core.cpp workflow where surfaces are first processed
         to conforming meshes, then selected for tetgen.
         """
-        logger.info("Loading conforming meshes from Refine & Mesh tab...")
-        self.statusBar().showMessage("Loading conforming surface meshes...")
-
-        if not hasattr(self, "datasets") or not self.datasets:
-            QMessageBox.warning(self, "No Data", "Please load surfaces first.")
-            return
-
-        # Check if conforming meshes exist from the refine tab
+        previous_selection = {
+            id(mesh_data["original_dataset"]): surface_idx in self.selected_conforming_surfaces
+            for surface_idx, mesh_data in self.conforming_mesh_data.items()
+        }
         conforming_surfaces_found = 0
         self.conforming_mesh_data.clear()
+        self.selected_conforming_surfaces.clear()
 
-        for dataset_idx, dataset in enumerate(self.datasets):
-            if "conforming_mesh" in dataset:
-                conforming_mesh = dataset["conforming_mesh"]
+        for dataset_idx, dataset in enumerate(getattr(self, "datasets", [])):
+            conforming_mesh = dataset.get("conforming_mesh")
+            if isinstance(conforming_mesh, dict):
 
                 # Validate conforming mesh data
                 if (
@@ -7966,6 +7954,8 @@ class MeshItWorkflowGUI(QWidget):
                         "original_dataset": dataset,
                         **self._dataset_pzero_metadata(dataset),
                     }
+                    if previous_selection.get(id(dataset), True):
+                        self.selected_conforming_surfaces.add(dataset_idx)
                     conforming_surfaces_found += 1
                     logger.info(
                         f"Loaded conforming mesh for surface {dataset_idx}: "
@@ -7973,23 +7963,16 @@ class MeshItWorkflowGUI(QWidget):
                         f"{len(conforming_mesh['triangles'])} triangles"
                     )
 
-        if conforming_surfaces_found == 0:
-            QMessageBox.warning(
-                self,
-                "No Conforming Meshes",
-                "No conforming surface meshes found.\n"
-                "Please generate conforming meshes in the Refine & Mesh tab first.",
+        if conforming_surfaces_found:
+            self.conforming_mesh_status_label.setText(
+                f"{conforming_surfaces_found} conforming surface meshes available."
             )
-            return
+        else:
+            self.conforming_mesh_status_label.setText(
+                "No conforming meshes available. Generate them in Refine & Mesh first."
+            )
 
-        # Update status label
-        self.conforming_mesh_status_label.setText(
-            f"Loaded {conforming_surfaces_found} conforming surface meshes.\n"
-            "Ready for selection and TetGen validation."
-        )
-
-        # Enable validation button
-        self.validate_for_tetgen_btn.setEnabled(True)
+        self.validate_for_tetgen_btn.setEnabled(bool(conforming_surfaces_found))
 
         # Populate the surface selection tree
         self._populate_conforming_surface_tree()
@@ -7998,7 +7981,7 @@ class MeshItWorkflowGUI(QWidget):
         self._update_conforming_surface_visualization()
 
         self.statusBar().showMessage(
-            f"✓ Loaded {conforming_surfaces_found} conforming surface meshes"
+            f"{conforming_surfaces_found} conforming surface meshes available"
         )
         logger.info(
             f"Successfully loaded {conforming_surfaces_found} conforming surface meshes"
@@ -8017,28 +8000,18 @@ class MeshItWorkflowGUI(QWidget):
                 logger.warning("No conforming mesh data to populate tree")
                 return
 
-            header_item = QTreeWidgetItem(self.conforming_surface_tree)
-            header_item.setText(
-                0, f"{len(self.conforming_mesh_data)} Conforming Surfaces Available"
-            )
-            header_item.setText(1, "Select")
-            header_item.setText(2, "for")
-            header_item.setText(3, "TetGen")
-            header_item.setFlags(header_item.flags() & ~Qt.ItemIsUserCheckable)
-
             for surface_idx, mesh_data in self.conforming_mesh_data.items():
                 surface_item = QTreeWidgetItem(self.conforming_surface_tree)
                 surface_item.setText(0, f"{mesh_data['name']}")
                 surface_item.setText(1, str(len(mesh_data["vertices"])))
                 surface_item.setText(2, str(len(mesh_data["triangles"])))
-                surface_item.setText(3, "Ready")
+                is_selected = surface_idx in self.selected_conforming_surfaces
+                surface_item.setText(3, "Selected" if is_selected else "Deselected")
 
                 surface_item.setFlags(surface_item.flags() | Qt.ItemIsUserCheckable)
-                surface_item.setCheckState(0, Qt.Checked)
+                surface_item.setCheckState(0, Qt.Checked if is_selected else Qt.Unchecked)
 
                 surface_item.setData(0, Qt.UserRole, surface_idx)
-
-                self.selected_conforming_surfaces.add(surface_idx)
 
             self.conforming_surface_tree.expandAll()
             logger.info(
@@ -8129,6 +8102,7 @@ class MeshItWorkflowGUI(QWidget):
                 self.statusBar().showMessage(
                     "Select conforming surfaces in the tree to visualize them."
                 )
+                self.pre_tetramesh_plotter.render()
                 return
 
             # Visualize only selected conforming surfaces
@@ -18073,13 +18047,7 @@ segmentation, triangulation, and visualization.
                 self._clear_refine_mesh_plot()
                 self.statusBar().showMessage("No intersections to refine or display.")
         elif current_tab_widget == self.pre_tetramesh_tab:
-            if any(d.get("constrained_triangulation_result") for d in self.datasets):
-                self._visualize_constrained_meshes()
-            else:
-                self._clear_pre_tetramesh_plot()
-                self.statusBar().showMessage(
-                    "No constrained surface meshes computed yet."
-                )
+            self._load_conforming_meshes_from_refine_tab()
         elif (
             hasattr(self, "tetra_mesh_tab")
             and current_tab_widget == self.tetra_mesh_tab
@@ -21651,34 +21619,25 @@ segmentation, triangulation, and visualization.
         logger.info("Loading conforming meshes into Tetra Mesh tab...")
 
         try:
-            # Clear existing data
-            self.tetra_selected_surfaces.clear()
-            self.tetra_surface_data.clear()
-            self.loaded_surfaces_list.clear()
-
-            loaded_count = 0
-
             # Get selected surfaces from the Pre-Tetra tab's tree (Tab 7)
+            if not self.conforming_surface_tree.topLevelItemCount():
+                self._load_conforming_meshes_from_refine_tab()
             selected_indices = self._get_selected_surfaces_from_conforming_tree()
 
             if not selected_indices:
-                # Fallback: try to get all surfaces that have conforming meshes
-                selected_indices = []
-                for idx, dataset in enumerate(self.datasets):
-                    if "conforming_mesh" in dataset:
-                        selected_indices.append(idx)
+                QMessageBox.warning(
+                    self,
+                    "No Surfaces Selected",
+                    "Select conforming surfaces in the Pre-Tetramesh tab. "
+                    "If none are available, generate them in Refine & Mesh first.",
+                )
+                return
 
-                if not selected_indices:
-                    QMessageBox.warning(
-                        self,
-                        "No Conforming Meshes Found",
-                        "No conforming meshes found.\n\n"
-                        "Please:\n"
-                        "1. Generate conforming meshes in the 'Refine & Mesh' tab\n"
-                        "2. Select surfaces in the 'Pre-Tetra Mesh' tab\n"
-                        "3. Then load them here for 3D meshing",
-                    )
-                    return
+            # Clear existing data only after a valid selection is available.
+            self.tetra_selected_surfaces.clear()
+            self.tetra_surface_data.clear()
+            self.loaded_surfaces_list.clear()
+            loaded_count = 0
 
             # Load conforming meshes for selected surfaces
             for surface_idx in selected_indices:
