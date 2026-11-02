@@ -24,6 +24,146 @@ except ImportError:
     logger.debug("netCDF4 library not available. NetCDF export will be disabled.")
 
 
+def map_well_points_to_mesh_nodes(mesh_points: np.ndarray, well_points: np.ndarray,
+                                   tolerance: float = 1e-5, precision: int = 9) -> np.ndarray:
+    """
+    Map well points to existing mesh node indices.
+
+    This function ensures wells share node IDs with the tetrahedral mesh instead of
+    duplicating points. This is critical for fracture-well connectivity in MOOSE/GOLEM.
+
+    Algorithm:
+    1. Build a hash map with rounded coordinates as keys for exact matching
+    2. For points not found exactly, use KDTree nearest neighbor with tolerance
+    3. Raise error if any well point cannot be mapped (indicates mesh didn't include well)
+
+    Args:
+        mesh_points: (N, 3) array of mesh node coordinates
+        well_points: (M, 3) array of well point coordinates to map
+        tolerance: Maximum distance for nearest-neighbor fallback (default 1e-5)
+        precision: Decimal precision for coordinate rounding in hash lookup (default 9)
+
+    Returns:
+        (M,) array of 0-based mesh node indices corresponding to each well point
+
+    Raises:
+        ValueError: If any well point cannot be mapped to an existing mesh node
+    """
+    if len(well_points) == 0:
+        return np.array([], dtype=np.int32)
+
+    mesh_points = np.asarray(mesh_points, dtype=np.float64)
+    well_points = np.asarray(well_points, dtype=np.float64)
+
+    n_mesh = len(mesh_points)
+    n_well = len(well_points)
+
+    # Step 1: Build hash map for exact (rounded) coordinate lookup
+    coord_to_idx = {}
+    for idx in range(n_mesh):
+        key = (round(mesh_points[idx, 0], precision),
+               round(mesh_points[idx, 1], precision),
+               round(mesh_points[idx, 2], precision))
+        # If multiple nodes map to same key (shouldn't happen), keep first
+        if key not in coord_to_idx:
+            coord_to_idx[key] = idx
+
+    # Step 2: Map each well point
+    mapped_indices = np.zeros(n_well, dtype=np.int32)
+    unmapped_points = []
+    unmapped_indices = []
+
+    for i in range(n_well):
+        key = (round(well_points[i, 0], precision),
+               round(well_points[i, 1], precision),
+               round(well_points[i, 2], precision))
+
+        if key in coord_to_idx:
+            mapped_indices[i] = coord_to_idx[key]
+        else:
+            unmapped_points.append(well_points[i])
+            unmapped_indices.append(i)
+
+    # Step 3: Fallback to KDTree for unmapped points
+    if unmapped_points:
+        logger.info(f"  {len(unmapped_points)} well points not found by exact match, using KDTree fallback...")
+
+        if cKDTree is not None:
+            tree = cKDTree(mesh_points)
+            distances, nearest_indices = tree.query(np.array(unmapped_points), k=1)
+
+            for j, (dist, nearest_idx) in enumerate(zip(distances, nearest_indices)):
+                well_idx = unmapped_indices[j]
+                if dist <= tolerance:
+                    mapped_indices[well_idx] = nearest_idx
+                    logger.debug(f"    Well point {well_idx} mapped to mesh node {nearest_idx} (distance: {dist:.2e})")
+                else:
+                    # Point is too far from any mesh node - this is an error
+                    pt = unmapped_points[j]
+                    raise ValueError(
+                        f"Well point [{pt[0]:.6f}, {pt[1]:.6f}, {pt[2]:.6f}] (index {well_idx}) "
+                        f"is not in the tetra mesh node table. Nearest mesh node is {dist:.2e} away "
+                        f"(tolerance: {tolerance:.2e}). This indicates the well was not properly "
+                        f"included in the PLC before TetGen meshing."
+                    )
+        else:
+            # Fallback without scipy: brute force nearest neighbor
+            unmapped_arr = np.array(unmapped_points)
+            for j, well_idx in enumerate(unmapped_indices):
+                diffs = mesh_points - unmapped_arr[j]
+                distances = np.sqrt(np.sum(diffs * diffs, axis=1))
+                nearest_idx = np.argmin(distances)
+                min_dist = distances[nearest_idx]
+
+                if min_dist <= tolerance:
+                    mapped_indices[well_idx] = nearest_idx
+                else:
+                    pt = unmapped_arr[j]
+                    raise ValueError(
+                        f"Well point [{pt[0]:.6f}, {pt[1]:.6f}, {pt[2]:.6f}] (index {well_idx}) "
+                        f"is not in the tetra mesh node table. Nearest mesh node is {min_dist:.2e} away "
+                        f"(tolerance: {tolerance:.2e})."
+                    )
+
+    logger.info(f"  Successfully mapped {n_well} well points to existing mesh nodes")
+    return mapped_indices
+
+
+def validate_well_node_usage(mapped_indices: np.ndarray, mesh_cells: np.ndarray,
+                              mesh_celltypes: np.ndarray) -> List[int]:
+    """
+    Validate that mapped well nodes are actually used by tetrahedral elements.
+
+    This is a sanity check to ensure the well points were properly incorporated
+    into the mesh during TetGen meshing.
+
+    Args:
+        mapped_indices: Array of mesh node indices that well points map to
+        mesh_cells: VTK cells array from the mesh
+        mesh_celltypes: VTK cell types array
+
+    Returns:
+        List of well point indices that are NOT used by any tetra element (should be empty)
+    """
+    # Build set of all node indices used by tetrahedral elements
+    tetra_nodes = set()
+    offset = 0
+    for cell_type in mesh_celltypes:
+        n_pts = mesh_cells[offset]
+        if cell_type == 10:  # VTK_TETRA
+            for k in range(1, n_pts + 1):
+                tetra_nodes.add(mesh_cells[offset + k])
+        offset += n_pts + 1
+
+    # Check which well nodes are NOT in tetra elements
+    unused = []
+    for i, node_idx in enumerate(mapped_indices):
+        if node_idx not in tetra_nodes:
+            unused.append(i)
+
+    return unused
+
+
 class TetrahedralMeshGenerator:
     """
     A utility class for generating tetrahedral meshes from surface data.
@@ -2307,6 +2447,7 @@ class TetrahedralMeshGenerator:
                         and well_marker in self._custom_well_names
                     ):
                         well_name = self._custom_well_names[well_marker]
+                    well_name = self._sanitize_surface_name(well_name)
 
                     if well_edges:
                         unique_pts = []
@@ -2447,10 +2588,10 @@ class TetrahedralMeshGenerator:
                 rootgrp.createDimension("num_nodes", total_points)
                 rootgrp.createDimension("num_elem", total_elements)
                 rootgrp.createDimension("num_el_blk", num_elem_blk)
-                rootgrp.createDimension(
-                    "num_node_sets", num_well_nodesets
-                )  # Well node sets for GOLEM
-                rootgrp.createDimension("num_side_sets", num_side_sets)
+                if num_well_nodesets:
+                    rootgrp.createDimension("num_node_sets", num_well_nodesets)
+                if num_side_sets:
+                    rootgrp.createDimension("num_side_sets", num_side_sets)
                 rootgrp.createDimension("num_qa_rec", 1)
                 rootgrp.createDimension(
                     "time_step", 1
@@ -2704,14 +2845,14 @@ class TetrahedralMeshGenerator:
                 )
                 import datetime
 
-                self._write_exodus_string_v2(qa_records[0], 0, "PyMeshIt", 33)
-                self._write_exodus_string_v2(qa_records[0], 1, "1.0", 33)
-                self._write_exodus_string_v2(
-                    qa_records[0], 2, datetime.datetime.now().strftime("%m/%d/%y"), 33
+                qa_values = (
+                    "PyMeshIt", "1.0", datetime.datetime.now().strftime("%m/%d/%y"),
+                    datetime.datetime.now().strftime("%H:%M:%S"),
                 )
-                self._write_exodus_string_v2(
-                    qa_records[0], 3, datetime.datetime.now().strftime("%H:%M:%S"), 33
-                )
+                for index, value in enumerate(qa_values):
+                    qa_records[0, index, :] = np.frombuffer(
+                        value.encode("ascii")[:32].ljust(33, b"\x00"), dtype="S1"
+                    )
 
                 # ========== TIME VALUES (required for EXODUS II) ==========
                 time_whole = rootgrp.createVariable("time_whole", "f8", ("time_step",))
@@ -2814,11 +2955,11 @@ class TetrahedralMeshGenerator:
         # Replace spaces and special characters
         sanitized = name.replace(" ", "_").replace("-", "_").replace(".", "_")
         # Remove any non-alphanumeric characters except underscore
-        sanitized = "".join(c if c.isalnum() or c == "_" else "" for c in sanitized)
+        sanitized = "".join(c for c in sanitized if c.isascii() and (c.isalnum() or c == "_"))
         # Ensure it doesn't start with a number
         if sanitized and sanitized[0].isdigit():
             sanitized = "surface_" + sanitized
-        return sanitized[:64] if sanitized else "unnamed"  # EXODUS name length limit
+        return sanitized[:32] if sanitized else "unnamed"
 
     def _find_bounding_surfaces_for_material(self, material_id: int) -> List[str]:
         """Find the surface names that bound a material region."""
@@ -3210,6 +3351,7 @@ class TetrahedralMeshGenerator:
         custom_block_names: Optional[Dict[int, str]] = None,
         custom_sideset_names: Optional[Dict[int, str]] = None,
         custom_well_names: Optional[Dict[int, str]] = None,
+        well_export_type: str = "Node Sets",
     ) -> bool:
         """
         Export tetrahedral mesh to various formats.
@@ -3220,6 +3362,7 @@ class TetrahedralMeshGenerator:
             custom_block_names: Custom names for element blocks (3D domains)
             custom_sideset_names: Custom names for sidesets (boundary surfaces)
             custom_well_names: Custom names for well blocks (1D edge elements, C++ style)
+            well_export_type: Export wells as node sets or BAR2 element blocks.
         """
         if mesh_data is None:
             mesh_data = self.tetrahedral_mesh
@@ -3232,7 +3375,7 @@ class TetrahedralMeshGenerator:
                 # Check file extension to determine export format
                 file_ext = file_path.lower().split(".")[-1]
 
-                if file_ext in ["nc", "nc4", "cdf", "exo"]:
+                if file_ext in ["nc", "nc4", "cdf", "exo", "e"]:
                     # Use NetCDF/EXODUS export with optional custom names
                     return self._export_netcdf(
                         file_path,
@@ -3240,6 +3383,7 @@ class TetrahedralMeshGenerator:
                         custom_block_names=custom_block_names,
                         custom_sideset_names=custom_sideset_names,
                         custom_well_names=custom_well_names,
+                        well_export_type=well_export_type,
                     )
                 else:
                     # Enhanced export for VTK/VTU formats with material information

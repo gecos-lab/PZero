@@ -741,12 +741,16 @@ class ExodusExportOptionsDialog(QDialog):
         well_tab = QWidget()
         well_layout = QVBoxLayout(well_tab)
 
-        well_info = QLabel(
-            "Well names define 1D edge element blocks (BEAM2/BAR2 in EXODUS).\n"
-            "C++ MeshIt exports wells as T3D2 in ABAQUS, VTK_LINE in VTU."
-        )
+        well_info = QLabel("Choose how wells are represented in the EXODUS file.")
         well_info.setStyleSheet("color: #7B1FA2;")
         well_layout.addWidget(well_info)
+
+        self.well_export_type = QComboBox()
+        self.well_export_type.addItems(["Node Sets", "Element Blocks"])
+        self.well_export_type.setToolTip(
+            "Node sets share mesh nodes; element blocks use BAR2 line elements."
+        )
+        well_layout.addWidget(self.well_export_type)
 
         # Well names table
         self.well_table = QTableWidget()
@@ -997,6 +1001,17 @@ class ExodusExportOptionsDialog(QDialog):
                     return
                 all_export_names.append(name)
 
+        normalized_names = [
+            TetrahedralMeshGenerator._sanitize_surface_name(None, name)
+            for name in all_export_names
+        ]
+        if len(set(normalized_names)) != len(normalized_names):
+            QMessageBox.warning(
+                self, "Duplicate Name",
+                "Names must remain unique after conversion to EXODUS-compatible "
+                "characters and the 32-character limit."
+            )
+            return
         self.accept()
 
     def get_block_names(self) -> Dict[int, str]:
@@ -1031,6 +1046,9 @@ class ExodusExportOptionsDialog(QDialog):
                 well_id = int(id_item.text())
                 result[well_id] = export_item.text().strip()
         return result
+
+    def get_well_export_type(self) -> str:
+        return self.well_export_type.currentText()
 
 
 class AdvancedConstraintSelectionDialog(QDialog):
@@ -15052,6 +15070,18 @@ segmentation, triangulation, and visualization.
 
             logger.info(f"Saving project to: {file_path}")
 
+            generator = getattr(self, "tetra_mesh_generator", None)
+            tet = getattr(generator, "tetgen_object", None)
+            tetgen_export_data = None
+            if tet is not None and all(
+                getattr(tet, key, None) is not None
+                for key in ("trifaces", "triface_markers", "elem")
+            ):
+                tetgen_export_data = {
+                    key: np.array(getattr(tet, key), copy=True)
+                    for key in ("trifaces", "triface_markers", "elem")
+                }
+
             project_data = {
                 "version": "1.2",
                 "datasets": self.datasets,
@@ -15063,6 +15093,8 @@ segmentation, triangulation, and visualization.
                 "tetra_mesh_data": serialize_tetrahedral_mesh(
                     getattr(self, "tetrahedral_mesh", None)
                 ),
+                "tetgen_export_data": tetgen_export_data,
+                "tetra_well_data": getattr(generator, "well_data", {}),
                 "tetra_materials": getattr(self, "tetra_materials", []),
                 "tetra_surface_data": getattr(self, "tetra_surface_data", {}),
                 "tetra_selected_surfaces": sorted(
@@ -15178,8 +15210,14 @@ segmentation, triangulation, and visualization.
                 ),
                 materials=self.tetra_materials,
                 surface_data=self.tetra_surface_data,
+                well_data=project_data.get("tetra_well_data", {}),
             )
             self.tetra_mesh_generator.tetrahedral_mesh = self.tetrahedral_mesh
+            tetgen_export_data = project_data.get("tetgen_export_data")
+            if tetgen_export_data:
+                from types import SimpleNamespace
+
+                self.tetra_mesh_generator.tetgen_object = SimpleNamespace(**tetgen_export_data)
 
             logger.info(
                 f"Loaded {len(self.tetra_materials)} material definitions with seed locations"
@@ -23330,15 +23368,21 @@ segmentation, triangulation, and visualization.
             self,
             "Export Tetrahedral Mesh",
             "tetrahedral_mesh.vtm",
-            "VTM Multi-Block files (*.vtm);;VTK files (*.vtk);;VTU files (*.vtu);;PLY files (*.ply);;STL files (*.stl);;NetCDF files (*.nc);;EXODUS files (*.exo);;All files (*.*)",
+            "VTM Multi-Block files (*.vtm);;VTK files (*.vtk);;VTU files (*.vtu);;PLY files (*.ply);;STL files (*.stl);;EXODUS / MOOSE files (*.exo *.e);;NetCDF files (*.nc);;All files (*.*)",
         )
 
         if not file_path:
             return
 
         # Check if NetCDF export is requested but library is not available
+        if not os.path.splitext(file_path)[1]:
+            extension = next((ext for ext in ("vtm", "vtk", "vtu", "ply", "stl", "exo", "nc")
+                              if f"*.{ext}" in file_filter), None)
+            if extension:
+                file_path += "." + extension
         file_ext = file_path.lower().split(".")[-1]
-        if file_ext in ["nc", "exo"]:
+        is_exodus = file_ext in ("nc", "nc4", "cdf", "exo", "e")
+        if is_exodus:
             try:
                 from Pymeshit.tetra_mesh_utils import HAS_NETCDF
 
@@ -23357,10 +23401,38 @@ segmentation, triangulation, and visualization.
                 )
                 return
 
+        export_options = {}
+        if is_exodus:
+            generator = self.tetra_mesh_generator
+            generator.materials = getattr(self, "tetra_materials", generator.materials)
+            tet = getattr(generator, "tetgen_object", None)
+            if tet is None or any(getattr(tet, key, None) is None for key in ("trifaces", "triface_markers", "elem")):
+                QMessageBox.warning(
+                    self, "Boundary Data Unavailable",
+                    "This mesh does not have the TetGen boundary data needed for MOOSE sidesets. "
+                    "Regenerate the tetrahedral mesh before exporting it."
+                )
+                return
+            block_names, sideset_names, well_names = self._get_exodus_default_names()
+            dialog = ExodusExportOptionsDialog(
+                self, block_names=block_names, sideset_names=sideset_names,
+                well_names=well_names, materials=getattr(self, "tetra_materials", []),
+                datasets=getattr(self, "datasets", []),
+            )
+            if dialog.exec() != QDialog.Accepted:
+                return
+            export_options = {
+                "custom_block_names": dialog.get_block_names(),
+                "custom_sideset_names": dialog.get_sideset_names(),
+                "custom_well_names": dialog.get_well_names(),
+                "well_export_type": dialog.get_well_export_type(),
+            }
+
         try:
             # Update generator with current materials (including faults with markers)
             if hasattr(self, "tetra_materials"):
                 self.tetra_mesh_generator.tetra_materials = self.tetra_materials
+                self.tetra_mesh_generator.materials = self.tetra_materials
                 logger.info(
                     f"Updated generator with {len(self.tetra_materials)} materials for export"
                 )
@@ -23380,7 +23452,7 @@ segmentation, triangulation, and visualization.
                 logger.warning("WARNING: tetra_materials attribute not found!")
 
             success = self.tetra_mesh_generator.export_mesh(
-                file_path, self.tetrahedral_mesh
+                file_path, self.tetrahedral_mesh, **export_options
             )
             if success:
                 # Provide helpful message about viewing in ParaView
@@ -23397,6 +23469,9 @@ segmentation, triangulation, and visualization.
                     )
                     msg += "• Use 'Threshold' on MaterialID to isolate materials"
 
+                elif is_exodus:
+                    msg += "Use the exported block and sideset names in MOOSE/GOLEM."
+
                 QMessageBox.information(self, "Export Successful", msg)
             else:
                 QMessageBox.critical(
@@ -23410,6 +23485,26 @@ segmentation, triangulation, and visualization.
             QMessageBox.critical(
                 self, "Export Error", f"Failed to export mesh:\n{str(e)}"
             )
+
+    def _get_exodus_default_names(self):
+        """List the blocks, matched boundaries and wells the writer will export."""
+        generator = self.tetra_mesh_generator
+        mesh = self.tetrahedral_mesh
+        cell_types = np.asarray(mesh.celltypes)
+        material_ids = np.asarray(mesh.cell_data.get("MaterialID", np.ones(mesh.n_cells, dtype=int)))
+        block_names = {
+            int(mid): generator._generate_block_name(int(mid))
+            for mid in np.unique(material_ids[cell_types == 10])
+        }
+        sidesets = generator._build_exodus_sidesets(mesh, None, None)
+        sideset_names = {int(marker): data["name"] for marker, data in sidesets.items()}
+        well_names = {
+            int(data.get("marker", idx + 2)): generator._sanitize_surface_name(
+                data.get("name", f"Well_{idx}")
+            )
+            for idx, data in generator.well_data.items()
+        }
+        return block_names, sideset_names, well_names
 
     def _update_export_to_pzero_button_state(self):
         """Update the enabled state of the Export to PZero button."""
