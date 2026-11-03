@@ -1127,6 +1127,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.signals.metadata_modified.emit(updated_uids, self.geol_coll)
         return updated_uids
 
+    @freeze_gui_onoff
     def entities_merge(self):
         """Merge entities of the same topology - VertexSet, PolyLine, TriSurf, ..."""
         if not self.selected_uids:
@@ -1782,6 +1783,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             function=retopo,
         )
 
+    @freeze_gui_onoff
     def retriangulate_surface_dialog(self):
         """Retriangulate the first selected geology TriSurf using the PyMeshIt workflow."""
         if self.shown_table != "tabGeology":

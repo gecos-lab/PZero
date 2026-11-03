@@ -278,6 +278,8 @@ def segment_pc(self):
         dialog = multiple_input_dialog(
             title="Segmentation filter", input_dict=input_dict
         )
+        if dialog is None:
+            return
 
         vtk_obj.GetPointData().SetActiveScalars("dip direction")
         connectivity_filter_dd = vtkEuclideanClusterExtraction()
@@ -601,6 +603,8 @@ def thresh_filt(self):
             "u_t": ["Upper threshold: ", 10],
         }
         dialog = multiple_input_dialog(title="Threshold filter", input_dict=input_dict)
+        if dialog is None:
+            return
 
         thresh = vtkThreshold()
         thresh.SetInputData(vtk_obj)

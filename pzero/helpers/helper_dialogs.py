@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QFileDialog,
     QWidget,
+    QDialog,
     QProgressDialog,
     QMainWindow,
     QComboBox,
@@ -181,7 +182,7 @@ def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
     @return: widget (not always)"""
 
     # Create the widget and set size and title.
-    widget = QWidget()
+    widget = QWidget() if return_widget else QDialog()
     widget.setWindowModality(Qt.ApplicationModal)
     widget.resize(len(input_dict) * 100, len(input_dict))
     widget.setWindowTitle(title)
@@ -249,32 +250,15 @@ def multiple_input_dialog(title="title", input_dict=None, return_widget=False):
         gridLayout.addWidget(button_cancel, i + 2, 2)
         button_cancel.setAutoDefault(True)
         button_cancel.setText("Cancel")
-        # Show the widget.
-        widget.show()
     else:
         return widget
 
-    def cancel_option():
-        """Clear the objects_qt dictionary if Cancel button is clicked"""
-        # This function has to be implemented before creating and calling the QEventLoop
-        objects_qt.clear()
+    button_ok.clicked.connect(widget.accept)
+    button_cancel.clicked.connect(widget.reject)
+    if widget.exec() != QDialog.Accepted:
         return
 
-    # A QEventLoop is created. Signals and connections are created. QEventLoop is executed. When button is clicked,
-    # the QEventLoop.quit() will be called to close the widget and the loop. Attention: it's not a linear path in the code
-    loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
-    button_ok.clicked.connect(
-        loop.quit
-    )  # Response to clicking the Collect PushButton. End the QEventLoop
-    button_cancel.clicked.connect(
-        cancel_option
-    )  # Set the first QLineEdit empty - useful for an IF
-    button_cancel.clicked.connect(
-        loop.quit
-    )  # Response to clicking the Cancel PushButton. End the QEventLoop
-    loop.exec_()  # Execute the QEventLoop
-
-    # When the QEventLoop is closed, the typed text is collected
+    # Collect the values after the dialog is accepted.
     if not objects_qt:
         # Return None if Cancel is pressed.
         return
@@ -313,7 +297,7 @@ def input_checkbox_dialog(
     """Open a dialog with a text line explaining the widget, followed by a list of checkboxes.
     If exclusive=True, only one checkbox can be selected at a time (radio button behavior).
     """
-    widget = QWidget()
+    widget = QDialog()
     widget.setWindowModality(Qt.ApplicationModal)
     widget.setWindowTitle(title)
 
@@ -403,30 +387,14 @@ def input_checkbox_dialog(
     buttons_layout.addWidget(button_cancel, 0, 1)
 
     main_layout.addLayout(buttons_layout)
-    # Show the widget, resized thank to the scroll function.
+    # Size the dialog to accommodate the scroll area.
     widget.resize(400, 300)
-    widget.show()
-
-    def cancel_option():
-        """Clear the objects_qt dictionary if Cancel button is clicked"""
-        # This function has to be implemented before creating and calling the QEventLoop
-        objects_qt.clear()
+    button_ok.clicked.connect(widget.accept)
+    button_cancel.clicked.connect(widget.reject)
+    if widget.exec() != QDialog.Accepted:
         return
 
-    # A QEventLoop is created. Signals and connections are created. QEventLoop is executed. When button is clicked,
-    # the QEventLoop.quit() will be called to close the widget and the loop. Attention: it's not a linear path in the code
-    loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
-    button_ok.clicked.connect(
-        loop.quit
-    )  # Response to clicking the Collect PushButton. End the QEventLoop
-    button_cancel.clicked.connect(cancel_option)  # Clear the widget
-    button_cancel.clicked.connect(
-        loop.quit
-    )  # Response to clicking the Cancel PushButton. End the QEventLoop
-    loop.exec_()  # Execute the QEventLoop
-
-    # When the QEventLoop is closed, the output is returned as a list of checked items,
-    # or None if Cancel is pressed or nothing is checked.
+    # Return a list of checked items, or None if nothing is checked.
     if not objects_qt:
         return
     else:
@@ -453,7 +421,7 @@ def general_input_dialog(title="title", input_dict=None):
     """
 
     # Create the widget and set size and title.
-    widget = QWidget()
+    widget = QDialog()
     widget.setWindowModality(Qt.ApplicationModal)
     # widget.resize(len(input_dict) * 100, len(input_dict))
     widget.setWindowTitle(title)
@@ -539,30 +507,12 @@ def general_input_dialog(title="title", input_dict=None):
     gridLayout.addWidget(button_cancel, i + 2, 2)
     button_cancel.setAutoDefault(True)
     button_cancel.setText("Cancel")
-    # Show the widget.
-    widget.show()
-
-    def cancel_option():
-        """Clear the objects_qt dictionary if Cancel button is clicked"""
-        # This function has to be implemented before creating and calling the QEventLoop
-        objects_qt.clear()
+    button_ok.clicked.connect(widget.accept)
+    button_cancel.clicked.connect(widget.reject)
+    if widget.exec() != QDialog.Accepted:
         return
 
-    # A QEventLoop is created. Signals and connections are created. QEventLoop is executed. When button is clicked,
-    # the QEventLoop.quit() will be called to close the widget and the loop. Attention: it's not a linear path in the code
-    loop = QEventLoop()  # Create a QEventLoop necessary to stop the main loop
-    button_ok.clicked.connect(
-        loop.quit
-    )  # Response to clicking the Collect PushButton. End the QEventLoop
-    button_cancel.clicked.connect(
-        cancel_option
-    )  # Set the first QLineEdit empty - useful for an IF
-    button_cancel.clicked.connect(
-        loop.quit
-    )  # Response to clicking the Cancel PushButton. End the QEventLoop
-    loop.exec_()  # Execute the QEventLoop
-
-    # When the QEventLoop is closed, the typed text is collected
+    # Collect the values after the dialog is accepted.
     if not objects_qt:
         # Return None if Cancel is pressed.
         return

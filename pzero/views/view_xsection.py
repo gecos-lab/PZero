@@ -283,6 +283,7 @@ class ViewXsection(View2D):
         self.plotter.camera.position = self.center + self.direction
         self.plotter.reset_camera()
 
+    @freeze_gui_onoff
     def fit_frame(self):
         """
         Fit frame to all entities in view.
