@@ -153,9 +153,15 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
     # if True in gdf.is_empty[:]:
     #     print("Empty geometries found - aborting.")
     #     return
+    # Drop missing, empty, and invalid geometries before inspecting/converting rows.
+    valid_geometry_mask = (
+        gdf.geometry.notna() & ~gdf.geometry.is_empty & gdf.geometry.is_valid
+    )
+    discarded_geometry_count = int((~valid_geometry_mask).sum())
+    gdf = gdf.loc[valid_geometry_mask].reset_index(drop=True)
 
     # Determine topology type from geometry
-    geom_type = gdf.geom_type[0]
+    geom_type = gdf.geom_type.iloc[0] if not gdf.empty else None
     if geom_type in ["LineString", "MultiLineString"]:
         topology_type = "PolyLine"
     elif geom_type == "Point":
@@ -165,6 +171,12 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
             f"Only Point and Line geometries can be imported. Found: {geom_type} - aborting."
         )
         return
+
+    if discarded_geometry_count > 0:
+        self.print_terminal(
+            f"Shapefile import: {discarded_geometry_count} out of "
+            f"{discarded_geometry_count + len(gdf)} rows discarded due to invalid geometry."
+        )
 
     # Create DataFrame with attributes (excluding geometry) for the dialog
     attrs_df = pd_DataFrame(gdf.drop(columns="geometry"))
