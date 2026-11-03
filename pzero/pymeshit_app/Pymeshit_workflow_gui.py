@@ -82,7 +82,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 from PySide6.QtGui import QFont, QIcon, QColor, QPalette, QPixmap, QAction, QActionGroup
-from PySide6.QtCore import Qt, QSize, Signal, QObject, QThread, QTimer, QSettings
+from PySide6.QtCore import Qt, QSize, Signal, QObject, QThread, QTimer, QSettings, QEvent
 
 # Add these imports at the top of meshit_workflow_gui.py
 from Pymeshit.intersection_utils import run_constrained_triangulation_py
@@ -450,6 +450,38 @@ def _constraint_point_type(point) -> str:
 
 
 # Worker class for background computations
+class _RefineConstraintClickFilter(QObject):
+    """Observe clicks without interfering with the viewer's camera controls."""
+
+    def __init__(self, gui, widget):
+        super().__init__(widget)
+        self.gui = gui
+        self.widget = widget
+        self.start = None
+        self.dragged = False
+
+    def eventFilter(self, watched, event):
+        if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            self.start = event.position()
+            self.dragged = False
+        elif event.type() == QEvent.MouseMove and self.start is not None:
+            delta = event.position() - self.start
+            if delta.x() ** 2 + delta.y() ** 2 > 16:
+                self.dragged = True
+        elif event.type() == QEvent.MouseButtonRelease and event.button() == Qt.LeftButton:
+            if self.start is not None:
+                delta = event.position() - self.start
+                if not self.dragged and delta.x() ** 2 + delta.y() ** 2 <= 16:
+                    pos = event.position()
+                    scale = self.widget._getPixelRatio()
+                    x = int(round(pos.x() * scale))
+                    y = int(round((self.widget.height() - pos.y() - 1) * scale))
+                    # Finish the VTK interaction before changing actors or the tree.
+                    QTimer.singleShot(0, lambda: self.gui._refine_pick_at(x, y))
+            self.start = None
+        return False
+
+
 class ComputationWorker(QObject):
     dataset_finished = Signal(int, str, bool)  # index, name, success
     batch_finished = Signal(
@@ -6218,6 +6250,17 @@ class MeshItWorkflowGUI(QWidget):
         )
         toolbar.addWidget(self.advanced_selection_btn)
 
+        self.refine_pick_constraints_btn = QPushButton("Constraint selection with mouse")
+        self.refine_pick_constraints_btn.setCheckable(True)
+        self.refine_pick_constraints_btn.setToolTip(
+            "Turn on, then click a constraint in the Segments view to toggle it. "
+            "Use the surface filter to choose between overlapping constraints."
+        )
+        self.refine_pick_constraints_btn.toggled.connect(
+            self._toggle_refine_constraint_picking
+        )
+        toolbar.addWidget(self.refine_pick_constraints_btn)
+
         toolbar.addStretch()
         center_layout.addLayout(toolbar)
 
@@ -6449,8 +6492,87 @@ class MeshItWorkflowGUI(QWidget):
             self.segments_plotter = None
             self.refine_mesh_plotter = None
 
+    def _toggle_refine_constraint_picking(self, enabled):
+        """Enable click selection on the Segments viewer."""
+        if not enabled:
+            self._remove_refine_pick_observers()
+            self.statusBar().showMessage("Constraint selection mode off", 3000)
+            return
+        self.refine_view_tabs.setCurrentIndex(2)
+        plotter = self._ensure_segments_plotter()
+        try:
+            widget = plotter.interactor
+            self._refine_click_filter = _RefineConstraintClickFilter(self, widget)
+            widget.installEventFilter(self._refine_click_filter)
+            self.statusBar().showMessage(
+                "Click a constraint to toggle it; drag to rotate. Filter by surface to disambiguate overlaps."
+            )
+        except Exception as exc:
+            logger.warning("Could not enable constraint picking: %s", exc, exc_info=True)
+            self._remove_refine_pick_observers()
+            self.refine_pick_constraints_btn.setChecked(False)
+            self.statusBar().showMessage("Could not enable constraint selection", 5000)
+
+    def _remove_refine_pick_observers(self):
+        click_filter = getattr(self, "_refine_click_filter", None)
+        if click_filter is not None:
+            try:
+                click_filter.widget.removeEventFilter(click_filter)
+                click_filter.deleteLater()
+            except RuntimeError:
+                pass
+        self._refine_click_filter = None
+
+    def _refine_pick_at(self, x, y):
+        if (not self.refine_pick_constraints_btn.isChecked()
+                or getattr(self, "current_refine_view", 0) != 2):
+            return
+        from vtkmodules.vtkRenderingCore import vtkCellPicker
+
+        picker = vtkCellPicker()
+        picker.SetTolerance(0.008)
+        picker.PickFromListOn()
+        actors = getattr(self, "_refine_pick_actors", [])
+        for actor, _ in actors:
+            picker.AddPickList(actor)
+        if not picker.Pick(x, y, 0, self.segments_plotter.renderer):
+            self.statusBar().showMessage("No constraint at this position", 2000)
+            return
+        picked_actor = picker.GetActor()
+        cell_id = picker.GetCellId()
+        for actor, keys in actors:
+            if actor == picked_actor and 0 <= cell_id < len(keys):
+                key = keys[cell_id]
+                if key is not None:
+                    self._toggle_refine_constraint_item(key)
+                return
+
+    def _toggle_refine_constraint_item(self, key):
+        """Toggle the matching tree leaf so normal table synchronization runs."""
+        tree = self.refine_constraint_tree
+
+        def visit(item):
+            data = item.data(0, Qt.UserRole) or {}
+            if data.get("type") == "constraint":
+                item_key = (data.get("surface_idx"), data.get("seg_uid"))
+            elif data.get("type") == "well_constraint":
+                item_key = (-data["well_idx"] - 1, data.get("seg_uid"))
+            else:
+                item_key = None
+            if item_key == key:
+                tree.setCurrentItem(item)
+                tree.scrollToItem(item)
+                state = Qt.Unchecked if item.checkState(0) == Qt.Checked else Qt.Checked
+                item.setCheckState(0, state)
+                return True
+            return any(visit(item.child(i)) for i in range(item.childCount()))
+
+        return any(visit(tree.topLevelItem(i)) for i in range(tree.topLevelItemCount()))
+
     def _on_refine_view_tab_changed(self, index):
         """Handle switching between refine view sub-tabs."""
+        if index != 2 and getattr(self, "refine_pick_constraints_btn", None):
+            self.refine_pick_constraints_btn.setChecked(False)
         old_view = getattr(self, "current_refine_view", 0)
         self.current_refine_view = index
 
@@ -6480,6 +6602,8 @@ class MeshItWorkflowGUI(QWidget):
 
     def _clear_refine_tab_plotters(self):
         """Clear all refine tab plotters safely"""
+        self._refine_segments_drawn = False
+        self._refine_pick_actors = []
         for plotter_name in [
             "intersections_plotter",
             "meshes_plotter",
@@ -16874,7 +16998,7 @@ segmentation, triangulation, and visualization.
             },  # Wells get their own category (magenta)
         }
 
-        def add_segment(cat_key, p1, p2):
+        def add_segment(cat_key, p1, p2, key=None):
             if p1 == p2:
                 return
             cat = cats[cat_key]
@@ -16882,6 +17006,7 @@ segmentation, triangulation, and visualization.
             cat["pts"].append(p1)
             cat["pts"].append(p2)
             cat["lines"].extend([2, i0, i0 + 1])
+            cat.setdefault("keys", []).append(key)
             cat["idx"] += 2
 
         def to_xyz(p):
@@ -16932,7 +17057,7 @@ segmentation, triangulation, and visualization.
                     p1 = to_xyz(pts[0])
                     p2 = to_xyz(pts[1])
                     if p1 is not None and p2 is not None and p1 != p2:
-                        add_segment(cat_key, p1, p2)
+                        add_segment(cat_key, p1, p2, (surf_idx, seg_uid))
                         built += 1
                 else:
                     local_pairs = 0
@@ -16941,7 +17066,7 @@ segmentation, triangulation, and visualization.
                         p2 = to_xyz(pts[j + 1])
                         if p1 is None or p2 is None or p1 == p2:
                             continue
-                        add_segment(cat_key, p1, p2)
+                        add_segment(cat_key, p1, p2, (surf_idx, seg_uid))
                         local_pairs += 1
                     if local_pairs > 0:
                         built += 1
@@ -16978,7 +17103,7 @@ segmentation, triangulation, and visualization.
                 p1 = to_xyz(pts[0])
                 p2 = to_xyz(pts[1])
                 if p1 is not None and p2 is not None and p1 != p2:
-                    add_segment(cat_key, p1, p2)
+                    add_segment(cat_key, p1, p2, (surf_idx, seg_uid))
                     built += 1
             else:
                 local_pairs = 0
@@ -16987,7 +17112,7 @@ segmentation, triangulation, and visualization.
                     p2 = to_xyz(pts[j + 1])
                     if p1 is None or p2 is None or p1 == p2:
                         continue
-                    add_segment(cat_key, p1, p2)
+                    add_segment(cat_key, p1, p2, (surf_idx, seg_uid))
                     local_pairs += 1
                 if local_pairs > 0:
                     built += 1
@@ -17027,6 +17152,8 @@ segmentation, triangulation, and visualization.
                 if local_pairs > 0:
                     built += 1
 
+        # Keep one identity per line cell, even when a constraint has many edges.
+        self._refine_pick_actors = []
         # build up to three actors
         def emit(cat_key, color, lw):
             cat = cats[cat_key]
@@ -17035,15 +17162,19 @@ segmentation, triangulation, and visualization.
             pts = np.asarray(cat["pts"], dtype=float)
             lines = np.asarray(cat["lines"], dtype=np.int64)
             poly = pv.PolyData(pts)
+            # Point-only PolyData creates vertex cells; remove them so picker cell IDs
+            # correspond exactly to the line-cell identity list.
+            poly.verts = np.empty(0, dtype=np.int64)
             poly.lines = lines
-            plotter.add_mesh(
+            actor = plotter.add_mesh(
                 poly,
                 color=color,
                 line_width=lw,
                 render_lines_as_tubes=False,
-                pickable=False,
+                pickable=True,
                 smooth_shading=False,
             )
+            self._refine_pick_actors.append((actor, cat["keys"]))
 
         emit("sel_norm", (0.0, 1.0, 0.0), 4)
         emit("sel_hole", (1.0, 0.0, 0.0), 4)
@@ -17163,7 +17294,12 @@ segmentation, triangulation, and visualization.
         if not plotter:
             return
 
-        # Fully reset the Segments viewport so it never stays white
+        # Preserve the user's viewpoint when a checkbox or pick redraws the scene.
+        camera_position = (
+            plotter.camera_position
+            if getattr(self, "_refine_segments_drawn", False)
+            else None
+        )
         plotter.clear()
         plotter.set_background([0.318, 0.341, 0.431])
 
@@ -17251,7 +17387,11 @@ segmentation, triangulation, and visualization.
             )
 
         plotter.add_axes()
-        plotter.reset_camera()
+        if camera_position is None:
+            plotter.reset_camera()
+        else:
+            plotter.camera_position = camera_position
+        self._refine_segments_drawn = True
         plotter.render()
         # =====================================
 
