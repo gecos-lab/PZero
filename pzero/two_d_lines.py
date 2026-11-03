@@ -1347,9 +1347,7 @@ def resample_lines_distance(self):
         label="Insert spacing distance",
         default_value="Distance",
     )
-    if any(
-        [distance_delta is None, isinstance(distance_delta, str), distance_delta <= 0]
-    ):
+    if distance_delta is None or isinstance(distance_delta, str) or distance_delta <= 0:
         self.print_terminal(" -- Distance is None -- ")
         return
     # distance_delta = int(distance_delta)
@@ -1376,6 +1374,9 @@ def resample_lines_distance(self):
         inUV = np_column_stack((inU, inV))
         # Run the Shapely function.
         shp_line_in = shp_linestring(inUV)
+        if shp_line_in.length == 0:
+            self.print_terminal(f" -- Line {current_uid} has zero length -- ")
+            continue
         if distance_delta >= shp_line_in.length:
             while distance_delta >= shp_line_in.length:
                 distance_delta = distance_delta / 2
@@ -1438,12 +1439,10 @@ def resample_lines_number_points(self):
         label="Insert number of points",
         default_value="Number",
     )
-    if any(
-        [
-            number_of_points is None,
-            isinstance(number_of_points, str),
-            number_of_points <= 1,
-        ]
+    if (
+        number_of_points is None
+        or isinstance(number_of_points, str)
+        or number_of_points <= 1
     ):
         self.print_terminal(" -- Number of nodes is None -- ")
         return
@@ -1472,6 +1471,9 @@ def resample_lines_number_points(self):
         inUV = np_column_stack((inU, inV))
         # Run the Shapely function.
         shp_line_in = shp_linestring(inUV)
+        if shp_line_in.length == 0:
+            self.print_terminal(f" -- Line {current_uid} has zero length -- ")
+            continue
         distances = (
             shp_line_in.length * i / (number_of_points - 1)
             for i in range(number_of_points)
@@ -1479,7 +1481,6 @@ def resample_lines_number_points(self):
         points = [
             tuple(shp_line_in.interpolate(distance).coords[0]) for distance in distances
         ]
-        points.append(tuple(shp_line_in.coords[-1]))
         shp_line_out = shp_linestring(points)
         outUV = deepcopy(np_array(shp_line_out.coords))
         # Un-stack output coordinates and write them to the empty dictionary.

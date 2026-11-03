@@ -322,8 +322,10 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["vtk_obj"].points = outXYZ
                     curr_obj_dict["vtk_obj"].auto_cells()
                 elif gdf.geom_type[row] == "MultiLineString":
-                    # to be solved with https://shapely.readthedocs.io/en/stable/migration.html ???
-                    outXYZ_list = np_array(gdf.loc[row].geometry)
+                    outXYZ_list = [
+                        np_array(part.coords, dtype=float)
+                        for part in gdf.loc[row].geometry.geoms
+                    ]
                     vtkappend = vtkAppendPolyData()
                     for outXYZ in outXYZ_list:
                         temp_vtk = PolyLine()
@@ -457,7 +459,10 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                     curr_obj_dict["vtk_obj"].points = outXYZ
                     curr_obj_dict["vtk_obj"].auto_cells()
                 elif gdf.geom_type[row] == "MultiLineString":
-                    outXYZ_list = np_array(gdf.loc[row].geometry)
+                    outXYZ_list = [
+                        np_array(part.coords, dtype=float)
+                        for part in gdf.loc[row].geometry.geoms
+                    ]
                     vtkappend = vtkAppendPolyData()
                     for outXYZ in outXYZ_list:
                         temp_vtk = PolyLine()
@@ -599,7 +604,10 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                             name="name", data=gdf[label_col].values
                         )
                 elif gdf.geom_type[row] == "MultiLineString":
-                    outXYZ_list = np_array(gdf.loc[row].geometry)
+                    outXYZ_list = [
+                        np_array(part.coords, dtype=float)
+                        for part in gdf.loc[row].geometry.geoms
+                    ]
                     vtkappend = vtkAppendPolyData()
                     for outXYZ in outXYZ_list:
                         temp_vtk = PolyLine()
