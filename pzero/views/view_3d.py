@@ -48,6 +48,8 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QMessageBox,
     QDialog,
+    QDialogButtonBox,
+    QFormLayout,
     QVBoxLayout,
     QGroupBox,
     QHBoxLayout,
@@ -88,7 +90,7 @@ from ..helpers.helper_functions import best_fitting_plane, gen_frame, freeze_gui
 from ..helpers.extend_surface import extend_geology_entity
 from ..properties_manager import _get_collection_property_datasets
 from ..collections.geological_collection import GeologicalCollection
-from ..entities_factory import PolyData, Attitude, PolyLine, TriSurf
+from ..entities_factory import PolyData, Attitude, PolyLine, TriSurf, Seismics
 from ..two_d_lines import draw_line_3d
 from pzero.point_clouds import (
     normals2dd,
@@ -2268,78 +2270,80 @@ class View3D(ViewVTK):
                 multi_direct_manip.setChecked(restore_manipulation)
 
         def create_section_from_slice():
-            """Create one XSection from an indexed multi-slice position and open its view."""
+            """Create one section at a seismic slice or mesh coordinate."""
             entity_name = multi_entity_combo.currentText()
             if not entity_name:
                 self.print_terminal("No entity selected.")
                 return
-
+            entity = self.get_entity_by_name(entity_name)
+            if entity is None:
+                self.print_terminal("Selected entity could not be found.")
+                return
+            is_seismic = isinstance(entity, Seismics)
             default_direction = direction_combo.currentText()
-            default_n_slices = int(slices_spin.value())
-            default_slice_no = max(1, int((default_n_slices + 1) / 2))
-            direction_letter = {
-                "U Direction": "U",
-                "V Direction": "V",
-                "W Direction": "W",
-            }.get(default_direction, "U")
             plain_name = (
                 entity_name.split(": ", 1)[1] if ": " in entity_name else entity_name
             )
-            safe_name = plain_name.replace(" ", "_")
-            default_section_name = (
-                f"XS_{safe_name}_{direction_letter}_{default_slice_no}"
-            )
+            dialog = QDialog(control_panel)
+            dialog.setWindowTitle("Create Section")
+            form = QFormLayout(dialog)
+            direction_input = QComboBox(dialog)
+            direction_input.setObjectName("section_direction")
+            direction_input.addItems(["U Direction", "V Direction", "W Direction"])
+            direction_input.setCurrentText(default_direction)
+            position_input = QLineEdit(dialog)
+            position_input.setObjectName("section_position")
+            range_label = QLabel(dialog)
+            range_label.setObjectName("section_range")
+            name_input = QLineEdit(f"XS_{plain_name.replace(' ', '_')}", dialog)
+            form.addRow("Direction", direction_input)
+            form.addRow("Slice number" if is_seismic else "Coordinate", position_input)
+            form.addRow("Valid range", range_label)
+            form.addRow("Section name", name_input)
+            buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=dialog)
+            form.addRow(buttons)
 
-            out_dict = multiple_input_dialog(
-                title="Create Section from Slice",
-                input_dict={
-                    "direction": [
-                        "Direction",
-                        ["U Direction", "V Direction", "W Direction"],
-                        default_direction,
-                    ],
-                    "slice_no": ["Slice number (1..N)", default_slice_no],
-                    "n_slices": ["Total slices (N)", default_n_slices],
-                    "section_name": ["X-Section name", default_section_name],
-                },
-            )
-            if out_dict is None:
+            def update_range():
+                axis = direction_to_slice_type(direction_input.currentText())
+                try:
+                    low, high = self._section_position_range(entity, axis, is_seismic)
+                except ValueError as exc:
+                    range_label.setText(str(exc))
+                    position_input.clear()
+                    return
+                range_label.setText(f"{low:.12g} to {high:.12g}" + (" (1-based)" if is_seismic else " (project coordinates)"))
+                middle = (int(low) + int(high)) // 2 if is_seismic else (low + high) / 2
+                position_input.setText(str(middle))
+
+            def accept_position():
+                axis = direction_to_slice_type(direction_input.currentText())
+                try:
+                    self._section_position_to_slice(entity, axis, position_input.text(), is_seismic)
+                except ValueError as exc:
+                    QMessageBox.warning(dialog, "Invalid position", str(exc))
+                    return
+                dialog.accept()
+
+            direction_input.currentTextChanged.connect(update_range)
+            buttons.accepted.connect(accept_position)
+            buttons.rejected.connect(dialog.reject)
+            update_range()
+            if dialog.exec() != QDialog.Accepted:
                 return
-
-            direction = out_dict["direction"]
+            direction = direction_input.currentText()
             slice_type = direction_to_slice_type(direction)
-
-            try:
-                n_slices = int(out_dict["n_slices"])
-            except Exception:
-                n_slices = default_n_slices
-            n_slices = max(1, n_slices)
-
-            try:
-                slice_no = int(out_dict["slice_no"])
-            except Exception:
-                slice_no = default_slice_no
-            slice_no = max(1, min(n_slices, slice_no))
-
-            section_name = str(out_dict["section_name"]).strip()
-            if not section_name:
-                section_name = default_section_name
-
-            start_norm = start_slider.value() / 100.0
-            end_norm = end_slider.value() / 100.0
-            if n_slices == 1:
-                normalized_pos = start_norm
-            else:
-                normalized_pos = start_norm + (slice_no - 1) * (
-                    (end_norm - start_norm) / (n_slices - 1)
-                )
-            normalized_pos = max(0.0, min(1.0, normalized_pos))
+            normalized_pos, slice_index = self._section_position_to_slice(
+                entity, slice_type, position_input.text(), is_seismic
+            )
+            section_name = name_input.text().strip() or "new_section"
 
             xuid = self._create_xsection_from_slicer_slice(
                 entity_name=entity_name,
                 slice_type=slice_type,
                 normalized_position=normalized_pos,
                 section_name=section_name,
+                slice_index=slice_index,
+                world_axis=not is_seismic,
             )
             if not xuid:
                 self.print_terminal("Failed to create X-Section from selected slice.")
@@ -2355,7 +2359,7 @@ class View3D(ViewVTK):
 
             created_name = self.parent.xsect_coll.get_uid_name(xuid)
             self.print_terminal(
-                f"Created section '{created_name}' from {direction} slice #{slice_no}/{n_slices}."
+                f"Created section '{created_name}' at {direction} position {position_input.text()}."
             )
             self._open_xsection_view_for_uid(xuid)
 
@@ -3429,8 +3433,39 @@ class View3D(ViewVTK):
             idx += 1
         return f"{name}_{idx}"
 
+    def _section_position_range(self, entity, slice_type, is_seismic):
+        """Return the valid one-based seismic indices or world-coordinate bounds."""
+        axis = self._slice_axis_index(slice_type)
+        if is_seismic:
+            dimensions = [0, 0, 0]
+            entity.GetDimensions(dimensions)
+            if dimensions[axis] < 1:
+                raise ValueError("The seismic volume has no slices in this direction.")
+            return 1, dimensions[axis]
+        bounds = entity.GetBounds()
+        low, high = float(bounds[2 * axis]), float(bounds[2 * axis + 1])
+        if not np.isfinite(low) or not np.isfinite(high) or low > high:
+            raise ValueError("The selected mesh has no valid bounds.")
+        return low, high
+
+    def _section_position_to_slice(self, entity, slice_type, value, is_seismic):
+        low, high = self._section_position_range(entity, slice_type, is_seismic)
+        try:
+            position = float(value)
+        except (TypeError, ValueError):
+            raise ValueError("Enter a valid number.") from None
+        if not np.isfinite(position) or not low <= position <= high:
+            raise ValueError(f"Position must be between {low:.12g} and {high:.12g}.")
+        if is_seismic:
+            if not position.is_integer():
+                raise ValueError("The seismic slice number must be a whole number.")
+            index = int(position) - 1
+            return (index / (high - 1) if high > 1 else 0.0), index
+        return ((position - low) / (high - low) if high > low else 0.0), None
+
     def _create_xsection_from_slicer_slice(
-        self, entity_name, slice_type, normalized_position, section_name=None
+        self, entity_name, slice_type, normalized_position, section_name=None,
+        slice_index=None, world_axis=False,
     ):
         """
         Create one XSection aligned to the selected slicer plane and fit its frame
@@ -3446,11 +3481,20 @@ class View3D(ViewVTK):
         bounds = pv_entity.bounds
         t = max(0.0, min(1.0, float(normalized_position)))
 
-        plane_info = self._slice_plane_from_dataset(
-            dataset=pv_entity,
-            slice_type=slice_type,
-            normalized_position=t,
-        )
+        if world_axis:
+            axis = self._slice_axis_index(slice_type)
+            center = np.array([(bounds[i] + bounds[i + 1]) / 2 for i in (0, 2, 4)])
+            center[axis] = bounds[axis * 2] + t * (bounds[axis * 2 + 1] - bounds[axis * 2])
+            normal = np.zeros(3)
+            normal[axis] = 1.0
+            plane_info = {"center": center, "normal": normal}
+        else:
+            plane_info = self._slice_plane_from_dataset(
+                dataset=pv_entity,
+                slice_type=slice_type,
+                normalized_position=t,
+                slice_index=slice_index,
+            )
         if plane_info is None:
             return None
         origin = np.asarray(plane_info["center"], dtype=float)
@@ -3495,11 +3539,10 @@ class View3D(ViewVTK):
             ],
             dtype=float,
         )
-        U, V = self.parent.xsect_coll.world2plane(
-            section_uid=xuid, X=corners[:, 0], Y=corners[:, 1], Z=corners[:, 2]
-        )
-        U = np.asarray(U).reshape(-1)
-        V = np.asarray(V).reshape(-1)
+        strike_vector = self.parent.xsect_coll.get_uid_strike_vect(section_uid=xuid)
+        dip_vector = self.parent.xsect_coll.get_uid_dip_vect(section_uid=xuid)
+        U = (corners - origin) @ strike_vector
+        V = (corners - origin) @ dip_vector
 
         min_u = float(np.min(U))
         max_u = float(np.max(U))
@@ -3515,9 +3558,7 @@ class View3D(ViewVTK):
         min_v -= pad
         max_v += pad
 
-        fitted_origin = self.parent.xsect_coll.plane2world(
-            section_uid=xuid, U=min_u, V=min_v, as_arr=True
-        )
+        fitted_origin = origin + min_u * strike_vector + min_v * dip_vector
         self.parent.xsect_coll.set_uid_length(xuid, float(max_u - min_u))
         self.parent.xsect_coll.set_uid_width(xuid, float(max_v - min_v))
         self.parent.xsect_coll.set_uid_origin_x(xuid, float(fitted_origin[0]))
@@ -3593,6 +3634,41 @@ class View3D(ViewVTK):
             if src_obj is None:
                 return None
 
+            def cut_section(plane):
+                cutter = vtkCutter()
+                cutter.SetInputData(src_obj)
+                cutter.SetCutFunction(plane)
+                cutter.Update()
+                cut = cutter.GetOutput()
+                if cut.GetNumberOfPoints():
+                    return cut
+                # VTK may produce an empty cut exactly on a dataset boundary.
+                bounds = np.asarray(src_obj.GetBounds(), dtype=float)
+                corners = np.array([[x, y, z] for x in bounds[:2] for y in bounds[2:4] for z in bounds[4:6]])
+                normal = np.asarray(plane.GetNormal(), dtype=float)
+                normal /= np.linalg.norm(normal)
+                origin = np.asarray(plane.GetOrigin(), dtype=float)
+                distances = (corners - origin) @ normal
+                epsilon = max(np.linalg.norm(bounds[1::2] - bounds[::2]) * 1e-7, 1e-9)
+                if min(abs(distances.min()), abs(distances.max())) > epsilon:
+                    return cut
+                inward = np.sign((corners.mean(axis=0) - origin) @ normal)
+                if not inward:
+                    return cut
+                from vtk import vtkPlane
+
+                offset_plane = vtkPlane()
+                offset_plane.SetNormal(normal)
+                offset_plane.SetOrigin(origin + inward * epsilon * normal)
+                cutter.SetCutFunction(offset_plane)
+                cutter.Update()
+                cut = cutter.GetOutput()
+                if cut.GetNumberOfPoints():
+                    points = numpy_support.vtk_to_numpy(cut.GetPoints().GetData()).astype(float)
+                    points -= ((points - origin) @ normal)[:, None] * normal
+                    cut.GetPoints().SetData(numpy_support.numpy_to_vtk(points, deep=True))
+                return cut
+
             try:
                 src_topology = source_coll.get_uid_topology(src_uid)
             except Exception:
@@ -3642,11 +3718,7 @@ class View3D(ViewVTK):
                     scalar_name = source_props[0]
 
                 plane = self.parent.xsect_coll.get_uid_vtk_plane(xuid)
-                cutter = vtkCutter()
-                cutter.SetCutFunction(plane)
-                cutter.SetInputData(src_obj)
-                cutter.Update()
-                cut_out = cutter.GetOutput()
+                cut_out = cut_section(plane)
                 if cut_out is None or cut_out.GetNumberOfPoints() <= 0:
                     return None
 
@@ -3813,11 +3885,7 @@ class View3D(ViewVTK):
 
             # Generic mesh fallback: create section polyline/surface from cutter output.
             plane = self.parent.xsect_coll.get_uid_vtk_plane(xuid)
-            cutter = vtkCutter()
-            cutter.SetCutFunction(plane)
-            cutter.SetInputData(src_obj)
-            cutter.Update()
-            cut_out = cutter.GetOutput()
+            cut_out = cut_section(plane)
             if cut_out is None or cut_out.GetNumberOfPoints() <= 0:
                 return None
 
