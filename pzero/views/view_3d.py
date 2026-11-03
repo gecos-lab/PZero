@@ -1136,6 +1136,8 @@ class View3D(ViewVTK):
         opt_dict = multiple_input_dialog(
             title="Orbiting options", input_dict=in_dict, return_widget=False
         )
+        if opt_dict is None:
+            return
 
         uid = opt_dict["uid"]
         # entity = self.actors_df.loc[self.actors_df["uid"] == uid, "actor"].values[0]
@@ -1221,6 +1223,8 @@ class View3D(ViewVTK):
             set_opt = multiple_input_dialog(
                 title="Create measure set", input_dict=input_dict
             )
+            if set_opt is None:
+                return
             self.plotter.enable_point_picking(
                 callback=lambda mesh, pid: self.pkd_point(mesh, pid, set_opt),
                 show_message=False,
