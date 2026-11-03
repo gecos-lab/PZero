@@ -6,6 +6,11 @@ from vtkmodules.util.numpy_support import vtk_to_numpy
 from vtkmodules.vtkCommonCore import vtkStringArray
 
 
+def is_internal_boundary_property(name):
+    """Identify legacy OBB metadata that is not a display property."""
+    return name in ("obb_angle", "obb_translation")
+
+
 def mark_oriented_boundary(obj):
     """Record the construction kind for relinking, without storing orientation."""
     tag = vtkStringArray()
