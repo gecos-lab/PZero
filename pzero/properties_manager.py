@@ -95,6 +95,8 @@ from pandas.core.common import flatten as pd_flatten
 from pyvista import get_cmap_safe as pv_get_cmap_safe
 import pyvista as pv
 
+from pzero.helpers.boundary_orientation import is_internal_boundary_property
+
 PROPERTY_COLLECTION_NAMES = (
     "geol_coll",
     "dom_coll",
@@ -661,6 +663,11 @@ class PropertiesCMaps(QObject):
             coll_prop_comps = list(pd_flatten(coll_prop_comps))
             for i in range(len(coll_props)):
                 # Keep interpretation slice metadata on entities, outside the legend.
+                if (
+                    collection is parent.boundary_coll
+                    and is_internal_boundary_property(coll_props[i])
+                ):
+                    continue
                 if isinstance(coll_props[i], str) and coll_props[i].startswith(
                     "slices_"
                 ):

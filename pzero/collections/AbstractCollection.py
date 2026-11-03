@@ -20,6 +20,8 @@ from numpy import intp as np_intp
 
 from vtkmodules.vtkCommonDataModel import vtkDataObject
 
+from pzero.helpers.boundary_orientation import is_internal_boundary_property
+
 
 class BaseCollection(ABC):
     """Abstract class used as a base for all collections, implemented with ABC in order to
@@ -620,6 +622,17 @@ class BaseTableModel(QAbstractTableModel):
         based on the column headers stored in the dictionary."""
         if qt_role == Qt.DisplayRole:
             value = self.collection.df.iloc[index.row(), index.column()]
+            column = self.collection.df.columns[index.column()]
+            if (
+                self.collection.collection_name == "boundary_coll"
+                and column in ("properties_names", "properties_components")
+            ):
+                names = self.collection.df.iloc[index.row()]["properties_names"]
+                if isinstance(names, (list, tuple)) and isinstance(value, (list, tuple)):
+                    value = [
+                        item for name, item in zip(names, value)
+                        if not is_internal_boundary_property(name)
+                    ]
             return str(value)
 
     def headerData(self, section, orientation, qt_role):

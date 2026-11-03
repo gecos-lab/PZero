@@ -27,6 +27,8 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QDrag, QActionGroup
 
+from pzero.helpers.boundary_orientation import is_internal_boundary_property
+
 MESH_SLICER_COLLECTION_PREFIXES = {
     "mesh3d_coll": "Mesh",
     "image_coll": "Image",
@@ -386,6 +388,11 @@ class CustomTreeWidget(QTreeWidget):
                 and row.get("topology") == "PCDom"
             )
             for prop, prop_comp in zip(row[self.prop_label], row[self.prop_comp_label]):
+                if (
+                    getattr(self.collection, "collection_name", None) == "boundary_coll"
+                    and is_internal_boundary_property(prop)
+                ):
+                    continue
                 # property_combo.addItem(prop)
                 # property_combo.setItemData(property_combo.findText(prop), prop)
                 if prop_comp > 1:
