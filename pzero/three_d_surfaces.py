@@ -2393,56 +2393,64 @@ def intersection_xs(self):
             self.xsect_coll.df["name"] == sec_name, "uid"
         ].values[0]
         postfix = f"_int_{sec_name}"
-        if self.shown_table == "tabGeology":
+        if self.shown_table in ["tabGeology", "tabFluids", "tabBackgrounds"]:
+            source_coll = getattr(
+                self,
+                {
+                    "tabGeology": "geol_coll",
+                    "tabFluids": "fluid_coll",
+                    "tabBackgrounds": "backgrnd_coll",
+                }[self.shown_table],
+            )
             for uid in input_uids:
-                if self.geol_coll.get_uid_topology(uid) in [
+                if source_coll.get_uid_topology(uid) in [
                     "PolyLine",
                     "XsPolyLine",
                 ]:
                     # Intersection for PolyLine and XsPolyLine.
-                    if self.geol_coll.get_uid_x_section(uid) != xsect_uid:
+                    if source_coll.get_uid_x_section(uid) != xsect_uid:
                         # cutter
                         cutter = vtkCutter()
                         cutter.SetCutFunction(
                             self.xsect_coll.get_uid_vtk_plane(xsect_uid)
                         )
-                        cutter.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
+                        cutter.SetInputData(source_coll.get_uid_vtk_obj(uid))
                         cutter.Update()
                         if cutter.GetOutput().GetNumberOfPoints() > 0:
                             # Create new dict for the new XsVertexSet
 
-                            obj_dict = deepcopy(self.geol_coll.entity_dict)
+                            obj_dict = deepcopy(source_coll.entity_dict)
                             obj_dict["parent_uid"] = xsect_uid
                             obj_dict["topology"] = "XsVertexSet"
                             obj_dict["vtk_obj"] = XsVertexSet(
                                 x_section_uid=xsect_uid, parent=self
                             )
                             obj_dict["name"] = (
-                                f"{self.geol_coll.get_uid_name(uid)}{postfix}"
+                                f"{source_coll.get_uid_name(uid)}{postfix}"
                             )
-                            obj_dict["role"] = self.geol_coll.get_uid_role(uid)
-                            obj_dict["feature"] = self.geol_coll.get_uid_feature(uid)
-                            obj_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
+                            obj_dict["role"] = source_coll.get_uid_role(uid)
+                            obj_dict["feature"] = source_coll.get_uid_feature(uid)
+                            obj_dict["scenario"] = source_coll.get_uid_scenario(uid)
                             obj_dict["properties_names"] = (
-                                self.geol_coll.get_uid_properties_names(uid)
+                                source_coll.get_uid_properties_names(uid)
                             )
                             obj_dict["properties_components"] = (
-                                self.geol_coll.get_uid_properties_components(uid)
+                                source_coll.get_uid_properties_components(uid)
                             )
                             obj_dict["vtk_obj"].DeepCopy(cutter.GetOutput())
                             for data_key in obj_dict["vtk_obj"].point_data_keys:
                                 if not data_key in obj_dict["properties_names"]:
                                     obj_dict["vtk_obj"].remove_point_data(data_key)
-                            self.geol_coll.add_entity_from_dict(obj_dict)
+                            source_coll.add_entity_from_dict(obj_dict)
                         else:
                             self.print_terminal(" -- empty object from cutter -- ")
                     else:
                         self.print_terminal(
                             " -- no intersection of XsPolyLine with its own XSection -- "
                         )
-                elif self.geol_coll.get_uid_topology(uid) == "TriSurf":
+                elif source_coll.get_uid_topology(uid) == "TriSurf":
                     line_parts = xsection_intersection_polyline_parts(
-                        vtk_obj=self.geol_coll.get_uid_vtk_obj(uid),
+                        vtk_obj=source_coll.get_uid_vtk_obj(uid),
                         vtk_plane=self.xsect_coll.get_uid_vtk_plane(xsect_uid),
                     )
                     if not line_parts:
@@ -2452,29 +2460,29 @@ def intersection_xs(self):
                         continue
                     for line_part in line_parts:
                         # Create new dict for the new XsPolyLine
-                        obj_dict = deepcopy(self.geol_coll.entity_dict)
+                        obj_dict = deepcopy(source_coll.entity_dict)
                         obj_dict["parent_uid"] = xsect_uid
                         obj_dict["topology"] = "XsPolyLine"
                         obj_dict["vtk_obj"] = XsPolyLine(
                             x_section_uid=xsect_uid, parent=self
                         )
                         obj_dict["name"] = (
-                            f"{self.geol_coll.get_uid_name(uid)}{postfix}"
+                            f"{source_coll.get_uid_name(uid)}{postfix}"
                         )
-                        obj_dict["role"] = self.geol_coll.get_uid_role(uid)
-                        obj_dict["feature"] = self.geol_coll.get_uid_feature(uid)
-                        obj_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
+                        obj_dict["role"] = source_coll.get_uid_role(uid)
+                        obj_dict["feature"] = source_coll.get_uid_feature(uid)
+                        obj_dict["scenario"] = source_coll.get_uid_scenario(uid)
                         obj_dict["properties_names"] = (
-                            self.geol_coll.get_uid_properties_names(uid)
+                            source_coll.get_uid_properties_names(uid)
                         )
                         obj_dict["properties_components"] = (
-                            self.geol_coll.get_uid_properties_components(uid)
+                            source_coll.get_uid_properties_components(uid)
                         )
                         obj_dict["vtk_obj"].DeepCopy(line_part)
                         for data_key in obj_dict["vtk_obj"].point_data_keys:
                             if not data_key in obj_dict["properties_names"]:
                                 obj_dict["vtk_obj"].remove_point_data(data_key)
-                        self.geol_coll.add_entity_from_dict(obj_dict)
+                        source_coll.add_entity_from_dict(obj_dict)
         elif self.shown_table == "tabMeshes":
             for uid in input_uids:
                 if self.mesh3d_coll.get_uid_mesh3d_type(uid) == "Voxet":
@@ -2679,11 +2687,13 @@ def project_2_dem(self):
     # self.print_terminal("Vertical Projection: project target lines onto a terrain image")
     valid_tables = {
         "tabGeology": "geol_coll",
+        "tabFluids": "fluid_coll",
+        "tabBackgrounds": "backgrnd_coll",
         "tabWells": "well_coll",
     }
     if self.shown_table not in valid_tables:
         self.print_terminal(
-            " -- Only geological objects and wells can be interpolated -- "
+            " -- Only geological objects and wells can be projected -- "
         )
         return
     source_coll = getattr(self, valid_tables[self.shown_table])
@@ -2897,15 +2907,15 @@ def project_2_dem(self):
             # Create VTK object and copy geometry from original
             if is_well_projection:
                 obj_dict["vtk_obj"] = source_coll.get_uid_vtk_obj(uid).deep_copy()
-            elif isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
+            elif isinstance(source_coll.get_uid_vtk_obj(uid), PolyLine):
                 obj_dict["vtk_obj"] = PolyLine()
-            elif isinstance(self.geol_coll.get_uid_vtk_obj(uid), Attitude):
+            elif isinstance(source_coll.get_uid_vtk_obj(uid), Attitude):
                 obj_dict["vtk_obj"] = Attitude()
-            elif isinstance(self.geol_coll.get_uid_vtk_obj(uid), VertexSet):
+            elif isinstance(source_coll.get_uid_vtk_obj(uid), VertexSet):
                 obj_dict["vtk_obj"] = VertexSet()
 
             if not is_well_projection:
-                obj_dict["vtk_obj"].DeepCopy(self.geol_coll.get_uid_vtk_obj(uid))
+                obj_dict["vtk_obj"].DeepCopy(source_coll.get_uid_vtk_obj(uid))
 
             # Add the copy to collection
             if obj_dict["vtk_obj"].points_number > 0:
@@ -3019,7 +3029,7 @@ def project_2_dem(self):
             projected_obj.Modified()
         else:
             projection = vtkPointInterpolator2D()
-            projection.SetInputData(self.geol_coll.get_uid_vtk_obj(uid_to_project))
+            projection.SetInputData(source_coll.get_uid_vtk_obj(uid_to_project))
             projection.SetSourceData(self.dom_coll.get_uid_vtk_obj(dom_uid))
             projection.SetKernel(vtkVoronoiKernel())
             projection.SetNullPointsStrategyToClosestPoint()
@@ -3028,11 +3038,11 @@ def project_2_dem(self):
 
             # Create temporary object to hold projected geometry
             projected_obj = None
-            if isinstance(self.geol_coll.get_uid_vtk_obj(uid_to_project), PolyLine):
+            if isinstance(source_coll.get_uid_vtk_obj(uid_to_project), PolyLine):
                 projected_obj = PolyLine()
-            elif isinstance(self.geol_coll.get_uid_vtk_obj(uid_to_project), Attitude):
+            elif isinstance(source_coll.get_uid_vtk_obj(uid_to_project), Attitude):
                 projected_obj = Attitude()
-            elif isinstance(self.geol_coll.get_uid_vtk_obj(uid_to_project), VertexSet):
+            elif isinstance(source_coll.get_uid_vtk_obj(uid_to_project), VertexSet):
                 projected_obj = VertexSet()
 
             if projected_obj is None:
@@ -3063,7 +3073,7 @@ def project_2_dem(self):
             source_coll.set_uid_vtk_obj(uid=uid_to_project, vtk_obj=projected_obj)
             self.signals.geom_modified.emit([uid_to_project], source_coll)
         else:
-            self.geol_coll.replace_vtk(uid=uid_to_project, vtk_object=projected_obj)
+            source_coll.replace_vtk(uid=uid_to_project, vtk_object=projected_obj)
 
         # Update entity name
         if replace_on_off == 1:  # No - set name for new entity
