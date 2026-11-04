@@ -4774,12 +4774,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def import_mapimage(self):
         """Import map image and update image collection."""
-        self.print_terminal("Importing image from supported format (GDAL)")
         # Select and open input file
         in_file_name = open_file_dialog(
             parent=self,
             caption="Import image from file",
-            filter="Image (*.tif *.jpg *.png *.bmp)",
+            filter="Images (*.tif *.tiff *.jpg *.jpeg *.png);;All files (*)",
         )
         if in_file_name:
             self.print_terminal("in_file_name: " + in_file_name)
@@ -4787,12 +4786,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def import_xsimage(self):
         """Import XSimage and update image collection."""
-        self.print_terminal("Importing image from supported format (GDAL)")
         # Select and open input file
         in_file_name = open_file_dialog(
             parent=self,
             caption="Import image from file",
-            filter="Image (*.tif *.jpg *.png *.bmp)",
+            filter="Images (*.tif *.tiff *.jpg *.jpeg *.png);;All files (*)",
         )
         if in_file_name:
             self.print_terminal("in_file_name: " + in_file_name)

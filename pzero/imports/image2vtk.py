@@ -9,8 +9,10 @@ from copy import deepcopy
 
 from rasterio import open as rio_open
 import rasterio.plot as rio_plt
+from PIL import Image as PIL_Image
 
 from numpy import abs as np_abs
+from numpy import array as np_array
 from numpy import cos as np_cos
 from numpy import dstack as np_dstack
 from numpy import pi as np_pi
@@ -27,7 +29,32 @@ from pzero.entities_factory import MapImage, XsImage
 from pzero.helpers.helper_dialogs import multiple_input_dialog
 
 
-def image_file_to_vtk(self=None, rio_image=None):
+supported_image_extensions = {".tif", ".tiff", ".jpg", ".jpeg", ".png"}
+
+
+def open_supported_image(in_file_name=None):
+    """Open supported raster formats and validate their band count."""
+    extension = os_path.splitext(in_file_name)[1].lower()
+    if extension == ".bmp":
+        raise ValueError(
+            "BMP is not supported. Accepted formats: TIFF/GeoTIFF, JPEG, PNG."
+        )
+    if extension not in supported_image_extensions:
+        raise ValueError(
+            "Unsupported image format. Accepted formats: TIFF/GeoTIFF, JPEG, PNG."
+        )
+
+    rio_image = rio_open(in_file_name)
+    if rio_image.count not in (1, 2, 3):
+        band_count = rio_image.count
+        rio_image.close()
+        raise ValueError(
+            f"Images with {band_count} bands are not supported; expected 1 to 3."
+        )
+    return rio_image
+
+
+def image_file_to_vtk(self=None, rio_image=None, in_file_name=None):
     """Generic function used to read an image from a rasterio image object and convert it to a VTK array."""
     # Deep copy used since the image is read now from file.
     # DO NOT specify the array type as e.g. in array_type=vtk.VTK_CHAR
@@ -35,10 +62,15 @@ def image_file_to_vtk(self=None, rio_image=None):
 
     if n_bands == 1 or n_bands == 2:
         # Greyscale or Greyscale with alpha channel
-        vtk_array = numpy_support.numpy_to_vtk(rio_image.read(1).ravel(), deep=True)
+        image_data = rio_image.read(1)
+        if n_bands == 1 and in_file_name:
+            with PIL_Image.open(in_file_name) as pil_image:
+                if pil_image.mode == "1":
+                    image_data = np_array(pil_image.convert("L"))
+        vtk_array = numpy_support.numpy_to_vtk(image_data.ravel(), deep=True)
         prop_name = "greyscale"
-    elif n_bands == 3 or n_bands == 4:
-        # RGB or RGBA (RGB with alpha channel)
+    elif n_bands == 3:
+        # RGB
         vtk_r_property = rio_image.read(1)
         vtk_g_property = rio_image.read(2)
         vtk_b_property = rio_image.read(3)
@@ -47,25 +79,10 @@ def image_file_to_vtk(self=None, rio_image=None):
             numpy_array.swapaxes(0, 1).reshape((-1, 3), order="F"), deep=True
         )
         prop_name = "RGB"
-    # elif n_bands == 4:
-    #     # RGBA - not yet supported, so we just drop the alpha channel in the previous case --------------------------
-    #     vtk_r_property = rio_image.read(1)
-    #     vtk_g_property = rio_image.read(2)
-    #     vtk_b_property = rio_image.read(3)
-    #     vtk_a_property = rio_image.read(4)
-    #     numpy_array = np_dstack(
-    #         (vtk_r_property, vtk_g_property, vtk_b_property, vtk_a_property)
-    #     )
-    #     vtk_array = numpy_support.numpy_to_vtk(
-    #         numpy_array.swapaxes(0, 1).reshape((-1, 4), order="F"), deep=True
-    #     )
-    #     vtk_array.SetName("RGBA")
-    #     prop_name = "RGBA"
     else:
-        # MULTIBAND - not yet supported, so we just return None -------------------------------------------------------
-        self.print_terminal("Multiband not supported")
-        vtk_array = None
-        prop_name = None
+        raise ValueError(
+            f"Images with {n_bands} bands are not supported; expected 1 to 3."
+        )
     if vtk_array:
         vtk_array.SetName(prop_name)
         return vtk_array
@@ -79,7 +96,7 @@ def geo_image2vtk(self=None, in_file_name=None):
         # The image is not read here but will be read afterward with rio_image.read()
         # http://xarray.pydata.org/en/stable/io.html#rasterio
         # http://www-2.unipv.it/compmech/seminars/group/VTK-VMTK.pdf
-        rio_image = rio_open(in_file_name)
+        rio_image = open_supported_image(in_file_name)
 
         # Image size as read by rasterio
         img_width_px = rio_image.width
@@ -95,7 +112,9 @@ def geo_image2vtk(self=None, in_file_name=None):
         spacing_Y = (img_y_min - img_y_max) / (img_height_px + 1)
 
         # Read the image and convert to vtk array.
-        vtk_array = image_file_to_vtk(self=self, rio_image=rio_image)
+        vtk_array = image_file_to_vtk(
+            self=self, rio_image=rio_image, in_file_name=in_file_name
+        )
 
         # Create MapImage entity (inherits from vtk.vtkImageData) and then set all data.
         # Recall that image coords 0,0 are at upper-left and image coords grow along x and -y.
@@ -135,7 +154,7 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
         # The image is not read here but will be read afterward with rio_image.read()
         # http://xarray.pydata.org/en/stable/io.html#rasterio
         # http://www-2.unipv.it/compmech/seminars/group/VTK-VMTK.pdf
-        rio_image = rio_open(in_file_name)
+        rio_image = open_supported_image(in_file_name)
 
         # Image size as read by rasterio
         img_width_px = rio_image.width
@@ -201,7 +220,9 @@ def xs_image2vtk(self=None, in_file_name=None, x_section_uid=None):
         ]
 
         # Read the image and convert to vtk array.
-        vtk_array = image_file_to_vtk(self=self, rio_image=rio_image)
+        vtk_array = image_file_to_vtk(
+            self=self, rio_image=rio_image, in_file_name=in_file_name
+        )
 
         # Create XsImage entity (inherits from vtk.vtkImageData) and then set all data.
         # Recall that image coords 0,0 are at upper-left and image coords grow along length and -height.
