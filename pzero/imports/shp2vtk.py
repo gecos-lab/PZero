@@ -267,9 +267,6 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
     if collection in ["Geology", "Fluid contacts"]:
         props_allowed.add("scenario")
     props_map = {k: v for k, v in attribute_mapping.items() if k in props_allowed}
-    if collection in ["Geology", "Fluid contacts"]:
-        props_allowed.add("scenario")
-    props_map = {k: v for k, v in attribute_mapping.items() if k in props_allowed}
     # Include dip, dip_dir, and dir (dir will be converted to dip_dir with +90° rotation)
     orient_map = {
         k: v for k, v in attribute_mapping.items() if k in {"dip", "dip_dir", "dir"}
@@ -301,373 +298,121 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
             )
             return
 
-    if collection == "Geology":
-        if (gdf.geom_type[0] == "LineString") or (
-            gdf.geom_type[0] == "MultiLineString"
-        ):
+    target_collection = {
+        "Geology": self.geol_coll,
+        "Fluid contacts": self.fluid_coll,
+        "Background data": self.backgrnd_coll,
+    }.get(collection)
+    if target_collection is None:
+        return
+
+    if geom_type in ["LineString", "MultiLineString"]:
+        imported_count = 0
+        for row in range(gdf.shape[0]):
+            curr_obj_dict = deepcopy(target_collection.entity_dict)
+            for pzero_prop, shp_col in props_map.items():
+                if shp_col in column_names:
+                    curr_obj_dict[pzero_prop] = gdf.loc[row, shp_col]
+            curr_obj_dict["topology"] = "PolyLine"
+            curr_obj_dict["vtk_obj"] = PolyLine()
+
+            geometry = gdf.loc[row].geometry
+            parts = (
+                [geometry]
+                if gdf.geom_type.iloc[row] == "LineString"
+                else geometry.geoms
+            )
+            vtkappend = vtkAppendPolyData()
+            for part in parts:
+                out_xyz = np_array(part.coords, dtype=float)
+                if np_shape(out_xyz)[1] == 2:
+                    out_xyz = np_column_stack(
+                        (out_xyz, np_zeros((np_shape(out_xyz)[0], 1)))
+                    )
+                temp_vtk = PolyLine()
+                temp_vtk.points = out_xyz
+                temp_vtk.auto_cells()
+                vtkappend.AddInputData(temp_vtk)
+            vtkappend.Update()
+            curr_obj_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
+
+            if collection == "Background data":
+                label_col = props_map.get("label")
+                if label_col and label_col in column_names:
+                    curr_obj_dict["vtk_obj"].set_field_data(
+                        name="name", data=gdf[label_col].values
+                    )
+            if curr_obj_dict["vtk_obj"].points_number > 0:
+                target_collection.add_entity_from_dict(curr_obj_dict)
+                imported_count += 1
+            else:
+                self.print_terminal("Empty object")
+        _print_import_summary(self, imported_count, total_entities, invalid_role_count)
+    elif geom_type == "Point":
+        feature_col = props_map.get("feature")
+        group_cols = _get_point_group_columns(props_map, column_names)
+        if feature_col and feature_col in column_names and group_cols:
             imported_count = 0
-            for row in range(gdf.shape[0]):
-                curr_obj_dict = deepcopy(GeologicalCollection().entity_dict)
-                # Use props_map to assign properties
+            for _group_key, group_df in gdf.groupby(group_cols):
+                curr_obj_dict = deepcopy(target_collection.entity_dict)
+                dip_col = orient_map.get("dip")
+                vtk_obj = (
+                    Attitude()
+                    if collection != "Background data"
+                    and dip_col
+                    and dip_col in column_names
+                    else VertexSet()
+                )
                 for pzero_prop, shp_col in props_map.items():
                     if shp_col in column_names:
-                        curr_obj_dict[pzero_prop] = gdf.loc[row, shp_col]
-                curr_obj_dict["topology"] = "PolyLine"
-                curr_obj_dict["vtk_obj"] = PolyLine()
-                if gdf.geom_type[row] == "LineString":
-                    outXYZ = np_array(list(gdf.loc[row].geometry.coords), dtype=float)
-                    if np_shape(outXYZ)[1] == 2:
-                        outZ = np_zeros((np_shape(outXYZ)[0], 1))
-                        outXYZ = np_column_stack((outXYZ, outZ))
-                    curr_obj_dict["vtk_obj"].points = outXYZ
-                    curr_obj_dict["vtk_obj"].auto_cells()
-                elif gdf.geom_type[row] == "MultiLineString":
-                    outXYZ_list = [
-                        np_array(part.coords, dtype=float)
-                        for part in gdf.loc[row].geometry.geoms
-                    ]
-                    vtkappend = vtkAppendPolyData()
-                    for outXYZ in outXYZ_list:
-                        temp_vtk = PolyLine()
-                        # print("outXYZ:\n", outXYZ)
-                        # print("np_shape(outXYZ):\n", np_shape(outXYZ))
-                        if np_shape(outXYZ)[1] == 2:
-                            outZ = np_zeros((np_shape(outXYZ)[0], 1))
-                            # print("outZ:\n", outZ)
-                            outXYZ = np_column_stack((outXYZ, outZ))
-                        # print("outXYZ:\n", outXYZ)
-                        temp_vtk.points = outXYZ
-                        temp_vtk.auto_cells()
-                        vtkappend.AddInputData(temp_vtk)
-                    vtkappend.Update()
-                    curr_obj_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
-                # Create entity from the dictionary and run left_right.
-                if curr_obj_dict["vtk_obj"].points_number > 0:
-                    output_uid = self.geol_coll.add_entity_from_dict(curr_obj_dict)
-                    imported_count += 1
-                else:
-                    print("Empty object")
-                # else:
-                # except:
-                #     print("Invalid object")
-                del curr_obj_dict
-            _print_import_summary(
-                self, imported_count, total_entities, invalid_role_count
-            )
-        elif gdf.geom_type[0] == "Point":
-            feature_col = props_map.get("feature")
-            group_cols = _get_point_group_columns(props_map, column_names)
-            if feature_col and feature_col in column_names and group_cols:
-                imported_count = 0
-                for _group_key, group_df in gdf.groupby(group_cols):
-                    curr_obj_dict = deepcopy(GeologicalCollection().entity_dict)
-                    # Check if we have dip data (Attitude)
-                    dip_col = orient_map.get("dip")
-                    if dip_col and dip_col in gdf.columns:
-                        vtk_obj = Attitude()
-                    else:
-                        vtk_obj = VertexSet()
-                    # Assign entity properties from the first row of the group
-                    for pzero_prop, shp_col in props_map.items():
-                        if shp_col in column_names:
-                            curr_obj_dict[pzero_prop] = group_df.iloc[0][shp_col]
-                    curr_obj_dict["topology"] = "VertexSet"
-                    curr_obj_dict["vtk_obj"] = vtk_obj
-                    # Extract coordinates from all points in the group
-                    outXYZ = np_array(
-                        [np_array(geom.coords[0]) for geom in group_df.geometry]
+                        curr_obj_dict[pzero_prop] = group_df.iloc[0][shp_col]
+                curr_obj_dict["topology"] = "VertexSet"
+                curr_obj_dict["vtk_obj"] = vtk_obj
+                out_xyz = np_array(
+                    [np_array(geom.coords[0]) for geom in group_df.geometry]
+                )
+                if out_xyz.ndim == 1:
+                    out_xyz = out_xyz.reshape(-1, np_shape(out_xyz)[0])
+                if np_shape(out_xyz)[1] == 2:
+                    out_xyz = np_column_stack(
+                        (out_xyz, np_zeros((np_shape(out_xyz)[0], 1)))
                     )
-                    if outXYZ.ndim == 1:
-                        outXYZ = outXYZ.reshape(-1, np_shape(outXYZ)[0])
-                    if np_shape(outXYZ)[1] == 2:
-                        outZ = np_zeros((np_shape(outXYZ)[0], 1))
-                        outXYZ = np_column_stack((outXYZ, outZ))
-                    curr_obj_dict["vtk_obj"].points = outXYZ
+                curr_obj_dict["vtk_obj"].points = out_xyz
 
-                    # Handle dip data using mapping
-                    dip_col = orient_map.get("dip")
+                if isinstance(vtk_obj, Attitude):
                     if dip_col and dip_col in column_names:
-                        dip_values = np_atleast_1d(group_df[dip_col].values)
-                        curr_obj_dict["vtk_obj"].set_point_data("dip", dip_values)
-
-                    # Handle dip_dir or dir (dir needs conversion: dir + 90° = dip_dir)
-                    has_angle_data = False
+                        curr_obj_dict["vtk_obj"].set_point_data(
+                            "dip", np_atleast_1d(group_df[dip_col].values)
+                        )
                     dir_col = orient_map.get("dir")
+                    dip_dir_col = orient_map.get("dip_dir")
+                    has_angle_data = False
                     if dir_col and dir_col in column_names:
-                        # Convert dir to dip_dir by adding 90 degrees (as in original)
                         direction = (group_df[dir_col].values + 90) % 360
                         curr_obj_dict["vtk_obj"].set_point_data(
                             "dip_dir", np_atleast_1d(direction)
                         )
                         has_angle_data = True
-                    else:
-                        # Try dip_dir directly
-                        dip_dir_col = orient_map.get("dip_dir")
-                        if dip_dir_col and dip_dir_col in column_names:
-                            dip_dir_values = np_atleast_1d(group_df[dip_dir_col].values)
-                            curr_obj_dict["vtk_obj"].set_point_data(
-                                "dip_dir", dip_dir_values
-                            )
-                            has_angle_data = True
-
-                    # Calculate normals if we have both dip and angle data
+                    elif dip_dir_col and dip_dir_col in column_names:
+                        curr_obj_dict["vtk_obj"].set_point_data(
+                            "dip_dir", np_atleast_1d(group_df[dip_dir_col].values)
+                        )
+                        has_angle_data = True
                     if dip_col and dip_col in column_names and has_angle_data:
                         normals = dip_directions2normals(
                             curr_obj_dict["vtk_obj"].get_point_data("dip"),
                             curr_obj_dict["vtk_obj"].get_point_data("dip_dir"),
                         )
                         curr_obj_dict["vtk_obj"].set_point_data("Normals", normals)
-                    curr_obj_dict["vtk_obj"].auto_cells()
-                    properties_names = curr_obj_dict["vtk_obj"].point_data_keys
-                    properties_components = [
-                        curr_obj_dict["vtk_obj"].get_point_data_shape(key)[1]
-                        for key in properties_names
-                    ]
-                    curr_obj_dict["properties_names"] = properties_names
-                    curr_obj_dict["properties_components"] = properties_components
-                    self.geol_coll.add_entity_from_dict(curr_obj_dict)
-                    imported_count += 1
-                    del curr_obj_dict
-                _print_import_summary(
-                    self, imported_count, total_entities, invalid_role_count
-                )
-            else:
-                self.print_terminal(
-                    "Incomplete data. Feature property is required but not found in mapping."
-                )
-    elif collection == "Fluid contacts":
-        print(gdf.geom_type[0])
-        if (gdf.geom_type[0] == "LineString") or (
-            gdf.geom_type[0] == "MultiLineString"
-        ):
-            imported_count = 0
-            for row in range(gdf.shape[0]):
-                curr_obj_dict = deepcopy(FluidCollection().entity_dict)
-                for pzero_prop, shp_col in props_map.items():
-                    if shp_col in column_names:
-                        curr_obj_dict[pzero_prop] = gdf.loc[row, shp_col]
-                curr_obj_dict["topology"] = "PolyLine"
-                curr_obj_dict["vtk_obj"] = PolyLine()
 
-                if gdf.geom_type[row] == "LineString":
-                    outXYZ = np_array(list(gdf.loc[row].geometry.coords), dtype=float)
-                    if np_shape(outXYZ)[1] == 2:
-                        outZ = np_zeros((np_shape(outXYZ)[0], 1))
-                        # print("outZ:\n", outZ)
-                        outXYZ = np_column_stack((outXYZ, outZ))
-                    # print("outXYZ:\n", outXYZ)
-                    curr_obj_dict["vtk_obj"].points = outXYZ
-                    curr_obj_dict["vtk_obj"].auto_cells()
-                elif gdf.geom_type[row] == "MultiLineString":
-                    outXYZ_list = [
-                        np_array(part.coords, dtype=float)
-                        for part in gdf.loc[row].geometry.geoms
-                    ]
-                    vtkappend = vtkAppendPolyData()
-                    for outXYZ in outXYZ_list:
-                        temp_vtk = PolyLine()
-                        if np_shape(outXYZ)[1] == 2:
-                            outZ = np_zeros((np_shape(outXYZ)[0], 1))
-                            # print("outZ:\n", outZ)
-                            outXYZ = np_column_stack((outXYZ, outZ))
-                        # print("outXYZ:\n", outXYZ)
-                        temp_vtk.points = outXYZ
-                        temp_vtk.auto_cells()
-                        vtkappend.AddInputData(temp_vtk)
-                    vtkappend.Update()
-                    curr_obj_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
-                # Create entity from the dictionary and run left_right.
-                if curr_obj_dict["vtk_obj"].points_number > 0:
-                    output_uid = self.fluid_coll.add_entity_from_dict(curr_obj_dict)
-                    imported_count += 1
-                else:
-                    print("Empty object")
-                # else:
-                # except:
-                #     print("Invalid object")
-                del curr_obj_dict
-            _print_import_summary(
-                self, imported_count, total_entities, invalid_role_count
-            )
-        elif gdf.geom_type[0] == "Point":
-            feature_col = props_map.get("feature")
-            group_cols = _get_point_group_columns(props_map, column_names)
-            if feature_col and feature_col in column_names and group_cols:
-                imported_count = 0
-                for _group_key, group_df in gdf.groupby(group_cols):
-                    curr_obj_dict = deepcopy(FluidCollection().entity_dict)
-                    dip_col = orient_map.get("dip")
-                    vtk_obj = (
-                        Attitude()
-                        if (dip_col and dip_col in gdf.columns)
-                        else VertexSet()
-                    )
-                    # Assign entity properties from the first row of the group
-                    for pzero_prop, shp_col in props_map.items():
-                        if shp_col in column_names:
-                            curr_obj_dict[pzero_prop] = group_df.iloc[0][shp_col]
-                    curr_obj_dict["topology"] = "VertexSet"
-                    curr_obj_dict["vtk_obj"] = vtk_obj
-                    # Extract coordinates from all points in the group
-                    outXYZ = np_array(
-                        [np_array(geom.coords[0]) for geom in group_df.geometry]
-                    )
-                    if outXYZ.ndim == 1:
-                        outXYZ = outXYZ.reshape(-1, np_shape(outXYZ)[0])
-                    if np_shape(outXYZ)[1] == 2:
-                        outZ = np_zeros((np_shape(outXYZ)[0], 1))
-                        outXYZ = np_column_stack((outXYZ, outZ))
-                    curr_obj_dict["vtk_obj"].points = outXYZ
-
-                    # Handle orientation data for Attitude objects
-                    if isinstance(vtk_obj, Attitude):
-                        # Handle dip data
-                        dip_col = orient_map.get("dip")
-                        if dip_col and dip_col in column_names:
-                            dip_values = np_atleast_1d(group_df[dip_col].values)
-                            curr_obj_dict["vtk_obj"].set_point_data("dip", dip_values)
-
-                        # Handle dip_dir or dir (dir needs conversion: dir + 90° = dip_dir)
-                        has_angle_data = False
-                        dir_col = orient_map.get("dir")
-                        if dir_col and dir_col in column_names:
-                            # Convert dir to dip_dir by adding 90 degrees
-                            direction = (group_df[dir_col].values + 90) % 360
-                            curr_obj_dict["vtk_obj"].set_point_data(
-                                "dip_dir", np_atleast_1d(direction)
-                            )
-                            has_angle_data = True
-                        else:
-                            # Try dip_dir directly
-                            dip_dir_col = orient_map.get("dip_dir")
-                            if dip_dir_col and dip_dir_col in column_names:
-                                dip_dir_values = np_atleast_1d(
-                                    group_df[dip_dir_col].values
-                                )
-                                curr_obj_dict["vtk_obj"].set_point_data(
-                                    "dip_dir", dip_dir_values
-                                )
-                                has_angle_data = True
-
-                        # Calculate normals if we have both dip and angle data
-                        if dip_col and dip_col in column_names and has_angle_data:
-                            normals = dip_directions2normals(
-                                curr_obj_dict["vtk_obj"].get_point_data("dip"),
-                                curr_obj_dict["vtk_obj"].get_point_data("dip_dir"),
-                            )
-                            curr_obj_dict["vtk_obj"].set_point_data("Normals", normals)
-
-                    curr_obj_dict["vtk_obj"].auto_cells()
-                    properties_names = curr_obj_dict["vtk_obj"].point_data_keys
-                    properties_components = [
-                        curr_obj_dict["vtk_obj"].get_point_data_shape(key)[1]
-                        for key in properties_names
-                    ]
-                    curr_obj_dict["properties_names"] = properties_names
-                    curr_obj_dict["properties_components"] = properties_components
-                    self.fluid_coll.add_entity_from_dict(curr_obj_dict)
-                    imported_count += 1
-                    del curr_obj_dict
-                _print_import_summary(
-                    self, imported_count, total_entities, invalid_role_count
-                )
-            else:
-                self.print_terminal(
-                    "Incomplete data. Feature property is required but not found in mapping."
-                )
-    elif collection == "Background data":
-        if (gdf.geom_type[0] == "LineString") or (
-            gdf.geom_type[0] == "MultiLineString"
-        ):
-            imported_count = 0
-            for row in range(gdf.shape[0]):
-                curr_obj_dict = deepcopy(BackgroundCollection().entity_dict)
-                for pzero_prop, shp_col in props_map.items():
-                    if shp_col in column_names:
-                        curr_obj_dict[pzero_prop] = gdf.loc[row, shp_col]
-                curr_obj_dict["topology"] = "PolyLine"
-                curr_obj_dict["vtk_obj"] = PolyLine()
-                if gdf.geom_type[row] == "LineString":
-                    outXYZ = np_array(list(gdf.loc[row].geometry.coords), dtype=float)
-                    # print("outXYZ:\n", outXYZ)
-                    if np_shape(outXYZ)[1] == 2:
-                        outZ = np_zeros((np_shape(outXYZ)[0], 1))
-                        # print("outZ:\n", outZ)
-                        outXYZ = np_column_stack((outXYZ, outZ))
-                    # print("outXYZ:\n", outXYZ)
-                    curr_obj_dict["vtk_obj"].points = outXYZ
-                    curr_obj_dict["vtk_obj"].auto_cells()
-                    # Handle label field if present in mapping
-                    label_col = props_map.get("label")
-                    if label_col and label_col in column_names:
-                        curr_obj_dict["vtk_obj"].set_field_data(
-                            name="name", data=gdf[label_col].values
-                        )
-                elif gdf.geom_type[row] == "MultiLineString":
-                    outXYZ_list = [
-                        np_array(part.coords, dtype=float)
-                        for part in gdf.loc[row].geometry.geoms
-                    ]
-                    vtkappend = vtkAppendPolyData()
-                    for outXYZ in outXYZ_list:
-                        temp_vtk = PolyLine()
-                        # print("outXYZ:\n", outXYZ)
-                        # print("np_shape(outXYZ):\n", np_shape(outXYZ))
-                        if np_shape(outXYZ)[1] == 2:
-                            outZ = np_zeros((np_shape(outXYZ)[0], 1))
-                            # print("outZ:\n", outZ)
-                            outXYZ = np_column_stack((outXYZ, outZ))
-                        # print("outXYZ:\n", outXYZ)
-                        temp_vtk.points = outXYZ
-                        temp_vtk.auto_cells()
-                        vtkappend.AddInputData(temp_vtk)
-                    vtkappend.Update()
-                    # Handle label field if present in mapping
-                    label_col = props_map.get("label")
-                    if label_col and label_col in column_names:
-                        out_vtk = PolyLine()
-                        out_vtk.ShallowCopy(vtkappend.GetOutput())
-                        out_vtk.set_field_data(name="name", data=gdf[label_col].values)
-                        curr_obj_dict["vtk_obj"].ShallowCopy(out_vtk)
-                    else:
-                        curr_obj_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
-
-                if curr_obj_dict["vtk_obj"].points_number > 0:
-                    self.backgrnd_coll.add_entity_from_dict(curr_obj_dict)
-                    imported_count += 1
-                else:
-                    self.print_terminal("Empty object")
-                del curr_obj_dict
-            _print_import_summary(
-                self, imported_count, total_entities, invalid_role_count
-            )
-            # Points
-        elif gdf.geom_type[0] == "Point":
-            feature_col = props_map.get("feature")
-            group_cols = _get_point_group_columns(props_map, column_names)
-            if feature_col and feature_col in column_names and group_cols:
-                imported_count = 0
-                for _group_key, group_df in gdf.groupby(group_cols):
-                    curr_obj_dict = deepcopy(BackgroundCollection().entity_dict)
-                    vtk_obj = VertexSet()
-                    # Assign entity properties from the first row of the group
-                    for pzero_prop, shp_col in props_map.items():
-                        if shp_col in column_names:
-                            curr_obj_dict[pzero_prop] = group_df.iloc[0][shp_col]
-                    curr_obj_dict["topology"] = "VertexSet"
-                    curr_obj_dict["vtk_obj"] = vtk_obj
-                    # Extract coordinates from all points in the group
-                    outXYZ = np_array(
-                        [np_array(geom.coords[0]) for geom in group_df.geometry]
-                    )
-                    if outXYZ.ndim == 1:
-                        outXYZ = outXYZ.reshape(-1, np_shape(outXYZ)[0])
-                    if np_shape(outXYZ)[1] == 2:
-                        outZ = np_zeros((np_shape(outXYZ)[0], 1))
-                        outXYZ = np_column_stack((outXYZ, outZ))
-                    curr_obj_dict["vtk_obj"].points = outXYZ
-                    curr_obj_dict["vtk_obj"].auto_cells()
-                    # Handle label field if present in mapping
+                curr_obj_dict["vtk_obj"].auto_cells()
+                properties_names = curr_obj_dict["vtk_obj"].point_data_keys
+                curr_obj_dict["properties_names"] = properties_names
+                curr_obj_dict["properties_components"] = [
+                    curr_obj_dict["vtk_obj"].get_point_data_shape(key)[1]
+                    for key in properties_names
+                ]
+                if collection == "Background data":
                     label_col = props_map.get("label")
                     if label_col and label_col in column_names:
                         curr_obj_dict["vtk_obj"].set_field_data(
@@ -675,15 +420,12 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                         )
                     else:
                         curr_obj_dict["vtk_obj"].set_field_data(name="name")
-
-                    if curr_obj_dict["vtk_obj"].points_number > 0:
-                        self.backgrnd_coll.add_entity_from_dict(curr_obj_dict)
-                        imported_count += 1
-                    del curr_obj_dict
-                _print_import_summary(
-                    self, imported_count, total_entities, invalid_role_count
-                )
-            else:
-                self.print_terminal(
-                    "Incomplete data. Feature property is required but not found in mapping."
-                )
+                target_collection.add_entity_from_dict(curr_obj_dict)
+                imported_count += 1
+            _print_import_summary(
+                self, imported_count, total_entities, invalid_role_count
+            )
+        else:
+            self.print_terminal(
+                "Incomplete data. Feature property is required but not found in mapping."
+            )
