@@ -63,16 +63,19 @@ def _choose_draw_line_collection(self):
 def draw_line(self):
     def end_digitize(event, input_dict):
         # Signal called to end the digitization of a trace. It returns a new polydata
-        self.plotter.untrack_click_position()
-        traced_pld = (
-            tracer.GetContourRepresentation().GetContourRepresentationAsPolyData()
-        )
-        if traced_pld.GetNumberOfPoints() > 0:
-            input_dict["vtk_obj"].ShallowCopy(traced_pld)
-            source_coll.add_entity_from_dict(input_dict)
-        tracer.EnabledOff()
-        # self.enable_actions()
-        freeze_gui_off(self)
+        try:
+            self.plotter.untrack_click_position()
+            traced_pld = (
+                tracer.GetContourRepresentation().GetContourRepresentationAsPolyData()
+            )
+            if traced_pld.GetNumberOfPoints() > 0:
+                input_dict["vtk_obj"].ShallowCopy(traced_pld)
+                source_coll.add_entity_from_dict(input_dict)
+        finally:
+            try:
+                tracer.EnabledOff()
+            finally:
+                freeze_gui_off(self)
 
     # self.disable_actions()
     source_coll = _choose_draw_line_collection(self)

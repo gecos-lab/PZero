@@ -3,7 +3,7 @@ PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
 from PySide6.QtWidgets import QDockWidget
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 
 # PZero imports____
 from .view_3d import View3D
@@ -106,12 +106,26 @@ class DockWindow(QDockWidget):
         self._dispose_canvas()
         self.deleteLater()
 
+    def event(self, event):
+        if (
+            event.type() in (QEvent.MouseButtonPress, QEvent.MouseButtonDblClick)
+            and getattr(self.parent(), "_active_interaction_view", None) is not None
+            and self.widget() is not None
+            and not self.widget().geometry().contains(event.position().toPoint())
+        ):
+            return True
+        return super().event(event)
+
     def closeEvent(self, event):
         """Override the standard closeEvent method in two cases:
         1) when a window is floating, "closing" it actually brings it back in
         the docking area;
         2) when really closing/deleting a window, self.plotter.close() is needed
         to cleanly close the vtk plotter and disconnect_all_lambda_signals."""
+        # Closing any dock must not interrupt an active drawing or selection.
+        if getattr(self.parent(), "_active_interaction_view", None) is not None:
+            event.ignore()
+            return
         # Case to send floating window back to docking area.
         if self.isFloating():
             self.setFloating(False)

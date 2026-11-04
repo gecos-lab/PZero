@@ -288,12 +288,37 @@ def srf(vectors):
     return result
 
 
+def _freeze_gui(self):
+    """Disable actions and dock controls until the operation finishes."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QAbstractButton, QDockWidget
+
+    self.disable_actions()
+    project = getattr(self, "parent", None)
+    if project is None or callable(project):
+        project = self
+    if (
+        not hasattr(project, "findChildren")
+        or getattr(project, "_active_interaction_view", None) is not None
+    ):
+        return
+    project._active_interaction_view = self
+    self._frozen_gui_project = project
+    self._frozen_dock_buttons = []
+    for dock in project.findChildren(QDockWidget):
+        for name in ("qt_dockwidget_closebutton", "qt_dockwidget_floatbutton"):
+            button = dock.findChild(QAbstractButton, name, Qt.FindDirectChildrenOnly)
+            if button is not None:
+                self._frozen_dock_buttons.append((button, button.isEnabled()))
+                button.setEnabled(False)
+
+
 def freeze_gui_on(func):
     """Decorator function used to start GUI freeze."""
 
     def wrapper(self, *args, **kwargs):
         # Disable GUI before function is called.
-        self.disable_actions()
+        _freeze_gui(self)
         # the wrapped function goes here, with try-except to avoid crashes
         try:
             print(f"Function {func} started.")
@@ -301,12 +326,23 @@ def freeze_gui_on(func):
             print(f"Function {func} ended successfully.")
         except Exception:
             self.print_terminal(f"Function {func} cannot be started.")
+            freeze_gui_off(self)
 
     return wrapper
 
 
 def freeze_gui_off(self):
     """Function used to unfreeze the GUI, in combination with freeze_gui_on."""
+    project = getattr(self, "_frozen_gui_project", None)
+    if project is not None and getattr(project, "_active_interaction_view", None) is self:
+        project._active_interaction_view = None
+        for button, enabled in self._frozen_dock_buttons:
+            try:
+                button.setEnabled(enabled)
+            except RuntimeError:
+                pass  # The dock was deleted while the project was closing.
+        self._frozen_dock_buttons = []
+        self._frozen_gui_project = None
     self.enable_actions()
 
 
@@ -315,7 +351,7 @@ def freeze_gui_onoff(func):
 
     def wrapper(self, *args, **kwargs):
         # Disable GUI before function is called.
-        self.disable_actions()
+        _freeze_gui(self)
         # the wrapped function goes here, with try-except to avoid crashes
         result = None
         try:
@@ -325,7 +361,7 @@ def freeze_gui_onoff(func):
         except Exception:
             self.print_terminal(f"Function {func} cannot be started.")
         # Enable GUI after function is called.
-        self.enable_actions()
+        freeze_gui_off(self)
         return result
 
     return wrapper
