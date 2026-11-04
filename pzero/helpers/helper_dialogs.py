@@ -580,12 +580,13 @@ class progress_dialog(QProgressDialog):
         label_txt=None,
         cancel_txt=None,
         parent=None,
+        window_modality=Qt.WindowModal,
         *args,
         **kwargs,
     ):
         super(progress_dialog, self).__init__(*args, **kwargs)
         self.parent = parent
-        self.setWindowModality(Qt.WindowModal)
+        self.setWindowModality(window_modality)
         self.setAutoReset(True)
         self.setAutoClose(True)
         self.setMinimumDuration(0)
@@ -598,7 +599,7 @@ class progress_dialog(QProgressDialog):
         self.forceShow()
 
     def add_one(self):
-        self.setValue(self.value() + 1)
+        self.setValue(max(self.minimum(), self.value()) + 1)
 
     @property
     def was_canceled(self):
