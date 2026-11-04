@@ -6,7 +6,8 @@ from os import mkdir as os_mkdir
 
 from copy import deepcopy
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
 
 from numpy import cos as np_cos
 from numpy import pi as np_pi
@@ -2310,10 +2311,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def save_project(self):
         # ________________________________________WRITERS TO BE MOVED TO COLLECTIONS
         """Save project to file and folder"""
-        # Get date and time, used to save incremental revisions.
-        from uuid import uuid4
-
-        now = datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "-" + uuid4().hex[:8]
         # Select and open output file and folder. Saving always performs a complete backup since the output folder
         # is named with the present date and time "rev_<now>".
         self.out_file_name = save_file_dialog(
@@ -2321,14 +2318,21 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         if not self.out_file_name:
             return
-        out_dir_name = self.out_file_name[:-3] + "_p0/rev_" + now
-        self.print_terminal(
-            f"Saving project as VTK files and csv tables with metada and legend.\nIn file/folder: {self.out_file_name}/{out_dir_name}\n"
-        )
         # Create the folder if it does not exist already.
         if not os_path.isdir(self.out_file_name[:-3] + "_p0"):
             os_mkdir(self.out_file_name[:-3] + "_p0")
-        os_mkdir(out_dir_name)
+        revision_time = datetime.now()
+        while True:
+            now = revision_time.strftime("%Y-%m-%d-%H-%M-%S")
+            out_dir_name = self.out_file_name[:-3] + "_p0/rev_" + now
+            try:
+                os_mkdir(out_dir_name)
+                break
+            except FileExistsError:
+                revision_time += timedelta(seconds=1)
+        self.print_terminal(
+            f"Saving project as VTK files and csv tables with metada and legend.\nIn file/folder: {self.out_file_name}/{out_dir_name}\n"
+        )
         was_enabled = self.isEnabled()
         self.setEnabled(False)
         try:
@@ -2343,6 +2347,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         finally:
             self.setEnabled(was_enabled)
         self.print_terminal("Project saved successfully.")
+        return True
 
     def _save_project_revision(self, out_dir_name):
         """Write all payloads before publishing the project's revision pointer."""
@@ -2406,6 +2411,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             write_checked(pd_writer)
             prgs_bar.add_one()
 
+        prgs_bar.close()
+
         # Save DOM collection table to JSON file and entities as VTK.
         out_cols = list(self.dom_coll.df.columns)
         out_cols.remove("vtk_obj")
@@ -2455,6 +2462,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 pd_writer.SetInputData(self.dom_coll.get_uid_vtk_obj(uid))
                 write_checked(pd_writer)
                 prgs_bar.add_one()
+
+        prgs_bar.close()
 
         # Save image collection table to JSON file and entities as VTK.
         out_cols = list(self.image_coll.df.columns)
@@ -2519,8 +2528,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     label_txt="Writing seismic snapshot...",
                     cancel_txt=None,
                     parent=self,
+                    window_modality=Qt.NonModal,
                 )
-                seismic_progress.setWindowModality(Qt.NonModal)
                 # Progress dialogs process paint events; exclude input while a
                 # snapshot is being written so the geometry cannot be edited.
                 from PySide6.QtCore import QCoreApplication, QEventLoop
@@ -2564,6 +2573,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     json_dump(seismic_metadata, f, indent=2)
                 prgs_bar.add_one()
 
+        prgs_bar.close()
+
         # Save mesh3d collection table to JSON file and entities as VTK.
         out_cols = list(self.mesh3d_coll.df.columns)
         out_cols.remove("vtk_obj")
@@ -2597,6 +2608,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 write_checked(ug_writer)
             prgs_bar.add_one()
 
+        prgs_bar.close()
+
         # Save boundaries collection table to CSV and JSON files.
         out_cols = list(self.boundary_coll.df.columns)
         out_cols.remove("vtk_obj")
@@ -2617,6 +2630,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.SetInputData(self.boundary_coll.get_uid_vtk_obj(uid))
             write_checked(pd_writer)
             prgs_bar.add_one()
+
+        prgs_bar.close()
 
         # Save wells collection table to CSV and JSON files.
 
@@ -2640,6 +2655,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             write_checked(pd_writer)
             prgs_bar.add_one()
 
+        prgs_bar.close()
+
         # Save fluids collection table to CSV and JSON files.
         out_cols = list(self.fluid_coll.df.columns)
         out_cols.remove("vtk_obj")
@@ -2661,6 +2678,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             write_checked(pd_writer)
             prgs_bar.add_one()
 
+        prgs_bar.close()
+
         # Save Backgrounds collection table to CSV and JSON files.
         out_cols = list(self.backgrnd_coll.df.columns)
         out_cols.remove("vtk_obj")
@@ -2681,6 +2700,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             pd_writer.SetInputData(self.backgrnd_coll.get_uid_vtk_obj(uid))
             write_checked(pd_writer)
             prgs_bar.add_one()
+
+        prgs_bar.close()
 
     def save_custom_tables(self, out_dir_name: str = None):
         """Persist user-defined tables alongside the project revision."""
@@ -2830,7 +2851,59 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def open_project(self):
         """Opens a project previously saved to disk."""
-        # Create empty containers. This clears all previous objects and also allows for missing tables below.
+        in_file_name = open_file_dialog(
+            parent=self, caption="Open PZero project", filter="PZero (*.p0)"
+        )
+        if not in_file_name:
+            return
+
+        try:
+            with open(in_file_name, "rt") as project_file:
+                lines = project_file.readlines()
+            last_revision = lines[2].strip()
+            test_epsg = lines[4].strip() if len(lines) > 4 else "no_epsg"
+            revision_root = Path(in_file_name[:-3] + "_p0")
+            revisions = sorted(
+                (item.name for item in revision_root.iterdir()
+                 if item.is_dir() and item.name.startswith("rev_")),
+                reverse=True,
+            )
+            if (
+                last_revision
+                and Path(last_revision).name == last_revision
+                and (revision_root / last_revision).is_dir()
+                and last_revision not in revisions
+            ):
+                revisions.insert(0, last_revision)
+        except (OSError, IndexError) as error:
+            self.print_terminal(f"Could not open project revisions: {error}")
+            return
+
+        if not revisions:
+            self.print_terminal("Could not open project: no saved revisions found.")
+            return
+        if last_revision in revisions:
+            revisions.remove(last_revision)
+            revisions.insert(0, last_revision)
+        labels = [
+            f"{revision} (last saved)" if revision == last_revision else revision
+            for revision in revisions
+        ]
+        selected = input_combo_dialog(
+            parent=self,
+            title="Open project version",
+            label="Choose a saved version:",
+            choice_list=labels,
+        )
+        if selected is None:
+            return
+        rev_name = revisions[labels.index(selected)]
+        in_dir_name = str(revision_root / rev_name)
+        if not os_path.isdir(in_dir_name):
+            self.print_terminal(f"Could not open project: revision folder is missing: {in_dir_name}")
+            return
+
+        # Only clear the current project after a project and revision have been chosen.
         current_entities_n = (
             self.backgrnd_coll.get_number_of_entities
             + self.boundary_coll.get_number_of_entities
@@ -2851,34 +2924,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 reject_role="Abort",
             )
             if confirm_new == 0:
-                self.save_project()
+                if not self.save_project():
+                    return
             elif confirm_new != 1:
                 return
 
         self.create_empty()
-
-        # Select and open project file.
-        in_file_name = open_file_dialog(
-            parent=self, caption="Open PZero project", filter=("PZero (*.p0)")
-        )
-        if not in_file_name:
-            return
         self.out_file_name = in_file_name
 
         # use try - except to avoid crashing in case a corrupted project is opened
         try:
-            # Read name of last revision in project file. This opens the last revision.
-            # To open a different one, edit the project file.
-            # ___________________________________ IN THE FUTURE an option to open a specific revision could be added
-            fin = open(in_file_name, "rt")
-            lines = fin.readlines()
-            rev_name = lines[2].strip()
-            try:
-                test_epsg = lines[4].strip()
-            except:
-                test_epsg = "no_epsg"
-            fin.close()
-            in_dir_name = in_file_name[:-3] + "_p0/" + rev_name
             self.print_terminal(
                 f"Opening project/revision : {in_file_name}/{rev_name}\n"
             )
