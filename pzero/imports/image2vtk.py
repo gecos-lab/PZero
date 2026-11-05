@@ -35,10 +35,6 @@ supported_image_extensions = {".tif", ".tiff", ".jpg", ".jpeg", ".png"}
 def open_supported_image(in_file_name=None):
     """Open supported raster formats and validate their band count."""
     extension = os_path.splitext(in_file_name)[1].lower()
-    if extension == ".bmp":
-        raise ValueError(
-            "BMP is not supported. Accepted formats: TIFF/GeoTIFF, JPEG, PNG."
-        )
     if extension not in supported_image_extensions:
         raise ValueError(
             "Unsupported image format. Accepted formats: TIFF/GeoTIFF, JPEG, PNG."
