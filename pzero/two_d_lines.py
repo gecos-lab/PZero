@@ -35,7 +35,7 @@ from .helpers.helper_dialogs import (
     message_dialog,
 )
 from .helpers.helper_widgets import Editor, Tracer, Tracer3D
-from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
+from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off, set_escape_callback
 from .entities_factory import PolyLine, XsPolyLine
 
 from .views.view_map import ViewMap
@@ -68,7 +68,7 @@ def draw_line(self):
             traced_pld = (
                 tracer.GetContourRepresentation().GetContourRepresentationAsPolyData()
             )
-            if traced_pld.GetNumberOfPoints() > 0:
+            if traced_pld.GetNumberOfPoints() >= 2:
                 input_dict["vtk_obj"].ShallowCopy(traced_pld)
                 source_coll.add_entity_from_dict(input_dict)
         finally:
@@ -137,6 +137,7 @@ def draw_line(self):
     self.plotter.track_click_position(
         side="right", callback=lambda event: end_digitize(event, line_dict)
     )
+    set_escape_callback(self, lambda: end_digitize(None, line_dict))
 
 
 @freeze_gui_on
@@ -326,6 +327,7 @@ def draw_line_3d(self):
     observer_tags["right"] = self.plotter.iren.interactor.AddObserver(
         "RightButtonPressEvent", on_right_click
     )
+    set_escape_callback(self, lambda: on_right_click(None, None))
 
     self.print_terminal(
         "3D Line Drawing: Left-click on surfaces to add points, Right-click to finish"
@@ -416,6 +418,7 @@ def edit_line(self):
     self.plotter.track_click_position(
         side="right", callback=lambda event: end_edit(event, sel_uid)
     )
+    set_escape_callback(self, lambda: end_edit(None, sel_uid))
 
 
 @freeze_gui_onoff
@@ -595,6 +598,7 @@ def extend_line(self):
     self.plotter.track_click_position(
         side="right", callback=lambda event: end_edit(event, sel_uid)
     )
+    set_escape_callback(self, lambda: end_edit(None, sel_uid))
 
 
 @freeze_gui_onoff
@@ -737,7 +741,7 @@ def split_line_line(self):
     self.clear_selection()
 
 
-@freeze_gui_onoff
+@freeze_gui_on
 def split_line_existing_point(self):
     # Split line at picked point in 2D work coordinates (map XY or xsection UV).
     def end_select(event, uid):
@@ -859,6 +863,7 @@ def split_line_existing_point(self):
         self, selected_uids=self.selected_uids[:1]
     )
     if source_coll is None:
+        freeze_gui_off(self)
         return
     # If more than one line is selected, keep the first
     sel_uid = self.selected_uids[0]
@@ -867,9 +872,20 @@ def split_line_existing_point(self):
     selector = Editor(self)
     selector.EnabledOn()
     selector.initialize(line, "select")
-    self.plotter.track_click_position(
-        side="right", callback=lambda event: end_select(event, sel_uid)
-    )
+
+    def finish_selection():
+        try:
+            if selector.point_selected:
+                end_select(None, sel_uid)
+        finally:
+            self.plotter.untrack_click_position(side="right")
+            self.plotter.untrack_click_position(side="left")
+            selector.EnabledOff()
+            freeze_gui_off(self)
+
+    # Use the same cleanup for right-click and Escape, including invalid picks.
+    self.plotter.track_click_position(side="right", callback=lambda event: finish_selection())
+    set_escape_callback(self, finish_selection)
 
 
 def split_line_vector(self, vector):

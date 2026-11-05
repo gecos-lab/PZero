@@ -23,7 +23,7 @@ from pyvista import PointSet as pvPointSet
 
 # PZero imports____
 from .abstract_base_view import BaseView
-from ..helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
+from ..helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off, set_escape_callback
 from ..orientation_analysis import get_dip_dir_vectors
 from ..helpers.helper_dialogs import input_one_value_dialog, save_file_dialog
 from ..helpers.screenshot_dialog import ScreenshotExportDialog
@@ -1364,6 +1364,7 @@ class ViewVTK(BaseView):
         # self.plotter.iren.interactor.AddObserver('KeyPressEvent',self.clear_selected)
         self.plotter.track_click_position(self.end_pick)
         self.plotter.add_key_event("c", self.clear_selection)
+        set_escape_callback(self, lambda: self.end_pick(None))
 
     def _remove_actor_pick_observer(self):
         """Stop actor selection without removing the camera widget's click handlers."""

@@ -55,6 +55,7 @@ from pzero.helpers.helper_functions import (
     freeze_gui_onoff,
     freeze_gui_on,
     freeze_gui_off,
+    set_escape_callback,
 )
 from .AbstractCollection import BaseCollection
 
@@ -947,6 +948,7 @@ def boundary_from_three_points(self, vector):
         freeze_gui_off(self)
 
     self.plotter.track_click_position(side="left", callback=end_third_point)
+    set_escape_callback(self, lambda: end_third_point(None))
 
 
 class BoundaryCollection(BaseCollection):

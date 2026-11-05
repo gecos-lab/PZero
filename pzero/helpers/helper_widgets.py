@@ -94,13 +94,24 @@ class Vector(vtkContourWidget):
     def check_length(self, event1, event2):
         n_nodes = self.GetContourRepresentation().GetNumberOfNodes()
         if n_nodes == 3:
-            pld = self.GetContourRepresentation().GetContourRepresentationAsPolyData()
+            self.finish()
+
+    def finish(self):
+        """Apply a completed vector, or stop an incomplete one."""
+        from pzero.helpers.helper_functions import freeze_gui_off
+
+        active_callback = getattr(self._parent, "_escape_callback", None)
+        try:
+            if self.GetContourRepresentation().GetNumberOfNodes() < 2:
+                return
             self.GetContourRepresentation().GetNthNodeWorldPosition(0, self.p1)
             self.GetContourRepresentation().GetNthNodeWorldPosition(1, self.p2)
             self.deltas = np_array(self.p2) - np_array(self.p1)
             self.length = sqrt(
                 self.deltas[0] ** 2 + self.deltas[1] ** 2 + self.deltas[2] ** 2
             )
+            if not self.length:
+                return
             self.azimuth = degrees(atan2(self.deltas[0], self.deltas[1])) % 360
             self.line = pv_lines_from_points(np_array([self.p1, self.p2]))
             # self.points = np_array(pld.GetPoints().GetData())[:2, :]
@@ -110,6 +121,13 @@ class Vector(vtkContourWidget):
             self.EnabledOff()
             # invoke callback with original parent
             self.run_function(self._parent, vector=self)
+        finally:
+            self.EnabledOff()
+            if (
+                getattr(self._parent, "_frozen_gui_project", None) is not None
+                and getattr(self._parent, "_escape_callback", None) is active_callback
+            ):
+                freeze_gui_off(self._parent)
 
 
 class Tracer3D:
@@ -301,6 +319,7 @@ class Editor(vtkContourWidget):
         self.pos_fin = [0, 0]
         self.active_pos = [0, 0, 0]
         self.active_ind = 0
+        self.point_selected = False
         # hold event translator in Python attribute to avoid VTK attribute conflict
         self._event_translator = self.GetEventTranslator()
 
@@ -364,6 +383,7 @@ class Editor(vtkContourWidget):
     def select_point(self, event=None):
         self.GetContourRepresentation().ActivateNode(event)
         self.GetContourRepresentation().GetActiveNodeWorldPosition(self.active_pos)
+        self.point_selected = True
         self.Render()
 
     def switch_active(self):

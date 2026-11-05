@@ -311,6 +311,68 @@ def _freeze_gui(self):
             if button is not None:
                 self._frozen_dock_buttons.append((button, button.isEnabled()))
                 button.setEnabled(False)
+    _install_escape_handler(self, project)
+
+
+def set_escape_callback(self, callback):
+    """Set the active tool's finish action for the decorator's Escape handler."""
+    self._escape_callback = callback
+
+
+def _install_escape_handler(self, project):
+    """Protect docks and handle Escape while a freeze decorator is active."""
+    from PySide6.QtCore import QEvent, QObject, Qt
+    from PySide6.QtWidgets import QApplication, QDockWidget, QWidget
+
+    app = QApplication.instance()
+    if app is None:
+        return
+    self._escape_callback = None
+
+    class EscapeFilter(QObject):
+        def finish(filter_self):
+            try:
+                while getattr(self, "_escape_callback", None) is not None:
+                    callback = self._escape_callback
+                    self._escape_callback = None
+                    callback()
+            finally:
+                if (
+                    getattr(self, "_frozen_gui_project", None) is project
+                    and getattr(self, "_escape_filter", None) is filter_self
+                ):
+                    freeze_gui_off(self)
+
+        def eventFilter(filter_self, obj, event):
+            if not isinstance(obj, QWidget):
+                return False
+            widget = obj
+            while widget is not None and widget is not project:
+                widget = QObject.parent(widget)
+            if widget is None:
+                return False
+            if isinstance(obj, QDockWidget):
+                if event.type() == QEvent.Close:
+                    event.ignore()
+                    return True
+                if (
+                    event.type() in (QEvent.MouseButtonPress, QEvent.MouseButtonDblClick)
+                    and obj.widget() is not None
+                    and not obj.widget().geometry().contains(event.position().toPoint())
+                ):
+                    return True
+            if (
+                event.type() != QEvent.KeyPress
+                or event.key() != Qt.Key_Escape
+                or app.activeModalWidget() is not None
+                or getattr(self, "_escape_callback", None) is None
+            ):
+                return False
+            filter_self.finish()
+            return True
+
+    self._escape_filter = EscapeFilter()
+    app.installEventFilter(self._escape_filter)
 
 
 def freeze_gui_on(func):
@@ -333,6 +395,15 @@ def freeze_gui_on(func):
 
 def freeze_gui_off(self):
     """Function used to unfreeze the GUI, in combination with freeze_gui_on."""
+    from PySide6.QtWidgets import QApplication
+
+    escape_filter = getattr(self, "_escape_filter", None)
+    if escape_filter is not None:
+        app = QApplication.instance()
+        if app is not None:
+            app.removeEventFilter(escape_filter)
+        self._escape_filter = None
+    self._escape_callback = None
     project = getattr(self, "_frozen_gui_project", None)
     if project is not None and getattr(project, "_active_interaction_view", None) is self:
         project._active_interaction_view = None

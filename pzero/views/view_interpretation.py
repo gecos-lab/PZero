@@ -39,7 +39,7 @@ from ..helpers.helper_dialogs import (
     options_dialog,
 )
 from ..helpers.helper_widgets import Editor, Tracer
-from ..helpers.helper_functions import freeze_gui_off, freeze_gui_on
+from ..helpers.helper_functions import freeze_gui_off, freeze_gui_on, set_escape_callback
 from ..imports.segy_reader import get_seismic_metadata, set_seismic_metadata
 
 
@@ -1160,7 +1160,7 @@ class ViewInterpretation(ViewMap):
         # Closing settings
         self.plotter.reset_key_events()
         self.selected_uids = self.parent.selected_uids
-        self.enable_actions()
+        freeze_gui_off(self)
 
     def _populate_seismic_cache(self):
         """Pre-populate the seismic cache (dimensions, bounds) for horizon scanning.
@@ -3968,6 +3968,7 @@ class ViewInterpretation(ViewMap):
                     editor=editor,
                 ),
             )
+            set_escape_callback(self, lambda: self._finalize_multipart_line_edit(selection=selection, editor=editor))
             return
 
         try:
@@ -4000,6 +4001,7 @@ class ViewInterpretation(ViewMap):
                 editor=editor,
             ),
         )
+        set_escape_callback(self, lambda: self._finalize_standard_line_edit(uid=sel_uid, editor=editor))
 
     def _build_propagated_entity_name(self, seed_uid, slice_indices, fallback_name):
         """
@@ -7091,6 +7093,7 @@ class ViewInterpretation(ViewMap):
         self.slice_actor = None
         self.update_slice()
 
+    @freeze_gui_on
     def draw_interpretation_line(self):
         """Draw a line on the current seismic slice. The line will be snapped to the slice plane."""
 
@@ -7100,7 +7103,7 @@ class ViewInterpretation(ViewMap):
             traced_pld = (
                 tracer.GetContourRepresentation().GetContourRepresentationAsPolyData()
             )
-            if traced_pld.GetNumberOfPoints() > 0:
+            if traced_pld.GetNumberOfPoints() >= 2:
                 # Copy the traced polydata to our vtk object first (like standard draw_line)
                 input_dict["vtk_obj"].ShallowCopy(traced_pld)
 
@@ -7157,13 +7160,11 @@ class ViewInterpretation(ViewMap):
                 pass
 
             tracer.EnabledOff()
-            self.enable_actions()
-
-        self.disable_actions()
+            freeze_gui_off(self)
 
         if not self.current_seismic_uid:
             self.print_terminal("Please select a structured volume first!")
-            self.enable_actions()
+            freeze_gui_off(self)
             return
 
         # Create deepcopy of the geological entity dictionary.
@@ -7195,7 +7196,7 @@ class ViewInterpretation(ViewMap):
         )
         # Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits
         if line_dict_updt is None:
-            self.enable_actions()
+            freeze_gui_off(self)
             return
         # Getting the values that have been typed by the user through the widget
         for key in line_dict_updt:
@@ -7243,6 +7244,7 @@ class ViewInterpretation(ViewMap):
         self.plotter.track_click_position(
             side="right", callback=lambda event: end_digitize(event, line_dict)
         )
+        set_escape_callback(self, lambda: end_digitize(None, line_dict))
 
     def add_picking_plane(self, expansion_factor=1.0):
         """Add a transparent plane at the current slice position for picking during line drawing."""
@@ -10352,6 +10354,7 @@ class ViewInterpretation(ViewMap):
 
         return None
 
+    @freeze_gui_on
     def _start_semi_auto_tracking(self, mode: str):
         """
         Start semi-auto tracking interaction (waypoints + A*).
@@ -10359,17 +10362,15 @@ class ViewInterpretation(ViewMap):
         Args:
             mode: 'horizon' or 'fault'
         """
-        self.disable_actions()
-
         if not self.current_seismic_uid:
             self.print_terminal("Please select a structured volume first!")
-            self.enable_actions()
+            freeze_gui_off(self)
             return
 
         slice_data, origin, spacing, axis_info = self.get_slice_as_2d_array()
         if slice_data is None:
             self.print_terminal("Could not extract slice data for auto-tracking!")
-            self.enable_actions()
+            freeze_gui_off(self)
             return
 
         self._autotrack_mode = mode
@@ -10467,7 +10468,7 @@ class ViewInterpretation(ViewMap):
         line_dict_updt = multiple_input_dialog(title=title, input_dict=line_dict_in)
 
         if line_dict_updt is None:
-            self.enable_actions()
+            freeze_gui_off(self)
             return
 
         for key in line_dict_updt:
@@ -10648,6 +10649,17 @@ class ViewInterpretation(ViewMap):
 
         self.plotter.track_click_position(side="left", callback=on_point_picked)
         self.plotter.track_click_position(side="right", callback=on_finish)
+
+        def finish_on_escape():
+            if len(self._autotrack_points) >= 2:
+                on_finish(None)
+            else:
+                self.plotter.untrack_click_position(side="left")
+                self.plotter.untrack_click_position(side="right")
+                self._cleanup_autotrack()
+                freeze_gui_off(self)
+
+        set_escape_callback(self, finish_on_escape)
 
     def get_slice_as_2d_array(self):
         """
@@ -11305,13 +11317,12 @@ class ViewInterpretation(ViewMap):
 
         self.plotter.render()
 
+    @freeze_gui_on
     def draw_connector_line(self):
         """Create a straight waypoint connector that may be picked outside the seismic bounds."""
-        self.disable_actions()
-
         if not self.current_seismic_uid:
             self.print_terminal("Please select a structured volume first!")
-            self.enable_actions()
+            freeze_gui_off(self)
             return
 
         line_dict = deepcopy(self.parent.geol_coll.entity_dict)
@@ -11333,7 +11344,7 @@ class ViewInterpretation(ViewMap):
             title="Create Connector", input_dict=line_dict_in
         )
         if line_dict_updt is None:
-            self.enable_actions()
+            freeze_gui_off(self)
             return
 
         for key in line_dict_updt:
@@ -11479,10 +11490,11 @@ class ViewInterpretation(ViewMap):
                 self.print_terminal(traceback.format_exc())
             finally:
                 self._cleanup_connector_pick()
-                self.enable_actions()
+                freeze_gui_off(self)
 
         self.plotter.track_click_position(side="left", callback=on_point_picked)
         self.plotter.track_click_position(side="right", callback=on_finish)
+        set_escape_callback(self, lambda: on_finish(None))
 
     def propagate_connector(self):
         """Copy a connector seed to adjacent slices without seismic attribute tracking."""
@@ -12038,7 +12050,7 @@ class ViewInterpretation(ViewMap):
 
         finally:
             self._cleanup_autotrack()
-            self.enable_actions()
+            freeze_gui_off(self)
 
     def _cleanup_autotrack(self):
         """Clean up temporary auto-tracking state and markers."""

@@ -7,7 +7,7 @@ from PySide6.QtCore import QEvent, Qt
 
 # PZero imports____
 from .abstract_view_vtk import ViewVTK
-from ..helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
+from ..helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off, set_escape_callback
 from ..helpers.helper_widgets import Vector
 
 
@@ -246,3 +246,4 @@ class View2D(ViewVTK):
         # self.disable_actions()
         vector = Vector(parent=self, pass_func=func)
         vector.EnabledOn()
+        set_escape_callback(self, vector.finish)
