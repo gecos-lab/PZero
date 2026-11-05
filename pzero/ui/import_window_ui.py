@@ -351,7 +351,7 @@ class Ui_ImportOptionsWindow(object):
             QCoreApplication.translate("ImportOptionsWindow", "<space>", None)
         )
         self.PreviewButton.setText(
-            QCoreApplication.translate("ImportOptionsWindow", "Preview", None)
+            QCoreApplication.translate("ImportOptionsWindow", "Refresh", None)
         )
 
     # retranslateUi

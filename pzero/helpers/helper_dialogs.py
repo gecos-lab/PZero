@@ -713,6 +713,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
         self.PreviewButton.clicked.connect(
             lambda: self.preview_file(self.input_data_df)
         )
+        self.PreviewButton.hide()
 
         self.ConfirmBox.accepted.connect(lambda: self.export_data())
         self.ConfirmBox.rejected.connect(self.close)
@@ -847,6 +848,7 @@ class import_dialog(QMainWindow, Ui_ImportOptionsWindow):
                 else:
                     self.rename_dict[i] = "N.a."
             self.assign_data()  #  Open the assign data ui.
+            self.preview_file(self.input_data_df)
         except ValueError:
             print("Could not preview: invalid column, row or separator")
         except FileNotFoundError:
