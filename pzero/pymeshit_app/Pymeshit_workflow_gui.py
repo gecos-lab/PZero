@@ -10040,11 +10040,13 @@ class MeshItWorkflowGUI(QWidget):
                         # OPTIMIZED: Use original triangulation vertices as REFERENCE points
                         # for Isomap fitting (learns the fold geometry from dense mesh)
                         reference_points = None
+                        reference_triangles = None
                         tri_result = ds.get("triangulation_result", {})
                         if "vertices" in tri_result and len(tri_result["vertices"]) > 0:
                             reference_points = np.asarray(
                                 tri_result["vertices"], dtype=float
                             )
+                            reference_triangles = tri_result.get("triangles")
                             logger.info(
                                 f"Isomap: Using {len(reference_points)} reference points from original triangulation"
                             )
@@ -10053,6 +10055,9 @@ class MeshItWorkflowGUI(QWidget):
                             reference_points = np.asarray(
                                 ds.get("points", []), dtype=float
                             )
+                            reference_triangles = ds.get(
+                                "source_triangulation_result", {}
+                            ).get("triangles")
                             logger.info(
                                 f"Isomap: Using {len(reference_points)} reference points from raw dataset"
                             )
@@ -10096,6 +10101,7 @@ class MeshItWorkflowGUI(QWidget):
                                 min_angle=cfg["min_angle"],
                                 uniform=self.mesh_uniform_checkbox.isChecked(),
                                 reference_points_3d=reference_points,  # Dense points for Isomap fitting
+                                reference_triangles=reference_triangles,
                                 smoothing=tps_smoothing,  # Smoothing parameter
                                 interpolator=interp_method,  # TPS or IDW from GUI combo
                                 well_feature_points_3d=(
@@ -13618,6 +13624,9 @@ segmentation, triangulation, and visualization.
                         min_angle=min_angle,
                         uniform=uniform,
                         reference_points_3d=reference_points,  # All raw points for Isomap fitting
+                        reference_triangles=dataset.get(
+                            "source_triangulation_result", {}
+                        ).get("triangles"),
                         smoothing=smoothing,  # Smoothing parameter
                         interpolator=interp_label,  # TPS or IDW from GUI combo
                     )
@@ -15963,6 +15972,15 @@ segmentation, triangulation, and visualization.
                         "scenario": getattr(record, "scenario", ""),
                         "loaded_as_points": True,
                     }
+                    # Retain connectivity for Isomap even when displaying only points.
+                    tri_data = self.pzero_bridge.load_triangles(
+                        record.collection_key, record.uid
+                    )
+                    if tri_data is not None:
+                        dataset["source_triangulation_result"] = {
+                            "vertices": points,
+                            "triangles": tri_data[1],
+                        }
                     if extension_factor > 0.0:
                         dataset["extension_factor"] = extension_factor
                         dataset["surface_extension_factor"] = extension_factor

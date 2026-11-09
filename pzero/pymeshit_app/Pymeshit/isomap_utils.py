@@ -17,6 +17,8 @@ import numpy as np
 import logging
 import time
 from typing import Optional, Tuple, Dict, List, Any
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
 from scipy.spatial import ConvexHull, cKDTree
 from scipy.spatial.distance import pdist
 
@@ -111,7 +113,9 @@ class IsomapTriangulator:
 
         logger.info(f"IsomapTriangulator initialized with n_neighbors={n_neighbors}")
 
-    def fit(self, points_3d: np.ndarray) -> "IsomapTriangulator":
+    def fit(
+        self, points_3d: np.ndarray, triangles: Optional[np.ndarray] = None
+    ) -> "IsomapTriangulator":
         """
         Fit the Isomap model to the 3D point cloud.
 
@@ -119,6 +123,8 @@ class IsomapTriangulator:
 
         Args:
             points_3d: (N, 3) array of 3D surface points.
+            triangles: Optional (T, 3) connectivity into points_3d. Mesh edges
+                       prevent shortcuts between nearby limbs of the same fold.
 
         Returns:
             self: For method chaining.
@@ -158,20 +164,23 @@ class IsomapTriangulator:
         # Build 3D KDTree for lookups
         self._tree_3d = cKDTree(self.points_3d)
 
+        # Reject spatial neighbours across nearby fold limbs before Isomap.
+        surface_graph = self._build_surface_graph(effective_neighbors, triangles)
+
         # Fit Isomap
         fit_start = time.perf_counter()
         try:
             self.isomap_model = Isomap(
-                n_neighbors=effective_neighbors,
+                n_neighbors=None,
+                radius=np.inf,
                 n_components=self.n_components,
-                metric="euclidean",
+                metric="precomputed",
                 p=2,
-                neighbors_algorithm="kd_tree",
                 n_jobs=-1,
                 eigen_solver="arpack",
                 path_method="D",
             )
-            self.points_2d = self.isomap_model.fit_transform(self.points_3d)
+            self.points_2d = self.isomap_model.fit_transform(surface_graph)
 
         except Exception as e:
             logger.error(f"Isomap fitting failed: {e}")
@@ -191,6 +200,80 @@ class IsomapTriangulator:
         )
 
         return self
+
+    def _build_surface_graph(
+        self, n_neighbors: int, triangles: Optional[np.ndarray] = None
+    ) -> csr_matrix:
+        """Prefer mesh edges; filter cross-tangent k-NN links for point clouds."""
+        from sklearn.neighbors import sort_graph_by_row_values
+
+        shape = (len(self.points_3d), len(self.points_3d))
+        mesh_graph = None
+        if triangles is not None and np.size(triangles):
+            triangles = np.asarray(triangles, dtype=np.intp)
+            edges = np.unique(
+                np.sort(
+                    np.vstack(
+                        [
+                            triangles[:, [0, 1]],
+                            triangles[:, [1, 2]],
+                            triangles[:, [2, 0]],
+                        ]
+                    ),
+                    axis=1,
+                ),
+                axis=0,
+            )
+            lengths = np.linalg.norm(
+                self.points_3d[edges[:, 0]] - self.points_3d[edges[:, 1]], axis=1
+            )
+            mesh_graph = csr_matrix(
+                (np.maximum(lengths, 1e-12), (edges[:, 0], edges[:, 1])), shape=shape
+            )
+            mesh_graph = mesh_graph.maximum(mesh_graph.T)
+            count, labels = connected_components(mesh_graph)
+            if count == 1:
+                return sort_graph_by_row_values(mesh_graph, warn_when_not_sorted=False)
+
+        dists, indices = self._tree_3d.query(self.points_3d, k=n_neighbors + 1)
+        # Use a small PCA neighbourhood so normals follow the fold locally.
+        local = self.points_3d[indices[:, : min(8, n_neighbors + 1)]]
+        local -= local.mean(axis=1, keepdims=True)
+        _, axes = np.linalg.eigh(np.einsum("nki,nkj->nij", local, local))
+        normals = axes[:, :, 0]
+
+        neighbours = indices[:, 1:]
+        lengths = dists[:, 1:]
+        offsets = self.points_3d[neighbours] - self.points_3d[:, None, :]
+        normal_offsets = np.maximum(
+            np.abs(np.einsum("nki,ni->nk", offsets, normals)),
+            np.abs(np.einsum("nki,nki->nk", offsets, normals[neighbours])),
+        )
+        keep = normal_offsets <= 0.5 * lengths
+        rows = np.broadcast_to(
+            np.arange(len(self.points_3d))[:, None], neighbours.shape
+        )
+        if mesh_graph is not None:
+            # Bridge disconnected source pieces only, never shortcut a fold
+            # that is already connected through its original triangles.
+            keep &= labels[rows] != labels[neighbours]
+        graph = csr_matrix(
+            (np.maximum(lengths[keep], 1e-12), (rows[keep], neighbours[keep])),
+            shape=shape,
+        )
+        graph = graph.maximum(graph.T)
+        if mesh_graph is not None:
+            graph = graph.maximum(mesh_graph)
+        # Never let sklearn repair gaps with unfiltered cross-limb links.
+        if connected_components(graph, return_labels=False) != 1:
+            raise ValueError(
+                "Isomap surface graph is disconnected after fold filtering; "
+                "use denser surface points or more neighbours."
+            )
+        logger.info(
+            "Isomap: rejected %d spatial neighbour links", np.count_nonzero(~keep)
+        )
+        return sort_graph_by_row_values(graph, warn_when_not_sorted=False)
 
     def _pca_fallback(self, points_3d: np.ndarray) -> np.ndarray:
         """
@@ -254,6 +337,14 @@ class IsomapTriangulator:
                 idxs = idxs[:, np.newaxis]
 
             weights = 1.0 / np.maximum(dists**2, 1e-12)
+            geodesic = getattr(self.isomap_model, "dist_matrix_", None)
+            if geodesic is not None:
+                # Interpolate on the limb of the closest reference point only.
+                anchors = idxs[:, 0]
+                spans = np.linalg.norm(
+                    self.points_3d[idxs] - self.points_3d[anchors, None, :], axis=2
+                )
+                weights *= geodesic[anchors[:, None], idxs] <= 2.0 * spans + 1e-10
             weights /= weights.sum(axis=1, keepdims=True)
             result_2d[interp_mask] = np.einsum(
                 "ij,ijk->ik", weights, self.points_2d[idxs]
@@ -472,6 +563,7 @@ class IsomapTriangulator:
         interpolator: str = "tps",
         well_feature_points_3d: Optional[np.ndarray] = None,
         well_feature_sizes: Optional[np.ndarray] = None,
+        reference_triangles: Optional[np.ndarray] = None,
     ) -> Dict[str, Any]:
         """
         Perform constrained triangulation using Isomap unfolding.
@@ -496,6 +588,7 @@ class IsomapTriangulator:
             uniform: Whether to generate uniform mesh density.
             reference_points_3d: (R, 3) array of ALL raw surface points for Isomap fitting.
                                  If None, uses points_3d (slower, less accurate for folds).
+            reference_triangles: Optional connectivity into reference_points_3d.
             smoothing: Smoothing parameter (0 = exact interpolation, >0 = smoother).
                        Higher values create smoother surfaces but may deviate from data.
             interpolator: Interpolation method for Steiner points:
@@ -589,7 +682,7 @@ class IsomapTriangulator:
         # Step 1: Fit Isomap on REFERENCE points (all raw points)
         # This learns the fold geometry from the dense point cloud
         fit_start = time.perf_counter()
-        self.fit(reference_points)
+        self.fit(reference_points, triangles=reference_triangles)
         logger.info(
             f"Isomap triangulation stage: fit={time.perf_counter() - fit_start:.3f}s"
         )
