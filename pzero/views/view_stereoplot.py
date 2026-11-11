@@ -950,7 +950,7 @@ class ViewStereoplot(ViewMPL):
 
         seeds.append(seed)
 
-        actor = self._draw_pole(seed, color="lime", marker="o", markersize=8)
+        actor, pole = self._draw_pole(seed, color="lime", marker="o", markersize=8)
         self.seed_pick_actors.append(actor)
         self.figure.canvas.draw()
 
@@ -1130,12 +1130,11 @@ class ViewStereoplot(ViewMPL):
                     continue
                 major_axis = bingham_result["axes"][0]
                 marker = "s" if kind == "normals" else "o"
-                new_actor.append(
-                    self._draw_pole(
-                        major_axis, color="red", marker=marker, markersize=8
-                    )
+                actor, pole = self._draw_pole(major_axis, color="red", marker=marker, markersize=8)
+                new_actor.append(actor)
+                self.print_terminal(
+                    f"Bingham major pole : {pole[0]:.2f}/{pole[1]:.2f}"
                 )
-                self.print_terminal(f"Bingham major pole : {major_axis}")
             if not new_actor:
                 new_actor = None
 
@@ -1148,12 +1147,9 @@ class ViewStereoplot(ViewMPL):
                     continue
                 intermediate_axis = bingham_result["axes"][1]
                 marker = "s" if kind == "normals" else "o"
-                new_actor.append(
-                    self._draw_pole(
-                        intermediate_axis, color="green", marker=marker, markersize=8
-                    )
-                )
-                self.print_terminal(f"Bingham intermediate pole : {intermediate_axis}")
+                actor, pole = self._draw_pole(intermediate_axis, color="green", marker=marker, markersize=8)
+                new_actor.append(actor)
+                self.print_terminal(f"Bingham intermediate pole : {pole[0]:.2f}/{pole[1]:.2f}")
             if not new_actor:
                 new_actor = None
 
@@ -1166,12 +1162,9 @@ class ViewStereoplot(ViewMPL):
                     continue
                 minor_axis = bingham_result["axes"][2]
                 marker = "s" if kind == "normals" else "o"
-                new_actor.append(
-                    self._draw_pole(
-                        minor_axis, color="blue", marker=marker, markersize=8
-                    )
-                )
-                self.print_terminal(f"Bingham minor pole : {minor_axis}")
+                actor, pole = self._draw_pole(minor_axis, color="blue", marker=marker, markersize=8)
+                new_actor.append(actor)
+                self.print_terminal(f"Bingham minor pole : {pole[0]:.2f}/{pole[1]:.2f}")
             if not new_actor:
                 new_actor = None
 
@@ -1200,12 +1193,9 @@ class ViewStereoplot(ViewMPL):
                     if norm == 0:
                         continue
                     unit_centroid = centroid / norm
-                    new_actor.append(
-                        self._draw_pole(
-                            unit_centroid, color="black", marker="^", markersize=8
-                        )
-                    )
-                    self.print_terminal(f"   {unit_centroid}")
+                    actor, pole = self._draw_pole(unit_centroid, color="black", marker="^", markersize=8)
+                    new_actor.append(actor)
+                    self.print_terminal(f"   {pole[0]:.2f}/{pole[1]:.2f}")
             if not new_actor:
                 new_actor = None
 
@@ -1225,9 +1215,8 @@ class ViewStereoplot(ViewMPL):
                     vectors = group[["x", "y", "z"]].to_numpy()
                     palette = cm.get_cmap("tab10")
                     color = palette(cluster_id % 10)
-                    new_actor.append(
-                        self._draw_pole(vectors, color=color, markersize=6)
-                    )
+                    actor, pole = self._draw_pole(vectors, color=color, markersize=6)
+                    new_actor.append(actor)
             if not new_actor:
                 new_actor = None
 
@@ -1240,12 +1229,9 @@ class ViewStereoplot(ViewMPL):
                     continue
                 mean_direction = fisher_result["mean_direction"][0]
                 marker = "s" if kind == "normals" else "o"
-                new_actor.append(
-                    self._draw_pole(
-                        mean_direction, color="purple", marker=marker, markersize=8
-                    )
-                )
-                self.print_terminal(f"Fisher parameter : {fisher_result['kappa']}")
+                actor, pole = self._draw_pole(mean_direction, color="purple", marker=marker, markersize=8)
+                new_actor.append(actor)
+                self.print_terminal(f"Fisher pole and K : {pole[0]:.2f}/{pole[1]:.2f}, {fisher_result['kappa']:.2f}")
             if not new_actor:
                 new_actor = None
 
@@ -1328,7 +1314,11 @@ class ViewStereoplot(ViewMPL):
         plunge, bearing = mplstereonet.vector2plunge_bearing(x, y, z)
         strike, dip = mplstereonet.plunge_bearing2pole(plunge, bearing)
         actor = self.ax.pole(strike, dip, **kwargs)[0]
-        return actor
+        if vector.ndim == 1:
+            pole = [bearing.item(), plunge.item()]
+        else:
+            pole = np_vstack([bearing, plunge]).T
+        return actor, pole
 
     def _draw_great_circle(self, vector, **kwargs):
         """
