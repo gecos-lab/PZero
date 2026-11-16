@@ -330,11 +330,13 @@ class CustomTreeWidget(QTreeWidget):
         # Clear current selection
         self.clearSelection()
 
-        # Find all items matching previously selected UIDs, i.e. in set_actor_visible, and select them
+        # Find all items matching previously selected UIDs, i.e. in set_actor_visible, and select them.
+        # A set makes each membership test O(1).
+        uids_to_select_set = set(uids_to_select)
         for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
             uid = self.get_item_uid(item)
             # "if uid" is needed since higher levels do not have an uid
-            if uid and uid in uids_to_select:
+            if uid and uid in uids_to_select_set:
                 item.setSelected(True)
 
         # Restore selection list
@@ -660,10 +662,12 @@ class CustomTreeWidget(QTreeWidget):
         # Clear current selection
         self.clearSelection()
 
-        # Find and select items with matching UIDs
+        # Find and select items with matching UIDs. Read the selection once into a set:
+        # collection.selected_uids builds a new list from the project store at each call.
+        selected_uids = set(self.collection.selected_uids)
         for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
             uid = self.get_item_uid(item)
-            if uid in self.collection.selected_uids:
+            if uid in selected_uids:
                 item.setSelected(True)
 
         # Unblock signals
@@ -679,18 +683,20 @@ class CustomTreeWidget(QTreeWidget):
         items. After updating the internal state, it emits a signal to notify observers
         about the updated selection.
         """
-        # Clear the current selection list
-        self.collection.selected_uids = []
+        # Collect the UID of each selected item (higher tree levels have no uid),
+        # deduplicated in O(n) while keeping order.
+        selected_uids = list(
+            dict.fromkeys(
+                uid
+                for uid in (self.get_item_uid(item) for item in self.selectedItems())
+                if uid
+            )
+        )
 
-        # Add the UID of each selected item to the list
-        for item in self.selectedItems():
-            uid = self.get_item_uid(item)
-            if uid:
-                self.collection.selected_uids.append(uid)
-
-        # emit signal
-        # self.parent.signals.selection_changed.emit(self.collection)
-        self.view.parent.signals.selection_changed.emit(self.collection)
+        # collection.selected_uids returns a copy, so it must be assigned, not mutated.
+        # The project selection store emits selection_changed / selection_modified if
+        # this actually changed the selection.
+        self.collection.selected_uids = selected_uids
 
     def update_child_check_states(self, item, check_state):
         """

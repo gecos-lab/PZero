@@ -1673,8 +1673,9 @@ class ViewStereoplot(ViewMPL):
         self.selection_highlight_uids = set(selected_uids)
         self.figure.canvas.draw()
 
+        # restore_selection writes geol_coll.selected_uids, and the project selection store
+        # emits selection_changed if this changed the selection.
         self.GeologyTreeWidget.restore_selection(selected_uids)
-        self.parent.signals.selection_changed.emit(self.parent.geol_coll)
         self._deactivate_selection(clear_highlight=False)
 
     def _event_to_screen_polar(self, event):
