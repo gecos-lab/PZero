@@ -205,7 +205,23 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         )
         self.parent.signals.legend_opacity_modified.connect(self.sig_opct_lmb)
 
-        # selection_changed
+        # selection_modified --- trees of this view mirror the project selection store
+        self.sig_sel_lmb = lambda added, removed, colls, source: (
+            self.selection_modified_update_trees(collections=colls, source=source)
+        )
+        self.parent.signals.selection_modified.connect(self.sig_sel_lmb)
+
+    def selection_modified_update_trees(self, collections=None, source=None):
+        """Re-apply the project selection to the trees of the collections whose selection
+        changed, except the tree that made the change (it already mirrors the store)."""
+        for collection_name in collections or []:
+            tree = getattr(self, self.collection_tree_dict.get(collection_name, ""), None)
+            if (
+                tree is not None
+                and tree is not source
+                and hasattr(tree, "set_selection_from_collection")
+            ):
+                tree.set_selection_from_collection()
 
     def disconnect_all_signals(self):
         """Disconnect each subscription independently before a view is deleted."""
@@ -227,6 +243,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             ("legend_thick_modified", "sig_thk_lmb"),
             ("legend_point_size_modified", "sig_pnt_lmb"),
             ("legend_opacity_modified", "sig_opct_lmb"),
+            ("selection_modified", "sig_sel_lmb"),
             ("prop_legend_cmap_modified", "update_slices_for_property_change"),
             ("entities_added", "on_entities_added"),
             ("entities_removed", "on_entities_removed"),

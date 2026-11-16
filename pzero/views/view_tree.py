@@ -21,6 +21,7 @@ from PySide6.QtCore import (
     Signal,
     QMimeData,
     QEvent,
+    QItemSelection,
     QItemSelectionModel,
     QSignalBlocker,
     QTimer,
@@ -249,6 +250,9 @@ class CustomTreeWidget(QTreeWidget):
         self.prop_comp_label = prop_comp_label
         self.default_labels = default_labels
         self.uid_label = uid_label  # could use "uid" as everywhere in PZero, without specifying it in input
+        # True while the tree changes its own selection (mirroring the store, rebuilding items):
+        # such selection changes must not be sent to the project selection store.
+        self._syncing_selection = False
 
         # one column for the tree hierarchy, one for name and one for properties
         self.setColumnCount(3)
@@ -273,11 +277,13 @@ class CustomTreeWidget(QTreeWidget):
         self._checkbox_timer.setSingleShot(True)
         self._checkbox_timer.timeout.connect(self.emit_checkbox_toggled)
         self.itemChanged.connect(self.on_checkbox_changed)
-        self.itemSelectionChanged.connect(self.emit_selection_changed)
+        # Selection: user changes are sent to the project selection store by on_tree_selection_changed,
+        # and the tree mirrors the store with set_selection_from_collection (called by the view).
+        self.selectionModel().selectionChanged.connect(self.on_tree_selection_changed)
+        self.itemClicked.connect(self.on_item_clicked)
 
-        # Import initial selection state if parent and collection exist
-        if hasattr(self.collection, "selected_uids"):
-            self.restore_selection(self.collection.selected_uids)
+        # Show the current project selection (populate_tree did it already, this is just to be sure)
+        self.set_selection_from_collection()
 
     def selectionCommand(self, index, event=None):
         # Shift-right-click opens the menu without extending or replacing a range.
@@ -296,54 +302,29 @@ class CustomTreeWidget(QTreeWidget):
 
     def preserve_selection(func):
         """
-        Decorator that preserves the current selection of items while executing the decorated function.
+        Decorator for methods that add, remove or rebuild tree items. Selection changes caused by
+        the items being edited are not sent to the project selection store, and afterwards the
+        tree selection is re-applied from the store, which is never changed here.
         """
 
         @wraps(func)
         def wrapper(self, *args, **kwargs):
-            # selection is recoded before the function runs
-            current_selection = self.collection.selected_uids.copy()
-            # the wrapped function runs here
-            result = func(self, *args, **kwargs)
-            # selection is restored after the function has run
-            self.restore_selection(current_selection)
-            # the wrapped function's return value is returned here
-            return result
+            was_syncing = self._syncing_selection
+            self._syncing_selection = True
+            try:
+                return func(self, *args, **kwargs)
+            finally:
+                self._syncing_selection = was_syncing
+                self.set_selection_from_collection()
 
         return wrapper
 
     def restore_selection(self, uids_to_select):
         """
-        Restores the previously saved selection of items in the widget based on their unique identifiers.
-        This method clears any existing selection in the widget, selects the items matching the provided
-        UIDs, and updates the parent's collection of selected UIDs. During this process, widget signals
-        are temporarily blocked to avoid triggering unwanted loops.
+        Select uids_to_select in this tree's collection (e.g. after a lasso selection in a view).
+        The selection goes to the project selection store, so all trees and tables follow.
         """
-
-        # Just to check
-        if not uids_to_select:
-            return
-
-        # Temporarily block signals to prevent recursive calls
-        self.blockSignals(True)
-
-        # Clear current selection
-        self.clearSelection()
-
-        # Find all items matching previously selected UIDs, i.e. in set_actor_visible, and select them.
-        # A set makes each membership test O(1).
-        uids_to_select_set = set(uids_to_select)
-        for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
-            uid = self.get_item_uid(item)
-            # "if uid" is needed since higher levels do not have an uid
-            if uid and uid in uids_to_select_set:
-                item.setSelected(True)
-
-        # Restore selection list
-        self.collection.selected_uids = uids_to_select.copy()
-
-        # Unblock signals
-        self.blockSignals(False)
+        self.collection.selected_uids = list(uids_to_select or [])
 
     def create_property_combo(self, row=None):
         """
@@ -507,6 +488,9 @@ class CustomTreeWidget(QTreeWidget):
         # Update parent checkbox states based on the imported states
         self.update_all_parent_check_states()
 
+        # The rebuilt tree has no selection: show the project selection again
+        self.set_selection_from_collection()
+
         # Unblock signals
         self.blockSignals(False)
 
@@ -649,54 +633,111 @@ class CustomTreeWidget(QTreeWidget):
         parent.addChild(item)
         return item
 
+    def _leaf_uids(self, item):
+        """UIDs of the entities in item: its own uid, or those of all its descendants for a group item."""
+        uid = self.get_item_uid(item)
+        if uid:
+            return [uid]
+        uids = []
+        for i in range(item.childCount()):
+            uids.extend(self._leaf_uids(item.child(i)))
+        return uids
+
     def set_selection_from_collection(self):
         """
-        To be called from the main application, sets the selection of items in the tree
-        from self.collection.selected_uids. It temporarily blocks signals to prevent triggering
-        multiple selection signals during the process.  All current selections
-        are cleared, and items with a matching UID from the provided list are selected.
+        Mirror the project selection store in the tree: entity items are selected if their uid is
+        selected, and group items if all the entities below them are selected. Done with a single
+        select() call, flagged so that it is not sent back to the store.
         """
-        # Block signals temporarily to prevent multiple selection signals
-        self.blockSignals(True)
-
-        # Clear current selection
-        self.clearSelection()
-
-        # Find and select items with matching UIDs. Read the selection once into a set:
-        # collection.selected_uids builds a new list from the project store at each call.
         selected_uids = set(self.collection.selected_uids)
-        for item in self.findItems("", Qt.MatchContains | Qt.MatchRecursive):
+        selection = QItemSelection()
+        last_column = self.columnCount() - 1
+
+        def visit(item):
+            # Returns (has_entities, all_entities_selected) and adds selected items to selection.
             uid = self.get_item_uid(item)
-            if uid in selected_uids:
-                item.setSelected(True)
+            if uid:
+                has_entities, is_selected = True, uid in selected_uids
+            else:
+                has_entities, is_selected = False, True
+                for i in range(item.childCount()):
+                    child_has, child_selected = visit(item.child(i))
+                    if child_has:
+                        has_entities = True
+                        is_selected = is_selected and child_selected
+                is_selected = has_entities and is_selected
+            if is_selected:
+                selection.select(
+                    self.indexFromItem(item, 0), self.indexFromItem(item, last_column)
+                )
+            return has_entities, is_selected
 
-        # Unblock signals
-        self.blockSignals(False)
+        root = self.invisibleRootItem()
+        for i in range(root.childCount()):
+            visit(root.child(i))
 
-    def emit_selection_changed(self):
-        """
-        To be used when selecting items from the tree towards the main application, it clears the current
-        selection, update it with the UIDs of selected items, and emits a signal to indicate that
-        the selection has changed.
-        The method resets the internal selection state by clearing the list of selected
-        UIDs in the parent collection and repopulates it based on the currently selected
-        items. After updating the internal state, it emits a signal to notify observers
-        about the updated selection.
-        """
-        # Collect the UID of each selected item (higher tree levels have no uid),
-        # deduplicated in O(n) while keeping order.
-        selected_uids = list(
-            dict.fromkeys(
-                uid
-                for uid in (self.get_item_uid(item) for item in self.selectedItems())
-                if uid
+        was_syncing = self._syncing_selection
+        self._syncing_selection = True
+        try:
+            self.selectionModel().select(
+                selection, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows
             )
-        )
+        finally:
+            self._syncing_selection = was_syncing
 
-        # collection.selected_uids returns a copy, so it must be assigned, not mutated.
-        # The project selection store emits selection_changed / selection_modified if
-        # this actually changed the selection.
-        self.collection.selected_uids = selected_uids
+    def on_tree_selection_changed(self, selected, deselected):
+        """
+        Send a selection made by the user in the tree to the project selection store, as additions
+        and removals (so that entities not shown in this tree keep their selection state).
+        - Selecting a group item selects all the entities below it.
+        - Deselecting a group item deselects all the entities below it only if the user acted on
+          that group (it is the current item, e.g. Ctrl-click); a group deselected as a side effect,
+          e.g. by clicking one of its entities, only loses the entities deselected explicitly.
+        Then the tree is normalized to mirror the store (group items follow their entities).
+        """
+        if self._syncing_selection or self.signalsBlocked():
+            return
+
+        def items_in(item_selection):
+            return [
+                self.itemFromIndex(index)
+                for index in item_selection.indexes()
+                if index.column() == 0
+            ]
+
+        current_item = self.currentItem()
+        added_uids = []
+        for item in items_in(selected):
+            added_uids.extend(self._leaf_uids(item))
+        removed_uids = []
+        for item in items_in(deselected):
+            uid = self.get_item_uid(item)
+            if uid:
+                removed_uids.append(uid)
+            elif item is current_item:
+                removed_uids.extend(self._leaf_uids(item))
+        added_uids = list(dict.fromkeys(added_uids))
+        added_set = set(added_uids)
+        removed_uids = [uid for uid in dict.fromkeys(removed_uids) if uid not in added_set]
+
+        project = self.view.parent
+        collection_name = self.collection.collection_name
+        if removed_uids:
+            project.set_selection(
+                uids=removed_uids, mode="remove", collection=collection_name, source=self
+            )
+        if added_uids:
+            project.set_selection(
+                uids=added_uids, mode="add", collection=collection_name, source=self
+            )
+        # The store skips the source when notifying, so mirror it here.
+        self.set_selection_from_collection()
+
+    def on_item_clicked(self, item=None, column=None):
+        """Clicking an already selected item does not change the selection, but the table tab
+        of this collection is still brought to front in the project window."""
+        if item is not None and item.isSelected():
+            self.view.parent.show_collection_tab(self.collection.collection_name)
 
     def update_child_check_states(self, item, check_state):
         """
