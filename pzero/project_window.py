@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from PySide6.QtGui import QAction, QDesktopServices, QPixmap
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QItemSelection, QItemSelectionModel
 
 import numpy as np
 from pandas import DataFrame as pd_DataFrame
@@ -260,9 +260,9 @@ class ProjectSignals(QObject):
     legend_opacity_modified = pyqtSignal(list, object)  # seems OK
 
     # selection_modified is emitted by ProjectWindow.set_selection() whenever the project-level selection
-    # changes, with (added_uids, removed_uids, source), where source is the object that requested the change
-    # (so that it can ignore its own echo).
-    selection_modified = pyqtSignal(list, list, object)
+    # changes, with (added_uids, removed_uids, changed_collection_names, source), where source is the object
+    # that requested the change (so that it can ignore its own echo).
+    selection_modified = pyqtSignal(list, list, list, object)
 
     # selection_changed is emitted by ProjectWindow.set_selection() once for each collection (= object) whose
     # selection changed. Legacy signal, kept until all listeners use selection_modified.
@@ -306,6 +306,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # Project-level selection store, see set_selection(). Removed entities are dropped from it.
         self._init_selection()
         self.signals.entities_removed.connect(self._prune_selection)
+        # Project tables mirror the store (see connect_table_selection for the other direction).
+        self.signals.selection_modified.connect(self._on_selection_modified_tables)
 
         # dictionary with table (key) vs. collection (value)
         self.tab_collection_dict = {
@@ -750,7 +752,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     # It is stored once, here, as an insertion-ordered dict {uid: collection_name}: uids are
     # unique project-wide, the pick order is preserved, and uids from several collections can
     # be selected together. Every change must go through set_selection(), which emits:
-    #   - signals.selection_modified(added_uids, removed_uids, source)
+    #   - signals.selection_modified(added_uids, removed_uids, changed_collection_names, source)
     #   - signals.selection_changed(collection) for each collection whose selection changed.
     # Collections expose their share of it through collection.selected_uids.
 
@@ -887,9 +889,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if not (added or removed):
             return False
 
-        self.signals.selection_modified.emit(added, removed, source)
-        changed_collections = dict.fromkeys(
-            [new[uid] for uid in added] + [old[uid] for uid in removed]
+        changed_collections = list(
+            dict.fromkeys([new[uid] for uid in added] + [old[uid] for uid in removed])
+        )
+        self.signals.selection_modified.emit(
+            added, removed, changed_collections, source
         )
         for collection_name in changed_collections:
             changed_collection = getattr(self, collection_name, None)
@@ -905,74 +909,130 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if uids:
             self.set_selection(uids=uids, mode="remove", source=self)
 
+    # ------------------- Selection adapter: project window tables -------------------
+    # Outbound: a selection made in a table replaces the selection of its collection in the store.
+    # Inbound: when the store changes, the tables of the changed collections are reselected from it,
+    # except the table that requested the change. The selection model signals are not blocked (the
+    # table view repaints from them): the _syncing_table_selection flag stops the echo instead.
+
+    def connect_table_selection(self):
+        """Connect each table's selection model and model reset to the selection store.
+        Must be called after setModel(), which replaces the selection model."""
+        self._syncing_table_selection = False
+        for table_view, collection_name in self.table_view_collection_dict.items():
+            selection_model = table_view.selectionModel()
+            if selection_model is not None:
+                selection_model.selectionChanged.connect(
+                    lambda _selected, _deselected, tv=table_view, coll=collection_name: (
+                        self._on_table_selection_changed(table_view=tv, collection_name=coll)
+                    )
+                )
+            if table_view.model() is not None:
+                # A model reset (entities added/removed) clears the table selection silently.
+                table_view.model().modelReset.connect(
+                    lambda tv=table_view, coll=collection_name: self._sync_table_selection(
+                        table_view=tv, collection_name=coll
+                    )
+                )
+
+    def _table_view_of_collection(self, collection_name: str = None):
+        for table_view, coll_name in self.table_view_collection_dict.items():
+            if coll_name == collection_name:
+                return table_view
+        return None
+
+    def _on_table_selection_changed(self, table_view=None, collection_name: str = None):
+        """Outbound: the rows selected in a table become the selection of its collection."""
+        if getattr(self, "_syncing_table_selection", False):
+            return
+        self.set_selection(
+            uids=self.get_selected_uids_from_table(table_view=table_view),
+            mode="replace",
+            collection=collection_name,
+            source=table_view,
+        )
+
+    def _on_selection_modified_tables(
+        self, added=None, removed=None, collections=None, source=None
+    ):
+        """Inbound: reselect the tables of the collections whose selection changed, then
+        bring to front the tab of the collection where entities were just selected."""
+        for collection_name in collections or []:
+            table_view = self._table_view_of_collection(collection_name)
+            if table_view is not None and table_view is not source:
+                self._sync_table_selection(
+                    table_view=table_view, collection_name=collection_name
+                )
+        self._show_tab_of_selection(added=added, source=source)
+
+    def _show_tab_of_selection(self, added=None, source=None):
+        """When entities are selected from a view or a view tree, show the table tab of
+        their collection (the one of the last selected uid), so that the tab in front, used
+        by selected_collection / selected_uids, matches where the user is selecting.
+        Not done for selections made in the tables themselves (the tab is already in front),
+        for internal updates of the store (source is the project), or for deselections."""
+        if (
+            not added
+            or source is self
+            or any(source is table_view for table_view in self.table_view_collection_dict)
+        ):
+            return
+        self.show_collection_tab(self._selection.get(added[-1]))
+
+    def show_collection_tab(self, collection_name: str = None):
+        """Bring to front the project window table tab of collection_name (e.g. "geol_coll")."""
+        tab_name = next(
+            (tab for tab, coll in self.tab_collection_dict.items() if coll == collection_name),
+            None,
+        )
+        tab_widget = getattr(self, tab_name, None) if tab_name else None
+        if tab_widget is not None and self.tabWidgetTopLeft.currentWidget() is not tab_widget:
+            self.tabWidgetTopLeft.setCurrentWidget(tab_widget)
+
+    def _sync_table_selection(self, table_view=None, collection_name: str = None):
+        """Select in table_view exactly the rows of the uids selected in the store, with a
+        single select() call. Rows are found with isin() on the dataframe (source model rows
+        are dataframe rows), merged into contiguous ranges and mapped through the proxy."""
+        collection = getattr(self, collection_name, None)
+        if table_view is None or collection is None:
+            return
+        selection_model = table_view.selectionModel()
+        proxy_model = table_view.model()
+        if selection_model is None or proxy_model is None:
+            return
+        source_model = proxy_model.sourceModel()
+        selection = QItemSelection()
+        selected_uids = self.selection_uids(collection=collection_name)
+        if selected_uids and "uid" in collection.df.columns and source_model is not None:
+            rows = np.flatnonzero(collection.df["uid"].isin(selected_uids).to_numpy())
+            last_column = max(collection.df.shape[1] - 1, 0)
+            source_selection = QItemSelection()
+            start = previous = None
+            for row in rows.tolist() + [None]:
+                if start is not None and row != previous + 1:
+                    source_selection.select(
+                        source_model.index(start, 0),
+                        source_model.index(previous, last_column),
+                    )
+                    start = None
+                if row is not None and start is None:
+                    start = row
+                previous = row
+            selection = proxy_model.mapSelectionFromSource(source_selection)
+        self._syncing_table_selection = True
+        try:
+            selection_model.select(
+                selection,
+                QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows,
+            )
+        finally:
+            self._syncing_table_selection = False
+
     @property
     def selected_uids(self):
-        """Returns a list of uids selected in the table view. Just rows completely selected are returned."""
-        selected_uids = []
-        if self.shown_table == "tabGeology":
-            # this will always give rows that have selected the column 0 (in this case uid). By changing
-            # the column=0 to another index it will give the value in another column.
-            selected_idxs_proxy = self.GeologyTableView.selectionModel().selectedRows(
-                column=0
-            )
-            for idx_proxy in selected_idxs_proxy:
-                selected_uids.append(idx_proxy.data())
-
-        elif self.shown_table == "tabXSections":
-            selected_idxs_proxy = self.XSectionsTableView.selectionModel().selectedRows(
-                column=0
-            )
-            for idx_proxy in selected_idxs_proxy:
-                selected_uids.append(idx_proxy.data())
-
-        elif self.shown_table == "tabMeshes":
-            selected_idxs_proxy = self.Meshes3DTableView.selectionModel().selectedRows(
-                column=0
-            )
-            for idx_proxy in selected_idxs_proxy:
-                selected_uids.append(idx_proxy.data())
-
-        elif self.shown_table == "tabDOMs":
-            selected_idxs_proxy = self.DOMsTableView.selectionModel().selectedRows(
-                column=0
-            )
-            for idx_proxy in selected_idxs_proxy:
-                selected_uids.append(idx_proxy.data())
-        elif self.shown_table == "tabImages":
-            selected_idxs_proxy = self.ImagesTableView.selectionModel().selectedRows(
-                column=0
-            )
-            for idx_proxy in selected_idxs_proxy:
-                selected_uids.append(idx_proxy.data())
-
-        elif self.shown_table == "tabBoundaries":
-            selected_idxs_proxy = (
-                self.BoundariesTableView.selectionModel().selectedRows(column=0)
-            )
-            for idx_proxy in selected_idxs_proxy:
-                selected_uids.append(idx_proxy.data())
-
-        elif self.shown_table == "tabWells":
-            selected_idxs_proxy = self.WellsTableView.selectionModel().selectedRows(
-                column=0
-            )
-            for idx_proxy in selected_idxs_proxy:
-                selected_uids.append(idx_proxy.data())
-
-        elif self.shown_table == "tabFluids":
-            selected_idxs_proxy = self.FluidsTableView.selectionModel().selectedRows(
-                column=0
-            )
-            for idx_proxy in selected_idxs_proxy:
-                selected_uids.append(idx_proxy.data())
-
-        elif self.shown_table == "tabBackgrounds":
-            selected_idxs_proxy = (
-                self.BackgroundsTableView.selectionModel().selectedRows(column=0)
-            )
-            for idx_proxy in selected_idxs_proxy:
-                selected_uids.append(idx_proxy.data())
-        return selected_uids
+        """Returns the uids selected in the collection of the table tab currently shown,
+        read from the project selection store (tables mirror it), in pick order."""
+        return self.selection_uids(collection=self.selected_collection)
 
     #  This is should be used for cross collection operations (e.g. cut surfaces in the geology table with the DEM).
     # We could use this instead of selected_uids but we should impose validity checks for the different functions
@@ -2384,6 +2444,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.bind_role_click_editor(table_view=table_view, collection=collection)
             bind_metadata_value_editors(table_view, collection)
         self.bind_collection_table_context_menus()
+        # setModel() above created new selection models: connect them to the selection store.
+        self.connect_table_selection()
 
         # Create the geol_coll.legend_df legend table (a Pandas dataframe), create the corresponding QT
         # Legend self.legend (a Qt QTreeWidget that is internally connected to its data source),
