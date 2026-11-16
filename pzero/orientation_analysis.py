@@ -19,6 +19,12 @@ from numpy import vstack as np_vstack
 from numpy import argmin as np_argmin
 from numpy import where as np_where
 from numpy import all as np_all
+from numpy import arctan2 as np_arctan2
+from numpy import arcsin as np_arcsin
+from numpy import clip as np_clip
+from numpy import pi as np_pi
+from numpy import abs as np_abs
+from numpy import any as np_any
 from numpy.linalg import norm as np_linalg_norm
 from numpy.linalg import eigh as np_linalg_eigh
 from numpy.linalg import det as np_linalg_det
@@ -31,6 +37,7 @@ from scipy.cluster.vq import kmeans2
 
 from pzero.helpers.helper_dialogs import multiple_input_dialog
 
+from .helpers.helper_functions import uses_selection
 from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 
 # -----IN THE FUTURE add functions for orientation analysis.-----
@@ -106,13 +113,22 @@ def dip_directions2normals(dips=None, directions=None, return_dip_dir_vec=False)
         directions_array = np_squeeze(directions)
     else:
         print("Dip/Direction type not recognized.")
-    dips_array = np_squeeze(dips_array)
+    dips_array = np_squeeze(np_asarray(dips_array, dtype=float))
     directions_array = np_squeeze(directions_array)
-    plunges_array = 90 - dips_array
+    # Negative dips are overturned planes (upper hemisphere): compute the downward normal of the
+    # plane with |dip| and the same dip direction, then flip it upwards (see normals2dip_directions).
+    overturned = dips_array < 0
+    plunges_array = 90 - np_abs(dips_array)
     trends_array = (directions_array + 180) * np_less_equal(directions_array, 180) + (
         directions_array - 180
     ) * np_greater(directions_array, 180)
     normals = plunge_trends2lineations(plunges=plunges_array, trends=trends_array)
+    if np_any(overturned):
+        normals = np_asarray(normals, dtype=float)
+        if normals.ndim == 1:
+            normals = -normals
+        else:
+            normals[overturned] *= -1
 
     return normals
 
@@ -127,6 +143,7 @@ def vset_set_normals(VertexSet=None, dip_name=None, dir_name=None):
     VertexSet.set_point_data(data_key="Normals", attribute_matrix=normals)
 
 
+@uses_selection(valid={"geol_coll": None, "dom_coll": None})
 @freeze_gui_onoff
 def set_normals(self):
     """
@@ -236,6 +253,24 @@ def set_normals(self):
             )
     else:
         self.print_terminal("No input data selected.")
+
+
+def normals2dip_directions(normals=None):
+    """Convert normal vectors (N x 3, or a single 3-vector) to Dip/Direction in degrees, inverse of
+    dip_directions2normals. Normals pointing downwards give 0 <= Dip <= 90; normals pointing upwards
+    (overturned surfaces, upper hemisphere of the stereoplot) give -90 < Dip < 0. In both cases the
+    Direction is the standard dip direction, computed from the downward-pointing normal.
+    Returns two Numpy arrays (dips, directions)."""
+    normals = np_asarray(normals, dtype=float).reshape(-1, 3)
+    upward = normals[:, 2] > 0
+    down_normals = normals.copy()
+    down_normals[upward] *= -1
+    directions = (
+        np_arctan2(down_normals[:, 0], down_normals[:, 1]) * 180 / np_pi - 180
+    ) % 360
+    dips = 90 - np_arcsin(np_clip(-down_normals[:, 2], -1.0, 1.0)) * 180 / np_pi
+    dips[upward] *= -1
+    return dips, directions
 
 
 def get_dip_dir_vectors(normals=None, az=False):

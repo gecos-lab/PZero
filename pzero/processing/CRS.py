@@ -9,6 +9,7 @@ from vtkmodules.util.numpy_support import numpy_to_vtk
 from vtkmodules.vtkFiltersGeneral import vtkTransformFilter
 
 from pzero.helpers.helper_dialogs import general_input_dialog
+from pzero.helpers.helper_functions import uses_selection
 from pzero.helpers.helper_functions import (
     freeze_gui_onoff,
     freeze_gui_on,
@@ -94,6 +95,7 @@ def CRS_apply_transformation(uid=None, collection=None, transformation_matrix=No
     collection.replace_vtk(uid=uid, vtk_object=out_entity)
 
 
+@uses_selection(valid=None)
 @freeze_gui_onoff
 def CRS_transform_selected(self):
     """Function used to transform CRS of selected entities.

@@ -86,18 +86,18 @@ from ..helpers.helper_dialogs import (
     multiple_input_dialog,
     progress_dialog,
 )
+from ..helpers.helper_functions import uses_selection
 from ..helpers.helper_functions import best_fitting_plane, gen_frame, freeze_gui_off
 from ..helpers.extend_surface import extend_geology_entity
 from ..properties_manager import _get_collection_property_datasets
 from ..collections.geological_collection import GeologicalCollection
 from ..entities_factory import PolyData, Attitude, PolyLine, TriSurf, Seismics
 from ..two_d_lines import draw_line_3d
+from ..three_d_surfaces import linear_extrusion
 from pzero.point_clouds import (
-    normals2dd,
     cut_pc,
     decimate_pc,
     segment_pc,
-    facets_pc,
     calibration_pc,
     auto_pick,
     thresh_filt,
@@ -4019,23 +4019,17 @@ class View3D(ViewVTK):
         self.drawLine3DButton.triggered.connect(lambda: draw_line_3d(self))
         self.menuCreate.addAction(self.drawLine3DButton)
 
+        # Extrusion of the last selected line, with optional densification (one tool).
+        self.actionExtrusion = QAction("Extrusion", self)
+        self.actionExtrusion.triggered.connect(lambda: linear_extrusion(self))
+        self.menuCreate.addAction(self.actionExtrusion)
+
         self.actionExtendSurface = QAction("Extend surface", self)
         self.actionExtendSurface.triggered.connect(self.open_extend_surface_dialog)
         self.menuModify.addAction(self.actionExtendSurface)
 
-        self.actionCalculate_dip_dir = QAction(
-            "Calculate dips and directions (PC)", self
-        )
-        self.actionCalculate_dip_dir.triggered.connect(
-            lambda: self.run_point_cloud_tool(normals2dd)
-        )
-        self.menuCreate.addAction(self.actionCalculate_dip_dir)
-
-        self.actionCreate_facet = QAction("Create mesh (PC)", self)
-        self.actionCreate_facet.triggered.connect(
-            lambda: self.run_point_cloud_tool(facets_pc)
-        )
-        self.menuCreate.addAction(self.actionCreate_facet)
+        # "Calculate dips and directions (PC)" is Project window > Properties > Calculate Dip/Direction,
+        # and "Create mesh (PC)" is Project window > Interpolation > Planar facets from PC clusters.
 
         self.actionCut_Pc = QAction("Cut Point Cloud", self)
         self.actionCut_Pc.triggered.connect(lambda: self.run_point_cloud_tool(cut_pc))
@@ -4360,27 +4354,14 @@ class View3D(ViewVTK):
         update_preview()
         dialog.show()
 
-    def sync_point_cloud_selection(self):
-        """Sync old point-cloud tools with current DOM tree/table selection."""
-        if self.selected_uids:
-            return
-
-        dom_selected_uids = getattr(self.parent.dom_coll, "selected_uids", [])
-        if dom_selected_uids:
-            self.selected_uids = dom_selected_uids.copy()
-            return
-
-        if getattr(self.parent, "shown_table", None) == "tabDOMs":
-            self.selected_uids = self.parent.selected_uids
-
     def run_point_cloud_tool(self, tool):
-        """Run a point-cloud tool after syncing DOM selection into the view."""
-        self.sync_point_cloud_selection()
+        """Run a point-cloud tool. The view selection is read from the project selection, which
+        already includes DOM tree and table selections, so no syncing is needed."""
         tool(self)
 
+    @uses_selection(valid={"dom_coll": ["PCDom"]}, max_selected=1)
     def decimate_selected_pc(self):
         """Decimate the selected point cloud and add the result as a DOM entity."""
-        self.sync_point_cloud_selection()
         if len(self.selected_uids) == 0:
             print("No entities selected, make sure to have the right tab open")
             return

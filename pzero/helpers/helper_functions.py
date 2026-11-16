@@ -2,6 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 from datetime import datetime
+from functools import wraps
 
 from os import path as os_path
 
@@ -286,6 +287,99 @@ def srf(vectors):
     result = np_sqrt(np_square(x) + np_square(y) + np_square(z)) / n
 
     return result
+
+
+def uses_selection(
+    valid=None, topologies=None, require_properties=None, min_selected=1, max_selected=None
+):
+    """
+    Decorator for tools that work on selected entities. Before the tool runs (and before the GUI is
+    frozen, so place it above @freeze_gui_on / @freeze_gui_onoff), the project selection is reduced
+    to the entities the tool can use, deselecting the others; if there are not enough, the tool does
+    not run. See ProjectWindow.restrict_selection_for_tool for valid, topologies,
+    require_properties, min_selected and max_selected.
+    Works for tools whose self is the ProjectWindow or a view (then self.parent is the project).
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if hasattr(self, "restrict_selection_for_tool"):
+                project, view = self, None
+            else:
+                project, view = self.parent, self
+            if (
+                project.restrict_selection_for_tool(
+                    valid=valid,
+                    topologies=topologies,
+                    require_properties=require_properties,
+                    min_selected=min_selected,
+                    max_selected=max_selected,
+                    view=view,
+                    tool_name=func.__name__,
+                )
+                is None
+            ):
+                return None
+            return func(self, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def active_collection(self):
+    """The collection a selection-based tool works on: the one of the table tab in front, which
+    @uses_selection has chosen and brought to front. self is the ProjectWindow or a view."""
+    project = self if hasattr(self, "restrict_selection_for_tool") else self.parent
+    return getattr(project, project.selected_collection)
+
+
+def uid_metadata(collection, uid=None, key=None, default=None):
+    """Value of the metadata column key for uid, or default if the collection has no such column
+    (e.g. boundaries have no role and feature)."""
+    if key not in collection.df.columns:
+        return default
+    values = collection.df.loc[collection.df["uid"] == uid, key].values
+    return values[0] if len(values) else default
+
+
+def derived_entity_dict(collection, uid=None, name_suffix="", topology=None):
+    """Entity dictionary for a new entity derived from uid and stored in the same collection: the
+    metadata that the collection schema has (role, feature, scenario) is copied from uid."""
+    from copy import deepcopy
+
+    entity_dict = deepcopy(collection.entity_dict)
+    entity_dict["name"] = f"{uid_metadata(collection, uid, 'name', 'undef')}{name_suffix}"
+    for key in ("role", "feature", "scenario"):
+        if key in entity_dict:
+            value = uid_metadata(collection, uid, key)
+            if value is not None:
+                entity_dict[key] = value
+    if topology is not None:
+        entity_dict["topology"] = topology
+    return entity_dict
+
+
+def entity_metadata_input_dict(collection, uid=None, name_label="Name: ", name_suffix=""):
+    """input_dict for multiple_input_dialog with the metadata fields of the collection schema
+    (name, and role, feature and scenario where present), with defaults taken from uid."""
+    input_dict = {
+        "name": [name_label, f"{uid_metadata(collection, uid, 'name', 'undef')}{name_suffix}"]
+    }
+    if "role" in collection.entity_dict and collection.valid_roles:
+        role = uid_metadata(collection, uid, "role")
+        input_dict["role"] = ["Role: ", list(collection.valid_roles)]
+        if role in collection.valid_roles:
+            input_dict["role"].append(role)
+    if "feature" in collection.entity_dict:
+        input_dict["feature"] = ["Feature: ", uid_metadata(collection, uid, "feature", "undef")]
+    if "scenario" in collection.entity_dict:
+        input_dict["scenario"] = [
+            "Scenario: ",
+            uid_metadata(collection, uid, "scenario", "undef"),
+        ]
+    return input_dict
 
 
 def freeze_gui_on(func):

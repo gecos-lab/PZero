@@ -84,27 +84,24 @@ from .entities_factory import (
     XsVertexSet,
     Attitude,
 )
+from .helpers.helper_functions import (
+    uses_selection,
+    active_collection,
+    derived_entity_dict,
+    entity_metadata_input_dict,
+    uid_metadata,
+)
 from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 
 
 def _build_extrusion_output_dict(self, input_uid, title, default_suffix):
     """Create the output entity dictionary shared by extrusion tools."""
-    surf_dict = deepcopy(self.geol_coll.entity_dict)
-    input_dict = {
-        "name": [
-            "TriSurf name: ",
-            self.geol_coll.get_uid_name(input_uid) + default_suffix,
-        ],
-        "role": [
-            "Role: ",
-            self.geol_coll.valid_roles,
-        ],
-        "feature": [
-            "Feature: ",
-            self.geol_coll.get_uid_feature(input_uid),
-        ],
-        "scenario": ["Scenario: ", self.geol_coll.get_uid_scenario(input_uid)],
-    }
+    # Input entities and outputs are in the active collection (see @uses_selection).
+    source_coll = active_collection(self)
+    surf_dict = deepcopy(source_coll.entity_dict)
+    input_dict = entity_metadata_input_dict(
+        source_coll, input_uid, "TriSurf name: ", default_suffix
+    )
     surf_dict_updt = multiple_input_dialog(title=title, input_dict=input_dict)
     if surf_dict_updt is None:
         return None
@@ -116,28 +113,30 @@ def _build_extrusion_output_dict(self, input_uid, title, default_suffix):
 
 
 def _ask_linear_extrusion_parameters(self, title):
-    """Ask for extrusion direction and vertical limits."""
-    trend = input_one_value_dialog(title=title, label="Trend Value", default_value=90.0)
-    if trend is None:
-        trend = 90.0
-    plunge = input_one_value_dialog(
-        title=title, label="Plunge Value", default_value=30.0
-    )
-    if plunge is None:
-        plunge = 30.0
-    extrusion_par = {"bottom": ["Lower limit:", -1000], "top": ["Higher limit", 1000]}
-    vertical_extrusion = multiple_input_dialog(
-        title="Vertical Extrusion", input_dict=extrusion_par
-    )
-    if vertical_extrusion is None:
-        self.print_terminal(
-            "Wrong extrusion parameters, please check the top and bottom values"
-        )
+    """Ask, in one dialog, for extrusion direction, limits along the direction, and optional
+    densification. Returns a dict with trend, plunge, bottom, top, densify, sample_lines, or None."""
+    input_dict = {
+        "trend": ["Trend: ", 90.0],
+        "plunge": ["Plunge: ", 30.0],
+        "bottom": ["Lower limit: ", -1000.0],
+        "top": ["Higher limit: ", 1000.0],
+        "densify": ["Densify with internal sample lines", False],
+        "sample_lines": ["Internal sample lines (if densified): ", 10],
+    }
+    parameters = multiple_input_dialog(title=title, input_dict=input_dict)
+    if parameters is None:
         return None
-    if vertical_extrusion["top"] <= vertical_extrusion["bottom"]:
+    try:
+        for key in ("trend", "plunge", "bottom", "top"):
+            parameters[key] = float(parameters[key])
+        parameters["sample_lines"] = max(1, int(round(float(parameters["sample_lines"]))))
+    except (TypeError, ValueError):
+        self.print_terminal(" -- Wrong extrusion parameters -- ")
+        return None
+    if parameters["top"] <= parameters["bottom"]:
         self.print_terminal(" -- Higher limit must be greater than lower limit -- ")
         return None
-    return trend, plunge, vertical_extrusion
+    return parameters
 
 
 def _get_linear_extrusion_vector(trend, plunge):
@@ -1055,6 +1054,7 @@ def _build_surface_from_point_stack(point_stack):
     return surface
 
 
+@uses_selection(topologies=["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine", "TriSurf"])
 @freeze_gui_onoff
 def interpolation_delaunay_2d(self):
     """The vtkDelaunay2D object takes vtkPointSet (or any of its subclasses) as input and
@@ -1062,9 +1062,8 @@ def interpolation_delaunay_2d(self):
     Select the whole line of two or more vtkPointSet entities and start the algorithm.
     """
     self.print_terminal("Delaunay2D: interpolation of Points, Lines and Surfaces")
-    if self.shown_table != "tabGeology":
-        self.print_terminal(" -- Only geological objects can be interpolated -- ")
-        return
+    # Input entities and output surface are in the active collection (see @uses_selection).
+    source_coll = active_collection(self)
     # Check if some vtkPolyData is selected
     if not self.selected_uids:
         self.print_terminal(" -- No input data selected -- ")
@@ -1074,35 +1073,17 @@ def interpolation_delaunay_2d(self):
         # can arise if the main geology table is deselected while the dataframe is being built
         input_uids = deepcopy(self.selected_uids)
     for uid in input_uids:
-        if (
-            isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine)
-            or isinstance(self.geol_coll.get_uid_vtk_obj(uid), XsPolyLine)
-            or isinstance(self.geol_coll.get_uid_vtk_obj(uid), VertexSet)
-            or isinstance(self.geol_coll.get_uid_vtk_obj(uid), XsVertexSet)
-            or isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf)
+        if not isinstance(
+            source_coll.get_uid_vtk_obj(uid),
+            (PolyLine, XsPolyLine, VertexSet, XsVertexSet, TriSurf),
         ):
-            pass
-        else:
             self.print_terminal(" -- Error input type -- ")
             return
-    # Create deepcopy of the geological entity dictionary.
-    surf_dict = deepcopy(self.geol_coll.entity_dict)
-    input_dict = {
-        "name": [
-            "TriSurf name: ",
-            self.geol_coll.get_uid_name(input_uids[0]) + "_delaunay2d",
-        ],
-        "role": [
-            "Role: ",
-            self.geol_coll.valid_roles,
-            self.geol_coll.get_uid_role(input_uids[0]),
-        ],
-        "feature": [
-            "Feature: ",
-            self.geol_coll.get_uid_feature(input_uids[0]),
-        ],
-        "scenario": ["Scenario: ", self.geol_coll.get_uid_scenario(input_uids[0])],
-    }
+    # Create deepcopy of the entity dictionary of the collection.
+    surf_dict = deepcopy(source_coll.entity_dict)
+    input_dict = entity_metadata_input_dict(
+        source_coll, input_uids[0], "TriSurf name: ", "_delaunay2d"
+    )
     surf_dict_updt = multiple_input_dialog(
         title="New Delaunay 2D interpolation", input_dict=input_dict
     )
@@ -1136,7 +1117,7 @@ def interpolation_delaunay_2d(self):
     # input multiple objects into vtkDelaunay2D
     vtkappend = vtkAppendPolyData()
     for uid in input_uids:
-        vtkappend.AddInputData(self.geol_coll.get_uid_vtk_obj(uid))
+        vtkappend.AddInputData(source_coll.get_uid_vtk_obj(uid))
     vtkappend.Update()
 
     bounding_box = vtkBoundingBox()
@@ -1157,24 +1138,24 @@ def interpolation_delaunay_2d(self):
     surf_dict["vtk_obj"].ShallowCopy(delaunay_2d.GetOutput())
     from .helpers.seismic_relink import inherit_surface_seismic_parent
 
-    inherit_surface_seismic_parent(self.geol_coll, input_uids, surf_dict)
+    inherit_surface_seismic_parent(source_coll, input_uids, surf_dict)
     surf_dict["vtk_obj"].Modified()
     # Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
     if surf_dict["vtk_obj"].points_number > 0:
-        self.geol_coll.add_entity_from_dict(surf_dict)
+        source_coll.add_entity_from_dict(surf_dict)
     else:
         self.print_terminal(" -- empty object -- ")
 
 
+@uses_selection(topologies=["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine", "TriSurf"], max_selected=1)
 @freeze_gui_onoff
 def regularized_grid_surface_interpolation(self):
     """Build a surface directly from a regularized interpretation grid."""
     self.print_terminal(
         "Regularized grid surface: build a footprint-preserving surface from regularized interpretation samples"
     )
-    if self.shown_table != "tabGeology":
-        self.print_terminal(" -- Only geological objects can be interpolated -- ")
-        return
+    # Input entity and output surface are in the active collection (see @uses_selection).
+    source_coll = active_collection(self)
     if not self.selected_uids:
         self.print_terminal("No input data selected.")
         return
@@ -1185,7 +1166,7 @@ def regularized_grid_surface_interpolation(self):
         )
         return
 
-    input_vtk_obj = self.geol_coll.get_uid_vtk_obj(input_uids[0])
+    input_vtk_obj = source_coll.get_uid_vtk_obj(input_uids[0])
     if not all(
         hasattr(input_vtk_obj, attr)
         for attr in ("GetNumberOfCells", "GetCell", "GetPoint")
@@ -1203,24 +1184,11 @@ def regularized_grid_surface_interpolation(self):
         )
         return
 
-    surf_dict = deepcopy(self.geol_coll.entity_dict)
-    input_dict = {
-        "name": [
-            "TriSurf name: ",
-            self.geol_coll.get_uid_name(input_uids[0]) + "_structured_surface",
-        ],
-        "role": [
-            "Role: ",
-            self.geol_coll.valid_roles,
-            self.geol_coll.get_uid_role(input_uids[0]),
-        ],
-        "feature": [
-            "Feature: ",
-            self.geol_coll.get_uid_feature(input_uids[0]),
-        ],
-        "scenario": ["Scenario: ", self.geol_coll.get_uid_scenario(input_uids[0])],
-        "steiner_points": ["Steiner points between grid samples:", 0],
-    }
+    surf_dict = deepcopy(source_coll.entity_dict)
+    input_dict = entity_metadata_input_dict(
+        source_coll, input_uids[0], "TriSurf name: ", "_structured_surface"
+    )
+    input_dict["steiner_points"] = ["Steiner points between grid samples:", 0]
     surf_dict_updt = multiple_input_dialog(
         title="Regularized Grid Surface", input_dict=input_dict
     )
@@ -1268,14 +1236,15 @@ def regularized_grid_surface_interpolation(self):
     surf_dict["vtk_obj"].ShallowCopy(structured_surface)
     from .helpers.seismic_relink import inherit_surface_seismic_parent
 
-    inherit_surface_seismic_parent(self.geol_coll, input_uids, surf_dict)
+    inherit_surface_seismic_parent(source_coll, input_uids, surf_dict)
     surf_dict["vtk_obj"].Modified()
     if surf_dict["vtk_obj"].points_number > 0:
-        self.geol_coll.add_entity_from_dict(surf_dict)
+        source_coll.add_entity_from_dict(surf_dict)
     else:
         self.print_terminal(" -- empty object -- ")
 
 
+@uses_selection(topologies=["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine", "TriSurf"])
 @freeze_gui_onoff
 def poisson_interpolation(self):
     """vtkSurfaceReconstructionFilter can be used to reconstruct surfaces from point clouds. Input is a vtkDataSet
@@ -1283,44 +1252,25 @@ def poisson_interpolation(self):
     self.print_terminal(
         "Poisson interpolation: reconstruct surface from points, lines, or surfaces as an implicit point-cloud surface"
     )
-    if self.shown_table != "tabGeology":
-        self.print_terminal(" -- Only geological objects can be interpolated -- ")
-        return
+    # Input entities and output surface are in the active collection (see @uses_selection).
+    source_coll = active_collection(self)
     if not self.selected_uids:
         self.print_terminal("No input data selected.")
         return
     else:
         input_uids = deepcopy(self.selected_uids)
     for uid in input_uids:
-        if (
-            isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine)
-            or isinstance(self.geol_coll.get_uid_vtk_obj(uid), XsPolyLine)
-            or isinstance(self.geol_coll.get_uid_vtk_obj(uid), VertexSet)
-            or isinstance(self.geol_coll.get_uid_vtk_obj(uid), XsVertexSet)
-            or isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf)
+        if not isinstance(
+            source_coll.get_uid_vtk_obj(uid),
+            (PolyLine, XsPolyLine, VertexSet, XsVertexSet, TriSurf),
         ):
-            pass
-        else:
             self.print_terminal(" -- Error input type -- ")
             return
 
-    surf_dict = deepcopy(self.geol_coll.entity_dict)
-    input_dict = {
-        "name": [
-            "TriSurf name: ",
-            self.geol_coll.get_uid_name(input_uids[0]) + "_poisson",
-        ],
-        "role": [
-            "Role: ",
-            self.geol_coll.valid_roles,
-            self.geol_coll.get_uid_role(input_uids[0]),
-        ],
-        "feature": [
-            "Feature: ",
-            self.geol_coll.get_uid_feature(input_uids[0]),
-        ],
-        "scenario": ["Scenario: ", self.geol_coll.get_uid_scenario(input_uids[0])],
-    }
+    surf_dict = deepcopy(source_coll.entity_dict)
+    input_dict = entity_metadata_input_dict(
+        source_coll, input_uids[0], "TriSurf name: ", "_poisson"
+    )
     surf_dict_updt = multiple_input_dialog(
         title="Poisson Interpolation", input_dict=input_dict
     )
@@ -1349,9 +1299,9 @@ def poisson_interpolation(self):
 
     vtkappend = vtkAppendPolyData()
     for uid in input_uids:
-        topology = self.geol_coll.get_uid_topology(uid)
+        topology = source_coll.get_uid_topology(uid)
         if topology in ["XsPolyLine", "PolyLine", "TriSurf"]:
-            point_coord = self.geol_coll.get_uid_vtk_obj(uid).points
+            point_coord = source_coll.get_uid_vtk_obj(uid).points
             points = vtkPoints()
             for point_idx in range(len(point_coord)):
                 points.InsertPoint(
@@ -1364,7 +1314,7 @@ def poisson_interpolation(self):
             polydata.SetPoints(points)
             vtkappend.AddInputData(polydata)
         elif topology in ["VertexSet", "XsVertexSet"]:
-            vtkappend.AddInputData(self.geol_coll.get_uid_vtk_obj(uid))
+            vtkappend.AddInputData(source_coll.get_uid_vtk_obj(uid))
     vtkappend.Update()
 
     surf_from_points.SetInputDataObject(vtkappend.GetOutput())
@@ -1377,11 +1327,12 @@ def poisson_interpolation(self):
     surf_dict["vtk_obj"].ShallowCopy(contour_surface.GetOutput())
     surf_dict["vtk_obj"].Modified()
     if surf_dict["vtk_obj"].points_number > 0:
-        self.geol_coll.add_entity_from_dict(surf_dict)
+        source_coll.add_entity_from_dict(surf_dict)
     else:
         self.print_terminal(" -- empty object -- ")
 
 
+@uses_selection(valid={"geol_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine", "TriSurf"]})
 @freeze_gui_onoff
 def implicit_model_loop_structural(self):
     """Function to call LoopStructural's implicit modelling algorithms.
@@ -1845,15 +1796,15 @@ def implicit_model_loop_structural(self):
     self.print_terminal("Loop interpolation completed.")
 
 
+@uses_selection(topologies=["TriSurf"])
 @freeze_gui_onoff
 def surface_smoothing(
     self, mode=0, convergence_value=1, boundary_smoothing=False, edge_smoothing=False
 ):
     """Smoothing tools adjust the positions of points to reduce the noise content in the surface."""
+    # Input entities and outputs are in the active collection (see @uses_selection).
+    source_coll = active_collection(self)
     self.print_terminal("Surface Smoothing: reduce the noise of the surface")
-    if self.shown_table != "tabGeology":
-        self.print_terminal(" -- Only geological objects can be modified -- ")
-        return
     # Check if some vtkPolyData is selected
     if not self.selected_uids:
         self.print_terminal("No input data selected.")
@@ -1862,9 +1813,9 @@ def surface_smoothing(
         # Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built
         input_uids = deepcopy(self.selected_uids)
     for uid in input_uids:
-        if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
+        if isinstance(source_coll.get_uid_vtk_obj(uid), TriSurf):
             smoother = vtkSmoothPolyDataFilter()
-            smoother.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
+            smoother.SetInputData(source_coll.get_uid_vtk_obj(uid))
             if convergence_value is None:
                 convergence_value = 1
             smoother.SetConvergence(float(convergence_value))
@@ -1875,18 +1826,14 @@ def surface_smoothing(
                 return smoother.GetOutput()
             else:
                 # Create deepcopy of the geological entity dictionary.
-                surf_dict = deepcopy(self.geol_coll.entity_dict)
-                surf_dict["name"] = self.geol_coll.get_uid_name(uid) + "_smoothed"
-                surf_dict["feature"] = self.geol_coll.get_uid_feature(uid)
-                surf_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
-                surf_dict["role"] = self.geol_coll.get_uid_role(uid)
+                surf_dict = derived_entity_dict(source_coll, uid, "_smoothed")
                 surf_dict["topology"] = "TriSurf"
                 surf_dict["vtk_obj"] = TriSurf()
                 surf_dict["vtk_obj"].ShallowCopy(smoother.GetOutput())
                 surf_dict["vtk_obj"].Modified()
 
                 if surf_dict["vtk_obj"].points_number > 0:
-                    self.geol_coll.add_entity_from_dict(surf_dict)
+                    source_coll.add_entity_from_dict(surf_dict)
                 else:
                     self.print_terminal(" -- empty object -- ")
 
@@ -1940,165 +1887,94 @@ def surface_smoothing(
     #     print(" -- empty object -- ")
 
 
+@uses_selection(topologies=["PolyLine", "XsPolyLine"], max_selected=1)
 @freeze_gui_onoff
 def linear_extrusion(self):
-    """vtkLinearExtrusionFilter sweeps the generating primitives along a straight line path. This tool is here
-    used to create fault surfaces from faults traces."""
+    """Create a surface by sweeping the last selected line along a straight direction (trend/plunge),
+    between a lower and a higher limit. With densification, internal sampled extrusion lines are
+    added (vtkLinearExtrusionFilter is used otherwise). View3D > Create > Extrusion.
+    Input line and output surface are in the active collection (see @uses_selection)."""
+    title = "Extrusion"
     self.print_terminal(
-        "Simple extrusion: create surface by projecting target linear object along a straight line path"
+        "Extrusion: create a surface by sweeping a line along a straight direction"
     )
-    if self.shown_table != "tabGeology":
-        self.print_terminal(" -- Only geological objects can be projected -- ")
-        return
-    # Check if some vtkPolyData is selected
+    source_coll = active_collection(self)
     if not self.selected_uids:
         self.print_terminal("No input data selected.")
         return
-    else:
-        # Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deselected while the dataframe is being built
-        input_uids = deepcopy(self.selected_uids)
-    for uid in input_uids:
-        if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine) or isinstance(
-            self.geol_coll.get_uid_vtk_obj(uid), XsPolyLine
-        ):
-            pass
-        else:
-            self.print_terminal(
-                " -- Error input type: only PolyLine and XsPolyLine type -- "
-            )
-            return
+    input_uid = self.selected_uids[-1]
+    input_obj = source_coll.get_uid_vtk_obj(input_uid)
+    if not isinstance(input_obj, (PolyLine, XsPolyLine)):
+        self.print_terminal(" -- Error input type: only PolyLine and XsPolyLine type -- ")
+        return
+    parameters = _ask_linear_extrusion_parameters(self=self, title=title)
+    if parameters is None:
+        return
     surf_dict = _build_extrusion_output_dict(
         self=self,
-        input_uid=input_uids[0],
-        title="Simple Extrusion",
-        default_suffix="_extruded",
+        input_uid=input_uid,
+        title=title,
+        default_suffix="_densified_extruded" if parameters["densify"] else "_extruded",
     )
     if surf_dict is None:
         return
-    extrusion_parameters = _ask_linear_extrusion_parameters(
-        self=self, title="Simple Extrusion"
+    extrusion_vector = _get_linear_extrusion_vector(
+        parameters["trend"], parameters["plunge"]
     )
-    if extrusion_parameters is None:
+
+    if parameters["densify"]:
+        out_polydata = _build_sampled_extrusion_surface(
+            source_line=input_obj,
+            extrusion_vector=extrusion_vector,
+            bottom_limit=parameters["bottom"],
+            top_limit=parameters["top"],
+            sample_lines=parameters["sample_lines"],
+        )
+    else:
+        x_vector, y_vector, z_vector = extrusion_vector
+        linear_extrusion_filter = vtkLinearExtrusionFilter()
+        linear_extrusion_filter.CappingOn()  # yes or no?
+        linear_extrusion_filter.SetExtrusionTypeToVectorExtrusion()
+        linear_extrusion_filter.SetVector(x_vector, y_vector, z_vector)
+        linear_extrusion_filter.SetScaleFactor(parameters["top"] - parameters["bottom"])
+        linear_extrusion_filter.SetInputData(input_obj)
+        linear_extrusion_filter.Update()
+        # The output of vtkLinearExtrusionFilter() are triangle strips: convert them to triangles.
+        triangle_filt = vtkTriangleFilter()
+        triangle_filt.SetInputConnection(linear_extrusion_filter.GetOutputPort())
+        triangle_filt.Update()
+        # Translate the surface to the lower limit along the extrusion vector.
+        translate = vtkTransform()
+        translate.Translate(
+            x_vector * parameters["bottom"],
+            y_vector * parameters["bottom"],
+            z_vector * parameters["bottom"],
+        )
+        transform_filter = vtkTransformPolyDataFilter()
+        transform_filter.SetTransform(translate)
+        transform_filter.SetInputConnection(triangle_filt.GetOutputPort())
+        transform_filter.Update()
+        out_polydata = transform_filter.GetOutput()
+
+    if out_polydata is None or out_polydata.GetNumberOfPoints() == 0:
+        self.print_terminal(" -- empty object -- ")
         return
-    trend, plunge, vertical_extrusion = extrusion_parameters
-    total_extrusion = vertical_extrusion["top"] - vertical_extrusion["bottom"]
-    linear_extrusion = vtkLinearExtrusionFilter()
-    linear_extrusion.CappingOn()  # yes or no?
-    linear_extrusion.SetExtrusionTypeToVectorExtrusion()
-    x_vector, y_vector, z_vector = _get_linear_extrusion_vector(trend, plunge)
-    linear_extrusion.SetVector(
-        x_vector, y_vector, z_vector
-    )  # double,double,double format
-    linear_extrusion.SetScaleFactor(total_extrusion)  # double format
-    linear_extrusion.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
-    linear_extrusion.Update()
-
-    #  The output of vtkLinearExtrusionFilter() are triangle strips we convert them to triangles with vtkTriangleFilter
-    triangle_filt = vtkTriangleFilter()
-    triangle_filt.SetInputConnection(linear_extrusion.GetOutputPort())
-    triangle_filt.Update()
-
-    #  translate the plane using the xyz vector with intensity = negative extrusion value.
-    translate = vtkTransform()
-    translate.Translate(
-        x_vector * vertical_extrusion["bottom"],
-        y_vector * vertical_extrusion["bottom"],
-        z_vector * vertical_extrusion["bottom"],
-    )
-
-    transform_filter = vtkTransformPolyDataFilter()
-    transform_filter.SetTransform(translate)
-    transform_filter.SetInputConnection(triangle_filt.GetOutputPort())
-    transform_filter.Update()
-
-    out_polydata = transform_filter.GetOutput()
-    # ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning
+    # ShallowCopy is the way to copy the new surface into the TriSurf instance created above.
     surf_dict["vtk_obj"].ShallowCopy(out_polydata)
     surf_dict["vtk_obj"].Modified()
-    # Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
-    if surf_dict["vtk_obj"].points_number > 0:
-        self.geol_coll.add_entity_from_dict(surf_dict)
-    else:
-        self.print_terminal(" -- empty object -- ")
+    source_coll.add_entity_from_dict(surf_dict)
 
 
-@freeze_gui_onoff
-def enhanced_linear_extrusion(self):
-    """Create a sampled extrusion surface with intermediate profiles."""
-    self.print_terminal(
-        "Extrusion with densification: create a surface from one polyline with internal sampled extrusion lines"
-    )
-    if self.shown_table != "tabGeology":
-        self.print_terminal(" -- Only geological objects can be projected -- ")
-        return
-    if not self.selected_uids:
-        self.print_terminal("No input data selected.")
-        return
-
-    input_uids = deepcopy(self.selected_uids)
-    if len(input_uids) != 1:
-        self.print_terminal(" -- Select a single PolyLine or XsPolyLine -- ")
-        return
-
-    input_obj = self.geol_coll.get_uid_vtk_obj(input_uids[0])
-    if not isinstance(input_obj, (PolyLine, XsPolyLine)):
-        self.print_terminal(
-            " -- Error input type: only PolyLine and XsPolyLine type -- "
-        )
-        return
-
-    surf_dict = _build_extrusion_output_dict(
-        self=self,
-        input_uid=input_uids[0],
-        title="Extrusion with Densification",
-        default_suffix="_enhanced_extruded",
-    )
-    if surf_dict is None:
-        return
-
-    extrusion_parameters = _ask_linear_extrusion_parameters(
-        self=self, title="Extrusion with Densification"
-    )
-    if extrusion_parameters is None:
-        return
-    trend, plunge, vertical_extrusion = extrusion_parameters
-
-    sample_lines = input_one_value_dialog(
-        title="Extrusion with Densification",
-        label="Internal sample lines",
-        default_value=10,
-    )
-    if sample_lines is None:
-        sample_lines = 10
-    sample_lines = max(1, int(round(sample_lines)))
-
-    extrusion_vector = _get_linear_extrusion_vector(trend, plunge)
-    output_surface = _build_sampled_extrusion_surface(
-        source_line=input_obj,
-        extrusion_vector=extrusion_vector,
-        bottom_limit=vertical_extrusion["bottom"],
-        top_limit=vertical_extrusion["top"],
-        sample_lines=sample_lines,
-    )
-    if output_surface is None or output_surface.points_number == 0:
-        self.print_terminal(" -- empty object -- ")
-        return
-
-    surf_dict["vtk_obj"].ShallowCopy(output_surface)
-    surf_dict["vtk_obj"].Modified()
-    self.geol_coll.add_entity_from_dict(surf_dict)
-
-
+@uses_selection(topologies=["TriSurf"])
 @freeze_gui_onoff
 def decimation_pro_resampling(self):
     """Decimation reduces the number of triangles in a triangle mesh while maintaining a faithful approximation to
     the original mesh."""
+    # Input entities and outputs are in the active collection (see @uses_selection).
+    source_coll = active_collection(self)
     self.print_terminal(
         "Decimation Pro: resample target surface and reduce number of triangles of the mesh"
     )
-    if self.shown_table != "tabGeology":
-        self.print_terminal(" -- Only geological objects can be resampled -- ")
-        return
     # Check if some vtkPolyData is selected
     if not self.selected_uids:
         self.print_terminal("No input data selected.")
@@ -2107,22 +1983,18 @@ def decimation_pro_resampling(self):
         # Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built
         input_uids = deepcopy(self.selected_uids)
     for uid in input_uids:
-        if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
+        if isinstance(source_coll.get_uid_vtk_obj(uid), TriSurf):
             pass
         else:
             self.print_terminal(" -- Error input type: only TriSurf type -- ")
             return
     # Create deepcopy of the geological entity dictionary.
-    surf_dict = deepcopy(self.geol_coll.entity_dict)
-    surf_dict["name"] = self.geol_coll.get_uid_name(input_uids[0]) + "_decimated"
-    surf_dict["feature"] = self.geol_coll.get_uid_feature(input_uids[0])
-    surf_dict["scenario"] = self.geol_coll.get_uid_scenario(input_uids[0])
-    surf_dict["role"] = self.geol_coll.get_uid_role(input_uids[0])
+    surf_dict = derived_entity_dict(source_coll, input_uids[0], "_decimated")
     surf_dict["topology"] = "TriSurf"
     surf_dict["vtk_obj"] = TriSurf()
     # Create a new instance of the decimation class
     deci = vtkDecimatePro()
-    deci.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
+    deci.SetInputData(source_coll.get_uid_vtk_obj(input_uids[0]))
     # Target Reduction value. Specify the desired reduction in the total number of polygons (e.g., when
     # Reduction is set to 0.9, this filter will try to reduce the data set to 10% of its original size).
     tar_reduct = input_one_value_dialog(
@@ -2176,21 +2048,21 @@ def decimation_pro_resampling(self):
     surf_dict["vtk_obj"].Modified()
     # Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
     if surf_dict["vtk_obj"].points_number > 0:
-        self.geol_coll.add_entity_from_dict(surf_dict)
+        source_coll.add_entity_from_dict(surf_dict)
     else:
         self.print_terminal(" -- empty object -- ")
 
 
+@uses_selection(topologies=["TriSurf"])
 @freeze_gui_onoff
 def decimation_quadric_resampling(self):
     """Decimation reduces the number of triangles in a triangle mesh while maintaining a faithful approximation to
     the original mesh."""
+    # Input entities and outputs are in the active collection (see @uses_selection).
+    source_coll = active_collection(self)
     self.print_terminal(
         "Decimation Quadric: resample target surface and reduce number of triangles of the mesh"
     )
-    if self.shown_table != "tabGeology":
-        self.print_terminal(" -- Only geological objects can be resampled -- ")
-        return
     # Check if some vtkPolyData is selected
     if not self.selected_uids:
         self.print_terminal("No input data selected.")
@@ -2199,22 +2071,18 @@ def decimation_quadric_resampling(self):
         # Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built
         input_uids = deepcopy(self.selected_uids)
     for uid in input_uids:
-        if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
+        if isinstance(source_coll.get_uid_vtk_obj(uid), TriSurf):
             pass
         else:
             self.print_terminal(" -- Error input type: only TriSurf type -- ")
             return
     # Create deepcopy of the geological entity dictionary.
-    surf_dict = deepcopy(self.geol_coll.entity_dict)
-    surf_dict["name"] = self.geol_coll.get_uid_name(input_uids[0]) + "_decimated"
-    surf_dict["feature"] = self.geol_coll.get_uid_feature(input_uids[0])
-    surf_dict["scenario"] = self.geol_coll.get_uid_scenario(input_uids[0])
-    surf_dict["role"] = self.geol_coll.get_uid_role(input_uids[0])
+    surf_dict = derived_entity_dict(source_coll, input_uids[0], "_decimated")
     surf_dict["topology"] = "TriSurf"
     surf_dict["vtk_obj"] = TriSurf()
     # Create a new instance of the decimation class
     deci = vtkQuadricDecimation()
-    deci.SetInputData(self.geol_coll.get_uid_vtk_obj(input_uids[0]))
+    deci.SetInputData(source_coll.get_uid_vtk_obj(input_uids[0]))
     # Target Reduction value. Specify the desired reduction in the total number of polygons (e.g., when
     # Target Reduction is set to 0.9, this filter will try to reduce the data set to 10% of its original size).
     tar_reduct = input_one_value_dialog(
@@ -2231,11 +2099,12 @@ def decimation_quadric_resampling(self):
     surf_dict["vtk_obj"].Modified()
     # Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
     if surf_dict["vtk_obj"].points_number > 0:
-        self.geol_coll.add_entity_from_dict(surf_dict)
+        source_coll.add_entity_from_dict(surf_dict)
     else:
         self.print_terminal(" -- empty object -- ")
 
 
+@uses_selection(topologies=["TriSurf"])
 @freeze_gui_onoff
 def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
     """Different types of subdivisions. Subdivides a triangular, polygonal surface; four new triangles are created for each triangle of the polygonal surface.:
@@ -2243,12 +2112,11 @@ def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
     1. vtkLinearSubdivisionFilter (shape preserving)
     2. vtkButterflySubdivisionFilter  (not shape preserving)
     3. vtkLoopSubdivisionFilter (not shape preserving)"""
+    # Input entities and outputs are in the active collection (see @uses_selection).
+    source_coll = active_collection(self)
     self.print_terminal(
         "Subdivision resampling: resample target surface and increase number of triangles of the mesh"
     )
-    if self.shown_table != "tabGeology":
-        self.print_terminal(" -- Only geological objects can be resampled -- ")
-        return
     # Check if some vtkPolyData is selected
     if not self.selected_uids:
         self.print_terminal("No input data selected.")
@@ -2258,7 +2126,7 @@ def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
         # deseselcted while the dataframe is being built
         input_uids = deepcopy(self.selected_uids)
     for uid in input_uids:
-        if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
+        if isinstance(source_coll.get_uid_vtk_obj(uid), TriSurf):
             if type == "linear":
                 subdiv_filter = vtkLinearSubdivisionFilter()
             elif type == "butterfly":
@@ -2267,7 +2135,7 @@ def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
                 subdiv_filter = vtkLoopSubdivisionFilter()
             # Create a new instance of the decimation class
 
-            subdiv_filter.SetInputData(self.geol_coll.get_uid_vtk_obj(uid))
+            subdiv_filter.SetInputData(source_coll.get_uid_vtk_obj(uid))
             subdiv_filter.SetNumberOfSubdivisions(int(n_subd))
             subdiv_filter.Update()
             # ShallowCopy is the way to copy the new interpolated surface into the
@@ -2278,18 +2146,14 @@ def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
             else:
                 # Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
                 # Create deepcopy of the geological entity dictionary.
-                surf_dict = deepcopy(self.geol_coll.entity_dict)
-                surf_dict["name"] = self.geol_coll.get_uid_name(uid) + "_subdivided"
-                surf_dict["feature"] = self.geol_coll.get_uid_feature(uid)
-                surf_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
-                surf_dict["role"] = self.geol_coll.get_uid_role(uid)
+                surf_dict = derived_entity_dict(source_coll, uid, "_subdivided")
                 surf_dict["topology"] = "TriSurf"
                 surf_dict["vtk_obj"] = TriSurf()
                 surf_dict["vtk_obj"].ShallowCopy(subdiv_filter.GetOutput())
                 surf_dict["vtk_obj"].Modified()
 
                 if surf_dict["vtk_obj"].points_number > 0:
-                    self.geol_coll.add_entity_from_dict(surf_dict)
+                    source_coll.add_entity_from_dict(surf_dict)
                 else:
                     self.print_terminal(" -- empty object -- ")
         else:
@@ -2362,13 +2226,14 @@ def xsection_intersection_polyline_parts(vtk_obj=None, vtk_plane=None):
     return out_parts
 
 
+@uses_selection(topologies=["PolyLine", "XsPolyLine", "TriSurf", "DEM", "TSDom", "Voxet", "TetraSolid"])
 @freeze_gui_onoff
 def intersection_xs(self):
     """vtkCutter is a filter to cut through data using any subclass of vtkImplicitFunction.
-    HOW TO USE: select one or more Geological objects, DOMs or 3D Meshes (Source data), then function asks for XSection
-    (input data) for the filter."""
+    HOW TO USE: select PolyLines, TriSurfs, DEMs, TSDoms or 3D meshes (Voxets) of any collection, then
+    the function asks for the XSections to intersect. Outputs are stored in the source collection."""
     self.print_terminal(
-        "Intersection with XSection: intersect Geological entities, 3D Meshes and DEM & DOMs."
+        "Intersection with XSection: intersect PolyLines, TriSurfs, DEMs, TSDoms and 3D meshes."
     )
     # Check if some vtkPolyData is selected
     if not self.selected_uids:
@@ -2393,291 +2258,282 @@ def intersection_xs(self):
             self.xsect_coll.df["name"] == sec_name, "uid"
         ].values[0]
         postfix = f"_int_{sec_name}"
-        if self.shown_table in ["tabGeology", "tabFluids", "tabBackgrounds"]:
-            source_coll = getattr(
-                self,
-                {
-                    "tabGeology": "geol_coll",
-                    "tabFluids": "fluid_coll",
-                    "tabBackgrounds": "backgrnd_coll",
-                }[self.shown_table],
-            )
-            for uid in input_uids:
-                if source_coll.get_uid_topology(uid) in [
-                    "PolyLine",
-                    "XsPolyLine",
-                ]:
-                    # Intersection for PolyLine and XsPolyLine.
-                    if source_coll.get_uid_x_section(uid) != xsect_uid:
-                        # cutter
-                        cutter = vtkCutter()
-                        cutter.SetCutFunction(
-                            self.xsect_coll.get_uid_vtk_plane(xsect_uid)
-                        )
-                        cutter.SetInputData(source_coll.get_uid_vtk_obj(uid))
-                        cutter.Update()
-                        if cutter.GetOutput().GetNumberOfPoints() > 0:
-                            # Create new dict for the new XsVertexSet
-
-                            obj_dict = deepcopy(source_coll.entity_dict)
-                            obj_dict["parent_uid"] = xsect_uid
-                            obj_dict["topology"] = "XsVertexSet"
-                            obj_dict["vtk_obj"] = XsVertexSet(
-                                x_section_uid=xsect_uid, parent=self
-                            )
-                            obj_dict["name"] = (
-                                f"{source_coll.get_uid_name(uid)}{postfix}"
-                            )
-                            obj_dict["role"] = source_coll.get_uid_role(uid)
-                            obj_dict["feature"] = source_coll.get_uid_feature(uid)
-                            obj_dict["scenario"] = source_coll.get_uid_scenario(uid)
-                            obj_dict["properties_names"] = (
-                                source_coll.get_uid_properties_names(uid)
-                            )
-                            obj_dict["properties_components"] = (
-                                source_coll.get_uid_properties_components(uid)
-                            )
-                            obj_dict["vtk_obj"].DeepCopy(cutter.GetOutput())
-                            for data_key in obj_dict["vtk_obj"].point_data_keys:
-                                if not data_key in obj_dict["properties_names"]:
-                                    obj_dict["vtk_obj"].remove_point_data(data_key)
-                            source_coll.add_entity_from_dict(obj_dict)
-                        else:
-                            self.print_terminal(" -- empty object from cutter -- ")
-                    else:
-                        self.print_terminal(
-                            " -- no intersection of XsPolyLine with its own XSection -- "
-                        )
-                elif source_coll.get_uid_topology(uid) == "TriSurf":
-                    line_parts = xsection_intersection_polyline_parts(
-                        vtk_obj=source_coll.get_uid_vtk_obj(uid),
-                        vtk_plane=self.xsect_coll.get_uid_vtk_plane(xsect_uid),
+        # The source collection is the active one (see @uses_selection); the branch is chosen by
+        # topology, so any collection works, and outputs go to the same collection.
+        source_coll = active_collection(self)
+        for uid in input_uids:
+            topology = source_coll.get_uid_topology(uid)
+            if topology in ["PolyLine", "XsPolyLine"]:
+                # Intersection for PolyLine and XsPolyLine: output points (XsVertexSet), that some
+                # collections cannot store (e.g. boundaries).
+                if "XsVertexSet" not in source_coll.valid_topologies:
+                    self.print_terminal(
+                        f" -- {source_coll.get_uid_name(uid)}: the intersection of a line is a set of "
+                        f"points, that cannot be stored in "
+                        f"{self.collection_display_name(source_coll.collection_name)} -- "
                     )
-                    if not line_parts:
-                        self.print_terminal(
-                            " -- empty object from cutter_clean_strips_clean_triangle -- "
+                    continue
+                if source_coll.get_uid_x_section(uid) != xsect_uid:
+                    # cutter
+                    cutter = vtkCutter()
+                    cutter.SetCutFunction(
+                        self.xsect_coll.get_uid_vtk_plane(xsect_uid)
+                    )
+                    cutter.SetInputData(source_coll.get_uid_vtk_obj(uid))
+                    cutter.Update()
+                    if cutter.GetOutput().GetNumberOfPoints() > 0:
+                        # Create new dict for the new XsVertexSet
+
+                        obj_dict = derived_entity_dict(
+                            source_coll, uid, postfix, topology="XsVertexSet"
                         )
-                        continue
-                    for line_part in line_parts:
-                        # Create new dict for the new XsPolyLine
-                        obj_dict = deepcopy(source_coll.entity_dict)
                         obj_dict["parent_uid"] = xsect_uid
-                        obj_dict["topology"] = "XsPolyLine"
-                        obj_dict["vtk_obj"] = XsPolyLine(
+                        obj_dict["vtk_obj"] = XsVertexSet(
                             x_section_uid=xsect_uid, parent=self
                         )
-                        obj_dict["name"] = (
-                            f"{source_coll.get_uid_name(uid)}{postfix}"
-                        )
-                        obj_dict["role"] = source_coll.get_uid_role(uid)
-                        obj_dict["feature"] = source_coll.get_uid_feature(uid)
-                        obj_dict["scenario"] = source_coll.get_uid_scenario(uid)
                         obj_dict["properties_names"] = (
                             source_coll.get_uid_properties_names(uid)
                         )
                         obj_dict["properties_components"] = (
                             source_coll.get_uid_properties_components(uid)
                         )
-                        obj_dict["vtk_obj"].DeepCopy(line_part)
+                        obj_dict["vtk_obj"].DeepCopy(cutter.GetOutput())
                         for data_key in obj_dict["vtk_obj"].point_data_keys:
                             if not data_key in obj_dict["properties_names"]:
                                 obj_dict["vtk_obj"].remove_point_data(data_key)
                         source_coll.add_entity_from_dict(obj_dict)
-        elif self.shown_table == "tabMeshes":
-            for uid in input_uids:
-                if self.mesh3d_coll.get_uid_mesh3d_type(uid) == "Voxet":
-                    # Get cutter - a polydata slice cut across the voxet.
-                    cutter = vtkCutter()
-                    cutter.SetCutFunction(self.xsect_coll.get_uid_vtk_plane(xsect_uid))
-                    cutter.SetInputData(self.mesh3d_coll.get_uid_vtk_obj(uid))
-                    cutter.Update()
-                    if cutter.GetOutput().GetNumberOfPoints() > 0:
-                        cutter.GetOutput().GetPointData().SetActiveScalars(
-                            self.mesh3d_coll.get_uid_properties_names(uid)[0]
-                        )
-                        cutter_bounds = np_float64(cutter.GetOutput().GetBounds())
-                        dim_Z = self.mesh3d_coll.get_uid_vtk_obj(uid).W_n
-                        spacing_Z = self.mesh3d_coll.get_uid_vtk_obj(uid).W_step
-                        if spacing_Z < 0:
-                            spacing_Z *= -1
-                        cutter_n_points = cutter.GetOutput().GetNumberOfPoints()
-                        dim_W = int(cutter_n_points / dim_Z)
-                        spacing_W = np_sqrt(
-                            (cutter_bounds[1] - cutter_bounds[0]) ** 2
-                            + (cutter_bounds[3] - cutter_bounds[2]) ** 2
-                        ) / (dim_W - 1)
-                        strike = self.xsect_coll.get_uid_strike(xsect_uid)
-                        # The direction matrix is a 3x3 transformation matrix supporting scaling and rotation.
-                        # (double  	e00,
-                        # double  	e01,
-                        # double  	e02,
-                        # double  	e10,
-                        # double  	e11,
-                        # double  	e12,
-                        # double  	e20,
-                        # double  	e21,
-                        # double  	e22)
-                        if strike <= 90:
-                            origin = [
-                                cutter_bounds[0],
-                                cutter_bounds[2],
-                                cutter_bounds[4],
-                            ]
-                            direction_matrix = [
-                                np_sin(strike * np_pi / 180),
-                                0,
-                                -(np_cos(strike * np_pi / 180)),
-                                np_cos(strike * np_pi / 180),
-                                0,
-                                np_sin(strike * np_pi / 180),
-                                0,
-                                1,
-                                0,
-                            ]
-                        elif strike <= 180:
-                            origin = [
-                                cutter_bounds[1],
-                                cutter_bounds[2],
-                                cutter_bounds[4],
-                            ]
-                            direction_matrix = [
-                                -(np_sin(strike * np_pi / 180)),
-                                0,
-                                -(np_cos(strike * np_pi / 180)),
-                                -(np_cos(strike * np_pi / 180)),
-                                0,
-                                np_sin(strike * np_pi / 180),
-                                0,
-                                1,
-                                0,
-                            ]
-                        elif strike <= 270:
-                            origin = [
-                                cutter_bounds[0],
-                                cutter_bounds[2],
-                                cutter_bounds[4],
-                            ]
-                            direction_matrix = [
-                                -(np_sin(strike * np_pi / 180)),
-                                0,
-                                -(np_cos(strike * np_pi / 180)),
-                                -(np_cos(strike * np_pi / 180)),
-                                0,
-                                np_sin(strike * np_pi / 180),
-                                0,
-                                1,
-                                0,
-                            ]
-                        else:
-                            origin = [
-                                cutter_bounds[1],
-                                cutter_bounds[2],
-                                cutter_bounds[4],
-                            ]
-                            direction_matrix = [
-                                np_sin(strike * np_pi / 180),
-                                0,
-                                -(np_cos(strike * np_pi / 180)),
-                                np_cos(strike * np_pi / 180),
-                                0,
-                                np_sin(strike * np_pi / 180),
-                                0,
-                                1,
-                                0,
-                            ]
-                        # Create vtkImageData with the geometry to fit data from cutter
-                        probe_image = vtkImageData()
-                        probe_image.SetOrigin(origin)
-                        probe_image.SetSpacing([spacing_W, spacing_Z, 0.0])
-                        probe_image.SetDimensions([dim_W, dim_Z, 1])
-                        probe_image.SetDirectionMatrix(direction_matrix)
-                        probe_n_points = probe_image.GetNumberOfPoints()
-                        # scipy.interpolate.griddata: get point coordinates from cutter.GetOutput() + strati_0 values +
-                        # calculate point coordinates for probe_image, the final regular grid. Then, execute griddata
-                        XYZ_cutter = numpy_support.vtk_to_numpy(
-                            cutter.GetOutput().GetPoints().GetData()
-                        )
-                        values = numpy_support.vtk_to_numpy(
-                            cutter.GetOutput().GetPointData().GetArray(0)
-                        ).reshape((dim_Z * dim_W,))
-                        XYZ_probe = np_zeros((probe_n_points, 3))
-                        for point in range(probe_n_points):
-                            XYZ_probe[point, :] = probe_image.GetPoint(point)
-                        regular_values = sp_griddata(
-                            points=XYZ_cutter,
-                            values=values,
-                            xi=XYZ_probe,
-                            method="nearest",
-                        )
-                        # regular_values = sp_griddata(points=XYZ_cutter, values=values, xi=XYZ_probe, method='linear')
-                        # regular_values = sp_griddata(points=XYZ_cutter, values=values, xi=XYZ_probe, method='linear', rescale=True)
-                        # Pass values from griddata interpolation to probe_image
-                        probe_image.GetPointData().AddArray(
-                            numpy_support.numpy_to_vtk(regular_values)
-                        )
-                        probe_image.GetPointData().GetArray(0).SetName(
-                            self.mesh3d_coll.get_uid_properties_names(uid)[0]
-                        )
-                        # Create new dict for the new XsVoxet
-                        obj_dict = deepcopy(self.mesh3d_coll.entity_dict)
-                        obj_dict["name"] = (
-                            f"{self.mesh3d_coll.get_uid_name(uid)}{postfix}"
-                        )
-                        obj_dict["topology"] = "XsVoxet"
-                        obj_dict["properties_names"] = (
-                            self.mesh3d_coll.get_uid_properties_names(uid)
-                        )
-                        obj_dict["properties_components"] = (
-                            self.mesh3d_coll.get_uid_properties_components(uid)
-                        )
-                        obj_dict["parent_uid"] = xsect_uid
-                        obj_dict["vtk_obj"] = XsVoxet(
-                            x_section_uid=xsect_uid, parent=self
-                        )
-                        obj_dict["vtk_obj"].ShallowCopy(probe_image)
-                        if obj_dict["vtk_obj"].points_number > 0:
-                            self.mesh3d_coll.add_entity_from_dict(obj_dict)
-                        else:
-                            self.print_terminal(" -- empty object -- ")
                     else:
-                        self.print_terminal(" -- empty object -- ")
-        elif self.shown_table == "tabDOMs":
-            for uid in input_uids:
-                if self.dom_coll.get_uid_topology(uid) == "DEM":
-                    # cutter
-                    cutter = vtkCutter()
-                    cutter.SetCutFunction(self.xsect_coll.get_uid_vtk_plane(xsect_uid))
-                    cutter.SetInputData(self.dom_coll.get_uid_vtk_obj(uid))
-                    cutter.Update()
-                    # Create new dict for the new DomXs
-                    obj_dict = deepcopy(self.dom_coll.entity_dict)
-                    obj_dict["name"] = f"{self.dom_coll.get_uid_name(uid)}{postfix}"
-                    obj_dict["topology"] = "DomXs"
-                    obj_dict["properties_names"] = (
-                        self.dom_coll.get_uid_properties_names(uid)
+                        self.print_terminal(" -- empty object from cutter -- ")
+                else:
+                    self.print_terminal(
+                        " -- no intersection of XsPolyLine with its own XSection -- "
                     )
-                    obj_dict["properties_components"] = (
-                        self.dom_coll.get_uid_properties_components(uid)
+            elif topology == "TriSurf":
+                line_parts = xsection_intersection_polyline_parts(
+                    vtk_obj=source_coll.get_uid_vtk_obj(uid),
+                    vtk_plane=self.xsect_coll.get_uid_vtk_plane(xsect_uid),
+                )
+                if not line_parts:
+                    self.print_terminal(
+                        " -- empty object from cutter_clean_strips_clean_triangle -- "
+                    )
+                    continue
+                for line_part in line_parts:
+                    # Create new dict for the new XsPolyLine
+                    obj_dict = derived_entity_dict(
+                        source_coll, uid, postfix, topology="XsPolyLine"
                     )
                     obj_dict["parent_uid"] = xsect_uid
                     obj_dict["vtk_obj"] = XsPolyLine(
                         x_section_uid=xsect_uid, parent=self
                     )
-                    obj_dict["vtk_obj"].DeepCopy(cutter.GetOutput())
-                    self.print_terminal(f"obj_dict['vtk_obj']:\n{obj_dict['vtk_obj']}")
+                    obj_dict["properties_names"] = (
+                        source_coll.get_uid_properties_names(uid)
+                    )
+                    obj_dict["properties_components"] = (
+                        source_coll.get_uid_properties_components(uid)
+                    )
+                    obj_dict["vtk_obj"].DeepCopy(line_part)
+                    for data_key in obj_dict["vtk_obj"].point_data_keys:
+                        if not data_key in obj_dict["properties_names"]:
+                            obj_dict["vtk_obj"].remove_point_data(data_key)
+                    source_coll.add_entity_from_dict(obj_dict)
+            elif topology == "Voxet":
+                # Get cutter - a polydata slice cut across the voxet.
+                cutter = vtkCutter()
+                cutter.SetCutFunction(self.xsect_coll.get_uid_vtk_plane(xsect_uid))
+                cutter.SetInputData(source_coll.get_uid_vtk_obj(uid))
+                cutter.Update()
+                if cutter.GetOutput().GetNumberOfPoints() > 0:
+                    cutter.GetOutput().GetPointData().SetActiveScalars(
+                        source_coll.get_uid_properties_names(uid)[0]
+                    )
+                    cutter_bounds = np_float64(cutter.GetOutput().GetBounds())
+                    dim_Z = source_coll.get_uid_vtk_obj(uid).W_n
+                    spacing_Z = source_coll.get_uid_vtk_obj(uid).W_step
+                    if spacing_Z < 0:
+                        spacing_Z *= -1
+                    cutter_n_points = cutter.GetOutput().GetNumberOfPoints()
+                    dim_W = int(cutter_n_points / dim_Z)
+                    spacing_W = np_sqrt(
+                        (cutter_bounds[1] - cutter_bounds[0]) ** 2
+                        + (cutter_bounds[3] - cutter_bounds[2]) ** 2
+                    ) / (dim_W - 1)
+                    strike = self.xsect_coll.get_uid_strike(xsect_uid)
+                    # The direction matrix is a 3x3 transformation matrix supporting scaling and rotation.
+                    # (double  	e00,
+                    # double  	e01,
+                    # double  	e02,
+                    # double  	e10,
+                    # double  	e11,
+                    # double  	e12,
+                    # double  	e20,
+                    # double  	e21,
+                    # double  	e22)
+                    if strike <= 90:
+                        origin = [
+                            cutter_bounds[0],
+                            cutter_bounds[2],
+                            cutter_bounds[4],
+                        ]
+                        direction_matrix = [
+                            np_sin(strike * np_pi / 180),
+                            0,
+                            -(np_cos(strike * np_pi / 180)),
+                            np_cos(strike * np_pi / 180),
+                            0,
+                            np_sin(strike * np_pi / 180),
+                            0,
+                            1,
+                            0,
+                        ]
+                    elif strike <= 180:
+                        origin = [
+                            cutter_bounds[1],
+                            cutter_bounds[2],
+                            cutter_bounds[4],
+                        ]
+                        direction_matrix = [
+                            -(np_sin(strike * np_pi / 180)),
+                            0,
+                            -(np_cos(strike * np_pi / 180)),
+                            -(np_cos(strike * np_pi / 180)),
+                            0,
+                            np_sin(strike * np_pi / 180),
+                            0,
+                            1,
+                            0,
+                        ]
+                    elif strike <= 270:
+                        origin = [
+                            cutter_bounds[0],
+                            cutter_bounds[2],
+                            cutter_bounds[4],
+                        ]
+                        direction_matrix = [
+                            -(np_sin(strike * np_pi / 180)),
+                            0,
+                            -(np_cos(strike * np_pi / 180)),
+                            -(np_cos(strike * np_pi / 180)),
+                            0,
+                            np_sin(strike * np_pi / 180),
+                            0,
+                            1,
+                            0,
+                        ]
+                    else:
+                        origin = [
+                            cutter_bounds[1],
+                            cutter_bounds[2],
+                            cutter_bounds[4],
+                        ]
+                        direction_matrix = [
+                            np_sin(strike * np_pi / 180),
+                            0,
+                            -(np_cos(strike * np_pi / 180)),
+                            np_cos(strike * np_pi / 180),
+                            0,
+                            np_sin(strike * np_pi / 180),
+                            0,
+                            1,
+                            0,
+                        ]
+                    # Create vtkImageData with the geometry to fit data from cutter
+                    probe_image = vtkImageData()
+                    probe_image.SetOrigin(origin)
+                    probe_image.SetSpacing([spacing_W, spacing_Z, 0.0])
+                    probe_image.SetDimensions([dim_W, dim_Z, 1])
+                    probe_image.SetDirectionMatrix(direction_matrix)
+                    probe_n_points = probe_image.GetNumberOfPoints()
+                    # scipy.interpolate.griddata: get point coordinates from cutter.GetOutput() + strati_0 values +
+                    # calculate point coordinates for probe_image, the final regular grid. Then, execute griddata
+                    XYZ_cutter = numpy_support.vtk_to_numpy(
+                        cutter.GetOutput().GetPoints().GetData()
+                    )
+                    values = numpy_support.vtk_to_numpy(
+                        cutter.GetOutput().GetPointData().GetArray(0)
+                    ).reshape((dim_Z * dim_W,))
+                    XYZ_probe = np_zeros((probe_n_points, 3))
+                    for point in range(probe_n_points):
+                        XYZ_probe[point, :] = probe_image.GetPoint(point)
+                    regular_values = sp_griddata(
+                        points=XYZ_cutter,
+                        values=values,
+                        xi=XYZ_probe,
+                        method="nearest",
+                    )
+                    # regular_values = sp_griddata(points=XYZ_cutter, values=values, xi=XYZ_probe, method='linear')
+                    # regular_values = sp_griddata(points=XYZ_cutter, values=values, xi=XYZ_probe, method='linear', rescale=True)
+                    # Pass values from griddata interpolation to probe_image
+                    probe_image.GetPointData().AddArray(
+                        numpy_support.numpy_to_vtk(regular_values)
+                    )
+                    probe_image.GetPointData().GetArray(0).SetName(
+                        source_coll.get_uid_properties_names(uid)[0]
+                    )
+                    # Create new dict for the new XsVoxet
+                    obj_dict = deepcopy(source_coll.entity_dict)
+                    obj_dict["name"] = (
+                        f"{source_coll.get_uid_name(uid)}{postfix}"
+                    )
+                    obj_dict["topology"] = "XsVoxet"
+                    obj_dict["properties_names"] = (
+                        source_coll.get_uid_properties_names(uid)
+                    )
+                    obj_dict["properties_components"] = (
+                        source_coll.get_uid_properties_components(uid)
+                    )
+                    obj_dict["parent_uid"] = xsect_uid
+                    obj_dict["vtk_obj"] = XsVoxet(
+                        x_section_uid=xsect_uid, parent=self
+                    )
+                    obj_dict["vtk_obj"].ShallowCopy(probe_image)
                     if obj_dict["vtk_obj"].points_number > 0:
-                        for data_key in obj_dict["vtk_obj"].point_data_keys:
-                            if not data_key in obj_dict["properties_names"]:
-                                obj_dict["vtk_obj"].remove_point_data(data_key)
-                        self.dom_coll.add_entity_from_dict(obj_dict)
+                        source_coll.add_entity_from_dict(obj_dict)
                     else:
                         self.print_terminal(" -- empty object -- ")
-        else:
-            self.print_terminal(
-                " -- Only Geological objects, 3D Meshes and DEM & DOMs can be intersected with XSection -- "
-            )
+                else:
+                    self.print_terminal(" -- empty object -- ")
+            elif topology == "TetraSolid":
+                # PLACEHOLDER - intersection of TetraSolid meshes is not implemented yet. Cutting the
+                # tetrahedra with the section plane (e.g. vtkCutter) gives a polygonal slice, so the
+                # output could be a TriSurf, or maybe a XsTriSurf (not yet a PZero topology), carrying
+                # the mesh properties interpolated on the slice.
+                self.print_terminal(
+                    f" -- {source_coll.get_uid_name(uid)}: intersection of TetraSolid meshes is not "
+                    "implemented yet -- "
+                )
+            elif topology in ["DEM", "TSDom"]:
+                # cutter
+                cutter = vtkCutter()
+                cutter.SetCutFunction(self.xsect_coll.get_uid_vtk_plane(xsect_uid))
+                cutter.SetInputData(source_coll.get_uid_vtk_obj(uid))
+                cutter.Update()
+                # Create new dict for the new DomXs
+                obj_dict = deepcopy(source_coll.entity_dict)
+                obj_dict["name"] = f"{source_coll.get_uid_name(uid)}{postfix}"
+                obj_dict["topology"] = "DomXs"
+                obj_dict["properties_names"] = (
+                    source_coll.get_uid_properties_names(uid)
+                )
+                obj_dict["properties_components"] = (
+                    source_coll.get_uid_properties_components(uid)
+                )
+                obj_dict["parent_uid"] = xsect_uid
+                obj_dict["vtk_obj"] = XsPolyLine(
+                    x_section_uid=xsect_uid, parent=self
+                )
+                obj_dict["vtk_obj"].DeepCopy(cutter.GetOutput())
+                if obj_dict["vtk_obj"].points_number > 0:
+                    for data_key in obj_dict["vtk_obj"].point_data_keys:
+                        if not data_key in obj_dict["properties_names"]:
+                            obj_dict["vtk_obj"].remove_point_data(data_key)
+                    source_coll.add_entity_from_dict(obj_dict)
+                else:
+                    self.print_terminal(" -- empty object -- ")
 
 
+@uses_selection(valid={"geol_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "fluid_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "backgrnd_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "boundary_coll": ["PolyLine", "XsPolyLine"], "well_coll": None})
 @freeze_gui_onoff
 def project_2_dem(self):
     """vtkProjectedTerrainPath projects an input polyline onto a terrain image.
@@ -2689,11 +2545,12 @@ def project_2_dem(self):
         "tabGeology": "geol_coll",
         "tabFluids": "fluid_coll",
         "tabBackgrounds": "backgrnd_coll",
+        "tabBoundaries": "boundary_coll",
         "tabWells": "well_coll",
     }
     if self.shown_table not in valid_tables:
         self.print_terminal(
-            " -- Only geological objects and wells can be projected -- "
+            " -- Only geology, fluids, background, boundary and well objects can be projected -- "
         )
         return
     source_coll = getattr(self, valid_tables[self.shown_table])
@@ -2895,8 +2752,9 @@ def project_2_dem(self):
                 source_coll.get_uid_properties_components(uid)
             )
             if not is_well_projection:
-                obj_dict["feature"] = source_coll.get_uid_feature(uid)
-                obj_dict["role"] = source_coll.get_uid_role(uid)
+                for key in ("feature", "role"):
+                    if key in obj_dict:
+                        obj_dict[key] = uid_metadata(source_coll, uid, key, obj_dict[key])
             else:
                 row_idx = source_coll.df[source_coll.df["uid"] == uid].index[0]
                 obj_dict["properties_types"] = deepcopy(
@@ -3125,6 +2983,7 @@ def project_2_dem(self):
             dock.canvas.clear_selection()
 
 
+@uses_selection(valid={"geol_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "fluid_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "backgrnd_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "boundary_coll": ["PolyLine", "XsPolyLine"], "well_coll": None})
 @freeze_gui_onoff
 def project_2_xs(self):
     """Projection of a copy of point/polyline geological entities to selected planar cross sections, along an axis specified with plunge/trend."""
@@ -3132,11 +2991,12 @@ def project_2_xs(self):
         "tabGeology": "geol_coll",
         "tabFluids": "fluid_coll",
         "tabBackgrounds": "backgrnd_coll",
+        "tabBoundaries": "boundary_coll",
         "tabWells": "well_coll",
     }
     if self.shown_table not in valid_tables:
         self.print_terminal(
-            " -- Only geology, fluids, background, and well objects can be projected -- "
+            " -- Only geology, fluids, background, boundary and well objects can be projected -- "
         )
         return
     source_coll = getattr(self, valid_tables[self.shown_table])
@@ -3410,8 +3270,9 @@ def project_2_xs(self):
                     continue
                 entity_dict = deepcopy(collection.entity_dict)
                 entity_dict["name"] = collection.get_uid_name(uid) + "_prj_" + xs_name
-                entity_dict["role"] = collection.get_uid_role(uid)
-                entity_dict["feature"] = collection.get_uid_feature(uid)
+                for key in ("role", "feature"):
+                    if key in entity_dict:
+                        entity_dict[key] = uid_metadata(collection, uid, key, entity_dict[key])
                 entity_dict["scenario"] = collection.get_uid_scenario(uid)
                 entity_dict["properties_names"] = collection.get_uid_properties_names(
                     uid
@@ -3677,12 +3538,12 @@ def project_2_xs(self):
         )
 
 
+@uses_selection(topologies=["TriSurf"], min_selected=2)
 @freeze_gui_onoff
 def split_surf(self):
     """Split two surfaces. This should be integrated with intersection_xs in one function since is the same thing"""
-    if self.shown_table != "tabGeology":
-        self.print_terminal(" -- Only surface objects can be intersected -- ")
-        return
+    # Input entities and outputs are in the active collection (see @uses_selection).
+    source_coll = active_collection(self)
     if not self.selected_uids:
         self.print_terminal("No input data selected.")
         return
@@ -3691,15 +3552,15 @@ def split_surf(self):
         # is deseselcted while the dataframe is being built
         # print(self.selected_uids_all())
         # 0. Define the reference surface and target surfaces
-        # if input_uids[0] not in self.geol_coll.get_uids():
+        # if input_uids[0] not in source_coll.get_uids():
         #     ref_surf = self.dom_coll.get_uid_vtk_obj(input_uids[0])
         #     pld = pv_PolyData(ref_surf.points)
         #     pld.delaunay_2d(inplace=True)
         # else:
-        scissor_surf = self.geol_coll.get_uid_vtk_obj(self.selected_uids[-1])
+        scissor_surf = source_coll.get_uid_vtk_obj(self.selected_uids[-1])
 
         for paper_uid in self.selected_uids[:-1]:  # for every target surface
-            paper_surf = self.geol_coll.get_uid_vtk_obj(paper_uid)
+            paper_surf = source_coll.get_uid_vtk_obj(paper_uid)
 
             # cutter = vtkIntersectionPolyDataFilter()
             # cutter.SetInputDataObject(0, paper_surf)
@@ -3745,54 +3606,41 @@ def split_surf(self):
             final_obj = TriSurf()
             final_obj.DeepCopy(appender.GetOutput())
 
-            obj_dict = deepcopy(self.geol_coll.entity_dict)
+            obj_dict = derived_entity_dict(
+                source_coll,
+                paper_uid,
+                "_split",
+                topology=source_coll.get_uid_topology(paper_uid),
+            )
 
             obj_dict["uid"] = str(uuid4())
-
-            obj_dict["topology"] = self.geol_coll.get_uid_topology(paper_uid)
 
             obj_dict["vtk_obj"] = final_obj
 
-            obj_dict["name"] = self.geol_coll.get_uid_name(paper_uid) + "_split"
-
-            obj_dict["role"] = self.geol_coll.get_uid_role(paper_uid)
-
-            obj_dict["feature"] = self.geol_coll.get_uid_feature(paper_uid)
-
-            obj_dict["scenario"] = self.geol_coll.get_uid_scenario(paper_uid)
-
-            self.geol_coll.add_entity_from_dict(obj_dict)
+            source_coll.add_entity_from_dict(obj_dict)
 
             # Calculate connectivity for the splitted surface
 
-            self.geol_coll.append_uid_property(
+            source_coll.append_uid_property(
                 uid=obj_dict["uid"], property_name="RegionId", property_components=1
             )
 
-            self.geol_coll.get_uid_vtk_obj(obj_dict["uid"]).connected_calc()
+            source_coll.get_uid_vtk_obj(obj_dict["uid"]).connected_calc()
 
             # Add line intersection
-            obj_dict = deepcopy(self.geol_coll.entity_dict)
+            obj_dict = derived_entity_dict(
+                source_coll, paper_uid, "_line_int", topology="PolyLine"
+            )
 
             obj_dict["uid"] = str(uuid4())
 
-            obj_dict["topology"] = "PolyLine"
-
             obj_dict["vtk_obj"] = line_intersection
 
-            obj_dict["name"] = self.geol_coll.get_uid_name(paper_uid) + "_line_int"
-
-            obj_dict["role"] = self.geol_coll.get_uid_role(paper_uid)
-
-            obj_dict["feature"] = self.geol_coll.get_uid_feature(paper_uid)
-
-            obj_dict["scenario"] = self.geol_coll.get_uid_scenario(paper_uid)
-
-            self.geol_coll.add_entity_from_dict(obj_dict)
-            self.geol_coll.append_uid_property(
+            source_coll.add_entity_from_dict(obj_dict)
+            source_coll.append_uid_property(
                 uid=obj_dict["uid"], property_name="RegionId", property_components=1
             )
-            self.geol_coll.get_uid_vtk_obj(obj_dict["uid"]).connected_calc()
+            source_coll.get_uid_vtk_obj(obj_dict["uid"]).connected_calc()
 
             self.prop_legend.update_widget(self)
 
@@ -3802,6 +3650,7 @@ def split_surf(self):
         # 1. Calculate the implicit distance of the target surface[1,2,3,4,..] from the reference surface[0]
 
 
+@uses_selection(topologies=["TriSurf"])
 @freeze_gui_onoff
 def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
     """Function used to retopologize a given surface. This is useful in the case of
@@ -3814,9 +3663,8 @@ def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
     For now the parameters (eg. SetTargetReduction, RelaxationFactor etc etc) are fixed but
     in the future it would be nicer to have an adaptive method (maybe using vtkMeshQuality?)
     """
-    if self.shown_table != "tabGeology":
-        self.print_terminal(" -- Only geological objects can be retopologized -- ")
-        return
+    # Input entities and outputs are in the active collection (see @uses_selection).
+    source_coll = active_collection(self)
     if not self.selected_uids:
         self.print_terminal("No input data selected.")
         return
@@ -3825,8 +3673,8 @@ def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
         input_uids = deepcopy(self.selected_uids)
 
         for uid in input_uids:
-            if isinstance(self.geol_coll.get_uid_vtk_obj(uid), TriSurf):
-                mesh = self.geol_coll.get_uid_vtk_obj(uid)
+            if isinstance(source_coll.get_uid_vtk_obj(uid), TriSurf):
+                mesh = source_coll.get_uid_vtk_obj(uid)
                 dec = vtkQuadricDecimation()
                 dec.SetInputData(mesh)
                 # tr.SetSourceData(bord)
@@ -3852,18 +3700,14 @@ def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
                     return clean.GetOutput()
                 else:
                     # Create deepcopy of the geological entity dictionary.
-                    surf_dict = deepcopy(self.geol_coll.entity_dict)
-                    surf_dict["name"] = self.geol_coll.get_uid_name(uid) + "_retopo"
-                    surf_dict["feature"] = self.geol_coll.get_uid_feature(uid)
-                    surf_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
-                    surf_dict["role"] = self.geol_coll.get_uid_role(uid)
+                    surf_dict = derived_entity_dict(source_coll, uid, "_retopo")
                     surf_dict["topology"] = "TriSurf"
                     surf_dict["vtk_obj"] = TriSurf()
                     surf_dict["vtk_obj"].ShallowCopy(clean.GetOutput())
                     surf_dict["vtk_obj"].Modified()
 
                     if surf_dict["vtk_obj"].points_number > 0:
-                        self.geol_coll.add_entity_from_dict(surf_dict)
+                        source_coll.add_entity_from_dict(surf_dict)
                     else:
                         self.print_terminal(" -- empty object -- ")
             else:
