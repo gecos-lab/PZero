@@ -191,13 +191,35 @@ class BaseCollection(ABC):
                 )
         self._df = df
 
+    def _uses_project_selection(self) -> bool:
+        """True if this collection is registered in a project that owns the selection store.
+        Unregistered collections (e.g. temporary ones) keep a local selection list."""
+        return (
+            bool(self.collection_name)
+            and hasattr(self.parent, "set_selection")
+            and getattr(self.parent, self.collection_name, None) is self
+        )
+
     @property
-    def selected_uids(self):
-        return self._selected_uids
+    def selected_uids(self) -> list:
+        """Selected uids in this collection, read from the project selection store.
+        Returns a new list: assign to change the selection, do not mutate it in place."""
+        if self._uses_project_selection():
+            return self.parent.selection_uids(collection=self.collection_name)
+        return list(self._selected_uids)
 
     @selected_uids.setter
     def selected_uids(self, selected_uids: list):
-        self._selected_uids = selected_uids
+        """Replace the selection of this collection in the project selection store."""
+        if self._uses_project_selection():
+            self.parent.set_selection(
+                uids=list(selected_uids or []),
+                mode="replace",
+                collection=self.collection_name,
+                source=self,
+            )
+        else:
+            self._selected_uids = list(selected_uids or [])
 
     @property
     def entity_dict_keys(self) -> list:

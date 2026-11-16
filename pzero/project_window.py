@@ -259,7 +259,13 @@ class ProjectSignals(QObject):
     legend_point_size_modified = pyqtSignal(list, object)  # seems OK
     legend_opacity_modified = pyqtSignal(list, object)  # seems OK
 
-    # selection_changed is used to update the set of selected entities on each collection = object
+    # selection_modified is emitted by ProjectWindow.set_selection() whenever the project-level selection
+    # changes, with (added_uids, removed_uids, source), where source is the object that requested the change
+    # (so that it can ignore its own echo).
+    selection_modified = pyqtSignal(list, list, object)
+
+    # selection_changed is emitted by ProjectWindow.set_selection() once for each collection (= object) whose
+    # selection changed. Legacy signal, kept until all listeners use selection_modified.
     selection_changed = pyqtSignal(object)
 
 
@@ -296,6 +302,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
 
         self.signals = ProjectSignals()
+
+        # Project-level selection store, see set_selection(). Removed entities are dropped from it.
+        self._init_selection()
+        self.signals.entities_removed.connect(self._prune_selection)
 
         # dictionary with table (key) vs. collection (value)
         self.tab_collection_dict = {
@@ -703,11 +713,25 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 "failed": [{"uid": None, "reason": "same source and destination"}],
             }
 
+        # A move removes the entity from the source collection, which prunes it from the
+        # selection: remember which moved uids were selected and reselect them afterwards.
+        moved_selected = (
+            [uid for uid in selected_uids if self.is_selected(uid)] if move else []
+        )
+
         report = source_collection.transfer_uids_to_collection(
             destination_collection=destination_collection,
             uids=selected_uids,
             move=move,
         )
+
+        if moved_selected:
+            # Collection lookup handles both moved uids and failed moves restored to the source.
+            self.set_selection(
+                uids=[uid for uid in moved_selected if not self.is_selected(uid)],
+                mode="add",
+                source=self,
+            )
 
         operation = "Moved" if move else "Copied"
         self.print_terminal(
@@ -720,6 +744,166 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 f"{operation} skipped for uid {failed['uid']}: {failed['reason']}"
             )
         return report
+
+    # ========================== Project-level selection store ==========================
+    # The selection is UI state shared by the project window, all views and their trees.
+    # It is stored once, here, as an insertion-ordered dict {uid: collection_name}: uids are
+    # unique project-wide, the pick order is preserved, and uids from several collections can
+    # be selected together. Every change must go through set_selection(), which emits:
+    #   - signals.selection_modified(added_uids, removed_uids, source)
+    #   - signals.selection_changed(collection) for each collection whose selection changed.
+    # Collections expose their share of it through collection.selected_uids.
+
+    _SELECTION_MODES = ("replace", "add", "remove", "toggle", "clear")
+
+    def _init_selection(self):
+        """Reset the selection store without emitting signals."""
+        self._selection = {}
+        self._active_selection_collection = None
+
+    @property
+    def active_selection_collection(self):
+        """Name of the collection where the selection was last changed, or None."""
+        return getattr(self, "_active_selection_collection", None)
+
+    def collections_of_uids(self, uids: list = None) -> dict:
+        """Return {uid: collection_name} for the uids found in the project collections.
+        Vectorized: one isin() per collection, whatever the number of uids."""
+        found = {}
+        remaining = set(uids or [])
+        for collection_name in self.tab_collection_dict.values():
+            if not remaining:
+                break
+            collection = getattr(self, collection_name, None)
+            if collection is None or "uid" not in collection.df.columns:
+                continue
+            uid_column = collection.df["uid"]
+            for uid in uid_column[uid_column.isin(remaining)]:
+                found[uid] = collection_name
+            remaining.difference_update(found)
+        return found
+
+    def collection_of_uid(self, uid: str = None):
+        """Return the name of the collection containing uid, or None if not found."""
+        return self.collections_of_uids([uid]).get(uid)
+
+    def selection_uids(self, collection: str = None) -> list:
+        """Selected uids in pick order, in all collections or in the given one."""
+        selection = getattr(self, "_selection", {})
+        if collection is None:
+            return list(selection)
+        return [uid for uid, coll in selection.items() if coll == collection]
+
+    def selection_collections(self) -> list:
+        """Names of the collections that have selected entities, in pick order."""
+        return list(dict.fromkeys(getattr(self, "_selection", {}).values()))
+
+    def is_selected(self, uid: str = None) -> bool:
+        return uid in getattr(self, "_selection", {})
+
+    def set_selection(
+        self,
+        uids: list = None,
+        mode: str = "replace",
+        collection: str = None,
+        source=None,
+    ) -> bool:
+        """
+        Single entry point to change the project-level selection.
+
+        mode:
+            "replace" - the selection within the scope becomes uids
+            "add"     - add uids to the selection
+            "remove"  - remove uids from the selection
+            "toggle"  - select unselected uids and deselect selected ones
+            "clear"   - deselect everything within the scope (uids is ignored)
+        collection:
+            collection name (e.g. "geol_coll"). If given, uids are assumed to belong to it, and
+            the scope of "replace" and "clear" is limited to it. If None, the collection of each
+            uid is looked up, and the scope is the whole project. Unknown uids are ignored.
+        source:
+            the object requesting the change, passed on with selection_modified so that it can
+            ignore its own echo.
+
+        Returns True if the selection changed (and signals were emitted).
+        """
+        if mode not in self._SELECTION_MODES:
+            raise ValueError(f"Invalid selection mode: {mode}")
+        if not hasattr(self, "_selection"):
+            self._init_selection()
+        if isinstance(uids, str):
+            uids = [uids]
+        uids = [uid for uid in dict.fromkeys(uids or []) if uid]
+
+        old = self._selection
+        new = dict(old)
+
+        # Resolve collections once for all uids that may be added (only when not given).
+        if collection is None and mode in ("replace", "add", "toggle"):
+            uid_collections = self.collections_of_uids(
+                [uid for uid in uids if mode != "toggle" or uid not in new]
+            )
+        else:
+            uid_collections = {}
+
+        def _add(uid):
+            coll = collection or uid_collections.get(uid)
+            if coll is None:
+                return
+            if new.get(uid) != coll:
+                # Pop first so that a uid that changed collection goes to the end.
+                new.pop(uid, None)
+                new[uid] = coll
+
+        if mode in ("replace", "clear"):
+            for uid in [u for u, c in new.items() if collection is None or c == collection]:
+                del new[uid]
+        if mode in ("replace", "add"):
+            for uid in uids:
+                _add(uid)
+        elif mode == "remove":
+            for uid in uids:
+                new.pop(uid, None)
+        elif mode == "toggle":
+            for uid in uids:
+                if uid in new:
+                    del new[uid]
+                else:
+                    _add(uid)
+
+        # Store before emitting, so that slots read the new state (and may change it again).
+        self._selection = new
+        if collection is not None and mode != "remove":
+            self._active_selection_collection = collection
+        elif mode in ("add", "toggle", "replace") and uids and uids[-1] in new:
+            self._active_selection_collection = new[uids[-1]]
+        if not new and collection is None:
+            self._active_selection_collection = None
+
+        # A uid that changed collection is reported as removed and added.
+        moved = [uid for uid in new if uid in old and old[uid] != new[uid]]
+        added = [uid for uid in new if uid not in old] + moved
+        removed = [uid for uid in old if uid not in new] + moved
+        if not (added or removed):
+            return False
+
+        self.signals.selection_modified.emit(added, removed, source)
+        changed_collections = dict.fromkeys(
+            [new[uid] for uid in added] + [old[uid] for uid in removed]
+        )
+        for collection_name in changed_collections:
+            changed_collection = getattr(self, collection_name, None)
+            if changed_collection is not None:
+                self.signals.selection_changed.emit(changed_collection)
+        return True
+
+    def _prune_selection(self, uids=None, collection=None):
+        """Slot for entities_removed: drop removed entities from the selection."""
+        if isinstance(uids, str):
+            uids = [uids]
+        uids = [uid for uid in (uids or []) if isinstance(uid, str) and self.is_selected(uid)]
+        if uids:
+            self.set_selection(uids=uids, mode="remove", source=self)
 
     @property
     def selected_uids(self):
@@ -2134,6 +2318,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Create empty containers for a new empty project."""
         # this is used to delete open windows when the current project is closed (and a new one is opened)
         self.signals.project_close.emit()
+
+        # The selection belongs to the closed project: reset it silently, views have been closed.
+        self._init_selection()
 
         self.custom_tables = {}
         self.custom_table_types = {}
