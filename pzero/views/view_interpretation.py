@@ -1159,7 +1159,6 @@ class ViewInterpretation(ViewMap):
 
         # Closing settings
         self.plotter.reset_key_events()
-        self.selected_uids = self.parent.selected_uids
         self.enable_actions()
 
     def _populate_seismic_cache(self):

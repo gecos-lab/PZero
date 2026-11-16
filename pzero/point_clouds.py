@@ -51,45 +51,43 @@ from vtkmodules.vtkFiltersPoints import (
 from pzero.collections.dom_collection import DomCollection
 from pzero.collections.geological_collection import GeologicalCollection
 from pzero.helpers.helper_dialogs import multiple_input_dialog
+from pzero.helpers.helper_functions import uses_selection
 from pzero.helpers.helper_functions import best_fitting_plane, srf, freeze_gui_onoff
 from pzero.helpers.helper_widgets import Scissors
 from .entities_factory import PCDom, TriSurf, Attitude
 
 
+@uses_selection(valid=None, require_properties=["Normals"])
 def normals2dd(self):
-    """Function used to calculate dip and dip direction of a point cloud given the point normals"""
+    """Calculate dip and dip direction point properties, from the Normals point property, for the
+    selected entities of any collection (points, lines, surfaces, point clouds, ...).
+    Project window > Properties > Calculate Dip/Direction (self is the ProjectWindow)."""
+    from .helpers.helper_functions import active_collection
+    from .orientation_analysis import normals2dip_directions
+
     if len(self.selected_uids) == 0:
-        print("No entities selected, make sure to have the right tab open")
+        self.print_terminal(" -- No entity with Normals selected -- ")
         return
+    collection = active_collection(self)
     for uid in self.selected_uids:
-        vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
-        prop_keys = vtk_obj.point_data_keys
-        if "Normals" not in prop_keys:
-            print("Normal data not present. Import or create normal data to proceed")
+        vtk_obj = collection.get_uid_vtk_obj(uid)
+        # -90 < dip < 90: negative for upward normals (overturned, upper hemisphere), with the
+        # standard dip direction in both cases (see orientation_analysis.normals2dip_directions).
+        dip, dip_dir = normals2dip_directions(vtk_obj.get_point_data("Normals"))
+        try:
+            for name, values in (("dip", dip), ("dip direction", dip_dir)):
+                if name not in collection.get_uid_properties_names(uid):
+                    collection.append_uid_property(
+                        uid=uid, property_name=name, property_components=1
+                    )
+                vtk_obj.set_point_data(data_key=name, attribute_matrix=values)
+        except Exception as exc:
+            self.print_terminal(
+                f" -- {collection.get_uid_name(uid)}: cannot store dip/direction ({exc}) -- "
+            )
             continue
-        else:
-            dip = vtk_obj.points_map_dip
-            dip_dir = vtk_obj.points_map_dip_direction
-
-        # vtk_obj.init_point_data("dip", 1)
-        # vtk_obj.init_point_data("dip direction", 1)
-
-        # vtk_obj.set_point_data("dip", dip)
-        # vtk_obj.set_point_data("dip direction", dip_dir)
-
-        # self.parent.dom_coll.replace_vtk(uid, vtk_obj)
-        # self.clear_selection()
-
-        self.parent.dom_coll.append_uid_property(
-            uid=uid, property_name="dip", property_components=1
-        )
-        self.parent.dom_coll.append_uid_property(
-            uid=uid, property_name="dip direction", property_components=1
-        )
-        vtk_obj.set_point_data(data_key="dip", attribute_matrix=dip)
-        vtk_obj.set_point_data(data_key="dip direction", attribute_matrix=dip_dir)
-        self.parent.dom_coll.replace_vtk(uid, vtk_obj)
-    self.parent.prop_legend.update_widget(self.parent)
+        collection.replace_vtk(uid, vtk_obj)
+    self.prop_legend.update_widget(self)
 
 
 def extract_id(vtk_obj, ids):
@@ -116,6 +114,7 @@ def extract_id(vtk_obj, ids):
     return vtk_ps_subset
 
 
+@uses_selection(valid={"dom_coll": ["PCDom"]}, max_selected=1)
 @freeze_gui_onoff
 def cut_pc(self, method="both"):
     """Function used to cut portions of a point cloud. Returns the points inside and outside the loop"""
@@ -248,6 +247,7 @@ def extract_pc(vtk_obj, implicit_func):
     return clip_out, clip_in
 
 
+@uses_selection(valid={"dom_coll": ["PCDom"]}, max_selected=1)
 def segment_pc(self):
     """Function used to segment a point cloud using dip and dip direction"""
 
@@ -361,21 +361,26 @@ def segment_pc(self):
     self.clear_selection()
 
 
+@uses_selection(valid={"dom_coll": ["PCDom"]}, max_selected=1)
 def facets_pc(self):
-    """Function used to create polygons starting from a region of points"""
+    """Create one planar facet per cluster (ClusterId) of a point cloud: the points of each cluster are
+    projected on their best-fitting plane and triangulated with Delaunay 2D. The facets are stored in
+    one Geology TriSurf, with dip, dip direction, area, width and length of each facet as field data.
+    Project window > Interpolation > Planar facets from PC clusters (self is the ProjectWindow)."""
     if len(self.selected_uids) == 0:
-        print("No entities selected, make sure to have the right tab open")
+        self.print_terminal(" -- No point cloud selected -- ")
         return
     else:
-        uid = self.selected_uids[0]
+        uid = self.selected_uids[-1]
 
-    vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
+    vtk_obj = self.dom_coll.get_uid_vtk_obj(uid)
     if "ClusterId" not in vtk_obj.point_data_keys:
-        print(
-            "Selected entity has no clusters, please choose an other or make them with the proper function"
+        self.print_terminal(
+            " -- Selected point cloud has no clusters (ClusterId): run Connected Parts or "
+            "segmentation first -- "
         )
         return
-    name = self.parent.dom_coll.get_uid_name(uid)
+    name = self.dom_coll.get_uid_name(uid)
     appender = vtkAppendPolyData()
     regions = set(vtk_obj.get_point_data("ClusterId"))
     n_regions = len(regions)
@@ -444,7 +449,7 @@ def facets_pc(self):
     properties_name = facets.point_data_keys
     properties_components = [facets.get_point_data_shape(i)[1] for i in properties_name]
 
-    curr_obj_dict = deepcopy(self.parent.geol_coll.entity_dict)
+    curr_obj_dict = deepcopy(self.geol_coll.entity_dict)
     curr_obj_dict["uid"] = str(uuid4())
     curr_obj_dict["name"] = f"{name}facets"
     curr_obj_dict["role"] = "undef"
@@ -453,11 +458,11 @@ def facets_pc(self):
     curr_obj_dict["properties_names"] = properties_name
     curr_obj_dict["properties_components"] = properties_components
     curr_obj_dict["vtk_obj"] = facets
-    # Add to entity collection.
-    self.parent.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
-    self.clear_selection()
+    # Add to entity collection. The selected point cloud stays selected.
+    self.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)
 
 
+@uses_selection(valid={"dom_coll": ["PCDom"]})
 def calibration_pc(self):
     if len(self.selected_uids) == 0:
         print("No entities selected, make sure to have the right tab open")
@@ -518,6 +523,7 @@ def calibration_pc(self):
     # Calculate N of neighbours
 
 
+@uses_selection(valid={"dom_coll": ["PCDom"]}, max_selected=1)
 def auto_pick(self):
     """Function used to pick automatically the regions from the segmentation"""
     if len(self.selected_uids) == 0:
@@ -587,6 +593,7 @@ def auto_pick(self):
 #  PC Filters ----------------------------------------------------
 
 
+@uses_selection(valid={"dom_coll": ["PCDom"]}, max_selected=1)
 def thresh_filt(self):
     """Function used to filter the point cloud using a given property"""
 

@@ -87,10 +87,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             },
             index=[],
         )
-        # __________________________________________________________________________________________
-        # THIS MUST BE REMOVED - USE self.collection.selected_uids  ================================
-        # __________________________________________________________________________________________
-        self.selected_uids = []
+        # The selection is stored at project level, see the selected_uids property below.
         # Set view_filter attribute to a string indicating that all entities must be selected (i.e. no filtering).
         # Somebody says 'ilevel_0 in ilevel_0' is more robust than 'index == index', but it seems OK.
         if not hasattr(self, "view_filter"):
@@ -102,8 +99,19 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.add_all_entities()
         self.create_trees()
         self.connect_all_signals()
+        # Show what is already selected in the project.
+        self.selection_modified_update_actors(
+            added=self.parent.selection_uids(), removed=[], source=None
+        )
 
     # ================================  General methods shared by all views ===========================================
+
+    @property
+    def selected_uids(self) -> list:
+        """UIDs selected in the project (see ProjectWindow.set_selection) that are shown in this
+        view, in pick order. Read-only: change the selection with self.parent.set_selection()."""
+        view_uids = set(self.actors_df["uid"])
+        return [uid for uid in self.parent.selection_uids() if uid in view_uids]
 
     def connect_all_signals(self):
         """
@@ -205,11 +213,19 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         )
         self.parent.signals.legend_opacity_modified.connect(self.sig_opct_lmb)
 
-        # selection_modified --- trees of this view mirror the project selection store
+        # selection_modified --- trees and graphics of this view mirror the project selection store
         self.sig_sel_lmb = lambda added, removed, colls, source: (
-            self.selection_modified_update_trees(collections=colls, source=source)
+            self.selection_modified_update_trees(collections=colls, source=source),
+            self.selection_modified_update_actors(
+                added=added, removed=removed, source=source
+            ),
         )
         self.parent.signals.selection_modified.connect(self.sig_sel_lmb)
+
+    def selection_modified_update_actors(self, added=None, removed=None, source=None):
+        """Update the highlight of selected entities in the graphics. To be implemented in
+        subclasses (ViewVTK, and ViewMPL-based views)."""
+        pass
 
     def selection_modified_update_trees(self, collections=None, source=None):
         """Re-apply the project selection to the trees of the collections whose selection
@@ -273,6 +289,8 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 action.setDisabled(True)
             except:
                 pass
+        # Selection by the user in tables and trees is frozen as well.
+        self.parent.set_selection_frozen(True)
 
     def enable_actions(self):
         """Un-freeze all actions after having done something."""
@@ -280,6 +298,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         print("o enabling actions in ", self.windowTitle())
         for action in self.parent.findChildren(QAction):
             action.setEnabled(True)
+        self.parent.set_selection_frozen(False)
 
     def create_trees(self):
         for tree_name, coll_name in self.tree_collection_dict.items():
@@ -392,10 +411,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.actors_df.drop(
             self.actors_df[self.actors_df["uid"].isin(updated_uids)].index, inplace=True
         )
-        removed_uids = set(updated_uids)
-        self.selected_uids = [
-            uid for uid in self.selected_uids if uid not in removed_uids
-        ]
+        # Removed entities are pruned from the project selection by the project itself.
         tree.remove_items_from_tree(uids_to_remove=updated_uids)
         if has_plotter:
             self.plotter.render()

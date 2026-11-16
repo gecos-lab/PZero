@@ -348,23 +348,47 @@ def _get_editable_line_source_coll(self, selected_uids=None, min_selected=1):
     if not selected_uids:
         self.print_terminal(" -- No input data selected -- ")
         return None
-    if len(selected_uids) < min_selected:
+
+    # Entities that are not lines of source_coll (e.g. a mesh selected together with a line)
+    # are not used (start_checked_line_tool deselects them).
+    line_uids = _editable_line_uids(source_coll, selected_uids)
+    if not line_uids:
+        self.print_terminal(" -- No input lines selected -- ")
+        return None
+    if len(line_uids) < min_selected:
         self.print_terminal(
-            f" -- Not enough input data selected. Select at least {min_selected} objects -- "
+            f" -- Not enough input lines selected. Select at least {min_selected} lines -- "
         )
         return None
-
-    for current_uid in selected_uids:
-        if (source_coll.get_uid_topology(current_uid) != "PolyLine") and (
-            source_coll.get_uid_topology(current_uid) != "XsPolyLine"
-        ):
-            self.print_terminal(f" -- Selected data {current_uid} is not a line -- ")
-            return None
     return source_coll
 
 
-def start_checked_line_tool(self, tool_func, selected_uids=None, min_selected=1):
-    """Validate line selection before starting a line editing tool."""
+def _editable_line_uids(source_coll, uids):
+    """The uids, in order, that are PolyLine or XsPolyLine entities of source_coll."""
+    topologies = dict(zip(source_coll.df["uid"], source_coll.df["topology"]))
+    return [uid for uid in uids if topologies.get(uid) in ("PolyLine", "XsPolyLine")]
+
+
+def start_checked_line_tool(
+    self, tool_func, selected_uids=None, min_selected=1, max_selected=None
+):
+    """Validate the line selection, then run a line editing tool on the selected lines.
+    Before the tool starts, the project selection is reduced to exactly the lines the tool works
+    on: entities that are not lines of the shown collection are deselected, and with max_selected
+    only the last selected lines (in click order) are kept. The tool then reads them from
+    self.selected_uids, and they stay selected after it (if the tool keeps the selection)."""
+    lines = ["PolyLine", "XsPolyLine"]
+    if (
+        self.parent.restrict_selection_for_tool(
+            valid={"geol_coll": lines, "fluid_coll": lines, "backgrnd_coll": lines},
+            min_selected=min_selected,
+            max_selected=max_selected,
+            view=self,
+            tool_name=getattr(tool_func, "__name__", None),
+        )
+        is None
+    ):
+        return
     if (
         _get_editable_line_source_coll(
             self, selected_uids=selected_uids, min_selected=min_selected
@@ -393,7 +417,7 @@ def edit_line(self):
         vtk_obj.ShallowCopy(traced_pld)
         source_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
         editor.EnabledOff()
-        self.clear_selection()
+        # Selection is kept after this tool (project-level selection).
         freeze_gui_off(self)
 
     source_coll = _get_editable_line_source_coll(
@@ -434,12 +458,10 @@ def sort_line_nodes(self):
         source_coll.get_uid_vtk_obj(
             current_uid
         ).sort_nodes()  # this could be probably done per-part__________________________
-        # Deselect input line.
         self.parent.signals.geom_modified.emit([current_uid], source_coll)
         # for action in self.findChildren(QAction):
         #     action.setEnabled(True)
-    # Deselect input line.
-    self.clear_selection()
+    # Selection is kept after this tool (project-level selection).
 
 
 def move_line(self, vector):
@@ -474,10 +496,8 @@ def move_line(self, vector):
         points = np_stack((x, y, z), axis=1)
         source_coll.get_uid_vtk_obj(current_uid).points = points
         left_right(self, uid=current_uid, source_coll=source_coll)
-        # Deselect input line.
         self.parent.signals.geom_modified.emit([current_uid], source_coll)
-    # Deselect input line.
-    self.clear_selection()
+    # Selection is kept after this tool (project-level selection).
     freeze_gui_off(self)
 
 
@@ -537,8 +557,7 @@ def rotate_line(self):
         left_right(self, uid=current_uid, source_coll=source_coll)
         # emit uid as list to force redraw()
         self.parent.signals.geom_modified.emit([current_uid], source_coll)
-    # Deselect input line.
-    self.clear_selection()
+    # Selection is kept after this tool (project-level selection).
 
 
 @freeze_gui_on
@@ -563,7 +582,7 @@ def extend_line(self):
 
         source_coll.replace_vtk(uid=uid, vtk_object=vtk_obj)
         extender.EnabledOff()
-        self.clear_selection()
+        # Selection is kept after this tool (project-level selection).
         freeze_gui_off(self)
 
     # Extend selected line.
@@ -654,14 +673,14 @@ def split_line_line(self):
             self.print_terminal(
                 f" -- Paper line {current_uid_paper} does not intersect scissor line {current_uid_scissors} -- "
             )
-            self.clear_selection()
+            # Selection is kept after this tool (project-level selection).
             return
         split_lines = shp_split(paper_to_split, splitter)
         if len(split_lines.geoms) < 2:
             self.print_terminal(
                 f" -- Scissor line {current_uid_scissors} does not split paper line {current_uid_paper} -- "
             )
-            self.clear_selection()
+            # Selection is kept after this tool (project-level selection).
             return
         replace = 1  # replace = 1 for the first line to operate replace_vtk
         uids = [current_uid_scissors]
@@ -727,11 +746,10 @@ def split_line_line(self):
                 self.print_terminal(
                     f" -- Split generated an empty object for {current_uid_paper} -- "
                 )
-        # Deselect input line and force redraw
+        # Force redraw
 
         # self.parent.signals.geom_modified.emit(uids)  # emit uid as list to force redraw()
-    # Deselect input line.
-    self.clear_selection()
+    # Selection is kept after this tool (project-level selection).
 
 
 @freeze_gui_onoff
@@ -844,8 +862,7 @@ def split_line_existing_point(self):
             del new_line_2
         else:
             self.print_terminal("Empty object")
-        # Deselect input line.
-        self.clear_selection()
+        # Selection is kept after this tool (project-level selection).
         selector.EnabledOff()
 
     # Split line at selected existing point (vertex)
@@ -962,8 +979,11 @@ def merge_lines(self):
         )
         self.enable_actions()
         return
-    # Deselect input lines, then remove old entities.
-    self.clear_selection()
+    # Remove old entities.
+    # Keep the selection on the welded line: the input lines are removed below.
+    self.parent.set_selection(
+        uids=[out_uid], mode="add", collection=source_coll.collection_name, source=self
+    )
     for uid in in_uids:
         if uid == out_uid:
             continue
@@ -1291,7 +1311,7 @@ def snap_line(self):
         self.print_terminal(
             "Snap to intersection completed: no short branches or endpoint snaps found within distance."
         )
-        self.clear_selection()
+        # Selection is kept after this tool (project-level selection).
         return
 
     for uid in ordered_selected_uids:
@@ -1324,7 +1344,7 @@ def snap_line(self):
         + str(endpoint_snap_count)
         + "."
     )
-    self.clear_selection()
+    # Selection is kept after this tool (project-level selection).
 
 
 @freeze_gui_onoff
@@ -1411,8 +1431,8 @@ def resample_lines_distance(self):
             del new_line
         else:
             self.print_terminal(" -- Empty object -- ")
-        # Deselect input line and emit uid as list to force redraw.
-        self.clear_selection()
+        # Emit uid as list to force redraw.
+        # Selection is kept after this tool (project-level selection).
         self.parent.signals.geom_modified.emit([current_uid], source_coll)
         self.print_terminal(
             f"Line {current_uid} resampled with distance = {distance_delta}"
@@ -1507,8 +1527,8 @@ def resample_lines_number_points(self):
             del new_line
         else:
             self.print_terminal(" -- Empty object -- ")
-        # Deselect input line and emit uid as list to force redraw.
-        self.clear_selection()
+        # Emit uid as list to force redraw.
+        # Selection is kept after this tool (project-level selection).
         self.parent.signals.geom_modified.emit([current_uid], source_coll)
         self.print_terminal(
             f"Line {current_uid} resampled with number of points = {number_of_points}"
@@ -1617,8 +1637,7 @@ def simplify_line(self):
     except Exception as e:
         self.print_terminal(f"Error: {str(e)}")
 
-    # Deselect input line.
-    self.clear_selection()
+    # Selection is kept after this tool (project-level selection).
 
 
 @freeze_gui_onoff

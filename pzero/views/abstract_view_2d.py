@@ -79,7 +79,7 @@ class View2D(ViewVTK):
         self.editLineButton = QAction("Edit line", self)
         self.editLineButton.triggered.connect(
             lambda: start_checked_line_tool(
-                self, edit_line, selected_uids=self.selected_uids[:1]
+                self, edit_line, max_selected=1
             )
         )
         self.menuModify.addAction(self.editLineButton)
@@ -107,7 +107,7 @@ class View2D(ViewVTK):
         self.extendButton = QAction("Extend line", self)
         self.extendButton.triggered.connect(
             lambda: start_checked_line_tool(
-                self, extend_line, selected_uids=self.selected_uids[:1]
+                self, extend_line, max_selected=1
             )
         )
         self.menuModify.addAction(self.extendButton)
@@ -121,7 +121,7 @@ class View2D(ViewVTK):
         self.splitLineByPointButton = QAction("Split line-point", self)
         self.splitLineByPointButton.triggered.connect(
             lambda: start_checked_line_tool(
-                self, split_line_existing_point, selected_uids=self.selected_uids[:1]
+                self, split_line_existing_point, max_selected=1
             )
         )
         self.menuModify.addAction(self.splitLineByPointButton)
@@ -159,7 +159,7 @@ class View2D(ViewVTK):
         self.copyParallelButton = QAction("Copy parallel", self)
         self.copyParallelButton.triggered.connect(
             lambda: start_checked_line_tool(
-                self, copy_parallel, selected_uids=self.selected_uids[:1]
+                self, copy_parallel, max_selected=1
             )
         )
         self.menuCreate.addAction(self.copyParallelButton)
@@ -167,7 +167,7 @@ class View2D(ViewVTK):
         self.copyKinkButton = QAction("Copy kink", self)
         self.copyKinkButton.triggered.connect(
             lambda: start_checked_line_tool(
-                self, copy_kink, selected_uids=self.selected_uids[:1]
+                self, copy_kink, max_selected=1
             )
         )
         self.menuCreate.addAction(self.copyKinkButton)
@@ -177,7 +177,7 @@ class View2D(ViewVTK):
             lambda: start_checked_line_tool(
                 self,
                 lambda view: view.vector_by_mouse(copy_similar),
-                selected_uids=self.selected_uids[:1],
+                max_selected=1,
             )
         )
         self.menuCreate.addAction(self.copySimilarButton)
@@ -232,7 +232,6 @@ class View2D(ViewVTK):
         self.plotter.reset_key_events()
         # Keep the 2D camera protected after restoring default key events (issue #174).
         self.plotter.clear_events_for_key("v")
-        self.selected_uids = self.parent.selected_uids
         # self.enable_actions()
         freeze_gui_off(self)
 

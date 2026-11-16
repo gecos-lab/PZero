@@ -1,7 +1,11 @@
 """abstract_view_vtk.py
 PZero© Andrea Bistacchi"""
 
+# Standard library imports____
+from functools import wraps
+
 # PySide6 imports____
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QAbstractItemView
 
@@ -11,12 +15,16 @@ from numpy import ndarray as np_ndarray
 
 # VTK imports incl. VTK-Numpy interface____
 from vtkmodules.vtkRenderingCore import vtkCellPicker, vtkMapper
+from vtkmodules.vtkCommonDataModel import vtkPolyData
+from vtkmodules.vtkFiltersCore import vtkFeatureEdges
+from vtkmodules.vtkFiltersGeometry import vtkGeometryFilter
 from vtk import vtkAppendPolyData
 
 # PyVista imports____
 from pyvista import global_theme as pv_global_theme
 from pyvistaqt import QtInteractor as pvQtInteractor
 from pyvista import Box as pv_Box
+from pyvista import wrap as pv_wrap
 from pyvista import Line as pv_Line
 from pyvista import Disc as pv_Disc
 from pyvista import PointSet as pvPointSet
@@ -49,14 +57,256 @@ from ..entities_factory import (
 )
 
 
+def _highlight_aware_actor_method(func):
+    """Wrap a method that (re)creates the actor of one uid (show_actor_with_property): the old actor
+    is un-highlighted before, and the new one is highlighted after, if the uid is selected."""
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        uid = kwargs.get("uid", args[0] if args else None)
+        self._unhighlight_actor(uid)
+        result = func(self, *args, **kwargs)
+        if uid is not None and self.parent.is_selected(uid):
+            self._highlight_actor(uid)
+        return result
+
+    wrapper._highlight_aware = True
+    return wrapper
+
+
+def _highlight_aware_style_method(func):
+    """Wrap a method that changes the style of actors (change_actor_color etc.): highlighted actors
+    get their original style back before, so the change applies to it, and are re-highlighted after."""
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        uids = kwargs.get("updated_uids", args[0] if args else None) or []
+        highlighted = [uid for uid in uids if uid in self._highlighted]
+        for uid in highlighted:
+            self._unhighlight_actor(uid)
+        try:
+            return func(self, *args, **kwargs)
+        finally:
+            for uid in highlighted:
+                self._highlight_actor(uid)
+
+    wrapper._highlight_aware = True
+    return wrapper
+
+
+# Methods wrapped automatically in ViewVTK and in all its subclasses that (re)implement them,
+# so that the selection highlight survives actor re-creation and legend changes.
+_HIGHLIGHT_AWARE_METHODS = {
+    "show_actor_with_property": _highlight_aware_actor_method,
+    "change_actor_color": _highlight_aware_style_method,
+    "change_actor_opacity": _highlight_aware_style_method,
+    "change_actor_line_thick": _highlight_aware_style_method,
+    "change_actor_point_size": _highlight_aware_style_method,
+}
+
+
+def _wrap_highlight_aware_methods(cls):
+    for name, decorator in _HIGHLIGHT_AWARE_METHODS.items():
+        method = cls.__dict__.get(name)
+        if method is not None and not getattr(method, "_highlight_aware", False):
+            setattr(cls, name, decorator(method))
+
+
 class ViewVTK(BaseView):
     """Abstract class used as a base for all classes using the VTK/PyVista plotting canvas."""
 
     RGB_TOTAL_PROPERTY = "RGB total"
     _coincident_topology_rendering_enabled = False
 
+    # Selection highlight. Selected actors are drawn with a modified style of their own property
+    # (no extra actors), except for collections or datasets where this would be too heavy or not
+    # visible, which get a bounding box outline named f"{uid}_silh".
+    HIGHLIGHT_COLOR = (1.0, 1.0, 0.0)
+    _HIGHLIGHT_OUTLINE_COLLECTIONS = ("dom_coll", "mesh3d_coll")
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        _wrap_highlight_aware_methods(cls)
+
     def __init__(self, *args, **kwargs):
+        # Must exist before BaseView.__init__ creates the actors.
+        self._highlighted = {}  # uid -> {"kind", "actor", "saved"}
+        self._pending_highlight = set()  # uids whose highlight must be updated at next flush
+        self._highlight_timer = None
         super(ViewVTK, self).__init__(*args, **kwargs)
+
+    # ================================  Selection highlight ===========================================================
+
+    def selection_modified_update_actors(self, added=None, removed=None, source=None):
+        """Queue the uids whose selection changed and are shown in this view; a burst of
+        selection signals is flushed once, at the next event loop iteration, with one render."""
+        actors = self.plotter.renderer.actors
+        for uid in list(removed or []) + list(added or []):
+            if uid in actors or uid in self._highlighted:
+                self._pending_highlight.add(uid)
+        if not self._pending_highlight:
+            return
+        if self._highlight_timer is None:
+            self._highlight_timer = QTimer(self)
+            self._highlight_timer.setSingleShot(True)
+            self._highlight_timer.setInterval(0)
+            self._highlight_timer.timeout.connect(self._flush_highlight)
+        self._highlight_timer.start()
+
+    def _flush_highlight(self):
+        """Apply the project selection state to the queued uids, then render once."""
+        pending, self._pending_highlight = self._pending_highlight, set()
+        if not pending or getattr(self, "_signals_disconnected", False):
+            return
+        for uid in pending:
+            if self.parent.is_selected(uid):
+                self._highlight_actor(uid)
+            else:
+                self._unhighlight_actor(uid)
+        self.plotter.render()
+
+    def _highlight_actor(self, uid=None):
+        """Highlight the actor of uid (idempotent). Does not render."""
+        self._unhighlight_actor(uid)
+        actor = self.get_actor_by_uid(uid)
+        mapper = actor.GetMapper() if actor is not None else None
+        if mapper is None:
+            return
+        data = mapper.GetInput()
+        collection = self.actors_df.loc[self.actors_df["uid"] == uid, "collection"]
+        collection = collection.values[0] if not collection.empty else None
+        prop = actor.GetProperty()
+        is_polydata = isinstance(data, vtkPolyData)
+        is_surface = (
+            is_polydata
+            and data.GetNumberOfPolys() + data.GetNumberOfStrips() > 0
+            and prop.GetRepresentation() == 2  # VTK_SURFACE
+        )
+
+        # Surfaces, DEMs/DOMs, images, meshes: yellow line along the outer border. Closed surfaces
+        # have no border and get yellow edges; point clouds and closed volumes get a bounding box.
+        if (
+            is_surface
+            or collection in self._HIGHLIGHT_OUTLINE_COLLECTIONS
+            or not is_polydata
+        ):
+            border = self._highlight_border(uid, data)
+            if border is not None or not is_surface:
+                self._highlighted[uid] = {
+                    "kind": "outline",
+                    "actor": actor,
+                    "saved": None,
+                }
+                if actor.GetVisibility():
+                    if border is not None:
+                        outline_actor = self.plotter.add_mesh(
+                            border,
+                            name=f"{uid}_silh",
+                            color=self.HIGHLIGHT_COLOR,
+                            line_width=3,
+                            pickable=False,
+                            reset_camera=False,
+                            render=False,
+                        )
+                        # The border is in data coordinates: follow the actor transform
+                        # (e.g. vertical exaggeration).
+                        outline_actor.SetUserMatrix(actor.GetUserMatrix())
+                        outline_actor.SetScale(actor.GetScale())
+                        outline_actor.SetOrigin(actor.GetOrigin())
+                        outline_actor.SetOrientation(actor.GetOrientation())
+                        outline_actor.SetPosition(actor.GetPosition())
+                    else:
+                        self.plotter.add_mesh(
+                            pv_Box(actor.GetBounds()),
+                            name=f"{uid}_silh",
+                            color=self.HIGHLIGHT_COLOR,
+                            style="wireframe",
+                            line_width=3,
+                            pickable=False,
+                            reset_camera=False,
+                            render=False,
+                        )
+                return
+
+        if is_surface:
+            saved = {
+                "edge_visibility": prop.GetEdgeVisibility(),
+                "edge_color": prop.GetEdgeColor(),
+                "line_width": prop.GetLineWidth(),
+            }
+            prop.EdgeVisibilityOn()
+            prop.SetEdgeColor(self.HIGHLIGHT_COLOR)
+            prop.SetLineWidth(max(saved["line_width"], 2.0))
+            kind = "surface"
+        else:
+            # Lines and points: the yellow color must win over scalar colors, which are
+            # restored on deselection.
+            saved = {
+                "color": prop.GetColor(),
+                "line_width": prop.GetLineWidth(),
+                "point_size": prop.GetPointSize(),
+                "scalar_visibility": mapper.GetScalarVisibility(),
+            }
+            prop.SetColor(self.HIGHLIGHT_COLOR)
+            prop.SetLineWidth(saved["line_width"] + 3.0)
+            prop.SetPointSize(saved["point_size"] + 4.0)
+            mapper.ScalarVisibilityOff()
+            kind = "line_point"
+        self._highlighted[uid] = {"kind": kind, "actor": actor, "saved": saved}
+
+    def _highlight_border(self, uid=None, data=None):
+        """Outer border (boundary edges) of the surface of data, as polydata, or None if it has
+        none (closed surfaces, volumes, point clouds). Cached per uid until data is modified."""
+        if data is None:
+            return None
+        cache = self.__dict__.setdefault("_highlight_border_cache", {})
+        key = (id(data), data.GetMTime())
+        cached = cache.get(uid)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        surface = data
+        if not isinstance(data, vtkPolyData):
+            geometry = vtkGeometryFilter()
+            geometry.SetInputData(data)
+            geometry.Update()
+            surface = geometry.GetOutput()
+        border = None
+        if surface.GetNumberOfPolys() + surface.GetNumberOfStrips() > 0:
+            edges = vtkFeatureEdges()
+            edges.SetInputData(surface)
+            edges.BoundaryEdgesOn()
+            edges.FeatureEdgesOff()
+            edges.NonManifoldEdgesOff()
+            edges.ManifoldEdgesOff()
+            edges.ColoringOff()
+            edges.Update()
+            if edges.GetOutput().GetNumberOfCells() > 0:
+                border = pv_wrap(edges.GetOutput())
+        cache[uid] = (key, border)
+        return border
+
+    def _unhighlight_actor(self, uid=None):
+        """Remove the highlight of uid, if any (idempotent). Does not render."""
+        record = self._highlighted.pop(uid, None)
+        if record is None:
+            return
+        if record["kind"] == "outline":
+            self.plotter.remove_actor(f"{uid}_silh", render=False)
+            return
+        actor = record["actor"]
+        if actor is not self.get_actor_by_uid(uid):
+            # The actor was replaced or removed: the new one is not highlighted.
+            return
+        prop, saved = actor.GetProperty(), record["saved"]
+        if record["kind"] == "surface":
+            prop.SetEdgeVisibility(saved["edge_visibility"])
+            prop.SetEdgeColor(saved["edge_color"])
+            prop.SetLineWidth(saved["line_width"])
+        else:
+            prop.SetColor(saved["color"])
+            prop.SetLineWidth(saved["line_width"])
+            prop.SetPointSize(saved["point_size"])
+            actor.GetMapper().SetScalarVisibility(saved["scalar_visibility"])
 
     # ================================  General methods shared by all views - built incrementally =====================
 
@@ -312,11 +562,15 @@ class ViewVTK(BaseView):
                 elif key in self._hidden_actor_pickability:
                     actor.SetPickable(self._hidden_actor_pickability.pop(key))
                 actor.SetVisibility(visible)
-                if key == uid and not visible:
-                    self.selected_uids = [
-                        item for item in self.selected_uids if item != uid
-                    ]
-                    self.plotter.remove_actor(f"{uid}_silh", render=False)
+                # Hidden entities stay selected; an outline highlight follows visibility.
+                if (
+                    key == uid
+                    and self._highlighted.get(uid, {}).get("kind") == "outline"
+                ):
+                    if visible:
+                        self._highlight_actor(uid)
+                    else:
+                        self.plotter.remove_actor(f"{uid}_silh", render=False)
             except Exception:
                 pass
 
@@ -1281,77 +1535,6 @@ class ViewVTK(BaseView):
             self.plotter.camera_position = camera_position
         return this_actor
 
-    def actor_in_table(self, sel_uid=None):
-        """Method used to highlight in the main project table view a list of selected actors."""
-        if sel_uid:
-            collection = self.actors_df.loc[
-                self.actors_df["uid"] == sel_uid[0], "collection"
-            ].values[0]
-            # Mapping collection name to (table, df, tab index)
-            collection_to_table = {
-                "geol_coll": (
-                    self.parent.GeologyTableView,
-                    self.parent.geol_coll.df,
-                    0,
-                ),
-                "fluid_coll": (
-                    self.parent.FluidsTableView,
-                    self.parent.fluid_coll.df,
-                    1,
-                ),
-                "backgrnd_coll": (
-                    self.parent.BackgroundsTableView,
-                    self.parent.backgrnd_coll.df,
-                    2,
-                ),
-                "dom_coll": (self.parent.DOMsTableView, self.parent.dom_coll.df, 3),
-                "image_coll": (
-                    self.parent.ImagesTableView,
-                    self.parent.image_coll.df,
-                    4,
-                ),
-                "mesh3d_coll": (
-                    self.parent.Meshes3DTableView,
-                    self.parent.mesh3d_coll.df,
-                    5,
-                ),
-                "boundary_coll": (
-                    self.parent.BoundariesTableView,
-                    self.parent.boundary_coll.df,
-                    6,
-                ),
-                "xsect_coll": (
-                    self.parent.XSectionsTableView,
-                    self.parent.xsect_coll.df,
-                    7,
-                ),
-                "well_coll": (self.parent.WellsTableView, self.parent.well_coll.df, 8),
-            }
-            if collection in collection_to_table:
-                table, df, tab_idx = collection_to_table[collection]
-                self.parent.tabWidgetTopLeft.setCurrentIndex(tab_idx)
-            else:
-                self.print_terminal(
-                    "Selection not supported for entities that do not belong to a recognized collection."
-                )
-                return
-            table.clearSelection()
-            if len(sel_uid) > 1:
-                table.setSelectionMode(QAbstractItemView.MultiSelection)
-            for uid in sel_uid:
-                uid_list = [
-                    table.model().index(row, 0).data() for row in range(len(df.index))
-                ]
-                if uid in uid_list:
-                    idx = uid_list.index(uid)
-                    table.selectRow(idx)
-                else:
-                    print(f"uid {uid} not find")
-        else:
-            self.parent.GeologyTableView.clearSelection()
-            self.parent.DOMsTableView.clearSelection()
-            self.selected_uids = []
-
     @freeze_gui_on
     def select_actor_with_mouse(self):
         """Function used for actor selection. As long as selection goes on, other actions are
@@ -1379,22 +1562,16 @@ class ViewVTK(BaseView):
         pass
 
     def clear_selection(self):
-        for av_actor in self.plotter.renderer.actors.copy():
-            self.plotter.remove_bounding_box()
-            if "_silh" in av_actor:
-                self.plotter.remove_actor(av_actor)
-
-        if not self.selected_uids == []:
-            deselected_uids = self.selected_uids
-            self.selected_uids = []
-        self.actor_in_table()
+        """Deselect, in the project selection, all entities shown in this view.
+        The highlight is removed when the selection store notifies the view."""
+        self.plotter.remove_bounding_box()
+        uids = self.selected_uids
+        if uids:
+            self.parent.set_selection(uids=uids, mode="remove", source=self)
 
     def select_actor(self, obj, event):
-        """Select actor with VTK picking."""
-        # initialize selction sets
-        name_list = set()
-        actors = set(self.plotter.renderer.actors)
-
+        """Select actor with VTK picking: click selects only the picked entity among those shown
+        in this view, Shift-click toggles it. The selection goes to the project selection store."""
         # initialize render interaction
         style = obj.GetInteractorStyle()
         style.SetDefaultRenderer(self.plotter.renderer)
@@ -1424,47 +1601,28 @@ class ViewVTK(BaseView):
             sel_uid = self.get_uid_from_actor(actor=actor)
             self.print_terminal(f"Picked uid: {sel_uid}")
 
-            # Shift-click toggles the picked actor in the selection.
+            collection = self.actors_df.loc[
+                self.actors_df["uid"] == sel_uid, "collection"
+            ]
+            collection = collection.values[0] if not collection.empty else None
+
             if shift:
-                self.selected_uids = [
-                    uid for uid in self.selected_uids if self.actor_shown(uid)
-                ]
-                if sel_uid in self.selected_uids:
-                    self.selected_uids.remove(sel_uid)
-                else:
-                    self.selected_uids.append(sel_uid)
-            else:
-                self.selected_uids = [sel_uid]
-            self.print_terminal(f"Selected uids: {self.selected_uids}")
-
-            # Show selected actors in yellow
-            for sel_uid in self.selected_uids:
-                sel_actor = self.get_actor_by_uid(sel_uid)
-                collection = self.actors_df.loc[
-                    self.actors_df["uid"] == sel_uid, "collection"
-                ].values[0]
-                mesh = sel_actor.GetMapper().GetInput()
-                name = f"{sel_uid}_silh"
-                name_list.add(name)
-                if collection == "dom_coll":
-                    bounds = sel_actor.GetBounds()
-                    mesh = pv_Box(bounds)
-
-                self.plotter.add_mesh(
-                    mesh,
-                    pickable=False,
-                    name=name,
-                    color="Yellow",
-                    style="wireframe",
-                    line_width=5,
+                # Shift-click toggles the picked entity in the selection.
+                self.parent.set_selection(
+                    uids=[sel_uid], mode="toggle", collection=collection, source=self
                 )
-
-            # Also remove stale outlines when the last object is deselected.
-            for av_actor in actors.difference(name_list):
-                if "_silh" in av_actor:
-                    self.plotter.remove_actor(av_actor)
-
-            self.actor_in_table(self.selected_uids)
+            else:
+                # Click: the picked entity replaces the selection of the entities in this view
+                # (entities not shown here keep their selection state).
+                others = [uid for uid in self.selected_uids if uid != sel_uid]
+                if others:
+                    self.parent.set_selection(uids=others, mode="remove", source=self)
+                self.parent.set_selection(
+                    uids=[sel_uid], mode="add", collection=collection, source=self
+                )
+                # Picking an already selected entity changes nothing, but shows its tab.
+                self.parent.show_collection_tab(collection)
+            self.print_terminal(f"Selected uids: {self.selected_uids}")
 
         else:
             return None
@@ -1493,3 +1651,7 @@ class ViewVTK(BaseView):
     def show_qt_canvas(self):
         """Show the Qt Window. To be reimplemented in some subclass."""
         pass
+
+
+# __init_subclass__ wraps the methods re-implemented in subclasses; wrap ViewVTK's own here.
+_wrap_highlight_aware_methods(ViewVTK)

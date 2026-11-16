@@ -144,10 +144,17 @@ from .entities_factory import (
     Attitude,
     XsImage,
 )
+from .helpers.helper_functions import (
+    uses_selection,
+    active_collection,
+    derived_entity_dict,
+    entity_metadata_input_dict,
+    uid_metadata,
+)
 from .helpers.helper_functions import freeze_gui_onoff
 from .legend_manager import Legend, legend_level_col
 from .orientation_analysis import set_normals
-from .point_clouds import decimate_pc
+from .point_clouds import decimate_pc, normals2dd, facets_pc
 from .properties_manager import PropertiesCMaps, ensure_property_legend_schema
 from .three_d_surfaces import (
     interpolation_delaunay_2d,
@@ -155,8 +162,6 @@ from .three_d_surfaces import (
     regularized_grid_surface_interpolation,
     implicit_model_loop_structural,
     surface_smoothing,
-    linear_extrusion,
-    enhanced_linear_extrusion,
     decimation_pro_resampling,
     decimation_quadric_resampling,
     subdivision_resampling,
@@ -194,7 +199,13 @@ from typing import Optional
 
 from PySide6.QtCore import Signal as pyqtSignal, Qt
 from PySide6.QtCore import QObject
-from PySide6.QtWidgets import QMainWindow, QMessageBox, QDockWidget, QAbstractItemView
+from PySide6.QtWidgets import (
+    QMainWindow,
+    QMessageBox,
+    QDockWidget,
+    QAbstractItemView,
+    QTreeWidget,
+)
 from PySide6.QtGui import QAction
 import importlib
 import importlib.util
@@ -363,6 +374,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionAddProperty.triggered.connect(self.property_add)
         self.actionRemoveProperty.triggered.connect(self.property_remove)
         self.actionCalculateNormals.triggered.connect(self.normals_calculate)
+        # Dip and dip direction point properties of point clouds, from their normals.
+        self.actionCalculate_Dip_Direction.triggered.connect(lambda: normals2dd(self))
         self.actionCalculateLineations.triggered.connect(self.lineations_calculate)
 
         self.actionBuildOctree.triggered.connect(self.build_octree)
@@ -370,6 +383,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Interpolation actions -> slots"""
         self.actionDelaunay2D.triggered.connect(lambda: interpolation_delaunay_2d(self))
         self.actionPoisson.triggered.connect(lambda: poisson_interpolation(self))
+        # One planar facet per point-cloud cluster (best-fitting plane + Delaunay 2D).
+        self.actionFacetsFromPointCloud = QAction("Planar facets from PC clusters", self)
+        self.actionFacetsFromPointCloud.setObjectName("actionFacetsFromPointCloud")
+        self.actionFacetsFromPointCloud.triggered.connect(lambda: facets_pc(self))
+        self.menuInterpolation.insertAction(
+            self.actionRegularizedGridSurface, self.actionFacetsFromPointCloud
+        )
         self.actionRegularizedGridSurface.triggered.connect(
             lambda: regularized_grid_surface_interpolation(self)
         )
@@ -385,13 +405,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionDecimationQuadric.triggered.connect(
             lambda: decimation_quadric_resampling(self)
         )
-        self.actionExtrusion.triggered.connect(lambda: linear_extrusion(self))
-        self.actionEnhancedExtrusion = QAction("Extrusion with Densification", self)
-        self.actionEnhancedExtrusion.setObjectName("actionEnhancedExtrusion")
-        self.actionEnhancedExtrusion.triggered.connect(
-            lambda: enhanced_linear_extrusion(self)
-        )
-        self.menuProjection.addAction(self.actionEnhancedExtrusion)
+        # Extrusion (simple, or with densification) is in View3D > Create, where it makes sense.
+        self.menuProjection.removeAction(self.actionExtrusion)
         self.actionProject2DEM.triggered.connect(lambda: project_2_dem(self))
         self.actionXSectionIntersection.triggered.connect(lambda: intersection_xs(self))
         self.actionProject2XSection.triggered.connect(lambda: project_2_xs(self))
@@ -469,6 +484,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 action.setDisabled(True)
             except:
                 pass
+        self.set_selection_frozen(True)
 
     def enable_actions(self):
         """Un-freeze all actions after having done something."""
@@ -480,6 +496,37 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 action.setEnabled(True)
             except:
                 pass
+        self.set_selection_frozen(False)
+
+    def set_selection_frozen(self, frozen: bool = True):
+        """Freeze (or un-freeze) selection by the user in the project tables and in all view trees,
+        together with the actions, while a tool is running (see freeze_gui_on / freeze_gui_onoff).
+        The selection stays visible; tools and picking can still change it via set_selection()."""
+        frozen = bool(frozen)
+        if getattr(self, "_selection_frozen", False) == frozen:
+            return
+        self._selection_frozen = frozen
+        widgets = list(self.table_view_collection_dict) + [
+            tree
+            for tree in self.findChildren(QTreeWidget)
+            if hasattr(tree, "set_selection_from_collection")
+        ]
+        if frozen:
+            self._unfrozen_selection_modes = {}
+            for widget in widgets:
+                self._unfrozen_selection_modes[widget] = widget.selectionMode()
+                widget.setSelectionMode(QAbstractItemView.NoSelection)
+        else:
+            for widget, mode in getattr(self, "_unfrozen_selection_modes", {}).items():
+                try:
+                    widget.setSelectionMode(mode)
+                except RuntimeError:
+                    pass  # widget deleted meanwhile (e.g. view closed)
+            self._unfrozen_selection_modes = {}
+
+    @property
+    def selection_frozen(self) -> bool:
+        return getattr(self, "_selection_frozen", False)
 
     def print_terminal(self, string=None):
         """Show string in terminal."""
@@ -814,7 +861,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         Single entry point to change the project-level selection.
 
         mode:
-            "replace" - the selection within the scope becomes uids
+            "replace" - the selection within the scope becomes uids (uids already selected keep
+                        their position, so the click order is preserved)
             "add"     - add uids to the selection
             "remove"  - remove uids from the selection
             "toggle"  - select unselected uids and deselect selected ones
@@ -857,8 +905,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 new.pop(uid, None)
                 new[uid] = coll
 
-        if mode in ("replace", "clear"):
+        if mode == "clear":
             for uid in [u for u, c in new.items() if collection is None or c == collection]:
+                del new[uid]
+        elif mode == "replace":
+            # Uids that stay selected keep their position (click order is preserved);
+            # new ones are appended below, in the given order.
+            keep = set(uids)
+            for uid in [
+                u
+                for u, c in new.items()
+                if (collection is None or c == collection) and u not in keep
+            ]:
                 del new[uid]
         if mode in ("replace", "add"):
             for uid in uids:
@@ -900,6 +958,101 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             if changed_collection is not None:
                 self.signals.selection_changed.emit(changed_collection)
         return True
+
+    def restrict_selection_for_tool(
+        self,
+        valid: dict = None,
+        topologies: list = None,
+        require_properties: list = None,
+        min_selected: int = 1,
+        max_selected: int = None,
+        view=None,
+        tool_name: str = None,
+    ):
+        """
+        Before a tool runs, reduce the project selection to exactly the entities the tool will use,
+        so that entities it cannot use do not stay selected.
+
+        valid:        {collection_name: [topologies] or None (any topology)}; None = any collection.
+        topologies:   with valid None, the topologies accepted in any collection (None = any).
+        require_properties: only entities having all these properties (e.g. ["Normals"]) are usable.
+        min_selected: minimum number of usable entities, otherwise nothing changes and None is returned.
+        max_selected: the tool uses only the last max_selected usable entities (in click order).
+        view:         for tools running in a view, entities not shown in that view are not usable.
+
+        The tool works on one collection: the one of the table tab in front if it contains usable
+        entities, otherwise the one of the last selected usable entity, whose tab is brought to front.
+        Returns the list of uids the tool will use, or None if there are not enough.
+        """
+        tool_label = (
+            tool_name.replace("_", " ")
+            if tool_name and tool_name.isidentifier()
+            else "this tool"
+        )
+        selection = getattr(self, "_selection", {})
+        view_uids = set(view.actors_df["uid"]) if view is not None else None
+        # Topologies of the selected uids, one vectorized lookup per collection.
+        uid_topologies = {}
+        for collection_name in set(selection.values()):
+            collection = getattr(self, collection_name, None)
+            if collection is None or "topology" not in collection.df.columns:
+                continue
+            rows = collection.df[collection.df["uid"].isin(list(selection))]
+            uid_topologies.update(zip(rows["uid"], rows["topology"]))
+
+        def usable(uid):
+            collection_name = selection[uid]
+            if valid is not None and collection_name not in valid:
+                return False
+            if view_uids is not None and uid not in view_uids:
+                return False
+            allowed = valid.get(collection_name) if valid is not None else topologies
+            if allowed is not None and uid_topologies.get(uid) not in allowed:
+                return False
+            if require_properties:
+                properties = getattr(self, collection_name).get_uid_properties_names(uid) or []
+                if not all(name in properties for name in require_properties):
+                    return False
+            return True
+
+        candidates = [uid for uid in selection if usable(uid)]
+        shown_collection = self.tab_collection_dict.get(self.shown_table)
+        if any(selection[uid] == shown_collection for uid in candidates):
+            target_collection = shown_collection
+        elif candidates:
+            target_collection = selection[candidates[-1]]
+        else:
+            target_collection = None
+        chosen = [uid for uid in candidates if selection[uid] == target_collection]
+        if max_selected:
+            chosen = chosen[-max_selected:]
+
+        if len(chosen) < min_selected:
+            if valid is None:
+                needed = "/".join(topologies) if topologies else "entities"
+                if require_properties:
+                    needed += " with " + ", ".join(require_properties)
+            else:
+                needed = " or ".join(
+                    f"{'/'.join(topos) if topos else 'entities'} in {self.collection_display_name(coll)}"
+                    for coll, topos in valid.items()
+                )
+            self.print_terminal(
+                f" -- {tool_label}: select at least {min_selected} {needed}"
+                + (" shown in this view" if view is not None else "")
+                + " -- "
+            )
+            return None
+
+        previous = list(selection)
+        if set(previous) != set(chosen):
+            self.set_selection(uids=chosen, mode="replace", source=view or self)
+            self.print_terminal(
+                f" -- {tool_label}: {len(previous) - len(chosen)} entities deselected, "
+                f"working on {len(chosen)} in {self.collection_display_name(target_collection)} -- "
+            )
+        self.show_collection_tab(target_collection)
+        return chosen
 
     def _prune_selection(self, uids=None, collection=None):
         """Slot for entities_removed: drop removed entities from the selection."""
@@ -944,6 +1097,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def _on_table_selection_changed(self, table_view=None, collection_name: str = None):
         """Outbound: the rows selected in a table become the selection of its collection."""
         if getattr(self, "_syncing_table_selection", False):
+            return
+        if self.selection_frozen:
+            # A tool is running: undo the change in the table.
+            self._sync_table_selection(table_view=table_view, collection_name=collection_name)
             return
         self.set_selection(
             uids=self.get_selected_uids_from_table(table_view=table_view),
@@ -1099,6 +1256,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     #                 selected_uids_all.append(self.backgrnd_coll.data(index=idx, qt_role=Qt.DisplayRole))
     #     return selected_uids_all
 
+    @uses_selection(valid=None)
     def show_info_on_entities(self):
         """Print the selected entities' VTK descriptions in the project terminal."""
         self.tabWidgetBottomLeft.setCurrentWidget(self.tabTerminal)
@@ -1117,6 +1275,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 else "No VTK object available."
             )
 
+    @uses_selection(valid=None)
     def entity_clone(self):
         """Clone the selection using the shared copy-to-collection implementation."""
         self.tabWidgetBottomLeft.setCurrentWidget(self.tabTerminal)
@@ -1132,6 +1291,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             move=False,
         )
 
+    @uses_selection(valid=None)
     def entity_remove(self):
         """Remove entities selected in an attribute table. Just rows completely selected are removed."""
         if not self.selected_uids:
@@ -1372,17 +1532,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.signals.metadata_modified.emit(updated_uids, self.geol_coll)
         return updated_uids
 
+    @uses_selection(topologies=["PolyLine", "XsPolyLine"], min_selected=2)
     @freeze_gui_onoff
     def entities_merge(self):
-        """Merge entities of the same topology - VertexSet, PolyLine, TriSurf, ..."""
+        """Merge entities of the same topology into a multi-part entity, in the active collection."""
         if not self.selected_uids:
             return
-        if self.shown_table == "tabGeology":
-            collection = self.geol_coll
-        elif self.shown_table == "tabDOMs":
-            collection = self.dom_coll
-        else:
-            return
+        # Input entities and output are in the active collection (see @uses_selection).
+        collection = active_collection(self)
         xsect_list = []
 
         for uid in self.selected_uids:
@@ -1400,58 +1557,22 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
 
         """Proceed with existing logic to collect properties and merge."""
-        if self.shown_table == "tabGeology":
-            collection = self.geol_coll
-            """Create deepcopy of the geological entity dictionary."""
-            new_dict = deepcopy(collection.entity_dict)
-            name_list = []
-            topology_list = []
-            role_list = []
-            feature_list = []
-            scenario_list = []
-            xsect_list = []
-            for uid in self.selected_uids:
-                name_list.append(collection.get_uid_name(uid))
-                topology_list.append(collection.get_uid_topology(uid))
-                role_list.append(collection.get_uid_role(uid))
-                feature_list.append(collection.get_uid_feature(uid))
-                scenario_list.append(collection.get_uid_scenario(uid))
-                xsect_list.append(collection.get_uid_x_section(uid))
-            name_list = list(set(name_list))
-            topology_list = list(set(topology_list))
-            role_list = list(set(role_list))
-            feature_list = list(set(feature_list))
-            scenario_list = list(set(scenario_list))
-            xsect_list = list(set(xsect_list))
-            input_dict = {
-                "name": ["New name: ", name_list],
-                "topology": ["Topology", topology_list],
-                "role": ["Role: ", role_list],
-                "feature": ["Feature: ", feature_list],
-                "scenario": ["Scenario: ", scenario_list],
-                "parent_uid": ["XSection: ", xsect_list],
-            }
-        elif self.shown_table == "tabDOMs":
-            collection = self.dom_coll
-            """Create deepcopy of the geological entity dictionary."""
-            new_dict = deepcopy(collection.entity_dict)
-            name_list = []
-            topology_list = []
-            xsect_list = []
-            for uid in self.selected_uids:
-                name_list.append(collection.get_uid_name(uid))
-                topology_list.append(collection.get_uid_topology(uid))
-                xsect_list.append(collection.get_uid_xsect(uid))
-            name_list = list(set(name_list))
-            topology_list = list(set(topology_list))
-            xsect_list = list(set(xsect_list))
-            input_dict = {
-                "name": ["New name: ", name_list],
-                "topology": ["Topology", topology_list],
-                "parent_uid": ["XSection: ", xsect_list],
-            }
-        else:
-            return
+        # Create deepcopy of the entity dictionary of the collection, and offer as choices the
+        # metadata values of the selected entities, for the fields that the collection has.
+        new_dict = deepcopy(collection.entity_dict)
+        input_dict = {
+            "name": ["New name: ", [collection.get_uid_name(uid) for uid in self.selected_uids]],
+            "topology": ["Topology", [collection.get_uid_topology(uid) for uid in self.selected_uids]],
+        }
+        for key, label in (("role", "Role: "), ("feature", "Feature: "), ("scenario", "Scenario: ")):
+            if key in new_dict:
+                input_dict[key] = [
+                    label,
+                    [str(uid_metadata(collection, uid, key, "undef")) for uid in self.selected_uids],
+                ]
+        input_dict["parent_uid"] = ["XSection: ", xsect_list]
+        for key in input_dict:
+            input_dict[key][1] = list(dict.fromkeys(input_dict[key][1]))
         updt_dict = multiple_input_dialog(
             title="Merge entities to multi-part", input_dict=input_dict
         )
@@ -1508,6 +1629,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
         uid_new = collection.add_entity_from_dict(new_dict)
 
+    @uses_selection(valid={"dom_coll": None})
     def texture_add(self):
         """Add texture to selected DEMs. Just rows completely selected are considered."""
         if not self.shown_table == "tabDOMs":
@@ -1539,6 +1661,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     dom_uid=dom_uid, map_image_uid=map_image_uid
                 )
 
+    @uses_selection(valid={"dom_coll": None})
     def texture_remove(self):
         """Remove texture to selected DEMs. Just rows completely selected are considered."""
         if not self.shown_table == "tabDOMs":
@@ -1570,127 +1693,63 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     dom_uid=dom_uid, map_image_uid=map_image_uid
                 )
 
+    @uses_selection(valid=None)
     @freeze_gui_onoff
     def property_add(self):
-        # ____________________________________________________ ADD IMAGES
-        """Add empty property on geological entity"""
-        if not self.shown_table in ["tabGeology", "tabMeshes", "tabDOMs"]:
-            return
+        """Add an empty property to the selected entities of the active collection."""
         if not self.selected_uids:
             return
+        collection = active_collection(self)
         input_dict = {
             "property_name": ["Property name: ", "new_property"],
             "property_components": ["Property components: ", 1],
         }
-        if not input_dict:
-            return
         updt_dict = multiple_input_dialog(
             title="Add empty property", input_dict=input_dict
         )
-        if self.shown_table == "tabGeology":
-            for uid in self.selected_uids:
-                if not updt_dict[
-                    "property_name"
-                ] in self.geol_coll.get_uid_properties_names(uid):
-                    self.geol_coll.append_uid_property(
-                        uid=uid,
-                        property_name=updt_dict["property_name"],
-                        property_components=updt_dict["property_components"],
-                    )
-        elif self.shown_table == "tabMeshes":
-            for uid in self.selected_uids:
-                if not updt_dict[
-                    "property_name"
-                ] in self.mesh3d_coll.get_uid_properties_names(uid):
-                    self.mesh3d_coll.append_uid_property(
-                        uid=uid,
-                        property_name=updt_dict["property_name"],
-                        property_components=updt_dict["property_components"],
-                    )
-        elif self.shown_table == "tabDOMs":
-            for uid in self.selected_uids:
-                if not updt_dict[
-                    "property_name"
-                ] in self.dom_coll.get_uid_properties_names(uid):
-                    self.dom_coll.append_uid_property(
-                        uid=uid,
-                        property_name=updt_dict["property_name"],
-                        property_components=updt_dict["property_components"],
-                    )
+        if updt_dict is None:
+            return
+        for uid in self.selected_uids:
+            if not updt_dict["property_name"] in collection.get_uid_properties_names(uid):
+                collection.append_uid_property(
+                    uid=uid,
+                    property_name=updt_dict["property_name"],
+                    property_components=updt_dict["property_components"],
+                )
         # Finally update properties legend.
         self.prop_legend.update_widget(self)
 
+    @uses_selection(valid=None)
     def property_remove(self):
-        # ____________________________________________________ ADD IMAGES
-        if not self.shown_table in ["tabGeology", "tabMeshes", "tabDOMs"]:
-            return
+        """Remove a property from the selected entities of the active collection. Only properties
+        present on all the selected entities are offered."""
         if not self.selected_uids:
             return
-        if self.shown_table == "tabGeology":
-            property_name_list = self.geol_coll.get_uid_properties_names(
-                uid=self.selected_uids[0]
-            )
-            if len(self.selected_uids) > 1:
-                for uid in self.selected_uids[1:]:
-                    property_name_list = list(
-                        set(property_name_list)
-                        & set(self.geol_coll.get_uid_properties_names(uid=uid))
-                    )
-            if property_name_list == []:
-                return
-            property_name = input_combo_dialog(
-                parent=None,
-                title="Remove selected property",
-                label="Remove property",
-                choice_list=property_name_list,
-            )
-            for uid in self.selected_uids:
-                self.geol_coll.remove_uid_property(uid=uid, property_name=property_name)
-        elif self.shown_table == "tabMeshes":
-            property_name_list = self.mesh3d_coll.get_uid_properties_names(
-                uid=self.selected_uids[0]
-            )
-            if len(self.selected_uids) > 1:
-                for uid in self.selected_uids[1:]:
-                    property_name_list = list(
-                        set(property_name_list)
-                        & set(self.mesh3d_coll.get_uid_properties_names(uid=uid))
-                    )
-            if property_name_list == []:
-                return
-            property_name = input_combo_dialog(
-                parent=None,
-                title="Remove selected property",
-                label="Remove property",
-                choice_list=property_name_list,
-            )
-            for uid in self.selected_uids:
-                self.mesh3d_coll.remove_uid_property(
-                    uid=uid, property_name=property_name
-                )
-        elif self.shown_table == "tabDOMs":
-            property_name_list = self.dom_coll.get_uid_properties_names(
-                uid=self.selected_uids[0]
-            )
-            if len(self.selected_uids) > 1:
-                for uid in self.selected_uids[1:]:
-                    property_name_list = list(
-                        set(property_name_list)
-                        & set(self.dom_coll.get_uid_properties_names(uid=uid))
-                    )
-            if property_name_list == []:
-                return
-            property_name = input_combo_dialog(
-                parent=None,
-                title="Remove selected property",
-                label="Remove property",
-                choice_list=property_name_list,
-            )
-            for uid in self.selected_uids:
-                self.dom_coll.remove_uid_property(uid=uid, property_name=property_name)
+        collection = active_collection(self)
+        property_name_list = collection.get_uid_properties_names(uid=self.selected_uids[0])
+        for uid in self.selected_uids[1:]:
+            property_name_list = [
+                name
+                for name in property_name_list
+                if name in collection.get_uid_properties_names(uid=uid)
+            ]
+        if not property_name_list:
+            self.print_terminal(" -- No property shared by all selected entities -- ")
+            return
+        property_name = input_combo_dialog(
+            parent=None,
+            title="Remove selected property",
+            label="Remove property",
+            choice_list=property_name_list,
+        )
+        if property_name is None:
+            return
+        for uid in self.selected_uids:
+            collection.remove_uid_property(uid=uid, property_name=property_name)
         # Finally update properties legend.
         self.prop_legend.update_widget(self)
 
+    @uses_selection(valid={"geol_coll": None, "dom_coll": None})
     def normals_calculate(self):
         # ____________________________________________________ ADD MORE CASES FOR POINT CLOUDS ETC.
         """Calculate Normals on geological entities (add point clouds and DOMS in the future)."""
@@ -1703,6 +1762,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         """Calculate lineations on geological entities."""
         pass
 
+    @uses_selection(valid={"dom_coll": ["PCDom"]})
     def build_octree(self):
         if self.selected_uids:
             for uid in self.selected_uids:
@@ -1906,6 +1966,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self._pymeshit_widget = None
             self._pymeshit_dock = None
 
+    @uses_selection(valid={"dom_coll": ["PCDom"]})
     def decimate_pc_dialog(self):
         if self.selected_uids:
             fac = (
@@ -1939,7 +2000,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         else:
             self.print_terminal("No entity selected")
 
+    @uses_selection(topologies=["TriSurf"])
     def smooth_dialog(self):
+        # Input entities and outputs are in the active collection (see @uses_selection).
+        source_coll = active_collection(self)
         input_dict = {
             "convergence_value": ["Convergence value:", 1],
             "boundary_smoothing": ["Boundary smoothing", False],
@@ -1959,7 +2023,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
 
         for uid in sel_uids:
-            mesh = self.geol_coll.get_uid_vtk_obj(uid)
+            mesh = source_coll.get_uid_vtk_obj(uid)
 
         PreviewWidget(
             parent=self,
@@ -1969,7 +2033,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             function=surface_smoothing,
         )
 
+    @uses_selection(topologies=["TriSurf"])
     def subd_res_dialog(self):
+        # Input entities and outputs are in the active collection (see @uses_selection).
+        source_coll = active_collection(self)
         input_dict = {
             "type": ["Subdivision type:", ["linear", "butterfly", "loop"]],
             "n_subd": ["Number of iterations", 2],
@@ -1988,7 +2055,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
 
         for uid in sel_uids:
-            mesh = self.geol_coll.get_uid_vtk_obj(uid)
+            mesh = source_coll.get_uid_vtk_obj(uid)
 
         PreviewWidget(
             parent=self,
@@ -1999,7 +2066,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         # subdivision_resampling(self,type=subd_input['type'],n_subd=subd_input['n_subd'])
 
+    @uses_selection(topologies=["TriSurf"])
     def retopologize_surface(self):
+        # Input entities and outputs are in the active collection (see @uses_selection).
+        source_coll = active_collection(self)
         input_dict = {
             "dec_int": ["Decimation intensity: ", 0],
             "n_iter": ["Number of iterations: ", 40],
@@ -2019,7 +2089,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
 
         for uid in sel_uids:
-            mesh = self.geol_coll.get_uid_vtk_obj(uid)
+            mesh = source_coll.get_uid_vtk_obj(uid)
 
         PreviewWidget(
             parent=self,
@@ -2028,26 +2098,24 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             function=retopo,
         )
 
+    @uses_selection(topologies=["TriSurf"], max_selected=1)
     @freeze_gui_onoff
     def retriangulate_surface_dialog(self):
-        """Retriangulate the first selected geology TriSurf using the PyMeshIt workflow."""
-        if self.shown_table != "tabGeology":
-            self.print_terminal(
-                "Retriangulate works on Geological Collection TriSurf objects only."
-            )
-            return
+        """Retriangulate the selected TriSurf (of any collection) using the PyMeshIt workflow."""
+        # Input entities and outputs are in the active collection (see @uses_selection).
+        source_coll = active_collection(self)
         if not self.selected_uids:
             self.print_terminal("No selected objects")
             return
 
-        uid = self.selected_uids[0]
+        uid = self.selected_uids[-1]
         if len(self.selected_uids) > 1:
             self.print_terminal(
-                "Multiple surfaces selected, retriangulating the first one only."
+                "Multiple surfaces selected, retriangulating the last selected one only."
             )
 
-        if self.geol_coll.get_uid_topology(uid) != "TriSurf":
-            self.print_terminal("Selected geology object is not a TriSurf.")
+        if source_coll.get_uid_topology(uid) != "TriSurf":
+            self.print_terminal("Selected object is not a TriSurf.")
             return
 
         replace_on_off = options_dialog(
@@ -2060,7 +2128,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if replace_on_off not in (0, 1):
             return
 
-        source_surface = self.geol_coll.get_uid_vtk_obj(uid)
+        source_surface = source_coll.get_uid_vtk_obj(uid)
         points = np.asarray(source_surface.points, dtype=float)
         if points.ndim != 2 or points.shape[0] < 3:
             self.print_terminal(
@@ -2087,7 +2155,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             temp_gui.hide()
             temp_gui.datasets = [
                 {
-                    "name": self.geol_coll.get_uid_name(uid),
+                    "name": source_coll.get_uid_name(uid),
                     "type": "SURFACE",
                     "points": np.asarray(points, dtype=float).copy(),
                     "visible": True,
@@ -2198,20 +2266,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 pass
 
             if replace_on_off == 0:
-                self.geol_coll.replace_vtk(uid, retriangulated_surface)
+                source_coll.replace_vtk(uid, retriangulated_surface)
                 self.print_terminal(
-                    f"Retriangulated '{self.geol_coll.get_uid_name(uid)}' "
+                    f"Retriangulated '{source_coll.get_uid_name(uid)}' "
                     f"({len(vertices)} vertices, {len(triangles)} triangles)"
                 )
             else:
-                out_dict = deepcopy(self.geol_coll.entity_dict)
+                out_dict = derived_entity_dict(
+                    source_coll, uid, "_retriangulated", topology="TriSurf"
+                )
                 out_dict["uid"] = ""
-                out_dict["name"] = f"{self.geol_coll.get_uid_name(uid)}_retriangulated"
-                out_dict["topology"] = "TriSurf"
-                out_dict["role"] = self.geol_coll.get_uid_role(uid)
-                out_dict["feature"] = self.geol_coll.get_uid_feature(uid)
-                out_dict["scenario"] = self.geol_coll.get_uid_scenario(uid)
-                out_dict["parent_uid"] = self.geol_coll.get_uid_x_section(uid)
+                out_dict["parent_uid"] = source_coll.get_uid_x_section(uid)
                 out_dict["properties_names"] = list(
                     retriangulated_surface.point_data_keys
                 )
@@ -2220,10 +2285,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     for key in out_dict["properties_names"]
                 ]
                 out_dict["vtk_obj"] = retriangulated_surface
-                new_uid = self.geol_coll.add_entity_from_dict(entity_dict=out_dict)
+                new_uid = source_coll.add_entity_from_dict(entity_dict=out_dict)
                 self.print_terminal(
-                    f"Retriangulated '{self.geol_coll.get_uid_name(uid)}' into "
-                    f"'{self.geol_coll.get_uid_name(new_uid)}' "
+                    f"Retriangulated '{source_coll.get_uid_name(uid)}' into "
+                    f"'{source_coll.get_uid_name(new_uid)}' "
                     f"({len(vertices)} vertices, {len(triangles)} triangles)"
                 )
         except ValueError as exc:
@@ -2240,6 +2305,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     pass
                 temp_gui.deleteLater()
 
+    @uses_selection(topologies=["PolyLine", "TriSurf", "PCDom"])
     def connected_parts(self):
         """Label connected mesh parts or point-cloud clusters without splitting."""
         self.tabWidgetBottomLeft.setCurrentWidget(self.tabTerminal)
@@ -2247,12 +2313,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         if not uids:
             self.print_terminal("No entities selected.")
             return
-        if self.shown_table not in ("tabGeology", "tabDOMs", "tabBoundaries"):
-            self.print_terminal(
-                "Connected Parts supports Geology, DOMs and Boundaries."
-            )
-            return
-        collection = getattr(self, self.selected_collection)
+        collection = active_collection(self)
         changed_uids, changed_keys = [], []
         for uid in uids:
             obj = collection.get_uid_vtk_obj(uid)
@@ -2299,17 +2360,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 self.signals.data_keys_added.emit(changed_keys, collection)
             self.signals.geom_modified.emit(changed_uids, collection)
 
+    @uses_selection(topologies=["PolyLine", "TriSurf", "PCDom"])
     def split_multipart(self):
         """Split multi-part entities into single-parts."""
         if self.selected_uids:
-            if self.shown_table == "tabGeology":
-                collection = self.geol_coll
-            elif self.shown_table == "tabDOMs":
-                collection = self.dom_coll
-            elif self.shown_table == "tabBoundaries":
-                collection = self.boundary_coll
-            else:
-                return
+            collection = active_collection(self)
             split_any = False
             for uid in self.selected_uids:
                 if isinstance(collection.get_uid_vtk_obj(uid), (PolyLine, TriSurf)):
@@ -5208,6 +5263,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     # Methods used to export entities to other file formats.
 
+    @uses_selection(valid=None)
     def export_cad(self):
         # ________________________________________________________________ IMPLEMENT GOCAD EXPORT
         """Base method to choose a CAD format for exporting geological entities."""
@@ -5348,6 +5404,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         self.print_terminal("All files saved.")
 
+    @uses_selection(valid=None)
     def export_vtk(self):
         """Function used to export selected objects as vtk files"""
         if not self.selected_uids:
@@ -5421,6 +5478,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 print(f"exported {uid}")
 
     # Everything here is very bad, but I am short on time
+    @uses_selection(valid=None)
     def export_csv(self):
         if not self.selected_uids:
             return

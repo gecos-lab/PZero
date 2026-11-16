@@ -697,6 +697,10 @@ class CustomTreeWidget(QTreeWidget):
         """
         if self._syncing_selection or self.signalsBlocked():
             return
+        if getattr(self.view.parent, "selection_frozen", False):
+            # A tool is running: undo the change (e.g. from a right-click) in the tree.
+            self.set_selection_from_collection()
+            return
 
         def items_in(item_selection):
             return [
