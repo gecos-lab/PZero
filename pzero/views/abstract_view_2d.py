@@ -79,49 +79,53 @@ class View2D(ViewVTK):
         self.editLineButton = QAction("Edit line", self)
         self.editLineButton.triggered.connect(
             lambda: start_checked_line_tool(
-                self, edit_line, max_selected=1
+                self, edit_line, max_selected=1,
+                cross_collection=True,
             )
         )
         self.menuModify.addAction(self.editLineButton)
 
         self.sortLineButton = QAction("Sort line nodes", self)
         self.sortLineButton.triggered.connect(
-            lambda: start_checked_line_tool(self, sort_line_nodes)
+            lambda: start_checked_line_tool(self, sort_line_nodes, cross_collection=True)
         )
         self.menuModify.addAction(self.sortLineButton)
 
         self.moveLineButton = QAction("Move line", self)
         self.moveLineButton.triggered.connect(
             lambda: start_checked_line_tool(
-                self, lambda view: view.vector_by_mouse(move_line)
+                self, lambda view: view.vector_by_mouse(move_line),
+                cross_collection=True,
             )
         )
         self.menuModify.addAction(self.moveLineButton)
 
         self.rotateLineButton = QAction("Rotate line", self)
         self.rotateLineButton.triggered.connect(
-            lambda: start_checked_line_tool(self, rotate_line)
+            lambda: start_checked_line_tool(self, rotate_line, cross_collection=True)
         )
         self.menuModify.addAction(self.rotateLineButton)
 
         self.extendButton = QAction("Extend line", self)
         self.extendButton.triggered.connect(
             lambda: start_checked_line_tool(
-                self, extend_line, max_selected=1
+                self, extend_line, max_selected=1,
+                cross_collection=True,
             )
         )
         self.menuModify.addAction(self.extendButton)
 
         self.splitLineByLineButton = QAction("Split line-line", self)
         self.splitLineByLineButton.triggered.connect(
-            lambda: start_checked_line_tool(self, split_line_line, min_selected=2)
+            lambda: start_checked_line_tool(self, split_line_line, min_selected=2, cross_collection=True)
         )
         self.menuModify.addAction(self.splitLineByLineButton)
 
         self.splitLineByPointButton = QAction("Split line-point", self)
         self.splitLineByPointButton.triggered.connect(
             lambda: start_checked_line_tool(
-                self, split_line_existing_point, max_selected=1
+                self, split_line_existing_point, max_selected=1,
+                cross_collection=True,
             )
         )
         self.menuModify.addAction(self.splitLineByPointButton)
@@ -137,33 +141,35 @@ class View2D(ViewVTK):
         self.snapLineButton = QAction("Snap to intersection", self)
         self.snapLineButton.triggered.connect(
             lambda: start_checked_line_tool(
-                self, snap_line, min_selected=2, same_parent=True
+                self, snap_line, min_selected=2, same_parent=True,
+                cross_collection=True,
             )
         )
         self.menuModify.addAction(self.snapLineButton)
 
         self.resampleDistanceButton = QAction("Resample distance", self)
         self.resampleDistanceButton.triggered.connect(
-            lambda: start_checked_line_tool(self, resample_lines_distance)
+            lambda: start_checked_line_tool(self, resample_lines_distance, cross_collection=True)
         )
         self.menuModify.addAction(self.resampleDistanceButton)
 
         self.resampleNumberButton = QAction("Resample number", self)
         self.resampleNumberButton.triggered.connect(
-            lambda: start_checked_line_tool(self, resample_lines_number_points)
+            lambda: start_checked_line_tool(self, resample_lines_number_points, cross_collection=True)
         )
         self.menuModify.addAction(self.resampleNumberButton)
 
         self.simplifyButton = QAction("Simplify line", self)
         self.simplifyButton.triggered.connect(
-            lambda: start_checked_line_tool(self, simplify_line)
+            lambda: start_checked_line_tool(self, simplify_line, cross_collection=True)
         )
         self.menuModify.addAction(self.simplifyButton)
 
         self.copyParallelButton = QAction("Copy parallel", self)
         self.copyParallelButton.triggered.connect(
             lambda: start_checked_line_tool(
-                self, copy_parallel, max_selected=1
+                self, copy_parallel, max_selected=1,
+                cross_collection=True,
             )
         )
         self.menuCreate.addAction(self.copyParallelButton)
@@ -171,7 +177,8 @@ class View2D(ViewVTK):
         self.copyKinkButton = QAction("Copy kink", self)
         self.copyKinkButton.triggered.connect(
             lambda: start_checked_line_tool(
-                self, copy_kink, max_selected=1
+                self, copy_kink, max_selected=1,
+                cross_collection=True,
             )
         )
         self.menuCreate.addAction(self.copyKinkButton)
@@ -182,6 +189,7 @@ class View2D(ViewVTK):
                 self,
                 lambda view: view.vector_by_mouse(copy_similar),
                 max_selected=1,
+                cross_collection=True,
             )
         )
         self.menuCreate.addAction(self.copySimilarButton)

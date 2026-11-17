@@ -9,7 +9,7 @@ from vtkmodules.util.numpy_support import numpy_to_vtk
 from vtkmodules.vtkFiltersGeneral import vtkTransformFilter
 
 from pzero.helpers.helper_dialogs import general_input_dialog
-from pzero.helpers.helper_functions import uses_selection
+from pzero.helpers.helper_functions import uses_selection, tool_uids, entity_collection
 from pzero.helpers.helper_functions import (
     freeze_gui_onoff,
     freeze_gui_on,
@@ -95,14 +95,15 @@ def CRS_apply_transformation(uid=None, collection=None, transformation_matrix=No
     collection.replace_vtk(uid=uid, vtk_object=out_entity)
 
 
-@uses_selection(valid=None)
+@uses_selection(valid=None, cross_collection=True)
 @freeze_gui_onoff
 def CRS_transform_selected(self):
     """Function used to transform CRS of selected entities.
     Only the transformation of entities exposing the .points property is accurate.
     Objects with a regular grid, such as images, are transformed with a simple roto-translation best-fit on corners.
     """
-    if not self.selected_uids:
+    uids = tool_uids(self)
+    if not uids:
         self.print_terminal("No input data selected.")
         return
     self.print_terminal(
@@ -124,9 +125,10 @@ def CRS_transform_selected(self):
     from_CRS = CRS_select["from_CRS"]
     to_CRS = CRS_select["to_CRS"]
     # run different methods based on collection and entity
-    collection = eval(f"self.{self.selected_collection}")
-    for uid in self.selected_uids:
-        if self.selected_collection == "xsect_coll":
+    # Selected entities can belong to different collections: each is transformed in its own.
+    for uid in uids:
+        collection = entity_collection(self, uid)
+        if collection.collection_name == "xsect_coll":
             # # affine transformation of a cross-section and all its child entities
             # transformation_matrix = CRS_fit_transformation(uid=uid,
             #                                                collection=collection,
@@ -139,14 +141,14 @@ def CRS_transform_selected(self):
             #         CRS_apply_transformation(uid=entity_uid,
             #                                  collection=entity_coll,
             #                                  transformation_matrix=transformation_matrix)
-            return
+            continue  # not implemented yet
         else:
             # transformation of individual entities.
             if collection.get_uid_topology(uid) in ["Voxet", "MapImage", "Image3D"]:
                 # # affine transformation of the regular grid
                 # transformation_matrix = CRS_fit_transformation(uid=uid, collection=collection, from_CRS=from_CRS, to_CRS=to_CRS)
                 # CRS_apply_transformation(uid=uid, collection=collection, transformation_matrix=transformation_matrix)
-                return
+                continue  # not implemented yet
             else:
                 # precise transformation of entities exposing point coordinates, excluding entities
                 # belonging to cross-sections and image-like entities

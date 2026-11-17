@@ -294,6 +294,7 @@ def uses_selection(
     topologies=None,
     require_properties=None,
     same_parent=False,
+    cross_collection=False,
     min_selected=1,
     max_selected=None,
 ):
@@ -302,7 +303,7 @@ def uses_selection(
     frozen, so place it above @freeze_gui_on / @freeze_gui_onoff), the project selection is reduced
     to the entities the tool can use, deselecting the others; if there are not enough, the tool does
     not run. See ProjectWindow.restrict_selection_for_tool for valid, topologies,
-    require_properties, same_parent, min_selected and max_selected.
+    require_properties, same_parent, cross_collection, min_selected and max_selected.
     Works for tools whose self is the ProjectWindow or a view (then self.parent is the project).
     """
 
@@ -319,6 +320,7 @@ def uses_selection(
                     topologies=topologies,
                     require_properties=require_properties,
                     same_parent=same_parent,
+                    cross_collection=cross_collection,
                     min_selected=min_selected,
                     max_selected=max_selected,
                     view=view,
@@ -339,6 +341,27 @@ def active_collection(self):
     @uses_selection has chosen and brought to front. self is the ProjectWindow or a view."""
     project = self if hasattr(self, "restrict_selection_for_tool") else self.parent
     return getattr(project, project.selected_collection)
+
+
+def _project_of(self):
+    return self if hasattr(self, "restrict_selection_for_tool") else self.parent
+
+
+def tool_uids(self):
+    """The selected uids a tool works on, in click order: for a view, the project selection restricted
+    to the entities shown in it; for the ProjectWindow, the whole project selection (not only the tab
+    in front, as ProjectWindow.selected_uids). For tools with @uses_selection(cross_collection=True)."""
+    project = _project_of(self)
+    if project is self:
+        return project.selection_uids()
+    return list(self.selected_uids)
+
+
+def entity_collection(self, uid=None):
+    """The collection object containing uid (selected or not). self is the ProjectWindow or a view."""
+    project = _project_of(self)
+    collection_name = getattr(project, "_selection", {}).get(uid) or project.collection_of_uid(uid)
+    return getattr(project, collection_name) if collection_name else None
 
 
 def uid_metadata(collection, uid=None, key=None, default=None):

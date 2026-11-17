@@ -57,19 +57,19 @@ from pzero.helpers.helper_widgets import Scissors
 from .entities_factory import PCDom, TriSurf, Attitude
 
 
-@uses_selection(valid=None, require_properties=["Normals"])
+@uses_selection(valid=None, require_properties=["Normals"], cross_collection=True)
 def normals2dd(self):
     """Calculate dip and dip direction point properties, from the Normals point property, for the
     selected entities of any collection (points, lines, surfaces, point clouds, ...).
     Project window > Properties > Calculate Dip/Direction (self is the ProjectWindow)."""
-    from .helpers.helper_functions import active_collection
+    from .helpers.helper_functions import entity_collection, tool_uids
     from .orientation_analysis import normals2dip_directions
 
-    if len(self.selected_uids) == 0:
+    if len(tool_uids(self)) == 0:
         self.print_terminal(" -- No entity with Normals selected -- ")
         return
-    collection = active_collection(self)
-    for uid in self.selected_uids:
+    for uid in tool_uids(self):
+        collection = entity_collection(self, uid)
         vtk_obj = collection.get_uid_vtk_obj(uid)
         # -90 < dip < 90: negative for upward normals (overturned, upper hemisphere), with the
         # standard dip direction in both cases (see orientation_analysis.normals2dip_directions).

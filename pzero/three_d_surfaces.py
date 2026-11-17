@@ -86,6 +86,8 @@ from .entities_factory import (
 )
 from .helpers.helper_functions import (
     uses_selection,
+    tool_uids,
+    entity_collection,
     active_collection,
     derived_entity_dict,
     entity_metadata_input_dict,
@@ -1796,23 +1798,22 @@ def implicit_model_loop_structural(self):
     self.print_terminal("Loop interpolation completed.")
 
 
-@uses_selection(topologies=["TriSurf"])
+@uses_selection(topologies=["TriSurf"], cross_collection=True)
 @freeze_gui_onoff
 def surface_smoothing(
     self, mode=0, convergence_value=1, boundary_smoothing=False, edge_smoothing=False
 ):
     """Smoothing tools adjust the positions of points to reduce the noise content in the surface."""
-    # Input entities and outputs are in the active collection (see @uses_selection).
-    source_coll = active_collection(self)
     self.print_terminal("Surface Smoothing: reduce the noise of the surface")
     # Check if some vtkPolyData is selected
-    if not self.selected_uids:
+    if not tool_uids(self):
         self.print_terminal("No input data selected.")
         return
     else:
         # Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built
-        input_uids = deepcopy(self.selected_uids)
+        input_uids = tool_uids(self)
     for uid in input_uids:
+        source_coll = entity_collection(self, uid)
         if isinstance(source_coll.get_uid_vtk_obj(uid), TriSurf):
             smoother = vtkSmoothPolyDataFilter()
             smoother.SetInputData(source_coll.get_uid_vtk_obj(uid))
@@ -1965,24 +1966,23 @@ def linear_extrusion(self):
     source_coll.add_entity_from_dict(surf_dict)
 
 
-@uses_selection(topologies=["TriSurf"])
+@uses_selection(topologies=["TriSurf"], cross_collection=True)
 @freeze_gui_onoff
 def decimation_pro_resampling(self):
     """Decimation reduces the number of triangles in a triangle mesh while maintaining a faithful approximation to
     the original mesh."""
-    # Input entities and outputs are in the active collection (see @uses_selection).
-    source_coll = active_collection(self)
     self.print_terminal(
         "Decimation Pro: resample target surface and reduce number of triangles of the mesh"
     )
     # Check if some vtkPolyData is selected
-    if not self.selected_uids:
+    if not tool_uids(self):
         self.print_terminal("No input data selected.")
         return
     else:
         # Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built
-        input_uids = deepcopy(self.selected_uids)
+        input_uids = tool_uids(self)
     for uid in input_uids:
+        source_coll = entity_collection(self, uid)
         if isinstance(source_coll.get_uid_vtk_obj(uid), TriSurf):
             pass
         else:
@@ -2053,24 +2053,23 @@ def decimation_pro_resampling(self):
         self.print_terminal(" -- empty object -- ")
 
 
-@uses_selection(topologies=["TriSurf"])
+@uses_selection(topologies=["TriSurf"], cross_collection=True)
 @freeze_gui_onoff
 def decimation_quadric_resampling(self):
     """Decimation reduces the number of triangles in a triangle mesh while maintaining a faithful approximation to
     the original mesh."""
-    # Input entities and outputs are in the active collection (see @uses_selection).
-    source_coll = active_collection(self)
     self.print_terminal(
         "Decimation Quadric: resample target surface and reduce number of triangles of the mesh"
     )
     # Check if some vtkPolyData is selected
-    if not self.selected_uids:
+    if not tool_uids(self):
         self.print_terminal("No input data selected.")
         return
     else:
         # Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built
-        input_uids = deepcopy(self.selected_uids)
+        input_uids = tool_uids(self)
     for uid in input_uids:
+        source_coll = entity_collection(self, uid)
         if isinstance(source_coll.get_uid_vtk_obj(uid), TriSurf):
             pass
         else:
@@ -2104,7 +2103,7 @@ def decimation_quadric_resampling(self):
         self.print_terminal(" -- empty object -- ")
 
 
-@uses_selection(topologies=["TriSurf"])
+@uses_selection(topologies=["TriSurf"], cross_collection=True)
 @freeze_gui_onoff
 def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
     """Different types of subdivisions. Subdivides a triangular, polygonal surface; four new triangles are created for each triangle of the polygonal surface.:
@@ -2112,20 +2111,19 @@ def subdivision_resampling(self, mode=0, type="linear", n_subd=2):
     1. vtkLinearSubdivisionFilter (shape preserving)
     2. vtkButterflySubdivisionFilter  (not shape preserving)
     3. vtkLoopSubdivisionFilter (not shape preserving)"""
-    # Input entities and outputs are in the active collection (see @uses_selection).
-    source_coll = active_collection(self)
     self.print_terminal(
         "Subdivision resampling: resample target surface and increase number of triangles of the mesh"
     )
     # Check if some vtkPolyData is selected
-    if not self.selected_uids:
+    if not tool_uids(self):
         self.print_terminal("No input data selected.")
         return
     else:
         # Deep copy list of selected uids needed otherwise problems can arise if the main geology table is
         # deseselcted while the dataframe is being built
-        input_uids = deepcopy(self.selected_uids)
+        input_uids = tool_uids(self)
     for uid in input_uids:
+        source_coll = entity_collection(self, uid)
         if isinstance(source_coll.get_uid_vtk_obj(uid), TriSurf):
             if type == "linear":
                 subdiv_filter = vtkLinearSubdivisionFilter()
@@ -2226,7 +2224,7 @@ def xsection_intersection_polyline_parts(vtk_obj=None, vtk_plane=None):
     return out_parts
 
 
-@uses_selection(topologies=["PolyLine", "XsPolyLine", "TriSurf", "DEM", "TSDom", "Voxet", "TetraSolid"])
+@uses_selection(topologies=["PolyLine", "XsPolyLine", "TriSurf", "DEM", "TSDom", "Voxet", "TetraSolid"], cross_collection=True)
 @freeze_gui_onoff
 def intersection_xs(self):
     """vtkCutter is a filter to cut through data using any subclass of vtkImplicitFunction.
@@ -2236,13 +2234,13 @@ def intersection_xs(self):
         "Intersection with XSection: intersect PolyLines, TriSurfs, DEMs, TSDoms and 3D meshes."
     )
     # Check if some vtkPolyData is selected
-    if not self.selected_uids:
+    if not tool_uids(self):
         self.print_terminal("No input data selected.")
         return
     else:
         # Deep copy list of selected uids needed otherwise problems can arise if the
         # main geology table is deseselcted while the dataframe is being built
-        input_uids = deepcopy(self.selected_uids)
+        input_uids = tool_uids(self)
 
     # Input selection dialog"
     xsect_names = input_checkbox_dialog(
@@ -2258,10 +2256,8 @@ def intersection_xs(self):
             self.xsect_coll.df["name"] == sec_name, "uid"
         ].values[0]
         postfix = f"_int_{sec_name}"
-        # The source collection is the active one (see @uses_selection); the branch is chosen by
-        # topology, so any collection works, and outputs go to the same collection.
-        source_coll = active_collection(self)
         for uid in input_uids:
+            source_coll = entity_collection(self, uid)
             topology = source_coll.get_uid_topology(uid)
             if topology in ["PolyLine", "XsPolyLine"]:
                 # Intersection for PolyLine and XsPolyLine: output points (XsVertexSet), that some
@@ -2533,7 +2529,7 @@ def intersection_xs(self):
                     self.print_terminal(" -- empty object -- ")
 
 
-@uses_selection(valid={"geol_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "fluid_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "backgrnd_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "boundary_coll": ["PolyLine", "XsPolyLine"], "well_coll": None})
+@uses_selection(valid={"geol_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "fluid_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "backgrnd_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "boundary_coll": ["PolyLine", "XsPolyLine"], "well_coll": None}, cross_collection=True)
 @freeze_gui_onoff
 def project_2_dem(self):
     """vtkProjectedTerrainPath projects an input polyline onto a terrain image.
@@ -2541,26 +2537,16 @@ def project_2_dem(self):
     DEM file also as MapImage (--> as vtkImageData) and to use this entity as source data for the
     projection"""
     # self.print_terminal("Vertical Projection: project target lines onto a terrain image")
-    valid_tables = {
-        "tabGeology": "geol_coll",
-        "tabFluids": "fluid_coll",
-        "tabBackgrounds": "backgrnd_coll",
-        "tabBoundaries": "boundary_coll",
-        "tabWells": "well_coll",
-    }
-    if self.shown_table not in valid_tables:
-        self.print_terminal(
-            " -- Only geology, fluids, background, boundary and well objects can be projected -- "
-        )
-        return
-    source_coll = getattr(self, valid_tables[self.shown_table])
-    is_well_projection = self.shown_table == "tabWells"
-    # Check if some vtkPolyData is selected
-    if not self.selected_uids:
+    # Selected entities can belong to different collections (@uses_selection(cross_collection=True)):
+    # each one is projected in its own collection, wells as wells.
+    input_uids = tool_uids(self)
+    if not input_uids:
         self.print_terminal("No input data selected.")
         return
-    else:
-        input_uids = deepcopy(self.selected_uids)
+    well_uids = [uid for uid in input_uids if entity_collection(self, uid) is self.well_coll]
+    # Before the main loop, is_well_projection tells whether there are wells among the inputs;
+    # in the loop it is set for each entity.
+    is_well_projection = bool(well_uids)
     # for uid in input_uids:
     #     if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
     #         pass
@@ -2703,7 +2689,7 @@ def project_2_dem(self):
             return
         project_linked_objects = linked_choice == 0
         if project_linked_objects:
-            linked_uids_by_well = _get_linked_child_uids_by_well(input_uids)
+            linked_uids_by_well = _get_linked_child_uids_by_well(well_uids)
             total_linked_objects = sum(
                 len(child_uids)
                 for well_children in linked_uids_by_well.values()
@@ -2739,6 +2725,9 @@ def project_2_dem(self):
     )
 
     for uid in input_uids:
+        # Each entity is projected in its own collection.
+        source_coll = entity_collection(self, uid)
+        is_well_projection = source_coll is self.well_coll
         # Determine which entity to project
         if replace_on_off == 1:  # No - first create a copy, then project only the copy
             # Create a copy of the original entity (not projected)
@@ -2983,53 +2972,29 @@ def project_2_dem(self):
             dock.canvas.clear_selection()
 
 
-@uses_selection(valid={"geol_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "fluid_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "backgrnd_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "boundary_coll": ["PolyLine", "XsPolyLine"], "well_coll": None})
+@uses_selection(valid={"geol_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "fluid_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "backgrnd_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "boundary_coll": ["PolyLine", "XsPolyLine"], "well_coll": ["PolyLine", "XsPolyLine"]}, cross_collection=True)
 @freeze_gui_onoff
 def project_2_xs(self):
     """Projection of a copy of point/polyline geological entities to selected planar cross sections, along an axis specified with plunge/trend."""
-    valid_tables = {
-        "tabGeology": "geol_coll",
-        "tabFluids": "fluid_coll",
-        "tabBackgrounds": "backgrnd_coll",
-        "tabBoundaries": "boundary_coll",
-        "tabWells": "well_coll",
-    }
-    if self.shown_table not in valid_tables:
-        self.print_terminal(
-            " -- Only geology, fluids, background, boundary and well objects can be projected -- "
-        )
-        return
-    source_coll = getattr(self, valid_tables[self.shown_table])
-    is_well_projection = self.shown_table == "tabWells"
     self.print_terminal(
         "Projection to X-sections: when multiple sections are selected, the first is used as reference; non-parallel sections are discarded (tollerance: ±1°)."
     )
-    if not self.selected_uids:
+    # Selected entities can belong to different collections (@uses_selection(cross_collection=True),
+    # which also keeps only supported topologies): wells are projected as wells, the other entities
+    # each in their own collection.
+    input_uids = tool_uids(self)
+    if not input_uids:
         self.print_terminal("No input data selected.")
         return
-    # Deep copy list of selected uids needed otherwise problems can arise if the
-    # main geology table is deselected while the dataframe is built.
-    input_uids = deepcopy(self.selected_uids)
-    # Select only supported topologies.
-    valid_topologies = (
-        ["PolyLine", "XsPolyLine"]
-        if is_well_projection
-        else [
-            "VertexSet",
-            "PolyLine",
-            "XsVertexSet",
-            "XsPolyLine",
-        ]
-    )
-    input_uids_clean = deepcopy(input_uids)
+    well_uids = []
+    gfb_uids_by_collection = {}
     for uid in input_uids:
-        if source_coll.get_uid_topology(uid) not in valid_topologies:
-            input_uids_clean.remove(uid)
-    input_uids = deepcopy(input_uids_clean)
-    del input_uids_clean
-    if not input_uids:
-        self.print_terminal("No valid input data selected.")
-        return
+        collection = entity_collection(self, uid)
+        if collection is self.well_coll:
+            well_uids.append(uid)
+        else:
+            gfb_uids_by_collection.setdefault(collection, []).append(uid)
+    is_well_projection = bool(well_uids)
 
     def _clip_polyline_to_distance_band(polyline_obj, max_dist):
         """Clip a polyline to the band |signed_distance| <= max_dist using nodal property."""
@@ -3518,9 +3483,9 @@ def project_2_xs(self):
         )
         if linked_choice in [-1, 2]:
             return
-        _project_well_entities(input_uids)
+        _project_well_entities(well_uids)
         if linked_choice == 0:
-            linked_map = _get_linked_child_uids(input_uids)
+            linked_map = _get_linked_child_uids(well_uids)
             total_linked = sum(len(uids) for uids in linked_map.values())
             if total_linked == 0:
                 self.print_terminal(
@@ -3529,8 +3494,8 @@ def project_2_xs(self):
             for collection, linked_uids in linked_map.items():
                 if linked_uids:
                     _project_gfb_entities(collection, linked_uids)
-    else:
-        _project_gfb_entities(source_coll, input_uids)
+    for collection, collection_uids in gfb_uids_by_collection.items():
+        _project_gfb_entities(collection, collection_uids)
 
     if discarded_sections > 0:
         self.print_terminal(
@@ -3538,28 +3503,29 @@ def project_2_xs(self):
         )
 
 
-@uses_selection(topologies=["TriSurf"], min_selected=2)
+@uses_selection(topologies=["TriSurf"], min_selected=2, cross_collection=True)
 @freeze_gui_onoff
 def split_surf(self):
     """Split two surfaces. This should be integrated with intersection_xs in one function since is the same thing"""
-    # Input entities and outputs are in the active collection (see @uses_selection).
-    source_coll = active_collection(self)
-    if not self.selected_uids:
+    if not tool_uids(self):
         self.print_terminal("No input data selected.")
         return
     else:
         # Deep copy list of selected uids needed otherwise problems can arise if the main geology table
         # is deseselcted while the dataframe is being built
-        # print(self.selected_uids_all())
+        # print(tool_uids(self)_all())
         # 0. Define the reference surface and target surfaces
         # if input_uids[0] not in source_coll.get_uids():
         #     ref_surf = self.dom_coll.get_uid_vtk_obj(input_uids[0])
         #     pld = pv_PolyData(ref_surf.points)
         #     pld.delaunay_2d(inplace=True)
         # else:
-        scissor_surf = source_coll.get_uid_vtk_obj(self.selected_uids[-1])
+        # The scissor surface can belong to any collection; split surfaces stay in their own.
+        scissor_uid = tool_uids(self)[-1]
+        scissor_surf = entity_collection(self, scissor_uid).get_uid_vtk_obj(scissor_uid)
 
-        for paper_uid in self.selected_uids[:-1]:  # for every target surface
+        for paper_uid in tool_uids(self)[:-1]:  # for every target surface
+            source_coll = entity_collection(self, paper_uid)
             paper_surf = source_coll.get_uid_vtk_obj(paper_uid)
 
             # cutter = vtkIntersectionPolyDataFilter()
@@ -3650,7 +3616,7 @@ def split_surf(self):
         # 1. Calculate the implicit distance of the target surface[1,2,3,4,..] from the reference surface[0]
 
 
-@uses_selection(topologies=["TriSurf"])
+@uses_selection(topologies=["TriSurf"], cross_collection=True)
 @freeze_gui_onoff
 def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
     """Function used to retopologize a given surface. This is useful in the case of
@@ -3663,16 +3629,15 @@ def retopo(self, mode=0, dec_int=0.2, n_iter=40, rel_fac=0.1):
     For now the parameters (eg. SetTargetReduction, RelaxationFactor etc etc) are fixed but
     in the future it would be nicer to have an adaptive method (maybe using vtkMeshQuality?)
     """
-    # Input entities and outputs are in the active collection (see @uses_selection).
-    source_coll = active_collection(self)
-    if not self.selected_uids:
+    if not tool_uids(self):
         self.print_terminal("No input data selected.")
         return
     else:
         # Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built
-        input_uids = deepcopy(self.selected_uids)
+        input_uids = tool_uids(self)
 
         for uid in input_uids:
+            source_coll = entity_collection(self, uid)
             if isinstance(source_coll.get_uid_vtk_obj(uid), TriSurf):
                 mesh = source_coll.get_uid_vtk_obj(uid)
                 dec = vtkQuadricDecimation()
