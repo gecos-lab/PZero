@@ -964,6 +964,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         valid: dict = None,
         topologies: list = None,
         require_properties: list = None,
+        same_parent: bool = False,
         min_selected: int = 1,
         max_selected: int = None,
         view=None,
@@ -976,6 +977,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         valid:        {collection_name: [topologies] or None (any topology)}; None = any collection.
         topologies:   with valid None, the topologies accepted in any collection (None = any).
         require_properties: only entities having all these properties (e.g. ["Normals"]) are usable.
+        same_parent:  inputs and outputs must belong to the same parent (cross-section): only entities
+                      with the parent_uid of the last selected usable entity are used (entities with no
+                      parent form their own group).
         min_selected: minimum number of usable entities, otherwise nothing changes and None is returned.
         max_selected: the tool uses only the last max_selected usable entities (in click order).
         view:         for tools running in a view, entities not shown in that view are not usable.
@@ -1024,6 +1028,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         else:
             target_collection = None
         chosen = [uid for uid in candidates if selection[uid] == target_collection]
+        if same_parent and chosen:
+            target_coll_obj = getattr(self, target_collection)
+
+            def parent_of(uid):
+                parent = uid_metadata(target_coll_obj, uid, "parent_uid", "")
+                return parent if isinstance(parent, str) else ""
+
+            target_parent = parent_of(chosen[-1])
+            chosen = [uid for uid in chosen if parent_of(uid) == target_parent]
         if max_selected:
             chosen = chosen[-max_selected:]
 
@@ -1534,6 +1547,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     @uses_selection(
         topologies=["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine", "TriSurf", "PCDom", "TSDom"],
+        same_parent=True,
         min_selected=2,
     )
     @freeze_gui_onoff
@@ -1543,21 +1557,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
         # Input entities and output are in the active collection (see @uses_selection).
         collection = active_collection(self)
-        xsect_list = []
-
-        for uid in self.selected_uids:
-            xsect_value = collection.get_uid_x_section(uid)
-            xsect_list.append(xsect_value)
-        unique_xsect_uids = set(xsect_list)
-        if len(unique_xsect_uids) == 1:
-            self.print_terminal(
-                "All selected entities share the same xsection_uid or have no xsection_uid assigned"
-            )
-        else:
-            self.print_terminal(
-                "Selected entities have mixed parent uids. Please select entities with the same parent_uid or that don't belong to any x-section or well."
-            )
-            return
+        # All inputs share the same parent_uid (cross-section or none): @uses_selection(same_parent=True)
+        # deselected the others. The output belongs to the same parent.
+        xsect_list = [collection.get_uid_x_section(uid) for uid in self.selected_uids]
 
         """Proceed with existing logic to collect properties and merge."""
         # Create deepcopy of the entity dictionary of the collection, and offer as choices the

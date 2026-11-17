@@ -98,4 +98,25 @@ select("s1", "pc1")
 pw.tabWidgetTopLeft.setCurrentWidget(pw.tabGeology)
 check("restrict helper returns chosen", pw.restrict_selection_for_tool(valid=None) == ["s1"])
 
+
+# same_parent: inputs and outputs in one cross-section (merge, weld, snap)
+gc = pw.geol_coll
+gc.table_model.beginResetModel()
+gc.df = pd.concat([gc.df, pd.DataFrame({
+    "uid": ["a1", "a2", "b1", "n1"], "name": ["a1", "a2", "b1", "n1"],
+    "topology": ["XsPolyLine", "XsPolyLine", "XsPolyLine", "PolyLine"],
+    "parent_uid": ["XS_A", "XS_A", "XS_B", ""],
+})], ignore_index=True)
+gc.table_model.endResetModel()
+lines = ["PolyLine", "XsPolyLine"]
+select("a1", "n1", "b1", "a2")
+pw.tabWidgetTopLeft.setCurrentWidget(pw.tabGeology)
+check("same_parent keeps lines of the last selected line's section",
+      pw.restrict_selection_for_tool(topologies=lines, same_parent=True, min_selected=2) == ["a1", "a2"])
+check("lines of other sections and without section deselected", pw.selection_uids() == ["a1", "a2"])
+select("a1", "b1", "n1")
+check("no-parent lines are their own group (only 1 -> refused)",
+      pw.restrict_selection_for_tool(topologies=lines, same_parent=True, min_selected=2) is None)
+check("selection unchanged when refused", pw.selection_uids() == ["a1", "b1", "n1"])
+
 print("RESULT:", "FAILED" if failed else "ALL PASSED")

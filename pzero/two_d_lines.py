@@ -370,19 +370,22 @@ def _editable_line_uids(source_coll, uids):
 
 
 def start_checked_line_tool(
-    self, tool_func, selected_uids=None, min_selected=1, max_selected=None
+    self, tool_func, selected_uids=None, min_selected=1, max_selected=None, same_parent=False
 ):
     """Validate the line selection, then run a line editing tool on the selected lines.
     Before the tool starts, the project selection is reduced to exactly the lines the tool works
     on: entities that are not lines of the shown collection are deselected, and with max_selected
     only the last selected lines (in click order) are kept. The tool then reads them from
-    self.selected_uids, and they stay selected after it (if the tool keeps the selection)."""
+    self.selected_uids, and they stay selected after it (if the tool keeps the selection).
+    With same_parent, only lines of the same cross-section (parent_uid) as the last selected line are
+    used (e.g. weld and snap, whose inputs and outputs must belong to one cross-section)."""
     lines = ["PolyLine", "XsPolyLine"]
     if (
         self.parent.restrict_selection_for_tool(
             valid={"geol_coll": lines, "fluid_coll": lines, "backgrnd_coll": lines},
             min_selected=min_selected,
             max_selected=max_selected,
+            same_parent=same_parent,
             view=self,
             tool_name=getattr(tool_func, "__name__", None),
         )

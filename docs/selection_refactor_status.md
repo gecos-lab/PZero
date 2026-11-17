@@ -81,6 +81,8 @@ Phase 4 follow-ups included in the same commit:
   Voxet → XsVoxet; boundary lines give no output (Boundaries cannot store points); TetraSolid
   placeholder (future output TriSurf or XsTriSurf). Merge to multipart (Entities menu, not Weld
   lines): any PolyData topology (points, lines, surfaces, PCDom, TSDom), one topology per merge.
+- Merge to multipart, weld and snap: inputs and outputs belong to one cross-section; only entities
+  with the parent_uid of the last selected one are used (`same_parent=True`), others deselected.
 
 ## Open items
 
