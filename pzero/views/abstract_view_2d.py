@@ -128,13 +128,17 @@ class View2D(ViewVTK):
 
         self.mergeLineButton = QAction("Weld lines", self)
         self.mergeLineButton.triggered.connect(
-            lambda: start_checked_line_tool(self, merge_lines, min_selected=2)
+            lambda: start_checked_line_tool(
+                self, merge_lines, min_selected=2, same_parent=True
+            )
         )
         self.menuModify.addAction(self.mergeLineButton)
 
         self.snapLineButton = QAction("Snap to intersection", self)
         self.snapLineButton.triggered.connect(
-            lambda: start_checked_line_tool(self, snap_line, min_selected=2)
+            lambda: start_checked_line_tool(
+                self, snap_line, min_selected=2, same_parent=True
+            )
         )
         self.menuModify.addAction(self.snapLineButton)
 

@@ -49,14 +49,15 @@ Tools that work on selected entities are decorated with `@uses_selection(...)` (
 - only entities of the accepted topologies are used; tools that work on a single entity use the **last selected** one;
 - all other entities are **deselected**, and a message reports it;
 - if not enough usable entities are selected, the tool does not run and the selection is unchanged;
-- for tools running in a view, entities not shown in that view are not usable.
+- for tools running in a view, entities not shown in that view are not usable;
+- tools whose inputs and outputs must belong to one cross-section (`same_parent=True`: merge to multipart, weld, snap) use only entities with the `parent_uid` of the last selected usable entity.
 
 Tools read the collection with `active_collection(self)` and store their output in the same collection, with metadata copied by `derived_entity_dict()` / `entity_metadata_input_dict()` only for the fields that collection has (e.g. boundaries have no role and feature).
 
 | Tools | Function(s) | Accepts |
 |---|---|---|
 | Line editing in 2D views: edit, extend, split at point, copy parallel/kink/similar (one line) | `two_d_lines.start_checked_line_tool` | Last selected PolyLine/XsPolyLine in Geology, Fluids or Backgrounds |
-| Line editing in 2D views: sort, move, rotate, split line/line, weld, snap, resample, simplify | `two_d_lines.start_checked_line_tool` | PolyLine/XsPolyLine in Geology, Fluids or Backgrounds |
+| Line editing in 2D views: sort, move, rotate, split line/line, weld, snap, resample, simplify | `two_d_lines.start_checked_line_tool` | PolyLine/XsPolyLine in Geology, Fluids or Backgrounds; weld and snap only on lines of the same cross-section (parent_uid) as the last selected line |
 | Smoothing, decimation (pro, quadric), subdivision, retopology | `surface_smoothing`, `decimation_pro_resampling`, `decimation_quadric_resampling`, `subdivision_resampling`, `retopo`, `smooth_dialog`, `subd_res_dialog`, `retopologize_surface` | TriSurf in any collection |
 | Retriangulate (one only) | `retriangulate_surface_dialog` | TriSurf in any collection |
 | Split surface (at least 2, the last one cuts the others) | `split_surf` | TriSurf in any collection |
@@ -67,7 +68,7 @@ Tools read the collection with `active_collection(self)` and store their output 
 | Intersection with cross-section (output in the source collection: PolyLine/XsPolyLine → XsVertexSet, TriSurf → XsPolyLine, DEM/TSDom → DomXs, Voxet → XsVoxet) | `intersection_xs` | PolyLine/XsPolyLine, TriSurf, DEM, TSDom, Voxet in any collection; boundary lines give no output (Boundaries cannot store points); TetraSolid is a placeholder, not implemented yet |
 | Project to DEM, project to cross-section | `project_2_dem`, `project_2_xs` | Points and lines in Geology, Fluids, Backgrounds; lines in Boundaries; wells |
 | Connected parts, split multipart | `connected_parts`, `split_multipart` | PolyLine and TriSurf in any collection; DOM point clouds |
-| Merge to multipart (Entities menu, at least 2; the merged entity is selected) | `entities_merge` | PolyData of one topology (VertexSet, XsVertexSet, PolyLine, XsPolyLine, TriSurf, PCDom, TSDom) in any collection; entities of other topologies than the one chosen are deselected |
+| Merge to multipart (Entities menu, at least 2; the merged entity is selected) | `entities_merge` | PolyData of one topology (VertexSet, XsVertexSet, PolyLine, XsPolyLine, TriSurf, PCDom, TSDom) in any collection, with the same parent_uid (cross-section) as the last selected entity; entities of other topologies than the one chosen, or of other cross-sections, are deselected |
 | Calculate normals (Properties menu) | `normals_calculate` → `orientation_analysis.set_normals` | Geology entities and DOMs |
 | Add / remove property | `property_add`, `property_remove` | Any entity (remove offers only properties present on all selected entities) |
 | Add / remove texture | `texture_add`, `texture_remove` | DOMs |

@@ -290,14 +290,19 @@ def srf(vectors):
 
 
 def uses_selection(
-    valid=None, topologies=None, require_properties=None, min_selected=1, max_selected=None
+    valid=None,
+    topologies=None,
+    require_properties=None,
+    same_parent=False,
+    min_selected=1,
+    max_selected=None,
 ):
     """
     Decorator for tools that work on selected entities. Before the tool runs (and before the GUI is
     frozen, so place it above @freeze_gui_on / @freeze_gui_onoff), the project selection is reduced
     to the entities the tool can use, deselecting the others; if there are not enough, the tool does
     not run. See ProjectWindow.restrict_selection_for_tool for valid, topologies,
-    require_properties, min_selected and max_selected.
+    require_properties, same_parent, min_selected and max_selected.
     Works for tools whose self is the ProjectWindow or a view (then self.parent is the project).
     """
 
@@ -313,6 +318,7 @@ def uses_selection(
                     valid=valid,
                     topologies=topologies,
                     require_properties=require_properties,
+                    same_parent=same_parent,
                     min_selected=min_selected,
                     max_selected=max_selected,
                     view=view,
