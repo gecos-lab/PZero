@@ -1532,7 +1532,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.signals.metadata_modified.emit(updated_uids, self.geol_coll)
         return updated_uids
 
-    @uses_selection(topologies=["PolyLine", "XsPolyLine"], min_selected=2)
+    @uses_selection(
+        topologies=["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine", "TriSurf", "PCDom", "TSDom"],
+        min_selected=2,
+    )
     @freeze_gui_onoff
     def entities_merge(self):
         """Merge entities of the same topology into a multi-part entity, in the active collection."""
@@ -1600,6 +1603,24 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             new_dict["vtk_obj"] = PCDom()
         else:
             return
+        # A multipart entity has one topology: only entities of the chosen topology are merged, and
+        # the others are deselected.
+        merge_uids = [
+            uid
+            for uid in self.selected_uids
+            if collection.get_uid_topology(uid) == new_dict["topology"]
+        ]
+        if len(merge_uids) < 2:
+            self.print_terminal(
+                f" -- Merge to multipart: select at least 2 entities of topology {new_dict['topology']} -- "
+            )
+            return
+        if len(merge_uids) < len(self.selected_uids):
+            self.print_terminal(
+                f" -- Merge to multipart: {len(self.selected_uids) - len(merge_uids)} entities "
+                f"of other topologies deselected -- "
+            )
+            self.set_selection(uids=merge_uids, mode="replace", source=self)
         # Ask whether to keep or removed merged entities.
         remove_merged_option = options_dialog(
             title="Remove merged entities?",
@@ -1612,13 +1633,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
         # Create a vtkAppendPolyData filter to merge all input vtk objects
         vtkappend = vtkAppendPolyData()
-        # Loop that collects all selected items to create the merge. Only entities of the same
-        # topology as chosen in the widget are merged, others are discarded.
-        for uid in self.selected_uids:
-            if new_dict["topology"] == collection.get_uid_topology(uid):
-                vtkappend.AddInputData(collection.get_uid_vtk_obj(uid))
-                if remove_merged_option == 1:
-                    collection.remove_entity(uid=uid)
+        # Collect the entities of the chosen topology to create the merge.
+        for uid in merge_uids:
+            vtkappend.AddInputData(collection.get_uid_vtk_obj(uid))
+            if remove_merged_option == 1:
+                collection.remove_entity(uid=uid)
         vtkappend.Update()
         # ShallowCopy is the way to copy the new vtk object into the empty instance created above.
         new_dict["vtk_obj"].ShallowCopy(vtkappend.GetOutput())
@@ -1628,6 +1647,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
         # Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
         uid_new = collection.add_entity_from_dict(new_dict)
+        # The merged entity is selected (as for weld).
+        if uid_new:
+            self.set_selection(uids=[uid_new], mode="replace", source=self)
 
     @uses_selection(valid={"dom_coll": None})
     def texture_add(self):
