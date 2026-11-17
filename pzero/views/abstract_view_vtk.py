@@ -1546,7 +1546,7 @@ class ViewVTK(BaseView):
         )
         # self.plotter.iren.interactor.AddObserver('KeyPressEvent',self.clear_selected)
         self.plotter.track_click_position(self.end_pick)
-        self.plotter.add_key_event("c", self.clear_selection)
+        # No "c" shortcut to clear the selection (confusing): use the Clear selection button.
 
     def _remove_actor_pick_observer(self):
         """Stop actor selection without removing the camera widget's click handlers."""

@@ -45,40 +45,46 @@ The selection of entities is stored once, at project level, in `ProjectWindow` (
 
 Tools that work on selected entities are decorated with `@uses_selection(...)` (`helpers/helper_functions.py`), which calls `ProjectWindow.restrict_selection_for_tool()` before the tool runs:
 
-- the tool works on **one collection**: the one of the tab in front if it contains usable entities, otherwise the one of the last selected usable entity, whose tab is brought to front;
+- **Mixed collections** (`cross_collection=True`): tools that modify or derive each entity independently, or cut entities with another one, use the usable entities of **all** the accepted collections together; **each output stays in the collection of its input** (e.g. moving geology and fluid lines together leaves each in its collection; a fluid line cut by a boundary entity gives fluid pieces). They read the uids with `tool_uids(self)` and the collection of each one with `entity_collection(self, uid)`.
+- **One collection**: tools whose single output is built from several inputs (weld, merge to multipart, interpolations) use only one collection: the one of the tab in front if it contains usable entities, otherwise the one of the last selected usable entity. They read it with `active_collection(self)`.
 - only entities of the accepted topologies are used; tools that work on a single entity use the **last selected** one;
-- all other entities are **deselected**, and a message reports it;
+- all other entities are **deselected**, and a message reports it; the tab of the collection of the last used entity is brought to front;
 - if not enough usable entities are selected, the tool does not run and the selection is unchanged;
 - for tools running in a view, entities not shown in that view are not usable;
 - tools whose inputs and outputs must belong to one cross-section (`same_parent=True`: merge to multipart, weld, snap) use only entities with the `parent_uid` of the last selected usable entity.
 
-Tools read the collection with `active_collection(self)` and store their output in the same collection, with metadata copied by `derived_entity_dict()` / `entity_metadata_input_dict()` only for the fields that collection has (e.g. boundaries have no role and feature).
+Outputs are stored in the collection of their input, with metadata copied by `derived_entity_dict()` / `entity_metadata_input_dict()` only for the fields that collection has (e.g. boundaries have no role and feature).
 
-| Tools | Function(s) | Accepts |
-|---|---|---|
-| Line editing in 2D views: edit, extend, split at point, copy parallel/kink/similar (one line) | `two_d_lines.start_checked_line_tool` | Last selected PolyLine/XsPolyLine in Geology, Fluids or Backgrounds |
-| Line editing in 2D views: sort, move, rotate, split line/line, weld, snap, resample, simplify | `two_d_lines.start_checked_line_tool` | PolyLine/XsPolyLine in Geology, Fluids or Backgrounds; weld and snap only on lines of the same cross-section (parent_uid) as the last selected line |
-| Smoothing, decimation (pro, quadric), subdivision, retopology | `surface_smoothing`, `decimation_pro_resampling`, `decimation_quadric_resampling`, `subdivision_resampling`, `retopo`, `smooth_dialog`, `subd_res_dialog`, `retopologize_surface` | TriSurf in any collection |
-| Retriangulate (one only) | `retriangulate_surface_dialog` | TriSurf in any collection |
-| Split surface (at least 2, the last one cuts the others) | `split_surf` | TriSurf in any collection |
-| Delaunay 2D and Poisson interpolation | `interpolation_delaunay_2d`, `poisson_interpolation` | Points, lines and TriSurfs in any collection |
-| Regularized grid surface (one only) | `regularized_grid_surface_interpolation` | Points, lines and TriSurfs in any collection |
-| Implicit model (LoopStructural) | `implicit_model_loop_structural` | Points, lines and TriSurfs in Geology (age is needed) |
-| Extrusion (View3D > Create), optional densification with internal sample lines | `linear_extrusion` | Last selected PolyLine/XsPolyLine in any collection |
-| Intersection with cross-section (output in the source collection: PolyLine/XsPolyLine → XsVertexSet, TriSurf → XsPolyLine, DEM/TSDom → DomXs, Voxet → XsVoxet) | `intersection_xs` | PolyLine/XsPolyLine, TriSurf, DEM, TSDom, Voxet in any collection; boundary lines give no output (Boundaries cannot store points); TetraSolid is a placeholder, not implemented yet |
-| Project to DEM, project to cross-section | `project_2_dem`, `project_2_xs` | Points and lines in Geology, Fluids, Backgrounds; lines in Boundaries; wells |
-| Connected parts, split multipart | `connected_parts`, `split_multipart` | PolyLine and TriSurf in any collection; DOM point clouds |
-| Merge to multipart (Entities menu, at least 2; the merged entity is selected) | `entities_merge` | PolyData of one topology (VertexSet, XsVertexSet, PolyLine, XsPolyLine, TriSurf, PCDom, TSDom) in any collection, with the same parent_uid (cross-section) as the last selected entity; entities of other topologies than the one chosen, or of other cross-sections, are deselected |
-| Calculate normals (Properties menu) | `normals_calculate` → `orientation_analysis.set_normals` | Geology entities and DOMs |
-| Add / remove property | `property_add`, `property_remove` | Any entity (remove offers only properties present on all selected entities) |
-| Add / remove texture | `texture_add`, `texture_remove` | DOMs |
-| Build octree (Point Clouds menu) | `build_octree` | DOM point clouds (PCDom) |
-| Point-cloud tools in the 3D view: cut, segment, auto-pick, threshold, decimate (one each) | `cut_pc`, `segment_pc`, `auto_pick`, `thresh_filt`, `decimate_selected_pc` | Last selected DOM point cloud (PCDom) |
-| Point-cloud calibration in the 3D view | `calibration_pc` | DOM point clouds (PCDom) |
-| Calculate Dip/Direction (Properties menu): dip and dip direction point properties from point normals (-90 < dip < 90, negative for overturned surfaces; standard dip direction) | `point_clouds.normals2dd` | Any entity with the Normals point property |
-| Planar facets from PC clusters (Interpolation menu): one planar facet per ClusterId, output in Geology | `point_clouds.facets_pc` | Last selected DOM point cloud (PCDom) with ClusterId |
-| Decimate point cloud (project window) | `decimate_pc_dialog` | DOM point clouds (PCDom) |
-| Remove, clone, info, export (CAD, VTK, CSV), CRS transform | `entity_remove`, `entity_clone`, `show_info_on_entities`, `export_cad`, `export_vtk`, `export_csv`, `CRS_transform_selected` | Any entity |
+| Tools | Function(s) | Collections per run | Accepts |
+|---|---|---|---|
+| Line editing in 2D views: edit, extend, split at point, copy parallel/kink/similar (one line) | `two_d_lines.start_checked_line_tool` | Mixed | Last selected PolyLine/XsPolyLine in Geology, Fluids or Backgrounds |
+| Line editing in 2D views: sort, move, rotate, resample, simplify | `two_d_lines.start_checked_line_tool` | Mixed | PolyLine/XsPolyLine in Geology, Fluids or Backgrounds |
+| Split line by line (the last selected line cuts the others) | `two_d_lines.split_line_line` | Mixed | PolyLine/XsPolyLine in Geology, Fluids or Backgrounds; pieces stay in the collection of their line |
+| Snap | `two_d_lines.snap_line` | Mixed | PolyLine/XsPolyLine in Geology, Fluids or Backgrounds, of the same cross-section (parent_uid) as the last selected line |
+| Weld lines | `two_d_lines.merge_lines` | One | PolyLine/XsPolyLine in Geology, Fluids or Backgrounds, of the same cross-section as the last selected line |
+| Smoothing, decimation (pro, quadric), subdivision, retopology | `surface_smoothing`, `decimation_pro_resampling`, `decimation_quadric_resampling`, `subdivision_resampling`, `retopo`, `smooth_dialog`, `subd_res_dialog`, `retopologize_surface` | Mixed | TriSurf in any collection |
+| Retriangulate (one only) | `retriangulate_surface_dialog` | One | Last selected TriSurf in any collection |
+| Split surface (at least 2, the last one cuts the others) | `split_surf` | Mixed | TriSurf in any collection; split surfaces stay in their collection |
+| Delaunay 2D and Poisson interpolation | `interpolation_delaunay_2d`, `poisson_interpolation` | One | Points, lines and TriSurfs of one collection |
+| Regularized grid surface (one only) | `regularized_grid_surface_interpolation` | One | Points, lines and TriSurfs in any collection |
+| Implicit model (LoopStructural) | `implicit_model_loop_structural` | One | Points, lines and TriSurfs in Geology (age is needed) |
+| Extrusion (View3D > Create), optional densification with internal sample lines | `linear_extrusion` | One | Last selected PolyLine/XsPolyLine in any collection |
+| Intersection with cross-section (PolyLine/XsPolyLine → XsVertexSet, TriSurf → XsPolyLine, DEM/TSDom → DomXs, Voxet → XsVoxet) | `intersection_xs` | Mixed | PolyLine/XsPolyLine, TriSurf, DEM, TSDom, Voxet in any collection; boundary lines give no output (Boundaries cannot store points); TetraSolid is a placeholder, not implemented yet |
+| Project to DEM, project to cross-section | `project_2_dem`, `project_2_xs` | Mixed | Points and lines in Geology, Fluids, Backgrounds; lines in Boundaries; wells |
+| Connected parts, split multipart | `connected_parts`, `split_multipart` | Mixed | PolyLine and TriSurf in any collection; DOM point clouds |
+| Merge to multipart (Entities menu, at least 2; the merged entity is selected) | `entities_merge` | One | PolyData of one topology (VertexSet, XsVertexSet, PolyLine, XsPolyLine, TriSurf, PCDom, TSDom), with the same parent_uid (cross-section) as the last selected entity |
+| Calculate normals (Properties menu) | `normals_calculate` → `orientation_analysis.set_normals` | One | Geology entities and DOMs |
+| Calculate Dip/Direction (Properties menu): dip and dip direction point properties from point normals (-90 < dip < 90, negative for overturned surfaces; standard dip direction) | `point_clouds.normals2dd` | Mixed | Any entity with the Normals point property |
+| Add / remove property | `property_add`, `property_remove` | Mixed | Any entity (remove offers only properties present on all selected entities) |
+| Add / remove texture | `texture_add`, `texture_remove` | One | DOMs |
+| Build octree (Point Clouds menu) | `build_octree` | One | DOM point clouds (PCDom) |
+| Point-cloud tools in the 3D view: cut, segment, auto-pick, threshold, decimate (one each) | `cut_pc`, `segment_pc`, `auto_pick`, `thresh_filt`, `decimate_selected_pc` | One | Last selected DOM point cloud (PCDom) |
+| Point-cloud calibration in the 3D view | `calibration_pc` | One | DOM point clouds (PCDom) |
+| Planar facets from PC clusters (Interpolation menu): one planar facet per ClusterId, output in Geology | `point_clouds.facets_pc` | One | Last selected DOM point cloud (PCDom) with ClusterId |
+| Decimate point cloud (project window) | `decimate_pc_dialog` | One | DOM point clouds (PCDom) |
+| Remove, clone (each clone in its own collection), info, export VTK, CRS transform | `entity_remove`, `entity_clone`, `show_info_on_entities`, `export_vtk`, `CRS_transform_selected` | Mixed | Any entity |
+| Export CSV | `export_csv` | One | Geology entities |
+| Export CAD | `export_cad` | — | Not a selection tool (exports collections; GOCAD and OBJ use the selection of the tab in front) |
 
 ## Sub-modules
 

@@ -67,6 +67,12 @@ Phase 4 follow-ups included in the same commit:
 ## Decisions taken (do not re-discuss unless asked)
 
 - Click order everywhere; tools deselect entities they cannot use (no silent filtering).
+- Mixed collections (`cross_collection=True`) for tools that modify/derive each entity independently
+  or cut entities with another one (2D line tools except weld, surface modifiers, split line/surface,
+  intersection, projection, connected parts, split multipart, properties, dip/direction, remove,
+  clone, info, export VTK, CRS): each output stays in its input's collection. One collection for
+  tools with a single output from several inputs (weld, merge to multipart, interpolations).
+  The README table has a "Collections per run" column.
 - Single-entity tools use the last selected entity.
 - Picking in a view selects among the entities of that view; selections in other views/collections
   are kept. Hidden entities stay selected (no highlight while hidden).
@@ -104,20 +110,23 @@ Phase 4 follow-ups included in the same commit:
 
 Watch the PZero terminal and the console for tracebacks.
 
-1. Highlight (3D + map view open): open/closed surface, property-coloured line, points, well, DEM,
+1. — PASSED 2026-11-17. Highlight (3D + map view open): open/closed surface, property-coloured line, points, well, DEM,
    textured DOM, point cloud, image, cross-section; Ctrl-A in a large table then deselect
    (responsiveness); change shown property / legend colour and thickness / hide-show while selected;
    vertical exaggeration; a new view shows the existing selection.
-2. Picking: click, Shift-click, click on an already selected entity (tab to front), clear selection
-   button / `c` (only entities of that view).
-3. Freeze: during Edit/Move line, table and tree selection (also right-click) cannot change; picking
+2. Picking: click, Shift-click, click on an already selected entity (tab to front), Clear selection
+   button (only entities of that view; there is no `c` shortcut). — PASSED 2026-11-17
+3. — PASSED 2026-11-17. Freeze: during Edit/Move line, table and tree selection (also right-click) cannot change; picking
    still works; everything unfreezes after the tool.
 4. Line tools in a cross-section: line + surface + line selected → Edit line keeps only the last
    line; Sort/Resample keep all lines in click order; selection kept after the listed tools; weld
-   selects the result; copy tools clear.
+   selects the result; copy tools clear; weld and snap with lines of two sections (or section + map
+   lines) use only the lines of the last clicked line's section.
 5. Tools on other collections: smoothing/decimation/subdivision/retopo on Fluids and Boundaries
    TriSurfs (output in the same collection, no role/feature in Boundaries); Delaunay/Poisson on fluid
-   points; merge of fluid lines (a surface alone is refused); connected parts / split multipart on a
+   points; merge to multipart of two lines and of two surfaces (result selected), lines + surface
+   (surface deselected), a single entity refused, entities of two sections (only the last one's
+   section merged); connected parts / split multipart on a
    boundary TriSurf; property add/remove on a mesh or image; a selection with nothing usable prints
    what is needed and does not run.
 6. Moved tools: View3D > Create > Extrusion with and without densification (not in project window

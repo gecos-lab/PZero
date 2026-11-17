@@ -146,6 +146,8 @@ from .entities_factory import (
 )
 from .helpers.helper_functions import (
     uses_selection,
+    tool_uids,
+    entity_collection,
     active_collection,
     derived_entity_dict,
     entity_metadata_input_dict,
@@ -965,6 +967,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         topologies: list = None,
         require_properties: list = None,
         same_parent: bool = False,
+        cross_collection: bool = False,
         min_selected: int = 1,
         max_selected: int = None,
         view=None,
@@ -983,9 +986,16 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         min_selected: minimum number of usable entities, otherwise nothing changes and None is returned.
         max_selected: the tool uses only the last max_selected usable entities (in click order).
         view:         for tools running in a view, entities not shown in that view are not usable.
+        cross_collection: usable entities of all the allowed collections are used together (tools that
+                      modify or derive each entity independently, or cut entities with another one;
+                      each output stays in the collection of its input). The tool must then get the
+                      collection of each uid (helper_functions.entity_collection) and the uids from
+                      helper_functions.tool_uids, since ProjectWindow.selected_uids is limited to
+                      the tab in front.
 
-        The tool works on one collection: the one of the table tab in front if it contains usable
-        entities, otherwise the one of the last selected usable entity, whose tab is brought to front.
+        Without cross_collection, the tool works on one collection: the one of the table tab in front
+        if it contains usable entities, otherwise the one of the last selected usable entity.
+        The tab of that collection (of the last used entity, with cross_collection) is brought to front.
         Returns the list of uids the tool will use, or None if there are not enough.
         """
         tool_label = (
@@ -1020,25 +1030,29 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return True
 
         candidates = [uid for uid in selection if usable(uid)]
-        shown_collection = self.tab_collection_dict.get(self.shown_table)
-        if any(selection[uid] == shown_collection for uid in candidates):
-            target_collection = shown_collection
-        elif candidates:
-            target_collection = selection[candidates[-1]]
+        if cross_collection:
+            chosen = candidates
         else:
-            target_collection = None
-        chosen = [uid for uid in candidates if selection[uid] == target_collection]
+            shown_collection = self.tab_collection_dict.get(self.shown_table)
+            if any(selection[uid] == shown_collection for uid in candidates):
+                target_collection = shown_collection
+            elif candidates:
+                target_collection = selection[candidates[-1]]
+            else:
+                target_collection = None
+            chosen = [uid for uid in candidates if selection[uid] == target_collection]
         if same_parent and chosen:
-            target_coll_obj = getattr(self, target_collection)
 
             def parent_of(uid):
-                parent = uid_metadata(target_coll_obj, uid, "parent_uid", "")
+                parent = uid_metadata(getattr(self, selection[uid]), uid, "parent_uid", "")
                 return parent if isinstance(parent, str) else ""
 
             target_parent = parent_of(chosen[-1])
             chosen = [uid for uid in chosen if parent_of(uid) == target_parent]
         if max_selected:
             chosen = chosen[-max_selected:]
+        if cross_collection:
+            target_collection = selection[chosen[-1]] if chosen else None
 
         if len(chosen) < min_selected:
             if valid is None:
@@ -1060,9 +1074,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         previous = list(selection)
         if set(previous) != set(chosen):
             self.set_selection(uids=chosen, mode="replace", source=view or self)
+            used_collections = ", ".join(
+                self.collection_display_name(coll)
+                for coll in dict.fromkeys(selection[uid] for uid in chosen)
+            )
             self.print_terminal(
                 f" -- {tool_label}: {len(previous) - len(chosen)} entities deselected, "
-                f"working on {len(chosen)} in {self.collection_display_name(target_collection)} -- "
+                f"working on {len(chosen)} in {used_collections} -- "
             )
         self.show_collection_tab(target_collection)
         return chosen
@@ -1269,17 +1287,17 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     #                 selected_uids_all.append(self.backgrnd_coll.data(index=idx, qt_role=Qt.DisplayRole))
     #     return selected_uids_all
 
-    @uses_selection(valid=None)
+    @uses_selection(valid=None, cross_collection=True)
     def show_info_on_entities(self):
-        """Print the selected entities' VTK descriptions in the project terminal."""
+        """Print the selected entities' (of any collection) VTK descriptions in the project terminal."""
         self.tabWidgetBottomLeft.setCurrentWidget(self.tabTerminal)
-        uids = self.selected_uids
+        uids = tool_uids(self)
         if not uids:
             self.print_terminal("No entities selected.")
             return
 
-        collection = getattr(self, self.selected_collection)
         for uid in uids:
+            collection = entity_collection(self, uid)
             vtk_object = collection.get_uid_vtk_obj(uid)
             self.print_terminal(f"{collection.get_uid_name(uid)} (UID: {uid})")
             self.print_terminal(
@@ -1288,32 +1306,42 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 else "No VTK object available."
             )
 
-    @uses_selection(valid=None)
+    @uses_selection(valid=None, cross_collection=True)
     def entity_clone(self):
-        """Clone the selection using the shared copy-to-collection implementation."""
+        """Clone the selected entities (of any collection), each in its own collection, using the
+        shared copy-to-collection implementation."""
         self.tabWidgetBottomLeft.setCurrentWidget(self.tabTerminal)
-        uids = list(self.selected_uids)
+        uids = tool_uids(self)
         if not uids:
             self.print_terminal("No entities selected.")
             return
-        collection_name = self.selected_collection
-        return self.transfer_entities_between_collections(
-            source_collection_name=collection_name,
-            destination_collection_name=collection_name,
-            selected_uids=uids,
-            move=False,
-        )
+        uids_by_collection = {}
+        for uid in uids:
+            uids_by_collection.setdefault(entity_collection(self, uid).collection_name, []).append(uid)
+        reports = []
+        for collection_name, collection_uids in uids_by_collection.items():
+            reports.append(
+                self.transfer_entities_between_collections(
+                    source_collection_name=collection_name,
+                    destination_collection_name=collection_name,
+                    selected_uids=collection_uids,
+                    move=False,
+                )
+            )
+        return reports[0] if len(reports) == 1 else reports
 
-    @uses_selection(valid=None)
+    @uses_selection(valid=None, cross_collection=True)
     def entity_remove(self):
-        """Remove entities selected in an attribute table. Just rows completely selected are removed."""
-        if not self.selected_uids:
+        """Remove the selected entities, of any collection."""
+        uids = tool_uids(self)
+        if not uids:
             return
         """Confirm removal dialog."""
-        if len(self.selected_uids) > 10:
-            msg = f"{self.selected_uids[:10]} and {len(self.selected_uids[10:])} more"
+        names = [entity_collection(self, uid).get_uid_name(uid) for uid in uids]
+        if len(names) > 10:
+            msg = f"{names[:10]} and {len(names[10:])} more"
         else:
-            msg = f"{self.selected_uids}"
+            msg = f"{names}"
         check = QMessageBox.question(
             self,
             "Remove Entities",
@@ -1323,9 +1351,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         if check == QMessageBox.No:
             return
-        """Remove entities."""
-        collection = getattr(self, self.selected_collection)
-        collection.remove_entities(self.selected_uids)
+        """Remove entities, once per collection."""
+        uids_by_collection = {}
+        for uid in uids:
+            uids_by_collection.setdefault(entity_collection(self, uid), []).append(uid)
+        for collection, collection_uids in uids_by_collection.items():
+            collection.remove_entities(collection_uids)
 
     def _get_seismic_image_uids(self):
         """Return the uid set of imported seismic images currently stored in the project."""
@@ -1717,13 +1748,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     dom_uid=dom_uid, map_image_uid=map_image_uid
                 )
 
-    @uses_selection(valid=None)
+    @uses_selection(valid=None, cross_collection=True)
     @freeze_gui_onoff
     def property_add(self):
         """Add an empty property to the selected entities of the active collection."""
-        if not self.selected_uids:
+        if not tool_uids(self):
             return
-        collection = active_collection(self)
         input_dict = {
             "property_name": ["Property name: ", "new_property"],
             "property_components": ["Property components: ", 1],
@@ -1733,7 +1763,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         if updt_dict is None:
             return
-        for uid in self.selected_uids:
+        for uid in tool_uids(self):
+            collection = entity_collection(self, uid)
             if not updt_dict["property_name"] in collection.get_uid_properties_names(uid):
                 collection.append_uid_property(
                     uid=uid,
@@ -1743,19 +1774,19 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # Finally update properties legend.
         self.prop_legend.update_widget(self)
 
-    @uses_selection(valid=None)
+    @uses_selection(valid=None, cross_collection=True)
     def property_remove(self):
-        """Remove a property from the selected entities of the active collection. Only properties
-        present on all the selected entities are offered."""
-        if not self.selected_uids:
+        """Remove a property from the selected entities (of any collection). Only properties present
+        on all the selected entities are offered."""
+        uids = tool_uids(self)
+        if not uids:
             return
-        collection = active_collection(self)
-        property_name_list = collection.get_uid_properties_names(uid=self.selected_uids[0])
-        for uid in self.selected_uids[1:]:
+        property_name_list = entity_collection(self, uids[0]).get_uid_properties_names(uid=uids[0])
+        for uid in uids[1:]:
             property_name_list = [
                 name
                 for name in property_name_list
-                if name in collection.get_uid_properties_names(uid=uid)
+                if name in entity_collection(self, uid).get_uid_properties_names(uid=uid)
             ]
         if not property_name_list:
             self.print_terminal(" -- No property shared by all selected entities -- ")
@@ -1768,8 +1799,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         if property_name is None:
             return
-        for uid in self.selected_uids:
-            collection.remove_uid_property(uid=uid, property_name=property_name)
+        for uid in uids:
+            entity_collection(self, uid).remove_uid_property(uid=uid, property_name=property_name)
         # Finally update properties legend.
         self.prop_legend.update_widget(self)
 
@@ -2024,10 +2055,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         else:
             self.print_terminal("No entity selected")
 
-    @uses_selection(topologies=["TriSurf"])
+    @uses_selection(topologies=["TriSurf"], cross_collection=True)
     def smooth_dialog(self):
-        # Input entities and outputs are in the active collection (see @uses_selection).
-        source_coll = active_collection(self)
         input_dict = {
             "convergence_value": ["Convergence value:", 1],
             "boundary_smoothing": ["Boundary smoothing", False],
@@ -2037,7 +2066,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             title="Surface smoothing", input_dict=input_dict, return_widget=True
         )
 
-        sel_uids = self.selected_uids
+        sel_uids = tool_uids(self)
         if len(sel_uids) > 1:
             self.print_terminal(
                 "Multiple surfaces selected, only one will be previewed"
@@ -2047,6 +2076,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
 
         for uid in sel_uids:
+            source_coll = entity_collection(self, uid)
             mesh = source_coll.get_uid_vtk_obj(uid)
 
         PreviewWidget(
@@ -2057,10 +2087,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             function=surface_smoothing,
         )
 
-    @uses_selection(topologies=["TriSurf"])
+    @uses_selection(topologies=["TriSurf"], cross_collection=True)
     def subd_res_dialog(self):
-        # Input entities and outputs are in the active collection (see @uses_selection).
-        source_coll = active_collection(self)
         input_dict = {
             "type": ["Subdivision type:", ["linear", "butterfly", "loop"]],
             "n_subd": ["Number of iterations", 2],
@@ -2069,7 +2097,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             "Subdivision dialog", input_dict, return_widget=True
         )
 
-        sel_uids = self.selected_uids
+        sel_uids = tool_uids(self)
         if len(sel_uids) > 1:
             self.print_terminal(
                 "Multiple surfaces selected, only one will be previewed"
@@ -2079,6 +2107,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
 
         for uid in sel_uids:
+            source_coll = entity_collection(self, uid)
             mesh = source_coll.get_uid_vtk_obj(uid)
 
         PreviewWidget(
@@ -2090,10 +2119,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         # subdivision_resampling(self,type=subd_input['type'],n_subd=subd_input['n_subd'])
 
-    @uses_selection(topologies=["TriSurf"])
+    @uses_selection(topologies=["TriSurf"], cross_collection=True)
     def retopologize_surface(self):
-        # Input entities and outputs are in the active collection (see @uses_selection).
-        source_coll = active_collection(self)
         input_dict = {
             "dec_int": ["Decimation intensity: ", 0],
             "n_iter": ["Number of iterations: ", 40],
@@ -2103,7 +2130,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             title="Retopologize surface", input_dict=input_dict, return_widget=True
         )
 
-        sel_uids = self.selected_uids
+        sel_uids = tool_uids(self)
         if len(sel_uids) > 1:
             self.print_terminal(
                 "Multiple surfaces selected, only one will be previewed"
@@ -2113,6 +2140,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             return
 
         for uid in sel_uids:
+            source_coll = entity_collection(self, uid)
             mesh = source_coll.get_uid_vtk_obj(uid)
 
         PreviewWidget(
@@ -2329,17 +2357,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     pass
                 temp_gui.deleteLater()
 
-    @uses_selection(topologies=["PolyLine", "TriSurf", "PCDom"])
+    @uses_selection(topologies=["PolyLine", "TriSurf", "PCDom"], cross_collection=True)
     def connected_parts(self):
-        """Label connected mesh parts or point-cloud clusters without splitting."""
+        """Label connected mesh parts or point-cloud clusters without splitting (any collection)."""
         self.tabWidgetBottomLeft.setCurrentWidget(self.tabTerminal)
-        uids = list(self.selected_uids)
+        uids = tool_uids(self)
         if not uids:
             self.print_terminal("No entities selected.")
             return
-        collection = active_collection(self)
-        changed_uids, changed_keys = [], []
+        # Changed uids per collection, to emit the signals once per collection.
+        changed_uids, changed_keys = {}, {}
         for uid in uids:
+            collection = entity_collection(self, uid)
             obj = collection.get_uid_vtk_obj(uid)
             if isinstance(obj, (PolyLine, TriSurf)):
                 property_name = "RegionId"
@@ -2360,7 +2389,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             components = collection.get_uid_properties_components(uid)
             # Register only after calculation, and repair duplicate labels from old runs.
             if names.count(property_name) != 1:
-                changed_keys.append(uid)
+                changed_keys.setdefault(collection, []).append(uid)
             kept = [i for i, name in enumerate(names) if name != property_name]
             collection.set_uid_properties_names(
                 uid, [names[i] for i in kept] + [property_name]
@@ -2368,7 +2397,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             collection.set_uid_properties_components(
                 uid, [components[i] for i in kept] + [1]
             )
-            changed_uids.append(uid)
+            changed_uids.setdefault(collection, []).append(uid)
             self.print_terminal(
                 f"{collection.get_uid_name(uid)}: found {count} connected parts. "
                 f"Select {property_name} in the view tree to colour them."
@@ -2380,17 +2409,18 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             )
         if changed_uids:
             self.prop_legend.update_widget(self)
-            if changed_keys:
-                self.signals.data_keys_added.emit(changed_keys, collection)
-            self.signals.geom_modified.emit(changed_uids, collection)
+            for collection, keys_uids in changed_keys.items():
+                self.signals.data_keys_added.emit(keys_uids, collection)
+            for collection, geom_uids in changed_uids.items():
+                self.signals.geom_modified.emit(geom_uids, collection)
 
-    @uses_selection(topologies=["PolyLine", "TriSurf", "PCDom"])
+    @uses_selection(topologies=["PolyLine", "TriSurf", "PCDom"], cross_collection=True)
     def split_multipart(self):
         """Split multi-part entities into single-parts."""
-        if self.selected_uids:
-            collection = active_collection(self)
+        if tool_uids(self):
             split_any = False
-            for uid in self.selected_uids:
+            for uid in tool_uids(self):
+                collection = entity_collection(self, uid)
                 if isinstance(collection.get_uid_vtk_obj(uid), (PolyLine, TriSurf)):
                     vtk_out_list = collection.get_uid_vtk_obj(uid).split_parts()
                     if not vtk_out_list or len(vtk_out_list) <= 1:
@@ -5287,7 +5317,6 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     # Methods used to export entities to other file formats.
 
-    @uses_selection(valid=None)
     def export_cad(self):
         # ________________________________________________________________ IMPLEMENT GOCAD EXPORT
         """Base method to choose a CAD format for exporting geological entities."""
@@ -5428,81 +5457,36 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         )
         self.print_terminal("All files saved.")
 
-    @uses_selection(valid=None)
+    @uses_selection(valid=None, cross_collection=True)
     def export_vtk(self):
-        """Function used to export selected objects as vtk files"""
-        if not self.selected_uids:
+        """Function used to export selected objects (of any collection) as vtk files."""
+        uids = tool_uids(self)
+        if not uids:
             return
-        else:
-            self.out_dir_name = save_file_dialog(
-                parent=self, caption="Select save directory.", directory=True
-            )
-            # print(self.out_file_name)
-            for (
-                uid
-            ) in (
-                self.selected_uids
-            ):  #  this could be generalized with a helper function
-                if self.shown_table == "tabGeology":
-                    entity = self.geol_coll.get_uid_vtk_obj(uid)
-
-                    pd_writer = vtkXMLPolyDataWriter()
-                    pd_writer.SetFileName(f"{self.out_dir_name}/{uid}.vtp")
-                    pd_writer.SetInputData(entity)
-                    pd_writer.Write()
-                    border = entity.get_clean_boundary()
-                    pd_writer = vtkXMLPolyDataWriter()
-                    pd_writer.SetFileName(f"{self.out_dir_name}/{uid}_border.vtp")
-                    pd_writer.SetInputData(border)
-                    pd_writer.Write()
-                elif self.shown_table == "tabXSections":
-                    entity = self.xsect_coll.get_uid_vtk_obj(uid)
-
-                    pd_writer = vtkXMLPolyDataWriter()
-                    pd_writer.SetFileName(f"{self.out_dir_name}/{uid}.vtp")
-                    pd_writer.SetInputData(entity)
-                    pd_writer.Write()
-                elif self.shown_table == "tabMeshes":
-                    entity = self.mesh3d_coll.get_uid_vtk_obj(uid)
-
-                    pd_writer = vtkXMLPolyDataWriter()
-                    pd_writer.SetFileName(f"{self.out_dir_name}/{uid}.vtp")
-                    pd_writer.SetInputData(entity)
-                    pd_writer.Write()
-                elif self.shown_table == "tabDOMs":
-                    entity = self.dom_coll.get_uid_vtk_obj(uid)
-                    temp = vtkPolyData()
-                    temp.ShallowCopy(entity)  # I hate this
-                    pd_writer = vtkXMLPolyDataWriter()
-                    pd_writer.SetFileName(f"{self.out_dir_name}/{uid}.vtp")
-                    pd_writer.SetInputData(temp)
-                    pd_writer.Write()
-                    del temp
-                elif self.shown_table == "tabImages":
-                    entity = self.image_coll.get_uid_vtk_obj(uid)
-
-                    pd_writer = vtkXMLPolyDataWriter()
-                    pd_writer.SetFileName(f"{self.out_dir_name}/{uid}.vtp")
-                    pd_writer.SetInputData(entity)
-                    pd_writer.Write()
-                elif self.shown_table == "tabBoundaries":
-                    entity = self.boundary_coll.get_uid_vtk_obj(uid)
-
-                    pd_writer = vtkXMLPolyDataWriter()
-                    pd_writer.SetFileName(f"{self.out_dir_name}/{uid}.vtp")
-                    pd_writer.SetInputData(entity)
-                    pd_writer.Write()
-                elif self.shown_table == "tabWells":
-                    entity = self.well_coll.get_uid_vtk_obj(uid)
-
-                    pd_writer = vtkXMLPolyDataWriter()
-                    pd_writer.SetFileName(f"{self.out_dir_name}/{uid}.vtp")
-                    pd_writer.SetInputData(entity)
-                    pd_writer.Write()
-                print(f"exported {uid}")
+        self.out_dir_name = save_file_dialog(
+            parent=self, caption="Select save directory.", directory=True
+        )
+        for uid in uids:
+            collection = entity_collection(self, uid)
+            entity = collection.get_uid_vtk_obj(uid)
+            if collection.collection_name == "dom_coll":
+                temp = vtkPolyData()
+                temp.ShallowCopy(entity)  # I hate this
+                entity = temp
+            pd_writer = vtkXMLPolyDataWriter()
+            pd_writer.SetFileName(f"{self.out_dir_name}/{uid}.vtp")
+            pd_writer.SetInputData(entity)
+            pd_writer.Write()
+            if collection.collection_name == "geol_coll":
+                border = entity.get_clean_boundary()
+                pd_writer = vtkXMLPolyDataWriter()
+                pd_writer.SetFileName(f"{self.out_dir_name}/{uid}_border.vtp")
+                pd_writer.SetInputData(border)
+                pd_writer.Write()
+            print(f"exported {uid}")
 
     # Everything here is very bad, but I am short on time
-    @uses_selection(valid=None)
+    @uses_selection(valid={"geol_coll": None})
     def export_csv(self):
         if not self.selected_uids:
             return

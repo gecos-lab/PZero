@@ -35,6 +35,7 @@ from .helpers.helper_dialogs import (
     message_dialog,
 )
 from .helpers.helper_widgets import Editor, Tracer, Tracer3D
+from .helpers.helper_functions import entity_collection
 from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 from .entities_factory import PolyLine, XsPolyLine
 
@@ -349,9 +350,15 @@ def _get_editable_line_source_coll(self, selected_uids=None, min_selected=1):
         self.print_terminal(" -- No input data selected -- ")
         return None
 
-    # Entities that are not lines of source_coll (e.g. a mesh selected together with a line)
-    # are not used (start_checked_line_tool deselects them).
-    line_uids = _editable_line_uids(source_coll, selected_uids)
+    # Entities that are not lines of the line collections (e.g. a mesh selected together with a line)
+    # are not used (start_checked_line_tool deselects them). Lines can belong to different collections.
+    line_uids = [
+        uid
+        for uid in selected_uids
+        if (coll := entity_collection(self, uid)) is not None
+        and coll.collection_name in valid_tables.values()
+        and coll.get_uid_topology(uid) in ("PolyLine", "XsPolyLine")
+    ]
     if not line_uids:
         self.print_terminal(" -- No input lines selected -- ")
         return None
@@ -363,14 +370,14 @@ def _get_editable_line_source_coll(self, selected_uids=None, min_selected=1):
     return source_coll
 
 
-def _editable_line_uids(source_coll, uids):
-    """The uids, in order, that are PolyLine or XsPolyLine entities of source_coll."""
-    topologies = dict(zip(source_coll.df["uid"], source_coll.df["topology"]))
-    return [uid for uid in uids if topologies.get(uid) in ("PolyLine", "XsPolyLine")]
-
-
 def start_checked_line_tool(
-    self, tool_func, selected_uids=None, min_selected=1, max_selected=None, same_parent=False
+    self,
+    tool_func,
+    selected_uids=None,
+    min_selected=1,
+    max_selected=None,
+    same_parent=False,
+    cross_collection=False,
 ):
     """Validate the line selection, then run a line editing tool on the selected lines.
     Before the tool starts, the project selection is reduced to exactly the lines the tool works
@@ -378,7 +385,9 @@ def start_checked_line_tool(
     only the last selected lines (in click order) are kept. The tool then reads them from
     self.selected_uids, and they stay selected after it (if the tool keeps the selection).
     With same_parent, only lines of the same cross-section (parent_uid) as the last selected line are
-    used (e.g. weld and snap, whose inputs and outputs must belong to one cross-section)."""
+    used (e.g. weld and snap, whose inputs and outputs must belong to one cross-section).
+    With cross_collection, lines of Geology, Fluids and Backgrounds are used together, each edited in
+    its own collection (all tools except weld, whose single output needs one collection)."""
     lines = ["PolyLine", "XsPolyLine"]
     if (
         self.parent.restrict_selection_for_tool(
@@ -386,6 +395,7 @@ def start_checked_line_tool(
             min_selected=min_selected,
             max_selected=max_selected,
             same_parent=same_parent,
+            cross_collection=cross_collection,
             view=self,
             tool_name=getattr(tool_func, "__name__", None),
         )
@@ -457,6 +467,8 @@ def sort_line_nodes(self):
     #         action.setDisabled(True)
     # If more than one line is selected, keep the first.
     for current_uid in self.selected_uids:
+        # Each line is edited in its own collection.
+        source_coll = entity_collection(self, current_uid)
         # For some reason in the following the [:] is needed.
         source_coll.get_uid_vtk_obj(
             current_uid
@@ -489,6 +501,8 @@ def move_line(self, vector):
         return
 
     for current_uid in self.selected_uids:
+        # Each line is edited in its own collection.
+        source_coll = entity_collection(self, current_uid)
 
         # Editing loop.
         # -----For some reason in the following the [:] is needed.-----
@@ -525,6 +539,8 @@ def rotate_line(self):
         self.print_terminal(" -- Angle is None -- ")
         return
     for current_uid in self.selected_uids:
+        # Each line is edited in its own collection.
+        source_coll = entity_collection(self, current_uid)
         if isinstance(self, ViewMap):
             inU = source_coll.get_uid_vtk_obj(current_uid).points_X
             inV = source_coll.get_uid_vtk_obj(current_uid).points_Y
@@ -626,11 +642,14 @@ def split_line_line(self):
         return
 
     current_uid_scissors = self.selected_uids[-1]
+    # The scissors line can belong to any line collection; cut pieces stay in the collection
+    # of their paper line.
+    scissors_coll = entity_collection(self, current_uid_scissors)
     if isinstance(self, ViewMap):
-        inU = source_coll.get_uid_vtk_obj(current_uid_scissors).points_X
-        inV = source_coll.get_uid_vtk_obj(current_uid_scissors).points_Y
+        inU = scissors_coll.get_uid_vtk_obj(current_uid_scissors).points_X
+        inV = scissors_coll.get_uid_vtk_obj(current_uid_scissors).points_Y
     elif isinstance(self, ViewXsection):
-        in_vtk_obj = source_coll.get_uid_vtk_obj(current_uid_scissors)
+        in_vtk_obj = scissors_coll.get_uid_vtk_obj(current_uid_scissors)
         inU, inV = self.parent.xsect_coll.world2plane(
             section_uid=self.this_x_section_uid,
             X=in_vtk_obj.points_X,
@@ -642,6 +661,7 @@ def split_line_line(self):
     shp_line_in_scissors = shp_linestring(inUV_scissors)
 
     for current_uid_paper in self.selected_uids[:-1]:
+        source_coll = entity_collection(self, current_uid_paper)
         if isinstance(self, ViewMap):
             inU = source_coll.get_uid_vtk_obj(current_uid_paper).points_X
             inV = source_coll.get_uid_vtk_obj(current_uid_paper).points_Y
@@ -1142,7 +1162,7 @@ def snap_line(self):
 
     if isinstance(self, ViewMap):
         for uid in ordered_selected_uids:
-            vtk_obj = source_coll.get_uid_vtk_obj(uid)
+            vtk_obj = entity_collection(self, uid).get_uid_vtk_obj(uid)
             in_u = np_array(vtk_obj.points_X).reshape(-1)
             in_v = np_array(vtk_obj.points_Y).reshape(-1)
             in_uv = _dedupe_consecutive_coords(np_column_stack((in_u, in_v)), eps=eps)
@@ -1152,7 +1172,7 @@ def snap_line(self):
             line_uv[uid] = in_uv
     elif isinstance(self, ViewXsection):
         for uid in ordered_selected_uids:
-            vtk_obj = source_coll.get_uid_vtk_obj(uid)
+            vtk_obj = entity_collection(self, uid).get_uid_vtk_obj(uid)
             in_u, in_v = self.parent.xsect_coll.world2plane(
                 section_uid=self.this_x_section_uid,
                 X=vtk_obj.points_X,
@@ -1336,7 +1356,7 @@ def snap_line(self):
         out_vtk.points = np_column_stack((out_x, out_y, out_z))
         out_vtk.auto_cells()
         if out_vtk.points_number >= 2:
-            source_coll.replace_vtk(uid=uid, vtk_object=out_vtk)
+            entity_collection(self, uid).replace_vtk(uid=uid, vtk_object=out_vtk)
 
     self.print_terminal(
         "Snap to intersection completed: updated "
@@ -1375,6 +1395,8 @@ def resample_lines_distance(self):
         return
     # distance_delta = int(distance_delta)
     for current_uid in self.selected_uids:
+        # Each line is edited in its own collection.
+        source_coll = entity_collection(self, current_uid)
         # Create empty dictionary for the output line.
         new_line = deepcopy(source_coll.entity_dict)
         # Define topology and parent_uid. Get coordinates of input line.
@@ -1472,6 +1494,8 @@ def resample_lines_number_points(self):
     else:
         number_of_points = int(number_of_points)
     for current_uid in self.selected_uids:
+        # Each line is edited in its own collection.
+        source_coll = entity_collection(self, current_uid)
         # Create empty dictionary for the output line.
         new_line = deepcopy(source_coll.entity_dict)
         # Define topology and parent_uid. Get coordinates of input line.
@@ -1565,6 +1589,8 @@ def simplify_line(self):
 
     try:
         for current_uid in self.selected_uids:
+            # Each line is edited in its own collection.
+            source_coll = entity_collection(self, current_uid)
             vtk_obj = source_coll.get_uid_vtk_obj(current_uid)
             if vtk_obj is None or vtk_obj.points_number <= 0:
                 self.print_terminal(f" --  Object not valid for {current_uid} -- ")
