@@ -79,10 +79,10 @@ select(b_surf)
 pw.connected_parts()
 check("connected parts on boundary", "RegionId" in pw.boundary_coll.get_uid_properties_names(b_surf))
 
-# merge requires lines: a TriSurf alone is not enough -> tool does not run, selection kept
+# merge needs at least 2 entities: a TriSurf alone is not enough -> tool does not run, selection kept
 select(f_surf)
 pw.entities_merge()
-check("merge refuses surfaces", pw.selection_uids() == [f_surf])
+check("merge refuses a single entity", pw.selection_uids() == [f_surf])
 
 # merge of two fluid lines (dialogs stubbed)
 l1 = add(pw.fluid_coll, "PolyLine", PolyLine, pv.Line((0, 0, 0), (1, 0, 0), resolution=2), "fl1")
@@ -93,5 +93,14 @@ n_fluid = len(pw.fluid_coll.df)
 select(l1, f_surf, l2)
 pw.entities_merge()
 check("merge of fluid lines, output in fluids", len(pw.fluid_coll.df) == n_fluid + 1)
+merged_uid = pw.fluid_coll.df["uid"].iloc[-1]
+check("merged line is PolyLine and selected", pw.fluid_coll.get_uid_topology(merged_uid) == "PolyLine" and pw.selection_uids() == [merged_uid])
+
+# merge of two TriSurfs (any PolyData topology)
+s2 = add(pw.fluid_coll, "TriSurf", TriSurf, plane, "fluid_surf_2")
+n_fluid = len(pw.fluid_coll.df)
+select(f_surf, s2)
+pw.entities_merge()
+check("merge of two TriSurfs", len(pw.fluid_coll.df) == n_fluid + 1 and pw.fluid_coll.df["topology"].iloc[-1] == "TriSurf")
 
 print("RESULT:", "FAILED" if failed else "ALL PASSED")

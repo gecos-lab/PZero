@@ -67,7 +67,7 @@ Tools read the collection with `active_collection(self)` and store their output 
 | Intersection with cross-section (output in the source collection: PolyLine/XsPolyLine → XsVertexSet, TriSurf → XsPolyLine, DEM/TSDom → DomXs, Voxet → XsVoxet) | `intersection_xs` | PolyLine/XsPolyLine, TriSurf, DEM, TSDom, Voxet in any collection; boundary lines give no output (Boundaries cannot store points); TetraSolid is a placeholder, not implemented yet |
 | Project to DEM, project to cross-section | `project_2_dem`, `project_2_xs` | Points and lines in Geology, Fluids, Backgrounds; lines in Boundaries; wells |
 | Connected parts, split multipart | `connected_parts`, `split_multipart` | PolyLine and TriSurf in any collection; DOM point clouds |
-| Merge to multipart (at least 2) | `entities_merge` | PolyLine/XsPolyLine in any collection |
+| Merge to multipart (Entities menu, at least 2; the merged entity is selected) | `entities_merge` | PolyData of one topology (VertexSet, XsVertexSet, PolyLine, XsPolyLine, TriSurf, PCDom, TSDom) in any collection; entities of other topologies than the one chosen are deselected |
 | Calculate normals (Properties menu) | `normals_calculate` → `orientation_analysis.set_normals` | Geology entities and DOMs |
 | Add / remove property | `property_add`, `property_remove` | Any entity (remove offers only properties present on all selected entities) |
 | Add / remove texture | `texture_add`, `texture_remove` | DOMs |

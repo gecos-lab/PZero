@@ -79,7 +79,8 @@ Phase 4 follow-ups included in the same commit:
   in map/cross-section views rely on them).
 - Intersection: PolyLine/XsPolyLine → XsVertexSet, TriSurf → XsPolyLine, DEM/TSDom → DomXs,
   Voxet → XsVoxet; boundary lines give no output (Boundaries cannot store points); TetraSolid
-  placeholder (future output TriSurf or XsTriSurf). Merge to multipart: lines only.
+  placeholder (future output TriSurf or XsTriSurf). Merge to multipart (Entities menu, not Weld
+  lines): any PolyData topology (points, lines, surfaces, PCDom, TSDom), one topology per merge.
 
 ## Open items
 
