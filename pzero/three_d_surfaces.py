@@ -1801,9 +1801,22 @@ def implicit_model_loop_structural(self):
 @uses_selection(topologies=["TriSurf"], cross_collection=True)
 @freeze_gui_onoff
 def surface_smoothing(
-    self, mode=0, convergence_value=1, boundary_smoothing=False, edge_smoothing=False
+    self,
+    mode=0,
+    number_of_iterations=20,
+    relaxation_factor=0.5,
+    convergence_value=0.0,
+    boundary_smoothing=True,
+    edge_smoothing=False,
 ):
-    """Smoothing tools adjust the positions of points to reduce the noise content in the surface."""
+    """Smoothing tools adjust the positions of points to reduce the noise content in the surface
+    (vtkSmoothPolyDataFilter, Laplacian smoothing).
+    number_of_iterations: maximum number of smoothing iterations.
+    relaxation_factor: fraction (0-1) of the displacement applied at each iteration; larger values
+        smooth more per iteration, but also shrink the surface more.
+    convergence_value: stop earlier when the maximum point motion of an iteration is smaller than this
+        fraction of the bounding box diagonal (0 = always run all the iterations).
+    The parameter order matches the smoothing dialog, whose values PreviewWidget passes positionally."""
     self.print_terminal("Surface Smoothing: reduce the noise of the surface")
     # Check if some vtkPolyData is selected
     if not tool_uids(self):
@@ -1817,9 +1830,13 @@ def surface_smoothing(
         if isinstance(source_coll.get_uid_vtk_obj(uid), TriSurf):
             smoother = vtkSmoothPolyDataFilter()
             smoother.SetInputData(source_coll.get_uid_vtk_obj(uid))
-            if convergence_value is None:
-                convergence_value = 1
-            smoother.SetConvergence(float(convergence_value))
+            try:
+                smoother.SetNumberOfIterations(max(1, int(float(number_of_iterations))))
+                smoother.SetRelaxationFactor(float(relaxation_factor))
+                smoother.SetConvergence(float(convergence_value or 0.0))
+            except (TypeError, ValueError):
+                self.print_terminal(" -- Wrong smoothing parameters -- ")
+                return
             smoother.SetBoundarySmoothing(boundary_smoothing)
             smoother.SetFeatureEdgeSmoothing(edge_smoothing)
             smoother.Update()

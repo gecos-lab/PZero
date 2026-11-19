@@ -2076,9 +2076,12 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     @uses_selection(topologies=["TriSurf"], cross_collection=True)
     def smooth_dialog(self):
+        # The order of the fields is the order of the parameters of surface_smoothing.
         input_dict = {
-            "convergence_value": ["Convergence value:", 1],
-            "boundary_smoothing": ["Boundary smoothing", False],
+            "number_of_iterations": ["Number of iterations:", 20],
+            "relaxation_factor": ["Relaxation factor (0-1):", 0.5],
+            "convergence_value": ["Convergence (0 = run all iterations):", 0.0],
+            "boundary_smoothing": ["Boundary smoothing", True],
             "edge_smoothing": ["Edge smoothing", False],
         }
         surf_dict_updt = multiple_input_dialog(

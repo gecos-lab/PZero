@@ -103,4 +103,44 @@ select(f_surf, s2)
 pw.entities_merge()
 check("merge of two TriSurfs", len(pw.fluid_coll.df) == n_fluid + 1 and pw.fluid_coll.df["topology"].iloc[-1] == "TriSurf")
 
+
+# smoothing / subdivision / retopo preview window on a fluid TriSurf (not only geology)
+from PySide6.QtWidgets import QMainWindow  # noqa: E402
+from pzero.helpers.helper_dialogs import PreviewWidget  # noqa: E402
+
+select(f_surf)
+preview = PreviewWidget.__new__(PreviewWidget)
+QMainWindow.__init__(preview)
+preview.setupUi(preview)
+preview.parent = pw
+preview.title1, preview.title2 = "a", "b"
+preview.initialize_interactor()
+check("preview window loads a fluid TriSurf", preview.mesh is pw.fluid_coll.get_uid_vtk_obj(f_surf))
+preview.preview_plotter.close()
+
+
+# smoothing parameters exposed in the dialog: the preview passes the dialog values positionally
+import numpy as np  # noqa: E402
+from PySide6.QtWidgets import QLineEdit, QCheckBox  # noqa: E402
+from pzero.helpers.helper_dialogs import multiple_input_dialog as real_dialog  # noqa: E402
+
+rng = np.random.default_rng(0)
+noisy = pv.Plane(i_resolution=30, j_resolution=30).triangulate()
+noisy.points[:, 2] += rng.normal(0, 0.02, noisy.n_points)
+n_uid = add(pw.fluid_coll, "TriSurf", TriSurf, noisy, "noisy")
+captured = {}
+pwm.multiple_input_dialog = lambda **kw: captured.setdefault("w", real_dialog(**kw))
+pwm.PreviewWidget = lambda **kw: captured.setdefault("kw", kw)
+select(n_uid)
+pw.smooth_dialog()
+params = []
+for child in captured["w"].children():
+    if child.objectName():
+        params.append(child.text() if isinstance(child, QLineEdit) else child.isChecked() if isinstance(child, QCheckBox) else None)
+check("smoothing dialog fields in parameter order", params == ["20", "0.5", "0.0", True, False])
+smoothed = captured["kw"]["function"](pw, 1, *params)
+z_in = np.std(noisy.points[:, 2])
+z_out = np.std(pv.wrap(smoothed).points[:, 2])
+check("smoothing with dialog defaults reduces noise clearly (>40%)", z_out < 0.6 * z_in)
+
 print("RESULT:", "FAILED" if failed else "ALL PASSED")
