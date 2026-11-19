@@ -1671,8 +1671,12 @@ class PreviewWidget(QMainWindow, Ui_PreviewWindow):
             "black"
         )  # background color - could be made interactive in the future
         self.PreviewLayout.addWidget(self.preview_plotter.interactor)
-        uid = self.parent.selected_uids[0]
-        self.mesh = self.parent.geol_coll.get_uid_vtk_obj(uid)
+        # The preview shows the first entity the tool works on, from its own collection
+        # (selected entities can belong to different collections).
+        from pzero.helpers.helper_functions import entity_collection, tool_uids
+
+        uid = tool_uids(self.parent)[0]
+        self.mesh = entity_collection(self.parent, uid).get_uid_vtk_obj(uid)
 
         self.preview_plotter.subplot(0, 0)
         self.preview_plotter.add_text(self.title1, font_size=10)
