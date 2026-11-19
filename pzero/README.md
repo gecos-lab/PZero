@@ -36,6 +36,7 @@ The selection of entities is stored once, at project level, in `ProjectWindow` (
 
 - selecting in a table, in a view tree or by picking in a view updates all the others;
 - selecting from a view or a view tree brings the table tab of that collection to front;
+- Ctrl+A selects all (in a table, a tree, or the entities shown in a view, with the focus in its graphics), Ctrl+Shift+A deselects all (Cmd on macOS);
 - selected entities are highlighted in all VTK views (yellow outer border for surfaces, DEMs/DOMs and images, yellow lines and points, bounding box for point clouds and volumes);
 - while a tool is running (`freeze_gui_on` / `freeze_gui_onoff`), selection by the user in tables and trees is frozen.
 
@@ -51,13 +52,15 @@ Tools that work on selected entities are decorated with `@uses_selection(...)` (
 - all other entities are **deselected**, and a message reports it; the tab of the collection of the last used entity is brought to front;
 - if not enough usable entities are selected, the tool does not run and the selection is unchanged;
 - for tools running in a view, entities not shown in that view are not usable;
+- new entities created by split tools (split line by line, split at point, split surface, split multipart) and newly drawn lines are added to the selection; all parts of a split line are named with the `_split` suffix, and a welded line with `_weld`;
 - tools whose inputs and outputs must belong to one cross-section (`same_parent=True`: merge to multipart, weld, snap) use only entities with the `parent_uid` of the last selected usable entity.
 
 Outputs are stored in the collection of their input, with metadata copied by `derived_entity_dict()` / `entity_metadata_input_dict()` only for the fields that collection has (e.g. boundaries have no role and feature).
 
 | Tools | Function(s) | Collections per run | Accepts |
 |---|---|---|---|
-| Line editing in 2D views: edit, extend, split at point, copy parallel/kink/similar (one line) | `two_d_lines.start_checked_line_tool` | Mixed | Last selected PolyLine/XsPolyLine in Geology, Fluids or Backgrounds |
+| Line editing in 2D views: edit, extend, split at point (one line) | `two_d_lines.start_checked_line_tool` | Mixed | Last selected PolyLine/XsPolyLine in Geology, Fluids or Backgrounds |
+| Copy parallel / kink / similar (one copy of each selected line, in its collection; the copies replace the lines in the selection) | `two_d_lines.copy_parallel`, `copy_kink`, `copy_similar` | Mixed | PolyLine/XsPolyLine in Geology, Fluids or Backgrounds; in cross-section views only lines of that section, in map views lines of any section |
 | Line editing in 2D views: sort, move, rotate, resample, simplify | `two_d_lines.start_checked_line_tool` | Mixed | PolyLine/XsPolyLine in Geology, Fluids or Backgrounds |
 | Split line by line (the last selected line cuts the others) | `two_d_lines.split_line_line` | Mixed | PolyLine/XsPolyLine in Geology, Fluids or Backgrounds; pieces stay in the collection of their line |
 | Snap | `two_d_lines.snap_line` | Mixed | PolyLine/XsPolyLine in Geology, Fluids or Backgrounds, of the same cross-section (parent_uid) as the last selected line |
@@ -82,7 +85,7 @@ Outputs are stored in the collection of their input, with metadata copied by `de
 | Point-cloud calibration in the 3D view | `calibration_pc` | One | DOM point clouds (PCDom) |
 | Planar facets from PC clusters (Interpolation menu): one planar facet per ClusterId, output in Geology | `point_clouds.facets_pc` | One | Last selected DOM point cloud (PCDom) with ClusterId |
 | Decimate point cloud (project window) | `decimate_pc_dialog` | One | DOM point clouds (PCDom) |
-| Remove, clone (each clone in its own collection), info, export VTK, CRS transform | `entity_remove`, `entity_clone`, `show_info_on_entities`, `export_vtk`, `CRS_transform_selected` | Mixed | Any entity |
+| Remove, clone (any number and type of entities, including cross-sections; each clone in its own collection; the clones replace the originals in the selection), info, export VTK, CRS transform | `entity_remove`, `entity_clone`, `show_info_on_entities`, `export_vtk`, `CRS_transform_selected` | Mixed | Any entity |
 | Export CSV | `export_csv` | One | Geology entities |
 | Export CAD | `export_cad` | — | Not a selection tool (exports collections; GOCAD and OBJ use the selection of the tab in front) |
 

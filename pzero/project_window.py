@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QWidget,
 )
-from PySide6.QtGui import QAction, QDesktopServices, QPixmap
+from PySide6.QtGui import QAction, QDesktopServices, QPixmap, QKeySequence, QShortcut
 from PySide6.QtCore import Qt, QTimer, QItemSelection, QItemSelectionModel
 
 import numpy as np
@@ -321,6 +321,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.signals.entities_removed.connect(self._prune_selection)
         # Project tables mirror the store (see connect_table_selection for the other direction).
         self.signals.selection_modified.connect(self._on_selection_modified_tables)
+        # Ctrl+Shift+A (Cmd+Shift+A on macOS) deselects all in a table (Ctrl+A, select all, is built in).
+        self._deselect_all_shortcuts = []
+        for table_view in self.table_view_collection_dict:
+            shortcut = QShortcut(QKeySequence("Ctrl+Shift+A"), table_view)
+            shortcut.setContext(Qt.WidgetShortcut)
+            shortcut.activated.connect(table_view.clearSelection)
+            self._deselect_all_shortcuts.append(shortcut)
 
         # dictionary with table (key) vs. collection (value)
         self.tab_collection_dict = {
@@ -1048,7 +1055,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 return parent if isinstance(parent, str) else ""
 
             target_parent = parent_of(chosen[-1])
+            n_before_parent_filter = len(chosen)
             chosen = [uid for uid in chosen if parent_of(uid) == target_parent]
+            if len(chosen) < n_before_parent_filter:
+                self.print_terminal(
+                    f" -- {tool_label}: inputs and outputs must belong to one cross-section: "
+                    f"{n_before_parent_filter - len(chosen)} entities of other cross-sections "
+                    f"(or not on a cross-section) are not used -- "
+                )
         if max_selected:
             chosen = chosen[-max_selected:]
         if cross_collection:
@@ -1067,6 +1081,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.print_terminal(
                 f" -- {tool_label}: select at least {min_selected} {needed}"
                 + (" shown in this view" if view is not None else "")
+                + (" belonging to the same cross-section" if same_parent else "")
                 + " -- "
             )
             return None
@@ -1328,6 +1343,10 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     move=False,
                 )
             )
+        # The clones replace the originals in the selection.
+        clone_uids = [uid for report in reports for uid in report.get("added_uids", []) if uid]
+        if clone_uids:
+            self.set_selection(uids=clone_uids, mode="replace", source=self)
         return reports[0] if len(reports) == 1 else reports
 
     @uses_selection(valid=None, cross_collection=True)
@@ -2443,7 +2462,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         vtk_out_dict["uid"] = None
                         vtk_out_dict["name"] = f"{name}_{i}"
                         vtk_out_dict["vtk_obj"] = vtk_object
-                        collection.add_entity_from_dict(entity_dict=vtk_out_dict)
+                        part_uid = collection.add_entity_from_dict(entity_dict=vtk_out_dict)
+                        # Parts replace the removed multipart entity in the selection.
+                        if part_uid:
+                            self.set_selection(
+                                uids=[part_uid],
+                                mode="add",
+                                collection=collection.collection_name,
+                                source=self,
+                            )
                     collection.remove_entity(uid)
                     split_any = True
                 elif isinstance(collection.get_uid_vtk_obj(uid), PCDom):
@@ -2474,7 +2501,15 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         vtk_out_dict["uid"] = None
                         vtk_out_dict["name"] = f"{name}_{i}"
                         vtk_out_dict["vtk_obj"] = vtk_object
-                        collection.add_entity_from_dict(entity_dict=vtk_out_dict)
+                        part_uid = collection.add_entity_from_dict(entity_dict=vtk_out_dict)
+                        # Parts replace the removed multipart entity in the selection.
+                        if part_uid:
+                            self.set_selection(
+                                uids=[part_uid],
+                                mode="add",
+                                collection=collection.collection_name,
+                                source=self,
+                            )
                     collection.remove_entity(uid)
                     split_any = True
 

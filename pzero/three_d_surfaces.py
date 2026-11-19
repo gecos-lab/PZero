@@ -3583,7 +3583,12 @@ def split_surf(self):
 
             obj_dict["vtk_obj"] = final_obj
 
-            source_coll.add_entity_from_dict(obj_dict)
+            new_uid = source_coll.add_entity_from_dict(obj_dict)
+            # New entities (split surface, intersection line) join the selection.
+            if new_uid:
+                self.set_selection(
+                    uids=[new_uid], mode="add", collection=source_coll.collection_name, source=self
+                )
 
             # Calculate connectivity for the splitted surface
 
@@ -3602,7 +3607,12 @@ def split_surf(self):
 
             obj_dict["vtk_obj"] = line_intersection
 
-            source_coll.add_entity_from_dict(obj_dict)
+            new_uid = source_coll.add_entity_from_dict(obj_dict)
+            # New entities (split surface, intersection line) join the selection.
+            if new_uid:
+                self.set_selection(
+                    uids=[new_uid], mode="add", collection=source_coll.collection_name, source=self
+                )
             source_coll.append_uid_property(
                 uid=obj_dict["uid"], property_name="RegionId", property_components=1
             )

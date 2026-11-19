@@ -35,7 +35,7 @@ from .helpers.helper_dialogs import (
     message_dialog,
 )
 from .helpers.helper_widgets import Editor, Tracer, Tracer3D
-from .helpers.helper_functions import entity_collection
+from .helpers.helper_functions import entity_collection, uid_metadata
 from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 from .entities_factory import PolyLine, XsPolyLine
 
@@ -70,7 +70,15 @@ def draw_line(self):
         )
         if traced_pld.GetNumberOfPoints() > 0:
             input_dict["vtk_obj"].ShallowCopy(traced_pld)
-            source_coll.add_entity_from_dict(input_dict)
+            new_uid = source_coll.add_entity_from_dict(input_dict)
+            # The newly drawn line joins the selection.
+            if new_uid:
+                self.parent.set_selection(
+                    uids=[new_uid],
+                    mode="add",
+                    collection=source_coll.collection_name,
+                    source=self,
+                )
         tracer.EnabledOff()
         # self.enable_actions()
         freeze_gui_off(self)
@@ -255,7 +263,15 @@ def draw_line_3d(self):
 
         if traced_pld and traced_pld.GetNumberOfPoints() > 0:
             line_dict["vtk_obj"].ShallowCopy(traced_pld)
-            source_coll.add_entity_from_dict(line_dict)
+            new_uid = source_coll.add_entity_from_dict(line_dict)
+            # The newly drawn line joins the selection.
+            if new_uid:
+                self.parent.set_selection(
+                    uids=[new_uid],
+                    mode="add",
+                    collection=source_coll.collection_name,
+                    source=self,
+                )
             self.print_terminal(f"✓ Created line with {len(tracer_3d.points)} points")
 
         # Clean up
@@ -368,6 +384,17 @@ def _get_editable_line_source_coll(self, selected_uids=None, min_selected=1):
         )
         return None
     return source_coll
+
+
+def _suffixed_name(name, suffix):
+    """Name of an output entity: suffix is appended once (not again when the tool is repeated)."""
+    name = str(name)
+    return name if name.endswith(suffix) else name + suffix
+
+
+def _split_name(name):
+    """Name of a part produced by a split."""
+    return _suffixed_name(name, "_split")
 
 
 def start_checked_line_tool(
@@ -710,11 +737,10 @@ def split_line_line(self):
         for line in split_lines.geoms:
             # Create empty dictionary for the output lines.
             new_line = deepcopy(source_coll.entity_dict)
-            new_line["name"] = (
+            new_line["name"] = _split_name(
                 source_coll.df.loc[
                     source_coll.df["uid"] == current_uid_paper, "name"
                 ].values[0]
-                + "_split"
             )
             new_line["topology"] = source_coll.df.loc[
                 source_coll.df["uid"] == current_uid_paper, "topology"
@@ -755,15 +781,31 @@ def split_line_line(self):
                     source_coll.replace_vtk(
                         uid=current_uid_paper, vtk_object=new_line["vtk_obj"]
                     )
+                    # The original line keeps the first part: it is a split part too.
+                    source_coll.set_uid_name(
+                        uid=current_uid_paper,
+                        name=_split_name(source_coll.get_uid_name(current_uid_paper)),
+                    )
+                    source_coll.modelReset.emit()
+                    self.parent.signals.metadata_modified.emit(
+                        [current_uid_paper], source_coll
+                    )
                     self.parent.signals.geom_modified.emit(
                         [current_uid_paper], source_coll
                     )
                     replace = 0
                     uids.append(current_uid_paper)
                 else:
-                    # Create entity from the dictionary
+                    # Create entity from the dictionary; new pieces join the selection.
                     uid = source_coll.add_entity_from_dict(new_line)
                     uids.append(uid)
+                    if uid:
+                        self.parent.set_selection(
+                            uids=[uid],
+                            mode="add",
+                            collection=source_coll.collection_name,
+                            source=self,
+                        )
                 del new_line["vtk_obj"]
             else:
                 self.print_terminal(
@@ -784,9 +826,8 @@ def split_line_existing_point(self):
         # Create empty dictionary for the output lines
         new_line_1 = deepcopy(source_coll.entity_dict)
         new_line_2 = deepcopy(source_coll.entity_dict)
-        new_line_2["name"] = (
+        new_line_2["name"] = _split_name(
             source_coll.df.loc[source_coll.df["uid"] == uid, "name"].values[0]
-            + "_split"
         )
         new_line_2["topology"] = source_coll.df.loc[
             source_coll.df["uid"] == uid, "topology"
@@ -876,12 +917,24 @@ def split_line_existing_point(self):
         # Replace VTK object
         if new_line_1["vtk_obj"].points_number > 0:
             source_coll.replace_vtk(uid=uid, vtk_object=new_line_1["vtk_obj"])
+            # The original line keeps the first part: it is a split part too.
+            source_coll.set_uid_name(uid=uid, name=_split_name(source_coll.get_uid_name(uid)))
+            source_coll.modelReset.emit()
+            self.parent.signals.metadata_modified.emit([uid], source_coll)
             del new_line_1
         else:
             self.print_terminal("Empty object")
         # Create entity from the dictionary
         if new_line_2["vtk_obj"].points_number > 0:
-            source_coll.add_entity_from_dict(new_line_2)
+            # The second part is a new entity: it joins the selection.
+            new_uid = source_coll.add_entity_from_dict(new_line_2)
+            if new_uid:
+                self.parent.set_selection(
+                    uids=[new_uid],
+                    mode="add",
+                    collection=source_coll.collection_name,
+                    source=self,
+                )
             del new_line_2
         else:
             self.print_terminal("Empty object")
@@ -945,7 +998,7 @@ def merge_lines(self):
     new_line = deepcopy(source_coll.entity_dict)
     # Populate metadata from first selected line.
     source_uid = in_uids[0]
-    new_line["name"] = source_coll.get_uid_name(source_uid)
+    new_line["name"] = _suffixed_name(source_coll.get_uid_name(source_uid), "_weld")
     new_line["topology"] = source_coll.get_uid_topology(source_uid)
     new_line["role"] = source_coll.get_uid_role(source_uid)
     new_line["feature"] = source_coll.get_uid_feature(source_uid)
@@ -1669,329 +1722,195 @@ def simplify_line(self):
     # Selection is kept after this tool (project-level selection).
 
 
+def _line_copy_dict(self, source_coll, input_uid, out_name):
+    """Entity dictionary for a copy of input_uid, in the same collection, with the metadata of that
+    collection schema; the copy is a PolyLine in map views and a XsPolyLine in cross-section views."""
+    line_dict = deepcopy(source_coll.entity_dict)
+    line_dict["name"] = out_name
+    for key in ("role", "feature", "scenario"):
+        if key in line_dict:
+            line_dict[key] = uid_metadata(source_coll, input_uid, key, line_dict[key])
+    if isinstance(self, ViewMap):
+        line_dict["vtk_obj"] = PolyLine()
+        line_dict["topology"] = "PolyLine"
+    elif isinstance(self, ViewXsection):
+        line_dict["vtk_obj"] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
+        line_dict["topology"] = "XsPolyLine"
+        line_dict["parent_uid"] = self.this_x_section_uid
+    else:
+        return None
+    return line_dict
+
+
+def _add_line_copy(self, source_coll, line_dict, out_xyz):
+    """Store a line copy in source_coll and orient it; returns its uid, or None if it is empty."""
+    line_dict["vtk_obj"].points = out_xyz
+    line_dict["vtk_obj"].auto_cells()
+    if line_dict["vtk_obj"].points_number <= 0:
+        self.print_terminal(f" -- {line_dict['name']}: empty object -- ")
+        return None
+    output_uid = source_coll.add_entity_from_dict(line_dict)
+    left_right(self, uid=output_uid, source_coll=source_coll)
+    return output_uid
+
+
+def _offset_line_copy(self, input_uid, distance, suffix, **offset_options):
+    """Copy of input_uid offset to the left by distance with Shapely parallel_offset (in the view
+    plane), stored in the collection of input_uid. Returns the uid of the copy, or None."""
+    source_coll = entity_collection(self, input_uid)
+    vtk_obj = source_coll.get_uid_vtk_obj(input_uid) if source_coll is not None else None
+    if vtk_obj is None or vtk_obj.points_number <= 0:
+        self.print_terminal(f" -- {input_uid}: invalid VTK object -- ")
+        return None
+    in_line_name = source_coll.get_uid_name(input_uid)
+    line_dict = _line_copy_dict(
+        self, source_coll, input_uid, in_line_name + suffix + "%d" % distance
+    )
+    if line_dict is None:
+        self.print_terminal(" -- Copies can be made in map and cross-section views only -- ")
+        return None
+    if isinstance(self, ViewXsection):
+        inU, inV = self.parent.xsect_coll.world2plane(
+            section_uid=self.this_x_section_uid,
+            X=vtk_obj.points_X,
+            Y=vtk_obj.points_Y,
+            Z=vtk_obj.points_Z,
+        )
+    else:
+        inU, inV = vtk_obj.points_X, vtk_obj.points_Y
+    shp_line_in = shp_linestring(np_column_stack((inU, inV)))
+    if not shp_line_in.is_simple:
+        self.print_terminal(f" -- {in_line_name}: polyline is not simple, it self-intersects -- ")
+        return None
+    shp_line_out = shp_line_in.parallel_offset(distance, "left", **offset_options)
+    if shp_line_out.is_empty:
+        self.print_terminal(f" -- {in_line_name}: empty geometry after parallel offset -- ")
+        return None
+    if shp_line_out.geom_type == "LineString":
+        out_line = shp_line_out
+    elif hasattr(shp_line_out, "geoms"):
+        line_parts = [
+            geom
+            for geom in shp_line_out.geoms
+            if geom.geom_type == "LineString" and len(geom.coords) >= 2
+        ]
+        if not line_parts:
+            self.print_terminal(f" -- {in_line_name}: invalid offset geometry -- ")
+            return None
+        out_line = max(line_parts, key=lambda geom: geom.length)
+    else:
+        self.print_terminal(f" -- {in_line_name}: unsupported offset geometry -- ")
+        return None
+    outUV = np_array(out_line.coords)
+    outU, outV = outUV[:, 0], outUV[:, 1]
+    if isinstance(self, ViewXsection):
+        outX, outY, outZ = self.parent.xsect_coll.plane2world(
+            self.this_x_section_uid, outU, outV
+        )
+    else:
+        outX, outY, outZ = outU, outV, np_zeros(np_shape(outU))
+    return _add_line_copy(self, source_coll, line_dict, np_column_stack((outX, outY, outZ)))
+
+
+def _select_line_copies(self, output_uids):
+    """The copies replace the input lines in the selection."""
+    output_uids = [uid for uid in output_uids if uid]
+    if output_uids:
+        self.parent.set_selection(uids=output_uids, mode="replace", source=self)
+    else:
+        self.print_terminal(" -- No copy created -- ")
+
+
 @freeze_gui_onoff
 def copy_parallel(self):
-    # this must be done per-part_______________________________________________________
-    """Parallel folding. Create a line copied and translated from a template line using Shapely.
+    """Parallel folding. Create a copy of each selected line, translated with Shapely (rounded joins).
     Since lines are oriented left-to-right and bottom-to-top, and here we copy a line to the left,
-    a positive distance creates a line shifted upwards and to the left."""
-    self.print_terminal("Copy Parallel. Create a line copied and translated.")
-    # Terminate running event loops
-
-    source_coll = _get_editable_line_source_coll(
-        self, selected_uids=self.selected_uids[:1]
-    )
-    if source_coll is None:
+    a positive distance creates a line shifted upwards and to the left. Each copy is stored in the
+    collection of its line, and the copies replace the lines in the selection."""
+    self.print_terminal("Copy Parallel. Create lines copied and translated.")
+    if _get_editable_line_source_coll(self) is None:
         return
-    # If more than one line is selected, keep the first."""
-    input_uid = self.selected_uids[0]
-    # -----IN THE FUTURE add a test to check that the selected feature is a geological feature-----
-    # Editing loop
     distance = input_one_value_dialog(
         parent=self,
-        title="Line from template",
+        title="Lines from template",
         label="Insert distance",
         default_value=100,
     )
     if distance is None:
-        # # Un-Freeze QT interface
-        # self.enable_actions()
         return
-
-    in_line_name = source_coll.df.loc[
-        source_coll.df["uid"] == input_uid, "name"
-    ].values[0]
-    out_line_name = in_line_name + "_para_" + "%d" % distance
-
-    # Create empty dictionary for the output line and set name and role.
-    # -----IN THE FUTURE see if other metadata should be automatically set.
-    line_dict = deepcopy(source_coll.entity_dict)
-    line_dict["name"] = out_line_name
-    line_dict["role"] = source_coll.df.loc[
-        source_coll.df["uid"] == input_uid, "role"
-    ].values[0]
-    line_dict["feature"] = source_coll.get_uid_feature(self.selected_uids[0])
-    line_dict["scenario"] = source_coll.get_uid_scenario(self.selected_uids[0])
-    if isinstance(self, ViewMap):
-        # if isinstance(self, (ViewMap, ViewMap)):
-        inU = source_coll.get_uid_vtk_obj(input_uid).points_X
-        inV = source_coll.get_uid_vtk_obj(input_uid).points_Y
-
-        line_dict["vtk_obj"] = PolyLine()
-        line_dict["topology"] = "PolyLine"
-    # elif isinstance(self, (ViewXsection, ViewXsection)):
-    elif isinstance(self, ViewXsection):
-        in_vtk_obj = source_coll.get_uid_vtk_obj(input_uid)
-        inU, inV = self.parent.xsect_coll.world2plane(
-            section_uid=self.this_x_section_uid,
-            X=in_vtk_obj.points_X,
-            Y=in_vtk_obj.points_Y,
-            Z=in_vtk_obj.points_Z,
-        )
-        line_dict["vtk_obj"] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
-        line_dict["topology"] = "XsPolyLine"
-        line_dict["parent_uid"] = self.this_x_section_uid
-
-    inUV = np_column_stack((inU, inV))
-    # Deselect input line.
-    self.clear_selection()
-    # self.parent.geol_coll.signals.geom_modified.emit([input_uid])  # emit uid as list to force redraw()
-    # Run the Shapely function.
-    shp_line_in = shp_linestring(inUV)
-    # print(shp_line_in)
-    # print("shp_line_in.parallel_offset")
-    if shp_line_in.is_simple:
-        shp_line_out = shp_line_in.parallel_offset(
-            distance, "left", resolution=16, join_style=1
-        )  # parallel folds are obtained with join_style=1
-        if shp_line_out.is_empty:
-            self.print_terminal("Empty geometry after parallel offset")
-            return
-        if shp_line_out.geom_type == "LineString":
-            out_line = shp_line_out
-        elif hasattr(shp_line_out, "geoms"):
-            line_parts = [
-                geom
-                for geom in shp_line_out.geoms
-                if geom.geom_type == "LineString" and len(geom.coords) >= 2
-            ]
-            if not line_parts:
-                self.print_terminal("Invalid offset geometry")
-                return
-            out_line = max(line_parts, key=lambda geom: geom.length)
-        else:
-            self.print_terminal("Unsupported offset geometry")
-            return
-
-        outUV = np_array(out_line.coords)
-        # Un-stack output coordinates and write them to the empty dictionary.
-        outU = outUV[:, 0]
-        outV = outUV[:, 1]
-    else:
-        self.print_terminal("Polyline is not simple, it self-intersects")
-        for action in self.findChildren(QAction):
-            return
-    if isinstance(self, ViewMap):
-        # if isinstance(self, (ViewMap, ViewMap)):
-        outX = outU
-        outY = outV
-        outZ = np_zeros(np_shape(outX))
-    # elif isinstance(self, (ViewXsection, ViewXsection)):
-    elif isinstance(self, ViewXsection):
-        outX, outY, outZ = self.parent.xsect_coll.plane2world(
-            self.this_x_section_uid, outU, outV
-        )
-    # Stack coordinates in two-columns matrix and write to vtk object.
-    self.print_terminal("outXYZ = np_column_stack((outX, outY, outZ))")
-    outXYZ = np_column_stack((outX, outY, outZ))
-
-    line_dict["vtk_obj"].points = outXYZ
-    line_dict["vtk_obj"].auto_cells()
-    # Create entity from the dictionary and run left_right.
-    if line_dict["vtk_obj"].points_number > 0:
-        output_uid = source_coll.add_entity_from_dict(line_dict)
-        left_right(self, uid=output_uid, source_coll=source_coll)
-    else:
-        self.print_terminal("Empty object")
+    output_uids = [
+        _offset_line_copy(self, uid, distance, "_para_", resolution=16, join_style=1)
+        for uid in self.selected_uids
+    ]  # parallel folds are obtained with join_style=1
+    _select_line_copies(self, output_uids)
 
 
 @freeze_gui_onoff
 def copy_kink(self):
-    """Kink folding. Create a line copied and translated from a template line using Shapely.
+    """Kink folding. Create a copy of each selected line, translated with Shapely (mitred joins).
     Since lines are oriented left-to-right and bottom-to-top, and here we copy a line to the left,
-    a positive distance creates a line shifted upwards and to the left."""
-    self.print_terminal("Copy Kink. Create a line copied and translated.")
-
-    source_coll = _get_editable_line_source_coll(
-        self, selected_uids=self.selected_uids[:1]
-    )
-    if source_coll is None:
+    a positive distance creates a line shifted upwards and to the left. Each copy is stored in the
+    collection of its line, and the copies replace the lines in the selection."""
+    self.print_terminal("Copy Kink. Create lines copied and translated.")
+    if _get_editable_line_source_coll(self) is None:
         return
-
-    # If more than one line is selected, keep the first.
-    input_uid = self.selected_uids[0]
-
-    vtk_obj = source_coll.get_uid_vtk_obj(input_uid)
-    if vtk_obj is None or vtk_obj.points_number <= 0:
-        self.print_terminal(" -- Oggetto VTK non valido -- ")
-        return
-
-    # Editing loop.
     distance = input_one_value_dialog(
         parent=self,
-        title="Line from template",
+        title="Lines from template",
         label="Insert distance",
         default_value=100,
     )
     if distance is None:
         return
-
-    in_line_name = source_coll.df.loc[
-        source_coll.df["uid"] == input_uid, "name"
-    ].values[0]
-    out_line_name = in_line_name + "_kink_" + "%d" % distance
-
-    # Create empty dictionary for the output line and set name and role.
-    line_dict = deepcopy(source_coll.entity_dict)
-    line_dict["name"] = out_line_name
-    line_dict["role"] = source_coll.df.loc[
-        source_coll.df["uid"] == input_uid, "role"
-    ].values[0]
-    line_dict["feature"] = source_coll.get_uid_feature(self.selected_uids[0])
-    line_dict["scenario"] = source_coll.get_uid_scenario(self.selected_uids[0])
-
-    try:
-        if isinstance(self, ViewMap):
-            line_dict["vtk_obj"] = PolyLine()
-            line_dict["topology"] = "PolyLine"
-            inU = vtk_obj.points_X
-            inV = vtk_obj.points_Y
-        elif isinstance(self, ViewXsection):
-            line_dict["vtk_obj"] = XsPolyLine(
-                self.this_x_section_uid, parent=self.parent
+    output_uids = []
+    for uid in self.selected_uids:
+        try:
+            # kink folds are obtained with join_style=2, mitre_limit=10.0
+            output_uids.append(
+                _offset_line_copy(
+                    self, uid, distance, "_kink_", resolution=16, join_style=2, mitre_limit=10.0
+                )
             )
-            line_dict["topology"] = "XsPolyLine"
-            line_dict["parent_uid"] = self.this_x_section_uid
-            inU, inV = self.parent.xsect_coll.world2plane(
-                section_uid=self.this_x_section_uid,
-                X=vtk_obj.points_X,
-                Y=vtk_obj.points_Y,
-                Z=vtk_obj.points_Z,
-            )
-
-        # Stack coordinates in two-columns matrix
-        inUV = np_column_stack((inU, inV))
-
-        # Deselect input line.
-        self.clear_selection()
-        self.parent.signals.geom_modified.emit([input_uid], source_coll)
-
-        # Run the Shapely function.
-        shp_line_in = shp_linestring(inUV)
-        if not shp_line_in.is_simple:
-            self.print_terminal("Polyline is not simple, it self-intersects")
-            return
-
-        shp_line_out = shp_line_in.parallel_offset(
-            distance, "left", resolution=16, join_style=2, mitre_limit=10.0
-        )  # kink folds are obtained with join_style=2, mitre_limit=10.0
-
-        if shp_line_out.is_empty:
-            self.print_terminal("Empty geometry after parallel offset")
-            return
-        if shp_line_out.geom_type == "LineString":
-            out_line = shp_line_out
-        elif hasattr(shp_line_out, "geoms"):
-            line_parts = [
-                geom
-                for geom in shp_line_out.geoms
-                if geom.geom_type == "LineString" and len(geom.coords) >= 2
-            ]
-            if not line_parts:
-                self.print_terminal("Invalid offset geometry")
-                return
-            out_line = max(line_parts, key=lambda geom: geom.length)
-        else:
-            self.print_terminal("Unsupported offset geometry")
-            return
-
-        outUV = np_array(out_line.coords)
-        outU = outUV[:, 0]
-        outV = outUV[:, 1]
-
-        if isinstance(self, ViewMap):
-            outX = outU
-            outY = outV
-            outZ = np_zeros(np_shape(outX))
-        elif isinstance(self, ViewXsection):
-            outX, outY, outZ = self.parent.xsect_coll.plane2world(
-                self.this_x_section_uid, outU, outV
-            )
-
-        # Stack coordinates in two-columns matrix and write to vtk object.
-        outXYZ = np_column_stack((outX, outY, outZ))
-        line_dict["vtk_obj"].points = outXYZ
-        line_dict["vtk_obj"].auto_cells()
-
-        # Create entity from the dictionary and run left_right.
-        if line_dict["vtk_obj"].points_number > 0:
-            output_uid = source_coll.add_entity_from_dict(line_dict)
-            left_right(self, uid=output_uid, source_coll=source_coll)
-        else:
-            self.print_terminal("Empty object")
-
-    except Exception as e:
-        self.print_terminal(f"Error: {str(e)}")
+        except Exception as e:
+            self.print_terminal(f"Error: {str(e)}")
+    _select_line_copies(self, output_uids)
 
 
 def copy_similar(self, vector):
-    # this must be done per-part_______________________________________________________
-    """Similar folding. Create a line copied and translated from a template line.
-    Does not need U,V coordinates since the translation vector is already in world coords
-    """
-    self.print_terminal("Copy Similar. Create a line copied and translated.")
-    # Terminate running event loops
-    # self.stop_event_loops()
-    source_coll = _get_editable_line_source_coll(
-        self, selected_uids=self.selected_uids[:1]
-    )
-    if source_coll is None:
+    """Similar folding. Create a copy of each selected line translated by the vector drawn with the
+    mouse (in world coordinates). Each copy is stored in the collection of its line, and the copies
+    replace the lines in the selection."""
+    self.print_terminal("Copy Similar. Create lines copied and translated.")
+    if _get_editable_line_source_coll(self) is None:
         freeze_gui_off(self)
         return
-    # If more than one line is selected, keep the first.
-    # We can switch to multiple entities in the future ------------------------------------------------
-    input_uid = self.selected_uids[0]
-    # ----IN THE FUTURE add a test to check that the selected feature is a geological feature
-    # Create empty dictionary for the output line and set name and role.
-    # IN THE FUTURE see if other metadata should be automatically set.
-    line_dict = deepcopy(source_coll.entity_dict)
-    line_dict["role"] = source_coll.df.loc[
-        source_coll.df["uid"] == input_uid, "role"
-    ].values[0]
-    line_dict["feature"] = source_coll.get_uid_feature(self.selected_uids[0])
-    line_dict["scenario"] = source_coll.get_uid_scenario(self.selected_uids[0])
-    if isinstance(self, ViewMap):
-        line_dict["vtk_obj"] = PolyLine()
-        line_dict["topology"] = "PolyLine"
-    elif isinstance(self, ViewXsection):
-        line_dict["vtk_obj"] = XsPolyLine(self.this_x_section_uid, parent=self.parent)
-        line_dict["topology"] = "XsPolyLine"
-        line_dict["parent_uid"] = self.this_x_section_uid
-    # Get coordinates of input line.
-    inX = source_coll.get_uid_vtk_obj(input_uid).points_X
-    inY = source_coll.get_uid_vtk_obj(input_uid).points_Y
-    inZ = source_coll.get_uid_vtk_obj(input_uid).points_Z
-    # Get similar folding vector.
     if vector.length == 0:
         self.print_terminal("Zero-length vector")
         freeze_gui_off(self)
         return
-
-    # Create output line.
-    outX = inX + vector.deltas[0]
-    outY = inY + vector.deltas[1]
-    outZ = inZ + vector.deltas[2]
-    # Stack coordinates in two-columns matrix and write to vtk object.
-    outXYZ = np_column_stack((outX, outY, outZ))
-    line_dict["vtk_obj"].points = outXYZ
-    line_dict["vtk_obj"].auto_cells()
-    # Set output line name.
-    in_line_name = source_coll.df.loc[
-        source_coll.df["uid"] == input_uid, "name"
-    ].values[0]
     distance = vector.length
-    out_line_name = f"{in_line_name}_simi_{round(distance, 2)}"
-
-    line_dict["name"] = out_line_name
-    # Create entity from the dictionary and run left_right.
-    output_uid = source_coll.add_entity_from_dict(line_dict)
-    left_right(self, uid=output_uid, source_coll=source_coll)
-    # Deselect input line.
-    if line_dict["vtk_obj"].points_number > 0:
-        self.clear_selection()
-        # self.parent.geol_coll.signals.geom_modified.emit([input_uid])  # emit uid as list to force redraw()
-    else:
-        self.print_terminal("Empty object")
+    output_uids = []
+    for input_uid in self.selected_uids:
+        source_coll = entity_collection(self, input_uid)
+        vtk_obj = source_coll.get_uid_vtk_obj(input_uid)
+        line_dict = _line_copy_dict(
+            self,
+            source_coll,
+            input_uid,
+            f"{source_coll.get_uid_name(input_uid)}_simi_{round(distance, 2)}",
+        )
+        if line_dict is None:
+            self.print_terminal(" -- Copies can be made in map and cross-section views only -- ")
+            break
+        out_xyz = np_column_stack(
+            (
+                vtk_obj.points_X + vector.deltas[0],
+                vtk_obj.points_Y + vector.deltas[1],
+                vtk_obj.points_Z + vector.deltas[2],
+            )
+        )
+        output_uids.append(_add_line_copy(self, source_coll, line_dict, out_xyz))
+    _select_line_copies(self, output_uids)
     freeze_gui_off(self)
 
 

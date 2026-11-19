@@ -165,10 +165,12 @@ class View2D(ViewVTK):
         )
         self.menuModify.addAction(self.simplifyButton)
 
+        # Copy tools: lines of one cross-section in cross-section views (same_parent), any
+        # PolyLine/XsPolyLine in map views.
         self.copyParallelButton = QAction("Copy parallel", self)
         self.copyParallelButton.triggered.connect(
             lambda: start_checked_line_tool(
-                self, copy_parallel, max_selected=1,
+                self, copy_parallel, same_parent=bool(getattr(self, "this_x_section_uid", None)),
                 cross_collection=True,
             )
         )
@@ -177,7 +179,7 @@ class View2D(ViewVTK):
         self.copyKinkButton = QAction("Copy kink", self)
         self.copyKinkButton.triggered.connect(
             lambda: start_checked_line_tool(
-                self, copy_kink, max_selected=1,
+                self, copy_kink, same_parent=bool(getattr(self, "this_x_section_uid", None)),
                 cross_collection=True,
             )
         )
@@ -188,7 +190,7 @@ class View2D(ViewVTK):
             lambda: start_checked_line_tool(
                 self,
                 lambda view: view.vector_by_mouse(copy_similar),
-                max_selected=1,
+                same_parent=bool(getattr(self, "this_x_section_uid", None)),
                 cross_collection=True,
             )
         )

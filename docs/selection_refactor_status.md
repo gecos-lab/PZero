@@ -67,6 +67,15 @@ Phase 4 follow-ups included in the same commit:
 ## Decisions taken (do not re-discuss unless asked)
 
 - Click order everywhere; tools deselect entities they cannot use (no silent filtering).
+- New entities created by split tools (line by line, at point, surface, multipart) and newly drawn
+  lines join the selection; all parts of a split line get the `_split` suffix, the weld output `_weld` (once);
+- Ctrl+A / Ctrl+Shift+A (Cmd on macOS): select / deselect all in tables, trees and views (view:
+  entities shown, focus in the graphics); weld/snap print why lines of other sections are not used;
+  after Entities > Clone the clones replace the originals in the selection, and after copy
+  parallel/kink/similar the copies replace the input lines (no line tool clears the selection).
+- Clone works on any number and type of entities, cross-sections included; copy parallel/kink/similar
+  work on all selected lines, one copy per line: in cross-section views lines of that section only
+  (same_parent), in map views any PolyLine/XsPolyLine (no section filter).
 - Mixed collections (`cross_collection=True`) for tools that modify/derive each entity independently
   or cut entities with another one (2D line tools except weld, surface modifiers, split line/surface,
   intersection, projection, connected parts, split multipart, properties, dip/direction, remove,
