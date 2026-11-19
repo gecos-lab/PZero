@@ -26,7 +26,7 @@ from PySide6.QtCore import (
     QSignalBlocker,
     QTimer,
 )
-from PySide6.QtGui import QDrag, QActionGroup
+from PySide6.QtGui import QDrag, QActionGroup, QKeySequence, QShortcut
 
 from pzero.helpers.boundary_orientation import is_internal_boundary_property
 
@@ -281,6 +281,10 @@ class CustomTreeWidget(QTreeWidget):
         # and the tree mirrors the store with set_selection_from_collection (called by the view).
         self.selectionModel().selectionChanged.connect(self.on_tree_selection_changed)
         self.itemClicked.connect(self.on_item_clicked)
+        # Ctrl+Shift+A (Cmd+Shift+A on macOS) deselects all (Ctrl+A, select all, is built in).
+        self._deselect_all_shortcut = QShortcut(QKeySequence("Ctrl+Shift+A"), self)
+        self._deselect_all_shortcut.setContext(Qt.WidgetShortcut)
+        self._deselect_all_shortcut.activated.connect(self.clearSelection)
 
         # Show the current project selection (populate_tree did it already, this is just to be sure)
         self.set_selection_from_collection()

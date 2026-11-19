@@ -73,6 +73,8 @@ n_g, n_b = len(pw.geol_coll.df), len(pw.boundary_coll.df)
 select(g_line, b_line)
 pw.entity_clone()
 check("clone in geology and boundaries", len(pw.geol_coll.df) == n_g + 1 and len(pw.boundary_coll.df) == n_b + 1)
+clones = [pw.geol_coll.df["uid"].iloc[-1], pw.boundary_coll.df["uid"].iloc[-1]]
+check("clones selected instead of originals", sorted(pw.selection_uids()) == sorted(clones))
 
 # A: remove across collections (confirmation stubbed)
 pwm.QMessageBox.question = staticmethod(lambda *a, **k: QMessageBox.Yes)
@@ -119,5 +121,86 @@ tds.intersection_xs(pw)
 check("intersection outputs in fluids and geology",
       pw.fluid_coll.df["topology"].iloc[-1] == "XsVertexSet" and len(pw.fluid_coll.df) == n_f + 1
       and pw.geol_coll.df["topology"].iloc[-1] == "XsPolyLine" and len(pw.geol_coll.df) == n_g + 1)
+
+
+# split creates new entities that join the selection (split multipart: parts replace the original)
+two_parts = pv.Line((0, 5, 0), (1, 5, 0), resolution=2) + pv.Line((3, 5, 0), (4, 5, 0), resolution=2)
+mp = add(pw.fluid_coll, "PolyLine", PolyLine, two_parts, "mp")
+select(mp)
+pw.split_multipart()
+parts = [u for u in pw.fluid_coll.get_uids if pw.fluid_coll.get_uid_name(u).startswith("mp_")]
+check("split multipart: parts created and selected", len(parts) == 2 and sorted(pw.selection_uids()) == sorted(parts))
+
+
+# copy parallel / similar on several lines of several collections (map view): one copy each,
+# in the collection of its line, copies selected
+import pzero.two_d_lines as tdl  # noqa: E402
+from pzero.views.view_map import ViewMap  # noqa: E402
+
+vm = ViewMap(parent=pw)
+c1 = add(pw.geol_coll, "PolyLine", PolyLine, pv.Line((0, 10, 0), (5, 10, 0), resolution=5), "c1")
+c2 = add(pw.fluid_coll, "PolyLine", PolyLine, pv.Line((0, 20, 0), (5, 20, 0), resolution=5), "c2")
+tdl.input_one_value_dialog = lambda **kw: 2.0
+select(c1, c2)
+tdl.start_checked_line_tool(vm, tdl.copy_parallel, same_parent=True, cross_collection=True)
+copies = pw.selection_uids()
+check("copy parallel: one copy per line, copies selected",
+      len(copies) == 2 and pw.collection_of_uid(copies[0]) == "geol_coll" and pw.collection_of_uid(copies[1]) == "fluid_coll"
+      and pw.geol_coll.get_uid_name(copies[0]) == "c1_para_2")
+
+
+class FakeVector:
+    length = 3.0
+    deltas = (0.0, 3.0, 0.0)
+
+
+select(c1, c2)
+vm.disable_actions()
+tdl.copy_similar(vm, FakeVector())
+copies = pw.selection_uids()
+check("copy similar: one copy per line, translated, copies selected",
+      len(copies) == 2 and pw.fluid_coll.get_uid_vtk_obj(copies[1]).points_Y[0] == 23.0)
+
+# clone of mixed classes and cross-sections
+xs_uid = pw.xsect_coll.get_uids[0]
+xs_line = add(pw.geol_coll, "XsPolyLine", PolyLine, line, "xs_line")
+pw.geol_coll.df.loc[pw.geol_coll.df["uid"] == xs_line, "parent_uid"] = xs_uid
+n_x, n_g = len(pw.xsect_coll.df), len(pw.geol_coll.df)
+select(xs_uid, xs_line, g_surf)
+pw.entity_clone()
+check("clone of a cross-section, a XsPolyLine and a TriSurf together",
+      len(pw.xsect_coll.df) == n_x + 1 and len(pw.geol_coll.df) == n_g + 2 and len(pw.selection_uids()) == 3)
+
+
+# map view: copy tools take any PolyLine/XsPolyLine, NOT filtered by cross-section
+xa = add(pw.geol_coll, "XsPolyLine", PolyLine, pv.Line((0, 30, 0), (5, 30, 0), resolution=5), "xa")
+xb = add(pw.fluid_coll, "XsPolyLine", PolyLine, pv.Line((0, 40, 0), (5, 40, 0), resolution=5), "xb")
+pw.geol_coll.df.loc[pw.geol_coll.df["uid"] == xa, "parent_uid"] = "XS_A"
+pw.fluid_coll.df.loc[pw.fluid_coll.df["uid"] == xb, "parent_uid"] = "XS_B"
+vm2 = ViewMap(parent=pw)
+select(c1, xa, xb)
+vm2.copyParallelButton.trigger()
+check("map view: copy parallel on lines of different sections (3 copies)", len(pw.selection_uids()) == 3)
+
+
+# Ctrl+A / Ctrl+Shift+A in a view; Ctrl+Shift+A in a table
+pw.set_selection(mode="clear")
+v.select_all_in_view()
+check("Ctrl+A in view selects all shown entities", set(pw.selection_uids()) == set(v.shown_uids))
+v.deselect_all_in_view()
+check("Ctrl+Shift+A in view deselects the view entities", v.selected_uids == [])
+select(g_line, f_line)
+geology_shortcut = next(sc for sc in pw._deselect_all_shortcuts if sc.parent() is pw.GeologyTableView)
+geology_shortcut.activated.emit()
+check("Ctrl+Shift+A in the Geology table deselects geology only", pw.selection_uids() == [f_line])
+
+
+# weld output named with the _weld suffix and selected
+w1 = add(pw.geol_coll, "PolyLine", PolyLine, pv.Line((0, 50, 0), (2, 50, 0), resolution=2), "w1")
+w2 = add(pw.geol_coll, "PolyLine", PolyLine, pv.Line((2.1, 50, 0), (4, 50, 0), resolution=2), "w2")
+select(w1, w2)
+tdl.start_checked_line_tool(vm, tdl.merge_lines, min_selected=2, same_parent=True)
+sel = pw.selection_uids()
+check("weld output named _weld and selected", len(sel) == 1 and pw.geol_coll.get_uid_name(sel[0]) == "w1_weld")
 
 print("RESULT:", "FAILED" if failed else "ALL PASSED")

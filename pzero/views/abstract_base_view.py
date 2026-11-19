@@ -4,7 +4,7 @@ PZero© Andrea Bistacchi"""
 # PySide6 imports____
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtWidgets import QMainWindow
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtCore import Signal as pyqtSignal
 
 # Pandas imports____
@@ -103,6 +103,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.selection_modified_update_actors(
             added=self.parent.selection_uids(), removed=[], source=None
         )
+        self._install_selection_shortcuts()
 
     # ================================  General methods shared by all views ===========================================
 
@@ -221,6 +222,37 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             ),
         )
         self.parent.signals.selection_modified.connect(self.sig_sel_lmb)
+
+    def _install_selection_shortcuts(self):
+        """Ctrl+A selects all the entities shown in this view, Ctrl+Shift+A deselects all the entities
+        of this view (Cmd instead of Ctrl on macOS). Active when the focus is in the graphics frame,
+        so that Ctrl+A in the trees of the view keeps selecting the tree items."""
+        frame = getattr(self, "ViewFrame", None) or self
+        self._selection_shortcuts = []
+        for keys, slot in (
+            ("Ctrl+A", self.select_all_in_view),
+            ("Ctrl+Shift+A", self.deselect_all_in_view),
+        ):
+            shortcut = QShortcut(QKeySequence(keys), frame)
+            shortcut.setContext(Qt.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(slot)
+            self._selection_shortcuts.append(shortcut)
+
+    def select_all_in_view(self):
+        """Add all the entities shown (checked) in this view to the project selection."""
+        if self.parent.selection_frozen:
+            return
+        uids = list(self.shown_uids)
+        if uids:
+            self.parent.set_selection(uids=uids, mode="add", source=self)
+
+    def deselect_all_in_view(self):
+        """Remove all the entities of this view from the project selection."""
+        if self.parent.selection_frozen:
+            return
+        uids = self.selected_uids
+        if uids:
+            self.parent.set_selection(uids=uids, mode="remove", source=self)
 
     def selection_modified_update_actors(self, added=None, removed=None, source=None):
         """Update the highlight of selected entities in the graphics. To be implemented in

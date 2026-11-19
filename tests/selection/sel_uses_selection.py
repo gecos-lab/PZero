@@ -109,11 +109,15 @@ gc.df = pd.concat([gc.df, pd.DataFrame({
 })], ignore_index=True)
 gc.table_model.endResetModel()
 lines = ["PolyLine", "XsPolyLine"]
+messages = []
+_orig_print = pw.print_terminal
+pw.print_terminal = lambda string=None: messages.append(str(string))
 select("a1", "n1", "b1", "a2")
 pw.tabWidgetTopLeft.setCurrentWidget(pw.tabGeology)
 check("same_parent keeps lines of the last selected line's section",
       pw.restrict_selection_for_tool(topologies=lines, same_parent=True, min_selected=2) == ["a1", "a2"])
 check("lines of other sections and without section deselected", pw.selection_uids() == ["a1", "a2"])
+check("message about lines of other cross-sections", any("must belong to one cross-section" in m for m in messages))
 select("a1", "b1", "n1")
 check("no-parent lines are their own group (only 1 -> refused)",
       pw.restrict_selection_for_tool(topologies=lines, same_parent=True, min_selected=2) is None)
