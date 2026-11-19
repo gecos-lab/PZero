@@ -68,11 +68,11 @@ class DockWindow(QDockWidget):
         # Make all dock widgets tabbed if more than one is open.
         if n_docks > 1:
             parent.tabifyDockWidget(parent.findChildren(QDockWidget)[0], self)
-        else:
-            if window_type == "View3D":
-                parent.print_terminal(
-                    "\nWarning: as far as the orientation widget problem is not solved, please resize the window to make it smaller.\n"
-                )
+        # else:
+        #     if window_type == "View3D":
+        #         parent.print_terminal(
+        #             "\nWarning: as far as the orientation widget problem is not solved, please resize the window to make it smaller.\n"
+        #         )
         if window_type == "View3D":
             QTimer.singleShot(0, self._resize_then_init_3d_camera_widget)
 
