@@ -2,7 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
-from PySide6.QtCore import QObject, Qt
+from PySide6.QtCore import QObject, Qt, QTimer
 from PySide6.QtWidgets import QMainWindow
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtCore import Signal as pyqtSignal
@@ -222,6 +222,25 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             ),
         )
         self.parent.signals.selection_modified.connect(self.sig_sel_lmb)
+
+    def showEvent(self, event):
+        """The first time the view is shown, split it 3:1 between graphics and side panel (trees).
+        The splitter would otherwise share the width according to the size hints of the canvases,
+        which differ (e.g. the matplotlib canvas of the stereoplot asks for very little width, so its
+        side panel was much wider than in VTK views). The user can move the divider afterwards."""
+        super().showEvent(event)
+        if not getattr(self, "_initial_split_done", False):
+            self._initial_split_done = True
+            QTimer.singleShot(0, self._apply_initial_split)
+
+    def _apply_initial_split(self):
+        splitter = getattr(self, "splitter", None)
+        if splitter is None:
+            return
+        total = sum(splitter.sizes()) or splitter.width()
+        if total > 0:
+            graphics = total * 3 // 4
+            splitter.setSizes([graphics, total - graphics])
 
     def _install_selection_shortcuts(self):
         """Ctrl+A selects all the entities shown in this view, Ctrl+Shift+A deselects all the entities
