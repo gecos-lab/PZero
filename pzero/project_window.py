@@ -537,6 +537,58 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
     def selection_frozen(self) -> bool:
         return getattr(self, "_selection_frozen", False)
 
+    def _docked_view(self):
+        """The view dock (DockWindow) currently shown in the right dock area, or None."""
+        for dock in self.findChildren(DockWindow):
+            if not dock.isFloating() and dock.isVisible() and not dock.visibleRegion().isEmpty():
+                return dock
+        return None
+
+    # Proportion between views (right dock area) and tables/legends. It is remembered (not measured
+    # during window resizes, when Qt may already have shrunk the views): set to 2/3 when the first
+    # view is opened, changed only when the user moves the divider, applied on every window resize.
+
+    def apply_view_area_ratio(self, ratio=None):
+        """Set (if given) and apply the views/tables ratio to the docked view area."""
+        if ratio is not None:
+            self._view_area_ratio = ratio
+        ratio = getattr(self, "_view_area_ratio", None)
+        dock = self._docked_view()
+        if dock is None or ratio is None or not 0.0 < ratio < 1.0:
+            return
+        # Our own resize must not be taken as a divider move: flag it until the layout is updated.
+        self._applying_view_area_ratio = True
+        self.resizeDocks([dock], [max(1, int(round(self.width() * ratio)))], Qt.Horizontal)
+        self._view_area_ratio_window_width = self.width()
+        QTimer.singleShot(0, self._end_applying_view_area_ratio)
+
+    def _end_applying_view_area_ratio(self):
+        self._applying_view_area_ratio = False
+
+    def view_dock_resized(self, dock=None):
+        """Called by a view dock when its size changes: if the project window was not resized, the
+        user moved the divider, and the new proportion is remembered."""
+        if (
+            dock is None
+            or dock.isFloating()
+            # tabs behind the one in front keep stale sizes: only the shown view counts
+            or dock is not self._docked_view()
+            or getattr(self, "_applying_view_area_ratio", False)
+            or getattr(self, "_view_area_ratio", None) is None
+            or self.width() != getattr(self, "_view_area_ratio_window_width", None)
+            or self.width() <= 0
+        ):
+            return
+        self._view_area_ratio = dock.width() / self.width()
+
+    def resizeEvent(self, event):
+        """Keep the remembered proportion between views and tables/legends when the project window
+        is resized (by default Qt gives all the change to the tables)."""
+        super().resizeEvent(event)
+        if getattr(self, "_view_area_ratio", None) is not None:
+            self._applying_view_area_ratio = True
+            QTimer.singleShot(0, self.apply_view_area_ratio)
+
     def print_terminal(self, string=None):
         """Show string in terminal, followed by exactly one empty line (trailing newlines of the
         message, e.g. in VTK descriptions, are trimmed first), so that consecutive messages are

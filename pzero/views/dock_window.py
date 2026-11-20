@@ -25,7 +25,6 @@ class DockWindow(QDockWidget):
 
     def __init__(self, parent=None, window_type=None, *args, **kwargs):
         super(DockWindow, self).__init__(parent, *args, **kwargs)
-        n_docks = len(parent.findChildren(QDockWidget))
 
         # Connect signal and set attribute to delete dock widget (not only hide it) when the project is closed.
         parent.signals.project_close.connect(self._close_for_project)
@@ -65,9 +64,21 @@ class DockWindow(QDockWidget):
         self.setWidget(self.canvas)
         parent.addDockWidget(Qt.RightDockWidgetArea, self)
 
-        # Make all dock widgets tabbed if more than one is open.
-        if n_docks > 1:
-            parent.tabifyDockWidget(parent.findChildren(QDockWidget)[0], self)
+        # Make all dock widgets tabbed if more than one is open: tab this view with the first other
+        # docked view (findChildren also returns this dock itself, so it cannot be used directly).
+        other_docked_views = [
+            dock
+            for dock in parent.findChildren(DockWindow)
+            if dock is not self and not dock.isFloating()
+        ]
+        if other_docked_views:
+            parent.tabifyDockWidget(other_docked_views[0], self)
+        # When the first view is opened, give 2/3 of the project window width to the views and 1/3
+        # to tables and legends (later views are tabbed in the same area and keep this split).
+        if not any(
+            dock is not self for dock in parent.findChildren(DockWindow)
+        ):
+            QTimer.singleShot(0, lambda: self._give_two_thirds_to_views(parent))
         # else:
         #     if window_type == "View3D":
         #         parent.print_terminal(
@@ -75,6 +86,23 @@ class DockWindow(QDockWidget):
         #         )
         if window_type == "View3D":
             QTimer.singleShot(0, self._resize_then_init_3d_camera_widget)
+
+    def _give_two_thirds_to_views(self, parent):
+        """Resize the right dock area (views) to 2/3 of the project window width; the project window
+        keeps this proportion on resize (see ProjectWindow.apply_view_area_ratio)."""
+        try:
+            if not self.isFloating():
+                parent.apply_view_area_ratio(2.0 / 3.0)
+        except RuntimeError:
+            pass  # dock already closed
+
+    def resizeEvent(self, event):
+        """Report size changes to the project window, which remembers divider moves."""
+        super().resizeEvent(event)
+        try:
+            self.parent().view_dock_resized(self)
+        except (AttributeError, RuntimeError):
+            pass
 
     # Temporary fix for issue 242 and 243: the 3D camera orientation widget
     # is not correctly displayed when the 3D view is first opened.
