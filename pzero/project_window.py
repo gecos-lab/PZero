@@ -538,11 +538,14 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         return getattr(self, "_selection_frozen", False)
 
     def print_terminal(self, string=None):
-        """Show string in terminal."""
+        """Show string in terminal, followed by exactly one empty line (trailing newlines of the
+        message, e.g. in VTK descriptions, are trimmed first), so that consecutive messages are
+        clearly separated."""
         try:
+            string = str(string).rstrip("\r\n") + "\n"
             self.TextTerminal.appendPlainText(string)
         except:
-            self.TextTerminal.appendPlainText("error printing in terminal")
+            self.TextTerminal.appendPlainText("error printing in terminal\n")
 
     def show_about_dialog(self):
 
