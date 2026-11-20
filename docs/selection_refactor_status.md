@@ -69,8 +69,9 @@ Phase 4 follow-ups included in the same commit:
 - Click order everywhere; tools deselect entities they cannot use (no silent filtering).
 - New entities created by split tools (line by line, at point, surface, multipart) and newly drawn
   lines join the selection; all parts of a split line get the `_split` suffix, the weld output `_weld` (once);
-- Ctrl+A / Ctrl+Shift+A (Cmd on macOS): select / deselect all in tables, trees and views (view:
-  entities shown, focus in the graphics); weld/snap print why lines of other sections are not used;
+- Ctrl+A / Ctrl+Shift+A (Cmd on macOS): select / deselect all in tables, trees and views; in the
+  graphics of a view Ctrl+A selects the shown entities and deselects the hidden ones of that view
+  (hiding alone never deselects); weld/snap print why lines of other sections are not used;
   after Entities > Clone the clones replace the originals in the selection, and after copy
   parallel/kink/similar the copies replace the input lines (no line tool clears the selection).
 - Clone works on any number and type of entities, cross-sections included; copy parallel/kink/similar

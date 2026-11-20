@@ -239,12 +239,18 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self._selection_shortcuts.append(shortcut)
 
     def select_all_in_view(self):
-        """Add all the entities shown (checked) in this view to the project selection."""
+        """Ctrl+A in the graphics: within this view, the entities shown (checked) become selected and
+        the hidden ones are deselected; entities that are not in this view keep their selection state.
+        (Hiding an entity does not deselect it: only this command does.)"""
         if self.parent.selection_frozen:
             return
-        uids = list(self.shown_uids)
-        if uids:
-            self.parent.set_selection(uids=uids, mode="add", source=self)
+        shown = list(self.shown_uids)
+        shown_set = set(shown)
+        hidden_selected = [uid for uid in self.selected_uids if uid not in shown_set]
+        if hidden_selected:
+            self.parent.set_selection(uids=hidden_selected, mode="remove", source=self)
+        if shown:
+            self.parent.set_selection(uids=shown, mode="add", source=self)
 
     def deselect_all_in_view(self):
         """Remove all the entities of this view from the project selection."""

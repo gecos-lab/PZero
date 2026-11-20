@@ -1987,31 +1987,15 @@ def linear_extrusion(self):
 @freeze_gui_onoff
 def decimation_pro_resampling(self):
     """Decimation reduces the number of triangles in a triangle mesh while maintaining a faithful approximation to
-    the original mesh."""
+    the original mesh. The parameters are asked once; each selected TriSurf is decimated and the result is stored
+    in the collection of its input."""
     self.print_terminal(
         "Decimation Pro: resample target surface and reduce number of triangles of the mesh"
     )
-    # Check if some vtkPolyData is selected
-    if not tool_uids(self):
+    input_uids = tool_uids(self)
+    if not input_uids:
         self.print_terminal("No input data selected.")
         return
-    else:
-        # Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built
-        input_uids = tool_uids(self)
-    for uid in input_uids:
-        source_coll = entity_collection(self, uid)
-        if isinstance(source_coll.get_uid_vtk_obj(uid), TriSurf):
-            pass
-        else:
-            self.print_terminal(" -- Error input type: only TriSurf type -- ")
-            return
-    # Create deepcopy of the geological entity dictionary.
-    surf_dict = derived_entity_dict(source_coll, input_uids[0], "_decimated")
-    surf_dict["topology"] = "TriSurf"
-    surf_dict["vtk_obj"] = TriSurf()
-    # Create a new instance of the decimation class
-    deci = vtkDecimatePro()
-    deci.SetInputData(source_coll.get_uid_vtk_obj(input_uids[0]))
     # Target Reduction value. Specify the desired reduction in the total number of polygons (e.g., when
     # Reduction is set to 0.9, this filter will try to reduce the data set to 10% of its original size).
     tar_reduct = input_one_value_dialog(
@@ -2021,31 +2005,18 @@ def decimation_pro_resampling(self):
     )
     if tar_reduct is None:
         tar_reduct = 0.5
-    deci.SetTargetReduction(tar_reduct)
     # Preserve Topology switch. Turn on/off whether to preserve the topology of the original mesh.
     preserve_topology = input_text_dialog(
         title="Decimation Resampling parameters",
         label="Preserve Topology (ON/OFF)",
         default_text="ON",
     )
-    if preserve_topology is None:
-        pass
-    elif preserve_topology == "ON" or preserve_topology == "on":
-        deci.PreserveTopologyOn()
-    elif preserve_topology == "OFF" or preserve_topology == "off":
-        deci.PreserveTopologyOff()
     # Boundary Vertex Deletion switch. Turn on/off the deletion of vertices on the boundary of a mesh.
     bound_vert_del = input_text_dialog(
         title="Decimation Resampling parameters",
         label="Boundary Vertex Deletion (ON/OFF)",
         default_text="OFF",
     )
-    if bound_vert_del is None:
-        pass
-    elif bound_vert_del == "ON" or bound_vert_del == "on":
-        deci.BoundaryVertexDeletionOn()
-    elif bound_vert_del == "OFF" or bound_vert_del == "off":
-        deci.BoundaryVertexDeletionOff()
     # Splitting switch. Turn on/off the splitting of the mesh at corners, along edges, at non-manifold points, or
     # anywhere else a split is required.
     splitting = input_text_dialog(
@@ -2053,52 +2024,51 @@ def decimation_pro_resampling(self):
         label="Splitting (ON to preserve original topology/OFF)",
         default_text="ON",
     )
-    if splitting is None:
-        pass
-    elif splitting == "ON" or splitting == "on":
-        deci.SplittingOn()
-    elif splitting == "OFF" or splitting == "off":
-        deci.SplittingOff()
-    deci.Update()
-    # ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning
-    surf_dict["vtk_obj"].ShallowCopy(deci.GetOutput())
-    surf_dict["vtk_obj"].Modified()
-    # Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
-    if surf_dict["vtk_obj"].points_number > 0:
-        source_coll.add_entity_from_dict(surf_dict)
-    else:
-        self.print_terminal(" -- empty object -- ")
+    for uid in input_uids:
+        source_coll = entity_collection(self, uid)
+        if not isinstance(source_coll.get_uid_vtk_obj(uid), TriSurf):
+            self.print_terminal(" -- Error input type: only TriSurf type -- ")
+            continue
+        deci = vtkDecimatePro()
+        deci.SetInputData(source_coll.get_uid_vtk_obj(uid))
+        deci.SetTargetReduction(float(tar_reduct))
+        if preserve_topology in ("ON", "on"):
+            deci.PreserveTopologyOn()
+        elif preserve_topology in ("OFF", "off"):
+            deci.PreserveTopologyOff()
+        if bound_vert_del in ("ON", "on"):
+            deci.BoundaryVertexDeletionOn()
+        elif bound_vert_del in ("OFF", "off"):
+            deci.BoundaryVertexDeletionOff()
+        if splitting in ("ON", "on"):
+            deci.SplittingOn()
+        elif splitting in ("OFF", "off"):
+            deci.SplittingOff()
+        deci.Update()
+        # Output in the collection of the input, with its metadata.
+        surf_dict = derived_entity_dict(source_coll, uid, "_decimated", topology="TriSurf")
+        surf_dict["vtk_obj"] = TriSurf()
+        surf_dict["vtk_obj"].ShallowCopy(deci.GetOutput())
+        surf_dict["vtk_obj"].Modified()
+        if surf_dict["vtk_obj"].points_number > 0:
+            source_coll.add_entity_from_dict(surf_dict)
+        else:
+            self.print_terminal(" -- empty object -- ")
 
 
 @uses_selection(topologies=["TriSurf"], cross_collection=True)
 @freeze_gui_onoff
 def decimation_quadric_resampling(self):
     """Decimation reduces the number of triangles in a triangle mesh while maintaining a faithful approximation to
-    the original mesh."""
+    the original mesh. The target reduction is asked once; each selected TriSurf is decimated and the result is
+    stored in the collection of its input."""
     self.print_terminal(
         "Decimation Quadric: resample target surface and reduce number of triangles of the mesh"
     )
-    # Check if some vtkPolyData is selected
-    if not tool_uids(self):
+    input_uids = tool_uids(self)
+    if not input_uids:
         self.print_terminal("No input data selected.")
         return
-    else:
-        # Deep copy list of selected uids needed otherwise problems can arise if the main geology table is deseselcted while the dataframe is being built
-        input_uids = tool_uids(self)
-    for uid in input_uids:
-        source_coll = entity_collection(self, uid)
-        if isinstance(source_coll.get_uid_vtk_obj(uid), TriSurf):
-            pass
-        else:
-            self.print_terminal(" -- Error input type: only TriSurf type -- ")
-            return
-    # Create deepcopy of the geological entity dictionary.
-    surf_dict = derived_entity_dict(source_coll, input_uids[0], "_decimated")
-    surf_dict["topology"] = "TriSurf"
-    surf_dict["vtk_obj"] = TriSurf()
-    # Create a new instance of the decimation class
-    deci = vtkQuadricDecimation()
-    deci.SetInputData(source_coll.get_uid_vtk_obj(input_uids[0]))
     # Target Reduction value. Specify the desired reduction in the total number of polygons (e.g., when
     # Target Reduction is set to 0.9, this filter will try to reduce the data set to 10% of its original size).
     tar_reduct = input_one_value_dialog(
@@ -2107,17 +2077,25 @@ def decimation_quadric_resampling(self):
         default_value=0.5,
     )
     if tar_reduct is None:
-        tar_reduct = "0.5"
-    deci.SetTargetReduction(tar_reduct)
-    deci.Update()
-    # ShallowCopy is the way to copy the new interpolated surface into the TriSurf instance created at the beginning
-    surf_dict["vtk_obj"].ShallowCopy(deci.GetOutput())
-    surf_dict["vtk_obj"].Modified()
-    # Add new entity from surf_dict. Function add_entity_from_dict creates a new uid
-    if surf_dict["vtk_obj"].points_number > 0:
-        source_coll.add_entity_from_dict(surf_dict)
-    else:
-        self.print_terminal(" -- empty object -- ")
+        tar_reduct = 0.5
+    for uid in input_uids:
+        source_coll = entity_collection(self, uid)
+        if not isinstance(source_coll.get_uid_vtk_obj(uid), TriSurf):
+            self.print_terminal(" -- Error input type: only TriSurf type -- ")
+            continue
+        deci = vtkQuadricDecimation()
+        deci.SetInputData(source_coll.get_uid_vtk_obj(uid))
+        deci.SetTargetReduction(float(tar_reduct))
+        deci.Update()
+        # Output in the collection of the input, with its metadata.
+        surf_dict = derived_entity_dict(source_coll, uid, "_decimated", topology="TriSurf")
+        surf_dict["vtk_obj"] = TriSurf()
+        surf_dict["vtk_obj"].ShallowCopy(deci.GetOutput())
+        surf_dict["vtk_obj"].Modified()
+        if surf_dict["vtk_obj"].points_number > 0:
+            source_coll.add_entity_from_dict(surf_dict)
+        else:
+            self.print_terminal(" -- empty object -- ")
 
 
 @uses_selection(topologies=["TriSurf"], cross_collection=True)
