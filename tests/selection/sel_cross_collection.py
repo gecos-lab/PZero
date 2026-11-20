@@ -203,4 +203,40 @@ tdl.start_checked_line_tool(vm, tdl.merge_lines, min_selected=2, same_parent=Tru
 sel = pw.selection_uids()
 check("weld output named _weld and selected", len(sel) == 1 and pw.geol_coll.get_uid_name(sel[0]) == "w1_weld")
 
+
+# surface tools on TriSurfs of several collections: one output per input, in its own collection
+sphere = pv.Sphere().triangulate()
+sg = add(pw.geol_coll, "TriSurf", TriSurf, sphere, "sg")
+sf = add(pw.fluid_coll, "TriSurf", TriSurf, sphere, "sf")
+sb = add(pw.boundary_coll, "TriSurf", TriSurf, sphere, "sb")
+tds.input_one_value_dialog = lambda **kw: 0.5
+tds.input_text_dialog = lambda **kw: kw.get("default_text")
+for label, run, suffix in (
+    ("decimation pro", lambda: tds.decimation_pro_resampling(pw), "_decimated"),
+    ("decimation quadric", lambda: tds.decimation_quadric_resampling(pw), "_decimated"),
+    ("subdivision", lambda: tds.subdivision_resampling(pw, 0, "linear", 1), "_subdivided"),
+    ("retopo", lambda: tds.retopo(pw, 0, 0.2, 10, 0.1), "_retopo"),
+):
+    counts = [len(c.df) for c in (pw.geol_coll, pw.fluid_coll, pw.boundary_coll)]
+    select(sg, sf, sb)
+    run()
+    new_names = [c.df["name"].iloc[-1] for c in (pw.geol_coll, pw.fluid_coll, pw.boundary_coll)]
+    grew = [len(c.df) - n for c, n in zip((pw.geol_coll, pw.fluid_coll, pw.boundary_coll), counts)]
+    check(f"{label} on geology, fluid and boundary TriSurfs", grew == [1, 1, 1] and new_names == ["sg" + suffix, "sf" + suffix, "sb" + suffix])
+
+
+# Ctrl+A in the graphics: shown entities selected, hidden entities of the view deselected,
+# entities outside the view untouched; hiding alone does not deselect
+pw.set_selection(mode="clear")
+hide_uid = g_line
+v.set_actor_visible(uid=hide_uid, visible=False)
+v.actors_df.loc[v.actors_df["uid"] == hide_uid, "show"] = False
+pw.set_selection([hide_uid], mode="add")
+check("hiding does not deselect", pw.is_selected(hide_uid))
+v.select_all_in_view()
+check("Ctrl+A selects shown entities", set(v.shown_uids) <= set(pw.selection_uids()))
+check("Ctrl+A deselects hidden entities of the view", not pw.is_selected(hide_uid))
+v.actors_df.loc[v.actors_df["uid"] == hide_uid, "show"] = True
+v.set_actor_visible(uid=hide_uid, visible=True)
+
 print("RESULT:", "FAILED" if failed else "ALL PASSED")

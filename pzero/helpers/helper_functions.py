@@ -411,6 +411,16 @@ def entity_metadata_input_dict(collection, uid=None, name_label="Name: ", name_s
     return input_dict
 
 
+def _report_tool_exception(self, func, exc):
+    """Report an exception raised by a tool run under the freeze decorators: the error in the
+    PZero terminal, the full traceback in the console (instead of hiding the cause)."""
+    import traceback
+
+    name = getattr(func, "__name__", str(func)).replace("_", " ")
+    self.print_terminal(f" -- {name} failed: {type(exc).__name__}: {exc} -- ")
+    traceback.print_exc()
+
+
 def freeze_gui_on(func):
     """Decorator function used to start GUI freeze."""
 
@@ -422,8 +432,8 @@ def freeze_gui_on(func):
             print(f"Function {func} started.")
             func(self, *args, **kwargs)
             print(f"Function {func} ended successfully.")
-        except Exception:
-            self.print_terminal(f"Function {func} cannot be started.")
+        except Exception as exc:
+            _report_tool_exception(self, func, exc)
 
     return wrapper
 
@@ -445,8 +455,8 @@ def freeze_gui_onoff(func):
             print(f"Function {func} started.")
             result = func(self, *args, **kwargs)
             print(f"Function {func} ended successfully.")
-        except Exception:
-            self.print_terminal(f"Function {func} cannot be started.")
+        except Exception as exc:
+            _report_tool_exception(self, func, exc)
         # Enable GUI after function is called.
         self.enable_actions()
         return result

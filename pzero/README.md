@@ -36,7 +36,7 @@ The selection of entities is stored once, at project level, in `ProjectWindow` (
 
 - selecting in a table, in a view tree or by picking in a view updates all the others;
 - selecting from a view or a view tree brings the table tab of that collection to front;
-- Ctrl+A selects all (in a table, a tree, or the entities shown in a view, with the focus in its graphics), Ctrl+Shift+A deselects all (Cmd on macOS);
+- Ctrl+A selects all in a table or a tree; in the graphics of a view it selects the entities shown and deselects the hidden ones of that view (hiding alone does not deselect); Ctrl+Shift+A deselects all (Cmd on macOS);
 - selected entities are highlighted in all VTK views (yellow outer border for surfaces, DEMs/DOMs and images, yellow lines and points, bounding box for point clouds and volumes);
 - while a tool is running (`freeze_gui_on` / `freeze_gui_onoff`), selection by the user in tables and trees is frozen.
 
