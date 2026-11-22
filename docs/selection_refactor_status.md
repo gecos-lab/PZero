@@ -38,6 +38,20 @@ are now synced through a single project-level store, keeping their functionality
   Tools read `active_collection(self)` and write outputs in the same collection
   (`derived_entity_dict`, `entity_metadata_input_dict`, `uid_metadata`).
 
+## Deferred view and legend updates
+
+Entity signals (added, removed, geometry, properties, metadata, legend styles) are queued by each view
+(`BaseView._queue_entity_update`), merged per kind and collection, and processed once per event loop
+iteration (`_run_deferred`): pending legend rebuilds first (`ProjectWindow.request_legend_update` /
+`flush_legend_updates`; `Legend` and `PropertiesCMaps.update_widget` only request a rebuild), then the
+updates in a fixed order (removed, added, geometry, properties, metadata, legend styles), then the
+selection highlight, with VTK rendering suppressed during the pass and one render at the end.
+Commands that read the content of a view (`@uses_selection` with a view, line tools, Ctrl+A) call
+`view.flush_pending_updates()` first. `ViewVTK.get_actor_by_uid` caches actors (PyVista 0.45 looks
+actors up with a linear scan). `append_uid_property` emits data_keys_added (was metadata_modified).
+Benchmark: `python tests/selection/bench_bulk_updates.py 300` (300 TriSurfs, 2 views: add 10 s,
+dip/direction 14 s, remove 7 s; more than 15 minutes in total before).
+
 ## Phases
 
 | Phase | Content | Status |

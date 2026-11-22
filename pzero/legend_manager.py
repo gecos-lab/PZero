@@ -125,6 +125,16 @@ class Legend(QObject):
         QObject.__init__(self, parent)
 
     def update_widget(self, parent=None):
+        """Request a rebuild of the legend widget. Rebuilds requested during an operation on many
+        entities are merged and run once, at the next event loop iteration (or before views process
+        their queued updates): see ProjectWindow.request_legend_update. The rebuild itself is
+        _update_widget_now."""
+        if parent is not None and hasattr(parent, "request_legend_update"):
+            parent.request_legend_update(self)
+        else:
+            self._update_widget_now(parent)
+
+    def _update_widget_now(self, parent=None):
         """Update the legend widget based on the legend table.
         The pattern to extract a cell value from a Pandas dataframe is: dataframe.loc[boolean_index_rows, boolean_index_columns].values[cell_id]
         The boolean indexes used by loc can be:

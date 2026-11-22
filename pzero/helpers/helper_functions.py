@@ -314,6 +314,9 @@ def uses_selection(
                 project, view = self, None
             else:
                 project, view = self.parent, self
+                # The tool reads the entities shown in the view: apply its queued updates first.
+                if hasattr(view, "flush_pending_updates"):
+                    view.flush_pending_updates()
             if (
                 project.restrict_selection_for_tool(
                     valid=valid,

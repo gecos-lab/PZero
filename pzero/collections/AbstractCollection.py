@@ -409,7 +409,8 @@ class BaseCollection(ABC):
             data_key=property_name, dimension=property_components
         )
         # IN THE FUTURE add cell data.
-        self.parent.signals.metadata_modified.emit([uid], self)
+        # A new property: views and trees update their property lists (data_keys_added).
+        self.parent.signals.data_keys_added.emit([uid], self)
 
     def remove_uid_property(self, uid: str = None, property_name: str = None):
         """Remove property name and components from an uid and remove property on vtk object.

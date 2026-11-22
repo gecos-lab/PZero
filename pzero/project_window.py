@@ -589,6 +589,32 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self._applying_view_area_ratio = True
             QTimer.singleShot(0, self.apply_view_area_ratio)
 
+    # Legend rebuilds requested while many entities are changed are merged and run once.
+
+    def request_legend_update(self, legend=None):
+        """Schedule one rebuild of legend (Legend or PropertiesCMaps) at the next event loop
+        iteration; repeated requests are merged."""
+        pending = self.__dict__.setdefault("_pending_legend_updates", [])
+        if legend is not None and legend not in pending:
+            pending.append(legend)
+        if not getattr(self, "_legend_update_scheduled", False):
+            self._legend_update_scheduled = True
+            QTimer.singleShot(0, self.flush_legend_updates)
+
+    def flush_legend_updates(self):
+        """Run the pending legend rebuilds now (also called by views before their queued updates,
+        since they read e.g. the property colormaps that the properties legend keeps updated)."""
+        self._legend_update_scheduled = False
+        pending = self.__dict__.get("_pending_legend_updates", [])
+        self._pending_legend_updates = []
+        for legend in pending:
+            try:
+                legend._update_widget_now(self)
+            except Exception:
+                import traceback
+
+                traceback.print_exc()
+
     def print_terminal(self, string=None):
         """Show string in terminal, followed by exactly one empty line (trailing newlines of the
         message, e.g. in VTK descriptions, are trimmed first), so that consecutive messages are
@@ -1086,7 +1112,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             if allowed is not None and uid_topologies.get(uid) not in allowed:
                 return False
             if require_properties:
-                properties = getattr(self, collection_name).get_uid_properties_names(uid) or []
+                # Collections without properties (e.g. cross-sections) have no such column.
+                properties = uid_metadata(
+                    getattr(self, collection_name), uid, "properties_names", None
+                )
+                properties = list(properties) if isinstance(properties, (list, tuple)) else []
                 if not all(name in properties for name in require_properties):
                     return False
             return True
@@ -1822,7 +1852,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     dom_uid=dom_uid, map_image_uid=map_image_uid
                 )
 
-    @uses_selection(valid=None, cross_collection=True)
+    # Cross-sections have no properties.
+    @uses_selection(valid={"geol_coll": None, "fluid_coll": None, "backgrnd_coll": None, "boundary_coll": None, "dom_coll": None, "image_coll": None, "mesh3d_coll": None, "well_coll": None}, cross_collection=True)
     @freeze_gui_onoff
     def property_add(self):
         """Add an empty property to the selected entities of the active collection."""
@@ -1848,7 +1879,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # Finally update properties legend.
         self.prop_legend.update_widget(self)
 
-    @uses_selection(valid=None, cross_collection=True)
+    # Cross-sections have no properties.
+    @uses_selection(valid={"geol_coll": None, "fluid_coll": None, "backgrnd_coll": None, "boundary_coll": None, "dom_coll": None, "image_coll": None, "mesh3d_coll": None, "well_coll": None}, cross_collection=True)
     def property_remove(self):
         """Remove a property from the selected entities (of any collection). Only properties present
         on all the selected entities are offered."""
@@ -1878,13 +1910,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # Finally update properties legend.
         self.prop_legend.update_widget(self)
 
-    @uses_selection(valid={"geol_coll": None, "dom_coll": None})
+    @uses_selection(topologies=["VertexSet", "XsVertexSet", "TriSurf", "XsPolyLine", "PCDom"], cross_collection=True)
     def normals_calculate(self):
-        # ____________________________________________________ ADD MORE CASES FOR POINT CLOUDS ETC.
-        """Calculate Normals on geological entities (add point clouds and DOMS in the future)."""
-        if self.shown_table in ["tabGeology", "tabMeshes", "tabDOMs"]:
-            if self.selected_uids:
-                set_normals(self)
+        """Properties > Calculate Normals: point sets (from dip/direction), TriSurfs, XsPolyLines and
+        point clouds (from geometry), of any collection (see orientation_analysis.set_normals)."""
+        set_normals(self)
 
     def lineations_calculate(self):
         # ____________________________________________________ IMPLEMENT THIS FOR POINTS WITH PLUNGE/TREND AND FOR POLYLINES

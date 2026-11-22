@@ -86,7 +86,7 @@ def normals2dd(self):
                 f" -- {collection.get_uid_name(uid)}: cannot store dip/direction ({exc}) -- "
             )
             continue
-        collection.replace_vtk(uid, vtk_obj)
+        # Properties are set in place (the geometry does not change): no replace_vtk.
     self.prop_legend.update_widget(self)
 
 

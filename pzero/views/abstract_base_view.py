@@ -139,78 +139,68 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         self.parent.signals.prop_legend_cmap_modified.connect(self.prop_legend_lambda)
 
         # entities_added ---
-        self.sig_add_lmb = lambda upd_uids, coll: self.entities_added_update_views(
-            updated_uids=upd_uids, collection=coll
+        self.sig_add_lmb = lambda upd_uids, coll: self._queue_entity_update(
+            "added", upd_uids, coll
         )
         self.parent.signals.entities_added.connect(self.sig_add_lmb)
 
         # entities_removed ---
-        self.sig_rem_lmb = lambda upd_uids, coll: self.entities_removed_update_views(
-            updated_uids=upd_uids, collection=coll
+        self.sig_rem_lmb = lambda upd_uids, coll: self._queue_entity_update(
+            "removed", upd_uids, coll
         )
         self.parent.signals.entities_removed.connect(self.sig_rem_lmb)
 
         # geom_modified ---
-        self.sig_geom_lmb = (
-            lambda upd_uids, coll: self.entities_geom_modified_update_views(
-                updated_uids=upd_uids, collection=coll
-            )
+        self.sig_geom_lmb = lambda upd_uids, coll: self._queue_entity_update(
+            "geom_modified", upd_uids, coll
         )
         self.parent.signals.geom_modified.connect(self.sig_geom_lmb)
 
         # data_keys_added ---
-        self.sig_k_add_lmb = (
-            lambda upd_uids, coll: self.entities_data_keys_added_update_views(
-                updated_uids=upd_uids, collection=coll
-            )
+        self.sig_k_add_lmb = lambda upd_uids, coll: self._queue_entity_update(
+            "data_keys_added", upd_uids, coll
         )
         self.parent.signals.data_keys_added.connect(self.sig_k_add_lmb)
 
         # data_keys_removed ---
-        self.sig_k_rmv_lmb = (
-            lambda upd_uids, coll: self.entities_data_keys_removed_update_views(
-                updated_uids=upd_uids, collection=coll
-            )
+        self.sig_k_rmv_lmb = lambda upd_uids, coll: self._queue_entity_update(
+            "data_keys_removed", upd_uids, coll
         )
         self.parent.signals.data_keys_removed.connect(self.sig_k_rmv_lmb)
 
         # data_val_modified ---
-        self.sig_val_lmb = (
-            lambda upd_uids, coll: self.entities_data_val_modified_update_views(
-                updated_uids=upd_uids, collection=coll
-            )
+        self.sig_val_lmb = lambda upd_uids, coll: self._queue_entity_update(
+            "data_val_modified", upd_uids, coll
         )
         self.parent.signals.data_val_modified.connect(self.sig_val_lmb)
 
         # metadata_modified ---
-        self.sig_meta_lmb = (
-            lambda upd_uids, coll: self.entities_metadata_modified_update_views(
-                updated_uids=upd_uids, collection=coll
-            )
+        self.sig_meta_lmb = lambda upd_uids, coll: self._queue_entity_update(
+            "metadata_modified", upd_uids, coll
         )
         self.parent.signals.metadata_modified.connect(self.sig_meta_lmb)
 
         # legend_color_modified ---
-        self.sig_clr_lmb = lambda upd_uids, coll: self.change_actor_color(
-            updated_uids=upd_uids, collection=coll
+        self.sig_clr_lmb = lambda upd_uids, coll: self._queue_entity_update(
+            "legend_color", upd_uids, coll
         )
         self.parent.signals.legend_color_modified.connect(self.sig_clr_lmb)
 
         # legend_thick_modified ---
-        self.sig_thk_lmb = lambda upd_uids, coll: self.change_actor_line_thick(
-            updated_uids=upd_uids, collection=coll
+        self.sig_thk_lmb = lambda upd_uids, coll: self._queue_entity_update(
+            "legend_thick", upd_uids, coll
         )
         self.parent.signals.legend_thick_modified.connect(self.sig_thk_lmb)
 
         # legend_point_size_modified ---
-        self.sig_pnt_lmb = lambda upd_uids, coll: self.change_actor_point_size(
-            updated_uids=upd_uids, collection=coll
+        self.sig_pnt_lmb = lambda upd_uids, coll: self._queue_entity_update(
+            "legend_point_size", upd_uids, coll
         )
         self.parent.signals.legend_point_size_modified.connect(self.sig_pnt_lmb)
 
         # legend_opacity_modified ---
-        self.sig_opct_lmb = lambda upd_uids, coll: self.change_actor_opacity(
-            updated_uids=upd_uids, collection=coll
+        self.sig_opct_lmb = lambda upd_uids, coll: self._queue_entity_update(
+            "legend_opacity", upd_uids, coll
         )
         self.parent.signals.legend_opacity_modified.connect(self.sig_opct_lmb)
 
@@ -263,6 +253,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         (Hiding an entity does not deselect it: only this command does.)"""
         if self.parent.selection_frozen:
             return
+        self.flush_pending_updates()  # act on the current content of the view
         shown = list(self.shown_uids)
         shown_set = set(shown)
         hidden_selected = [uid for uid in self.selected_uids if uid not in shown_set]
@@ -275,9 +266,102 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """Remove all the entities of this view from the project selection."""
         if self.parent.selection_frozen:
             return
+        self.flush_pending_updates()  # act on the current content of the view
         uids = self.selected_uids
         if uids:
             self.parent.set_selection(uids=uids, mode="remove", source=self)
+
+    # Entity signals (added, removed, geometry, properties, metadata, legend) are not processed
+    # one by one: they are queued, merged per kind and collection, and processed once at the next
+    # event loop iteration, after pending legend rebuilds and before the selection highlight. An
+    # operation on many entities then updates each view once per kind instead of once per entity.
+    # Kinds are processed in a fixed order: removed before added (an entity removed and added
+    # again in the same pass ends up present; one added and removed is skipped since it no longer
+    # exists), then the other kinds, skipping entities just added (their actors are already new).
+
+    _ENTITY_UPDATE_HANDLERS = {
+        "removed": "entities_removed_update_views",  # processed first (see above)
+        "added": "entities_added_update_views",
+        "geom_modified": "entities_geom_modified_update_views",
+        "data_keys_added": "entities_data_keys_added_update_views",
+        "data_keys_removed": "entities_data_keys_removed_update_views",
+        "data_val_modified": "entities_data_val_modified_update_views",
+        "metadata_modified": "entities_metadata_modified_update_views",
+        "legend_color": "change_actor_color",
+        "legend_thick": "change_actor_line_thick",
+        "legend_point_size": "change_actor_point_size",
+        "legend_opacity": "change_actor_opacity",
+    }
+
+    def _queue_entity_update(self, kind=None, uids=None, collection=None):
+        """Queue an entity update, merged with the other updates of the same kind and collection."""
+        if isinstance(uids, str):
+            uids = [uids]
+        queue = self.__dict__.setdefault("_entity_update_queue", {})
+        merged = queue.setdefault((kind, id(collection)), (collection, {}))[1]
+        for uid in uids or []:
+            merged[uid] = None  # ordered set
+        self._schedule_deferred()
+
+    def _schedule_deferred(self):
+        """Run _run_deferred once at the next event loop iteration."""
+        timer = self.__dict__.get("_deferred_timer")
+        if timer is None:
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.setInterval(0)
+            timer.timeout.connect(self._run_deferred)
+            self._deferred_timer = timer
+        if not timer.isActive():
+            timer.start()
+
+    def flush_pending_updates(self):
+        """Process queued updates now (e.g. before reading the view state in the same operation)."""
+        timer = self.__dict__.get("_deferred_timer")
+        if timer is not None:
+            timer.stop()
+        self._run_deferred()
+
+    def _run_deferred(self):
+        """Pending legend rebuilds, then queued entity updates in order, then the highlight."""
+        if getattr(self, "_signals_disconnected", False):
+            self._entity_update_queue = {}
+            return
+        flush_legends = getattr(self.parent, "flush_legend_updates", None)
+        if flush_legends is not None:
+            flush_legends()
+        queue = self.__dict__.get("_entity_update_queue", {})
+        self._entity_update_queue = {}
+        just_added = {}
+        for kind in self._ENTITY_UPDATE_HANDLERS:  # fixed processing order
+            for (queued_kind, _), (collection, merged) in list(queue.items()):
+                if queued_kind != kind:
+                    continue
+                uids = list(merged)
+                if kind != "removed":
+                    # Entities may have been removed after the update was queued.
+                    existing = set(collection.df["uid"]) if "uid" in collection.df.columns else set()
+                    uids = [uid for uid in uids if uid in existing]
+                if kind not in ("removed", "added"):
+                    fresh = just_added.get(id(collection), set())
+                    uids = [uid for uid in uids if uid not in fresh]
+                if not uids:
+                    continue
+                if kind == "added":
+                    just_added.setdefault(id(collection), set()).update(uids)
+                try:
+                    getattr(self, self._ENTITY_UPDATE_HANDLERS[kind])(
+                        updated_uids=uids, collection=collection
+                    )
+                except Exception:
+                    import traceback
+
+                    traceback.print_exc()
+        self._apply_pending_highlight()
+
+    def _apply_pending_highlight(self):
+        """Apply queued selection highlight changes. Implemented in subclasses."""
+        pass
 
     def selection_modified_update_actors(self, added=None, removed=None, source=None):
         """Update the highlight of selected entities in the graphics. To be implemented in

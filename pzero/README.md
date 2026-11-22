@@ -76,9 +76,9 @@ Outputs are stored in the collection of their input, with metadata copied by `de
 | Project to DEM, project to cross-section | `project_2_dem`, `project_2_xs` | Mixed | Points and lines in Geology, Fluids, Backgrounds; lines in Boundaries; wells |
 | Connected parts, split multipart | `connected_parts`, `split_multipart` | Mixed | PolyLine and TriSurf in any collection; DOM point clouds |
 | Merge to multipart (Entities menu, at least 2; the merged entity is selected) | `entities_merge` | One | PolyData of one topology (VertexSet, XsVertexSet, PolyLine, XsPolyLine, TriSurf, PCDom, TSDom), with the same parent_uid (cross-section) as the last selected entity |
-| Calculate normals (Properties menu) | `normals_calculate` → `orientation_analysis.set_normals` | One | Geology entities and DOMs |
+| Calculate normals (Properties menu): point sets from their dip/direction properties, TriSurfs, XsPolyLines and point clouds from geometry | `normals_calculate` → `orientation_analysis.set_normals` | Mixed | VertexSet, XsVertexSet, TriSurf, XsPolyLine, PCDom in any collection (not DEMs) |
 | Calculate Dip/Direction (Properties menu): dip and dip direction point properties from point normals (-90 < dip < 90, negative for overturned surfaces; standard dip direction) | `point_clouds.normals2dd` | Mixed | Any entity with the Normals point property |
-| Add / remove property | `property_add`, `property_remove` | Mixed | Any entity (remove offers only properties present on all selected entities) |
+| Add / remove property | `property_add`, `property_remove` | Mixed | Any entity except cross-sections, which have no properties (remove offers only properties present on all selected entities) |
 | Add / remove texture | `texture_add`, `texture_remove` | One | DOMs |
 | Build octree (Point Clouds menu) | `build_octree` | One | DOM point clouds (PCDom) |
 | Point-cloud tools in the 3D view: cut, segment, auto-pick, threshold, decimate (one each) | `cut_pc`, `segment_pc`, `auto_pick`, `thresh_filt`, `decimate_selected_pc` | One | Last selected DOM point cloud (PCDom) |

@@ -415,6 +415,8 @@ def start_checked_line_tool(
     used (e.g. weld and snap, whose inputs and outputs must belong to one cross-section).
     With cross_collection, lines of Geology, Fluids and Backgrounds are used together, each edited in
     its own collection (all tools except weld, whose single output needs one collection)."""
+    # The tool reads the entities shown in the view: apply its queued updates first.
+    self.flush_pending_updates()
     lines = ["PolyLine", "XsPolyLine"]
     if (
         self.parent.restrict_selection_for_tool(

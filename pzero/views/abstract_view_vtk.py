@@ -78,10 +78,23 @@ def _highlight_aware_style_method(func):
     """Wrap a method that changes the style of actors (change_actor_color etc.): highlighted actors
     get their original style back before, so the change applies to it, and are re-highlighted after."""
 
+    # Highlight kinds whose saved style overlaps the style changed by each method: other highlights
+    # (e.g. border outlines, separate actors) are not touched, nor anything for opacity.
+    affected_kinds = {
+        "change_actor_color": ("line_point",),
+        "change_actor_line_thick": ("line_point", "surface"),
+        "change_actor_point_size": ("line_point",),
+        "change_actor_opacity": (),
+    }.get(func.__name__, ("line_point", "surface", "outline"))
+
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         uids = kwargs.get("updated_uids", args[0] if args else None) or []
-        highlighted = [uid for uid in uids if uid in self._highlighted]
+        highlighted = [
+            uid
+            for uid in uids
+            if self._highlighted.get(uid, {}).get("kind") in affected_kinds
+        ]
         for uid in highlighted:
             self._unhighlight_actor(uid)
         try:
@@ -138,32 +151,48 @@ class ViewVTK(BaseView):
     # ================================  Selection highlight ===========================================================
 
     def selection_modified_update_actors(self, added=None, removed=None, source=None):
-        """Queue the uids whose selection changed and are shown in this view; a burst of
-        selection signals is flushed once, at the next event loop iteration, with one render."""
-        actors = self.plotter.renderer.actors
-        for uid in list(removed or []) + list(added or []):
-            if uid in actors or uid in self._highlighted:
-                self._pending_highlight.add(uid)
-        if not self._pending_highlight:
+        """Queue the uids whose selection changed; they are processed in the deferred pass of the
+        view (see BaseView._run_deferred), after the queued entity updates (so that new actors
+        exist), with one render. Uids without an actor in this view are skipped then."""
+        changed = list(removed or []) + list(added or [])
+        if not changed:
             return
-        if self._highlight_timer is None:
-            self._highlight_timer = QTimer(self)
-            self._highlight_timer.setSingleShot(True)
-            self._highlight_timer.setInterval(0)
-            self._highlight_timer.timeout.connect(self._flush_highlight)
-        self._highlight_timer.start()
+        self._pending_highlight.update(changed)
+        self._schedule_deferred()
 
-    def _flush_highlight(self):
-        """Apply the project selection state to the queued uids, then render once."""
+    def _apply_pending_highlight(self):
+        """Apply the project selection state to the queued uids (no render)."""
         pending, self._pending_highlight = self._pending_highlight, set()
-        if not pending or getattr(self, "_signals_disconnected", False):
+        if not pending:
             return
+        actors = self.plotter.renderer.actors
         for uid in pending:
+            if uid not in actors and uid not in self._highlighted:
+                continue  # not shown in this view
             if self.parent.is_selected(uid):
                 self._highlight_actor(uid)
             else:
                 self._unhighlight_actor(uid)
-        self.plotter.render()
+
+    def _flush_highlight(self):
+        """Process the queued updates and highlight now, then render (kept for callers/tests)."""
+        self.flush_pending_updates()
+
+    def _run_deferred(self):
+        """Deferred pass of BaseView with rendering suppressed (adding or replacing actors renders
+        by default), and a single render at the end."""
+        plotter = getattr(self, "plotter", None)
+        if plotter is None:
+            return super()._run_deferred()
+        plotter.render = lambda *args, **kwargs: None
+        try:
+            super()._run_deferred()
+        finally:
+            try:
+                del plotter.render  # back to the class method
+                plotter.render()
+            except Exception:
+                pass
 
     def _highlight_actor(self, uid=None):
         """Highlight the actor of uid (idempotent). Does not render."""
@@ -432,13 +461,19 @@ class ViewVTK(BaseView):
 
     def get_actor_by_uid(self, uid: str = None):
         """
-        Get an actor by uid in a VTK/PyVista plotter. Here we use self.plotter.renderer.actors
-        that is a dictionary with key = uid string and value = actor.
+        Get an actor by uid in a VTK/PyVista plotter (actor name = uid).
+        PyVista builds renderer.actors with a linear scan of all actors at every call, which made
+        operations on many entities quadratic: a uid -> actor cache is used, checked with the fast
+        vtkRenderer.HasViewProp and rebuilt from one scan when stale.
         """
-        actors = self.plotter.renderer.actors
-        if uid not in actors:
-            return None
-        return actors[uid]
+        cache = self.__dict__.setdefault("_actor_cache", {})
+        renderer = self.plotter.renderer
+        actor = cache.get(uid)
+        if actor is not None and renderer.HasViewProp(actor):
+            return actor
+        cache.clear()
+        cache.update(renderer.actors)
+        return cache.get(uid)
 
     def get_uid_from_actor(self, actor=None):
         """
@@ -475,12 +510,14 @@ class ViewVTK(BaseView):
 
     def change_actor_color(self, updated_uids: list = None, collection=None):
         """Change color for VTK plots."""
+        uids_in_view = set(self.uids_in_view)  # built once, not per uid
         for uid in updated_uids:
-            if uid in self.uids_in_view:
-                # Get color from legend
-                color_R = collection.get_uid_legend(uid=uid)["color_R"]
-                color_G = collection.get_uid_legend(uid=uid)["color_G"]
-                color_B = collection.get_uid_legend(uid=uid)["color_B"]
+            if uid in uids_in_view:
+                # Get color from legend (one lookup)
+                legend = collection.get_uid_legend(uid=uid)
+                color_R = legend["color_R"]
+                color_G = legend["color_G"]
+                color_B = legend["color_B"]
                 color_RGB = [color_R / 255, color_G / 255, color_B / 255]
                 # Now update color for actor uid
                 self.get_actor_by_uid(uid).GetProperty().SetColor(color_RGB)
@@ -489,8 +526,9 @@ class ViewVTK(BaseView):
 
     def change_actor_opacity(self, updated_uids: list = None, collection=None):
         """Change opacity for actor uid"""
+        uids_in_view = set(self.uids_in_view)  # built once, not per uid
         for uid in updated_uids:
-            if uid in self.uids_in_view:
+            if uid in uids_in_view:
                 # Get color from legend
                 opacity = collection.get_uid_legend(uid=uid)["opacity"] / 100
                 # Now update color for actor uid
@@ -500,8 +538,9 @@ class ViewVTK(BaseView):
 
     def change_actor_line_thick(self, updated_uids: list = None, collection=None):
         """Change line thickness for actor uid"""
+        uids_in_view = set(self.uids_in_view)  # built once, not per uid
         for uid in updated_uids:
-            if uid in self.uids_in_view:
+            if uid in uids_in_view:
                 # Get color from legend
                 line_thick = collection.get_uid_legend(uid=uid)["line_thick"]
                 # Now update color for actor uid
@@ -511,8 +550,9 @@ class ViewVTK(BaseView):
 
     def change_actor_point_size(self, updated_uids: list = None, collection=None):
         """Change point size for actor uid"""
+        uids_in_view = set(self.uids_in_view)  # built once, not per uid
         for uid in updated_uids:
-            if uid in self.uids_in_view:
+            if uid in uids_in_view:
                 point_size = collection.get_uid_legend(uid=uid)["point_size"]
 
                 # Check if this uid is showing Normals

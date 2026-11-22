@@ -623,6 +623,16 @@ class PropertiesCMaps(QObject):
             parent.signals.prop_legend_cmap_modified.emit(property_name)
 
     def update_widget(self, parent=None):
+        """Request a rebuild of the legend widget. Rebuilds requested during an operation on many
+        entities are merged and run once, at the next event loop iteration (or before views process
+        their queued updates): see ProjectWindow.request_legend_update. The rebuild itself is
+        _update_widget_now."""
+        if parent is not None and hasattr(parent, "request_legend_update"):
+            parent.request_legend_update(self)
+        else:
+            self._update_widget_now(parent)
+
+    def _update_widget_now(self, parent=None):
         """Update the properties colormap dataframe and widget. This is different from legend manager,
         where the geol_coll.legend_df dataframe is managed directly by the geol_coll class. The reason for
         this difference is that property colormaps are managed at the whole project level, across the

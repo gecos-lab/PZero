@@ -1350,8 +1350,6 @@ class XsPolyLine(PolyLine):
                 if cell_list.GetNumberOfIds() > 0:
                     point_normal /= cell_list.GetNumberOfIds()
 
-                print(f"Normals in point {i}: {point_normal}")
-
                 point_normals.SetTuple3(i, *point_normal)
             except Exception as e:
                 print(f"Error in point {i}: {e}")

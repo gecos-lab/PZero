@@ -143,116 +143,77 @@ def vset_set_normals(VertexSet=None, dip_name=None, dir_name=None):
     VertexSet.set_point_data(data_key="Normals", attribute_matrix=normals)
 
 
-@uses_selection(valid={"geol_coll": None, "dom_coll": None})
+@uses_selection(topologies=["VertexSet", "XsVertexSet", "TriSurf", "XsPolyLine", "PCDom"], cross_collection=True)
 @freeze_gui_onoff
 def set_normals(self):
     """
-    General function to set normals on different entities.
-    It branches to other functions depending on the selected entity
-    and aborts if the input entities are not homogeneous.
+    Set the Normals point property on the selected entities, of any collection, each in its own:
+    - VertexSet / XsVertexSet: from their dip and direction properties (names asked once, among the
+      properties shared by all the selected point sets);
+    - TriSurf, XsPolyLine and PCDom (point clouds): calculated from the geometry.
+    Other entities (e.g. DEMs) cannot have normals calculated and are deselected by @uses_selection.
     """
-    from .entities_factory import TriSurf, VertexSet, XsVertexSet, XsPolyLine
+    from .entities_factory import VertexSet, XsVertexSet
+    from .helpers.helper_functions import entity_collection, tool_uids
 
-    # Check if some vtkPolyData is selected.
-    if self.selected_uids:
-        if self.shown_table == "tabGeology":
-            # Case for VertexSet and XsVertexSet that alreadz have Dip and Direction properties.
-            if isinstance(
-                self.geol_coll.get_uid_vtk_obj(self.selected_uids[0]),
-                (VertexSet, XsVertexSet),
-            ):
-                for uid in self.selected_uids:
-                    if not isinstance(
-                        self.geol_coll.get_uid_vtk_obj(uid), (VertexSet, XsVertexSet)
-                    ):
-                        self.print_terminal(
-                            "Setting normals failed: all entities must be of the same type."
-                        )
-                        return
-                # Choose Dip/Direction property names. If list is empty return.
-                property_name_list = self.geol_coll.get_uid_properties_names(
-                    uid=self.selected_uids[0]
-                )
-                if len(self.selected_uids) > 1:
-                    for uid in self.selected_uids[1:]:
-                        property_name_list = list(
-                            set(property_name_list)
-                            & set(self.geol_coll.get_uid_properties_names(uid=uid))
-                        )
-                if property_name_list == []:
-                    return
-                input_dict = {
+    uids = tool_uids(self)
+    if not uids:
+        self.print_terminal("No input data selected.")
+        return
+
+    def add_normals_property(collection, uid):
+        if "Normals" not in collection.get_uid_properties_names(uid):
+            collection.append_uid_property(
+                uid=uid, property_name="Normals", property_components=3
+            )
+
+    point_set_uids = [
+        uid
+        for uid in uids
+        if isinstance(entity_collection(self, uid).get_uid_vtk_obj(uid), (VertexSet, XsVertexSet))
+    ]
+    geometry_uids = [uid for uid in uids if uid not in set(point_set_uids)]
+
+    # Point sets: normals from dip / direction properties.
+    if point_set_uids:
+        property_name_list = list(
+            entity_collection(self, point_set_uids[0]).get_uid_properties_names(point_set_uids[0])
+        )
+        for uid in point_set_uids[1:]:
+            names = entity_collection(self, uid).get_uid_properties_names(uid)
+            property_name_list = [name for name in property_name_list if name in names]
+        if not property_name_list:
+            self.print_terminal(
+                " -- Normals of point sets: no dip/direction properties shared by all of them -- "
+            )
+        else:
+            updt_dict = multiple_input_dialog(
+                title="Select Dip/Direction property names",
+                input_dict={
                     "dip_name": ["Dip property: ", property_name_list],
                     "dir_name": ["Direction property: ", property_name_list],
-                }
-                updt_dict = multiple_input_dialog(
-                    title="Select Dip/Direction property names", input_dict=input_dict
-                )
-                if updt_dict is None:
-                    return
-                # Now calculate Normals on each VTK object and append Normals to properties_names list.
-                for uid in self.selected_uids:
-                    self.geol_coll.append_uid_property(
-                        uid=uid, property_name="Normals", property_components=3
-                    )
+                },
+            )
+            if updt_dict is not None:
+                for uid in point_set_uids:
+                    collection = entity_collection(self, uid)
+                    add_normals_property(collection, uid)
                     vset_set_normals(
-                        VertexSet=self.geol_coll.get_uid_vtk_obj(uid),
+                        VertexSet=collection.get_uid_vtk_obj(uid),
                         dip_name=updt_dict["dip_name"],
                         dir_name=updt_dict["dir_name"],
                     )
-                    self.prop_legend.update_widget(self)
-                    self.print_terminal("Normals set on vertex set " + uid)
-                self.print_terminal("All Normals set.")
-            # Case for TriSurf and XsPolyLine where Normal are calculated from geometry
-            elif isinstance(
-                self.geol_coll.get_uid_vtk_obj(self.selected_uids[0]),
-                (TriSurf, XsPolyLine),
-            ):
-                self.print_terminal("Normals on TriSurf or XsPolyLine.")
-                for uid in self.selected_uids:
-                    if not isinstance(
-                        self.geol_coll.get_uid_vtk_obj(uid), (TriSurf, XsPolyLine)
-                    ):
-                        self.print_terminal(
-                            "Setting normals failed: all entities must be of the same type."
-                        )
-                        return
-                for uid in self.selected_uids:
-                    self.geol_coll.append_uid_property(
-                        uid=uid, property_name="Normals", property_components=3
-                    )
-                    self.geol_coll.get_uid_vtk_obj(uid).vtk_set_normals()
-                    self.prop_legend.update_widget(self)
-                    self.print_terminal("Normals set on TriSurf or XsPolyLine" + uid)
-                    obj = self.geol_coll.get_uid_vtk_obj(uid)
-                    normals = obj.get_property("Normals")
-                    # self.print_terminal(f"UID {uid}:")
-                    # self.print_terminal("getproperties", normals)
-                    # for n in normals:
-                    #     self.print_terminal("Normals: X={0}, Y={1}, Z={2}".format(n[0], n[1], n[2]))
+                    self.print_terminal(f"Normals set on {collection.get_uid_name(uid)}")
 
-                self.print_terminal("All Normals set.")
-            else:
-                self.print_terminal(
-                    "Only VertexSet, XsVertexSet, XsPolyLine and TriSurf entities can be processed."
-                )
+    # TriSurf, XsPolyLine, point clouds: normals from geometry.
+    for uid in geometry_uids:
+        collection = entity_collection(self, uid)
+        add_normals_property(collection, uid)
+        collection.get_uid_vtk_obj(uid).vtk_set_normals()
+        self.print_terminal(f"Normals set on {collection.get_uid_name(uid)}")
 
-        elif self.shown_table == "tabDOMs":
-            self.print_terminal("Calculating normals for Point Cloud")
-            for uid in self.selected_uids:
-                self.dom_coll.append_uid_property(
-                    uid=uid, property_name="Normals", property_components=3
-                )
-                self.dom_coll.get_uid_vtk_obj(uid).vtk_set_normals()
-                self.prop_legend.update_widget(self)
-                # self.print_terminal(self.prop_legend_df)
-            self.print_terminal("Done")
-        else:
-            self.print_terminal(
-                "Normals can be calculated only on geological entities and Point Clouds (at the moment)."
-            )
-    else:
-        self.print_terminal("No input data selected.")
+    self.prop_legend.update_widget(self)
+    self.print_terminal("All Normals set.")
 
 
 def normals2dip_directions(normals=None):

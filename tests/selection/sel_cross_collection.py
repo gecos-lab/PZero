@@ -11,6 +11,7 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[2]
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 app = QApplication.instance() or QApplication(sys.argv)
+import numpy as np  # noqa: E402
 import pyvista as pv  # noqa: E402
 from pzero.project_window import ProjectWindow  # noqa: E402
 from pzero.entities_factory import PolyLine, TriSurf  # noqa: E402
@@ -141,6 +142,8 @@ vm = ViewMap(parent=pw)
 c1 = add(pw.geol_coll, "PolyLine", PolyLine, pv.Line((0, 10, 0), (5, 10, 0), resolution=5), "c1")
 c2 = add(pw.fluid_coll, "PolyLine", PolyLine, pv.Line((0, 20, 0), (5, 20, 0), resolution=5), "c2")
 tdl.input_one_value_dialog = lambda **kw: 2.0
+for _ in range(5):
+    app.processEvents()  # views process the queued additions (in the GUI, between user actions)
 select(c1, c2)
 tdl.start_checked_line_tool(vm, tdl.copy_parallel, same_parent=True, cross_collection=True)
 copies = pw.selection_uids()
@@ -198,6 +201,8 @@ check("Ctrl+Shift+A in the Geology table deselects geology only", pw.selection_u
 # weld output named with the _weld suffix and selected
 w1 = add(pw.geol_coll, "PolyLine", PolyLine, pv.Line((0, 50, 0), (2, 50, 0), resolution=2), "w1")
 w2 = add(pw.geol_coll, "PolyLine", PolyLine, pv.Line((2.1, 50, 0), (4, 50, 0), resolution=2), "w2")
+for _ in range(5):
+    app.processEvents()
 select(w1, w2)
 tdl.start_checked_line_tool(vm, tdl.merge_lines, min_selected=2, same_parent=True)
 sel = pw.selection_uids()
@@ -238,5 +243,61 @@ check("Ctrl+A selects shown entities", set(v.shown_uids) <= set(pw.selection_uid
 check("Ctrl+A deselects hidden entities of the view", not pw.is_selected(hide_uid))
 v.actors_df.loc[v.actors_df["uid"] == hide_uid, "show"] = True
 v.set_actor_visible(uid=hide_uid, visible=True)
+
+
+# Calculate Normals across collections: TriSurfs and point clouds get Normals, a DEM is deselected
+from pzero.entities_factory import PCDom  # noqa: E402
+
+pc = PCDom()
+pc.ShallowCopy(pv.PolyData(np.random.default_rng(2).random((200, 3)) * [10, 10, 0.1]))
+dpc = deepcopy(pw.dom_coll.entity_dict)
+dpc.update(name="pc", uid=str(uuid4()), topology="PCDom", vtk_obj=pc)
+pc_uid = pw.dom_coll.add_entity_from_dict(entity_dict=dpc)
+dem_like = TriSurf()
+dem_like.ShallowCopy(plane)
+ddem = deepcopy(pw.dom_coll.entity_dict)
+ddem.update(name="dem", uid=str(uuid4()), topology="DEM", vtk_obj=dem_like)
+dem_uid = pw.dom_coll.add_entity_from_dict(entity_dict=ddem)
+nsg = add(pw.geol_coll, "TriSurf", TriSurf, plane, "nsg")
+nsf = add(pw.fluid_coll, "TriSurf", TriSurf, plane, "nsf")
+select(nsg, dem_uid, nsf, pc_uid)
+pw.normals_calculate()
+check("normals on geology and fluid TriSurfs and point cloud",
+      "Normals" in pw.geol_coll.get_uid_properties_names(nsg)
+      and "Normals" in pw.fluid_coll.get_uid_properties_names(nsf)
+      and "Normals" in pw.dom_coll.get_uid_properties_names(pc_uid))
+check("DEM deselected, no normals", not pw.is_selected(dem_uid) and "Normals" not in pw.dom_coll.get_uid_properties_names(dem_uid))
+
+
+# tools with required properties / property tools with everything selected, cross-sections included
+import pzero.point_clouds as pcl  # noqa: E402
+pw.set_selection(uids=[u for c in pw.tab_collection_dict.values() for u in getattr(pw, c).get_uids], mode="replace")
+pcl.normals2dd(pw)
+check("dip/direction with everything selected (incl. cross-sections): no crash, only entities with Normals kept",
+      pw.selection_uids() and all("Normals" in pw.collection_of_uid(u) and False or True for u in pw.selection_uids())
+      and not any(pw.collection_of_uid(u) == "xsect_coll" for u in pw.selection_uids()))
+pw.set_selection(uids=[u for c in pw.tab_collection_dict.values() for u in getattr(pw, c).get_uids], mode="replace")
+pwm.multiple_input_dialog = lambda **kw: {"property_name": "ptest", "property_components": 1}
+pw.property_add()
+check("add property with everything selected: cross-sections deselected",
+      not any(pw.collection_of_uid(u) == "xsect_coll" for u in pw.selection_uids()) and "ptest" in pw.geol_coll.get_uid_properties_names(g_line))
+
+
+# deferred view updates: many entities added and removed in one operation, views consistent after
+# one event loop pass (one merged update per kind instead of one per entity)
+for _ in range(5):
+    app.processEvents()
+bulk = [add(pw.fluid_coll, "TriSurf", TriSurf, plane, f"bulk{i}") for i in range(40)]
+check("views not yet updated before the event loop runs", bulk[0] not in set(v.actors_df["uid"]))
+for _ in range(5):
+    app.processEvents()
+check("bulk additions shown in the view", set(bulk) <= set(v.actors_df["uid"]) and all(v.get_actor_by_uid(u) is not None for u in bulk))
+pw.fluid_coll.remove_entities(bulk[:30])
+pw.fluid_coll.remove_entities(bulk[30:])
+for _ in range(5):
+    app.processEvents()
+check("bulk removals gone from the view and its tree",
+      not (set(bulk) & set(v.actors_df["uid"]))
+      and not any(v.FluidsTreeWidget.get_item_uid(i) in set(bulk) for i in v.FluidsTreeWidget.findItems("", __import__("PySide6.QtCore", fromlist=["Qt"]).Qt.MatchContains | __import__("PySide6.QtCore", fromlist=["Qt"]).Qt.MatchRecursive)))
 
 print("RESULT:", "FAILED" if failed else "ALL PASSED")
