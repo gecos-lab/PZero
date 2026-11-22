@@ -2,6 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QSpinBox, QWidgetAction
 
@@ -17,6 +18,7 @@ from numpy import atleast_1d as np_atleast_1d
 from numpy import concatenate as np_concatenate
 from numpy import vstack as np_vstack
 from numpy import where as np_where
+from numpy import isfinite as np_isfinite
 
 # Pandas imports____
 from pandas import DataFrame as pd_DataFrame
@@ -46,7 +48,69 @@ from matplotlib.path import Path as mpl_Path
 import matplotlib.cm as cm
 
 
+class KSpinBoxAction(QWidgetAction):
+    """Number of k-medoids clusters in the Analysis menu. A new spin box is created for each place
+    the menu is shown (also a detached / torn-off copy of the menu, where a single default widget
+    would disappear); all of them show the view's kmedoids_k."""
+
+    def __init__(self, view):
+        super().__init__(view)
+        self.view = view
+
+    def createWidget(self, parent):
+        spinbox = QSpinBox(parent)
+        spinbox.setMinimum(1)
+        spinbox.setPrefix("k = ")
+        spinbox.setValue(self.view.kmedoids_k)
+        spinbox.valueChanged.connect(self.view.set_kmedoids_k)
+        return spinbox
+
+    def sync(self, value):
+        for spinbox in self.createdWidgets():
+            if spinbox.value() != value:
+                spinbox.blockSignals(True)
+                spinbox.setValue(value)
+                spinbox.blockSignals(False)
+
+
+class StereoActor:
+    """The matplotlib artists of one entity in the stereoplot (markers of the two hemispheres,
+    great circles, contours), shown, hidden and removed together. Duck-types the artist methods
+    used by ViewMPL (set_visible, get_visible, remove, figure)."""
+
+    def __init__(self, artists):
+        self.artists = [artist for artist in artists if artist is not None]
+
+    @property
+    def figure(self):
+        return self.artists[0].figure
+
+    def get_visible(self):
+        return any(artist.get_visible() for artist in self.artists)
+
+    def set_visible(self, visible):
+        for artist in self.artists:
+            artist.set_visible(bool(visible))
+
+    def remove(self):
+        for artist in self.artists:
+            try:
+                artist.remove()
+            except (ValueError, AttributeError, NotImplementedError):
+                pass
+        self.artists = []
+
+
 class ViewStereoplot(ViewMPL):
+
+    MARKER_SIZE = 4
+
+    # Printed when k-medoids results of Normals are shown (see orientation_analysis.kmedoids_clusters).
+    KMEDOIDS_NORMALS_NOTE = (
+        "Note: k-medoids on Normals is biaxial: each normal is clustered together with its "
+        "antipode (the data are doubled), so a cluster and its antipodal copy can both be found, "
+        "giving two (nearly) identical centers; centers are shown on the lower hemisphere."
+    )
 
     Z_CONTOURS = 1
     Z_GRID = 2
@@ -59,6 +123,18 @@ class ViewStereoplot(ViewMPL):
         self.proj_type = "equal_area_stereonet"
         # self.contours can be True (filled), False (non filled) or None (no contours)
         self.contours = None
+        # Entities with more Normals + Lineations vectors than this are drawn as density contours
+        # in their legend color instead of markers (View > Contours-only threshold).
+        self.contours_only_threshold = 20000
+        # View > Toggle poles (markers of Normals and Lineations) and Toggle great circles (planes
+        # of the Normals of all entities, in addition to the "Planes" shown property).
+        self.show_poles = True
+        self.show_great_circles = False
+        # Toggle contours: one density of all the shown entities together (pooled), updated after
+        # entities are shown, hidden, added, removed or redrawn.
+        self.pooled_contour_actor = None
+        self._pooled_contours_pending = False
+        self._contours_only_uids = set()  # entities already reported as drawn as contours only
         # self.grid_kind can be 'polar', None (equatorial grid), or False (no grid at all)
         self.grid_kind = "polar"
 
@@ -73,7 +149,9 @@ class ViewStereoplot(ViewMPL):
         self.kmedoids_k = 1  # default value
         self.is_normals = None
         self.is_lineations = None
-        self.auto_recompute = False
+        # Statistics are computed on the shown entities, only when needed (a checked overlay,
+        # seed picking, saving clusters, exporting the summary); _stats_dirty marks them out of date.
+        self._stats_dirty = True
         self.picking_seeds = False
         self.seed_pick_kind = None
         self.seed_pick_target = 0
@@ -113,6 +191,18 @@ class ViewStereoplot(ViewMPL):
         self.actionContours.triggered.connect(self.toggle_contours)
         self.menuView.addAction(self.actionContours)
 
+        self.actionTogglePoles = QAction("Toggle poles", self)
+        self.actionTogglePoles.triggered.connect(self.toggle_poles)
+        self.menuView.addAction(self.actionTogglePoles)
+
+        self.actionToggleGreatCircles = QAction("Toggle great circles", self)
+        self.actionToggleGreatCircles.triggered.connect(self.toggle_great_circles)
+        self.menuView.addAction(self.actionToggleGreatCircles)
+
+        self.actionContoursThreshold = QAction("Contours-only threshold...", self)
+        self.actionContoursThreshold.triggered.connect(self.set_contours_only_threshold)
+        self.menuView.addAction(self.actionContoursThreshold)
+
         self.actionSetPolar = QAction("Toggle grid", self)
         self.actionSetPolar.triggered.connect(self.toggle_grid)
         self.menuView.addAction(self.actionSetPolar)
@@ -128,30 +218,13 @@ class ViewStereoplot(ViewMPL):
         self.menuSelect.addAction(self.actionSelectionTool)
 
         # ---- Analysis Menu ----
-        self.actionRecompute = QAction("Recompute statistics", self)
-        self.actionRecompute.setEnabled(not self.auto_recompute)
-        self.actionRecompute.triggered.connect(self.recompute_values)
-        self.menuAnalysis.addAction(self.actionRecompute)
-
-        self.actionAutoRecompute = QAction("Enable auto recomputation", self)
-        self.actionAutoRecompute.setCheckable(True)
-        self.actionAutoRecompute.setChecked(self.auto_recompute)
-        self.actionAutoRecompute.triggered.connect(self.toggle_auto_recompute)
-        self.menuAnalysis.addAction(self.actionAutoRecompute)
-
         self.actionSaveClusters = QAction("Save clusters as a property", self)
         self.actionSaveClusters.triggered.connect(self.prompt_and_save_clusters)
         self.menuAnalysis.addAction(self.actionSaveClusters)
 
         self.menuAnalysis.addSection("Kmedoids clusters")
 
-        self.kmedoids_k_spinbox = QSpinBox()
-        self.kmedoids_k_spinbox.setMinimum(1)
-        self.kmedoids_k_spinbox.setValue(self.kmedoids_k)
-        self.kmedoids_k_spinbox.valueChanged.connect(self.set_kmedoids_k)
-
-        self.kmedoids_k_widget_action = QWidgetAction(self)
-        self.kmedoids_k_widget_action.setDefaultWidget(self.kmedoids_k_spinbox)
+        self.kmedoids_k_widget_action = KSpinBoxAction(self)
         self.menuAnalysis.addAction(self.kmedoids_k_widget_action)
 
         self.actionExportStats = QAction("Export statistics summary", self)
@@ -313,6 +386,190 @@ class ViewStereoplot(ViewMPL):
             "button_press_event", self._on_seed_pick
         )
 
+    # --- Entity drawing helpers ---
+    @staticmethod
+    def _entity_vectors(vtk_obj, key):
+        """Unit vectors (N x 3) of the point property key ("Normals" or "Lineations") of vtk_obj,
+        and the boolean mask (on the original points) of the valid ones (finite, non-zero).
+        Returns (None, None) if the property is missing or empty."""
+        if vtk_obj is None or key not in vtk_obj.point_data_keys:
+            return None, None
+        vectors = np_asarray(vtk_obj.get_point_data(key), dtype=float)
+        if vectors.size == 0:
+            return None, None
+        vectors = vectors.reshape(-1, 3)
+        norms = np_linalg_norm(vectors, axis=1)
+        valid = np_isfinite(norms) & (norms > 0)
+        if not valid.any():
+            return None, None
+        return vectors[valid] / norms[valid][:, None], valid
+
+    @staticmethod
+    def _vectors_to_lonlat(vectors):
+        """Stereonet coordinates of unit vectors (x east, y north, z up), and the mask of the upward
+        ones. Downward vectors are projected on the lower hemisphere. Upward vectors (poles of
+        overturned planes, upward lineations, i.e. negative plunge) are projected on the upper
+        hemisphere at their own trend, which is the position of (x, y, -z) on the lower one."""
+        vectors = np_asarray(vectors, dtype=float).reshape(-1, 3)
+        upward = vectors[:, 2] > 0
+        folded = vectors.copy()
+        folded[upward, 2] *= -1
+        plunge, trend = mplstereonet.vector2plunge_bearing(
+            folded[:, 0], folded[:, 1], folded[:, 2]
+        )
+        lon, lat = mplstereonet.line(plunge, trend)
+        return np_atleast_1d(lon), np_atleast_1d(lat), upward
+
+    def _entity_lonlat(self, vtk_obj, keys=("Normals", "Lineations")):
+        """Stereonet coordinates of all the Normals and Lineations of an entity, concatenated
+        (same positions as drawn by show_actor_with_property). Returns (lon, lat, vectors) or
+        (None, None, None) if the entity has no valid vectors."""
+        lons, lats, vecs = [], [], []
+        for key in keys:
+            vectors, _ = self._entity_vectors(vtk_obj, key)
+            if vectors is None:
+                continue
+            lon, lat, _ = self._vectors_to_lonlat(vectors)
+            lons.append(lon)
+            lats.append(lat)
+            vecs.append(vectors)
+        if not lons:
+            return None, None, None
+        return np_concatenate(lons), np_concatenate(lats), np_vstack(vecs)
+
+    def _entity_style(self, uid, collection):
+        """(RGB color, opacity) of an entity from the legend of its collection (gray if none)."""
+        try:
+            legend = collection.get_uid_legend(uid=uid)
+            color = [legend["color_R"] / 255, legend["color_G"] / 255, legend["color_B"] / 255]
+            opacity = legend["opacity"] / 100
+        except Exception:
+            color, opacity = [0.5, 0.5, 0.5], 1.0
+        return color, opacity
+
+    def _property_colors(self, vtk_obj, show_property, valid, opacity):
+        """RGBA colors (one per valid point) for a scalar property, with the colormap of the
+        property legend, or None if the property cannot be read."""
+        from matplotlib import colormaps
+        from matplotlib.colors import Normalize
+
+        try:
+            show_property_title = show_property
+            if show_property == "X":
+                values = vtk_obj.points_X
+            elif show_property == "Y":
+                values = vtk_obj.points_Y
+            elif show_property == "Z":
+                values = vtk_obj.points_Z
+            elif isinstance(show_property, str) and show_property.endswith("]"):
+                pos1 = show_property.index("[")
+                pos2 = show_property.index("]")
+                show_property_title = show_property[:pos1]
+                comp_index = int(show_property[pos1 + 1 : pos2])
+                values = np_asarray(vtk_obj.get_point_data(show_property_title)).reshape(
+                    vtk_obj.points_number, -1
+                )[:, comp_index]
+            else:
+                values = vtk_obj.get_point_data(show_property)
+            values = np_asarray(values, dtype=float).reshape(-1)[valid]
+        except Exception:
+            return None
+        cmap_row = self.parent.prop_legend_df.loc[
+            self.parent.prop_legend_df["property_name"] == show_property_title, "colormap"
+        ]
+        cmap_name = cmap_row.values[0] if len(cmap_row) else "rainbow"
+        try:
+            cmap = colormaps[cmap_name]
+        except KeyError:
+            cmap = colormaps["rainbow"]
+        finite = values[np_isfinite(values)]
+        vmin, vmax = (finite.min(), finite.max()) if finite.size else (0.0, 1.0)
+        rgba = cmap(Normalize(vmin=vmin, vmax=vmax)(values))
+        rgba[:, 3] = opacity
+        return rgba
+
+    def _draw_markers(self, lon, lat, upward, colors, opacity, marker):
+        """One scatter artist: filled markers for the lower hemisphere, hollow markers (same color
+        and size) for the upper hemisphere. colors is one RGB color or an N x 4 RGBA array."""
+        from matplotlib.colors import to_rgba_array
+
+        if np_asarray(colors).ndim == 1:
+            edge = to_rgba_array([list(colors) + [opacity]] * lon.size)
+        else:
+            edge = np_asarray(colors, dtype=float)
+        face = edge.copy()
+        face[upward, 3] = 0.0
+        return self.ax.scatter(
+            lon,
+            lat,
+            s=self.MARKER_SIZE**2,
+            marker=marker,
+            facecolors=face,
+            edgecolors=edge,
+            linewidths=1.0,
+            zorder=self.Z_ENTITIES,
+        )
+
+    def _draw_planes(self, normals, color, opacity):
+        """Great circles of the planes with the given normals, as one line per hemisphere
+        (NaN-separated segments): solid for upright planes, dashed for overturned ones."""
+        from numpy import full as np_full
+        from numpy import nan as np_nan
+
+        artists = []
+        upward = normals[:, 2] > 0
+        for subset, style in ((~upward, "-"), (upward, "--")):
+            these = normals[subset]
+            if these.shape[0] == 0:
+                continue
+            down = these.copy()
+            down[down[:, 2] > 0] *= -1
+            plunge, trend = mplstereonet.vector2plunge_bearing(down[:, 0], down[:, 1], down[:, 2])
+            strike, dip = mplstereonet.plunge_bearing2pole(plunge, trend)
+            lon, lat = mplstereonet.plane(np_atleast_1d(strike), np_atleast_1d(dip))
+            lon = np_vstack([lon, np_full((1, lon.shape[1]), np_nan)]).T.ravel()
+            lat = np_vstack([lat, np_full((1, lat.shape[1]), np_nan)]).T.ravel()
+            artists.append(
+                self.ax.plot(
+                    lon,
+                    lat,
+                    linestyle=style,
+                    color=color,
+                    alpha=opacity,
+                    linewidth=1.0,
+                    zorder=self.Z_ENTITIES,
+                )[0]
+            )
+        return artists
+
+    def _draw_density(self, lon, lat, color=None, filled=False):
+        """Exponential Kamb contours of the given stereonet points (axial counting, so both
+        hemispheres count together). With color, contour lines in that color (entities shown as
+        contours only); otherwise the default colormap, filled or not (Toggle contours)."""
+        from pzero.orientation_analysis import kamb_density_grid
+
+        from matplotlib.ticker import MaxNLocator
+
+        lon_grid, lat_grid, density = kamb_density_grid(lon, lat)
+        levels = MaxNLocator(nbins=8).tick_values(0.0, float(density.max()))
+        levels = levels[levels > 0]  # no level at 0: the empty background is not filled
+        if levels.size < 2:
+            return None
+        if color is not None:
+            return self.ax.contour(
+                lon_grid, lat_grid, density, levels=levels, colors=[color], linewidths=1.0,
+                zorder=self.Z_CONTOURS,
+            )
+        if filled:
+            return self.ax.contourf(
+                lon_grid, lat_grid, density, levels=levels, cmap="Blues", alpha=0.8,
+                zorder=self.Z_CONTOURS,
+            )
+        return self.ax.contour(
+            lon_grid, lat_grid, density, levels=levels, cmap="viridis", linewidths=1.0,
+            zorder=self.Z_CONTOURS,
+        )
+
     def show_actor_with_property(
         self,
         uid=None,
@@ -320,130 +577,219 @@ class ViewStereoplot(ViewMPL):
         show_property=None,
         visible=None,
     ):
-        # self.print_terminal(f"DEBUG show_actor_with_property called for uid={uid}, visible={visible}")
-        # self.print_terminal("".join(traceback.format_stack(limit=8)))
-        # Show actor with scalar property (default None)
-        if show_property is None:
+        """Draw an entity of any class and collection from its Normals (as poles, circles) and/or
+        Lineations (triangles) point properties. Downward vectors are filled markers on the lower
+        hemisphere, upward vectors (overturned planes, negative plunge) hollow markers on the
+        upper hemisphere. Entities with more than contours_only_threshold vectors are drawn as
+        density contours in their legend color. show_property: "Poles" (default), "Planes"
+        (great circles of the Normals) or a scalar property used to color the markers.
+        The artists of one entity are grouped in a single StereoActor (or None if nothing to draw)."""
+        if show_property in [None, "none"]:
             show_property = "Poles"
-
-        # First get the vtk object from its collection.
-        show_property_title = show_property
-        this_coll = eval(f"self.parent.{coll_name}")
-        if coll_name == "geol_coll":
-            color_R = this_coll.get_uid_legend(uid=uid)["color_R"]
-            color_G = this_coll.get_uid_legend(uid=uid)["color_G"]
-            color_B = this_coll.get_uid_legend(uid=uid)["color_B"]
-            color_RGB = [color_R / 255, color_G / 255, color_B / 255]
-            opacity = this_coll.get_uid_legend(uid=uid)["opacity"] / 100
-            plot_entity = this_coll.get_uid_vtk_obj(uid)
-        else:
-            # catch errors
-            self.print_terminal("no collection: " + coll_name)
-            plot_entity = None
-
-        # Then plot.
-        if isinstance(plot_entity, (VertexSet, XsVertexSet, Attitude)):
-            if isinstance(plot_entity.points, np_ndarray):
-                if plot_entity.points_number > 0:
-                    # This check is needed to avoid errors when trying to plot an empty
-                    # PolyData, just created at the beginning of a digitizing session.
-                    # Check if both these conditions are necessary_________________
-                    # Dip direction needs to be converted to strike (dz-90) to plot with mplstereonet
-                    strike = (plot_entity.points_map_dip_direction - 90) % 360
-                    dip = plot_entity.points_map_dip
-
-                    if np_all(strike != None):
-                        self.remove_actor_in_view(uid=uid, redraw=False)
-                        if show_property == "Planes":
-                            this_actor = self.ax.plane(
-                                strike,
-                                dip,
-                                color=color_RGB,
-                                alpha=opacity,
-                                zorder=self.Z_ENTITIES,
-                            )[0]
-
-                        elif show_property in ["none", "Poles", None]:
-                            if self.contours is not None and visible is True:
-                                if self.contours:
-                                    self.ax.density_contourf(
-                                        strike,
-                                        dip,
-                                        measurement="poles",
-                                        zorder=self.Z_CONTOURS,
-                                    )
-                                else:
-                                    self.ax.density_contour(
-                                        strike,
-                                        dip,
-                                        measurement="poles",
-                                        zorder=self.Z_CONTOURS,
-                                    )
-
-                            this_actor = self.ax.pole(
-                                strike,
-                                dip,
-                                color=color_RGB,
-                                alpha=opacity,
-                                markersize=4,
-                                zorder=self.Z_ENTITIES,
-                            )[0]
-
-                        else:
-                            show_property_title = show_property
-
-                            if show_property == "X":
-                                prop_values = plot_entity.points_X
-                            elif show_property == "Y":
-                                prop_values = plot_entity.points_Y
-                            elif show_property == "Z":
-                                prop_values = plot_entity.points_Z
-                            elif isinstance(
-                                show_property, str
-                            ) and show_property.endswith("]"):
-                                pos1 = show_property.index("[")
-                                pos2 = show_property.index("]")
-                                original_prop = show_property[:pos1]
-                                comp_index = int(show_property[pos1 + 1 : pos2])
-                                prop_values = plot_entity.get_point_data(original_prop)[
-                                    :, comp_index
-                                ]
-                                show_property_title = original_prop
-                            else:
-                                prop_values = plot_entity.get_point_data(show_property)
-
-                            cmap_row = self.parent.prop_legend_df.loc[
-                                self.parent.prop_legend_df["property_name"]
-                                == show_property_title,
-                                "colormap",
-                            ]
-                            show_property_cmap = (
-                                cmap_row.values[0] if len(cmap_row) else "rainbow"
-                            )
-
-                            prop_values = np_asarray(prop_values).reshape(-1)
-                            lon, lat = mplstereonet.pole(strike, dip)
-                            this_actor = self.ax.scatter(
-                                lon,
-                                lat,
-                                c=prop_values,
-                                cmap=show_property_cmap,
-                                alpha=opacity,
-                                s=4**2,
-                                zorder=self.Z_ENTITIES,
-                            )
-                    else:
-                        this_actor = None
+        self.remove_actor_in_view(uid=uid, redraw=False)
+        this_actor = None
+        collection = getattr(self.parent, coll_name, None) if coll_name else None
+        vtk_obj = collection.get_uid_vtk_obj(uid) if collection is not None else None
+        if vtk_obj is not None:
+            color, opacity = self._entity_style(uid, collection)
+            artists = []
+            all_lon, all_lat = [], []
+            n_vectors = 0
+            parts = []
+            for key, marker in (("Normals", "o"), ("Lineations", "^")):
+                vectors, valid = self._entity_vectors(vtk_obj, key)
+                if vectors is None:
+                    continue
+                lon, lat, upward = self._vectors_to_lonlat(vectors)
+                parts.append((key, marker, vectors, valid, lon, lat, upward))
+                all_lon.append(lon)
+                all_lat.append(lat)
+                n_vectors += vectors.shape[0]
+            if parts:
+                all_lon = np_concatenate(all_lon)
+                all_lat = np_concatenate(all_lat)
+                contours_only = n_vectors > self.contours_only_threshold
+                if contours_only and uid not in self._contours_only_uids:
+                    # Say it once per entity (and again after the threshold changes).
+                    self._contours_only_uids.add(uid)
+                    self.print_terminal(
+                        f"Stereoplot: {collection.get_uid_name(uid)} has {n_vectors} vectors "
+                        f"(> {self.contours_only_threshold}), drawn as contours in its color "
+                        f"instead of poles (View > Contours-only threshold)."
+                    )
+                elif not contours_only:
+                    self._contours_only_uids.discard(uid)
+                if contours_only:
+                    # Too many vectors for markers: density lines in the entity color, shown and
+                    # hidden as its poles (Toggle poles).
+                    if self.show_poles:
+                        artists.append(self._draw_density(all_lon, all_lat, color=color))
                 else:
-                    this_actor = None
-            else:
-                this_actor = None
-        else:
-            this_actor = None
-        if this_actor:
-            this_actor.figure.canvas.draw()
+                    for key, marker, vectors, valid, lon, lat, upward in parts:
+                        if key == "Normals" and (
+                            self.show_great_circles or show_property == "Planes"
+                        ):
+                            artists.extend(self._draw_planes(vectors, color, opacity))
+                        if show_property == "Planes" and key == "Normals":
+                            continue
+                        if not self.show_poles:
+                            continue
+                        colors = color
+                        if show_property not in ["Poles", "Planes"]:
+                            rgba = self._property_colors(vtk_obj, show_property, valid, opacity)
+                            if rgba is not None:
+                                colors = rgba
+                        artists.append(
+                            self._draw_markers(lon, lat, upward, colors, opacity, marker)
+                        )
+            if artists:
+                this_actor = StereoActor(artists)
+                if visible is False:
+                    this_actor.set_visible(False)
+                this_actor.figure.canvas.draw_idle()
         self.mpl_actors[uid] = this_actor
+        self._schedule_pooled_contours()
         return this_actor
+
+    def set_actor_visible(self, uid=None, visible=None):
+        super().set_actor_visible(uid=uid, visible=visible)
+        self._schedule_pooled_contours()
+
+    def remove_actor_in_view(self, uid=None, redraw=False):
+        super().remove_actor_in_view(uid=uid, redraw=redraw)
+        self._schedule_pooled_contours()
+
+    def _schedule_pooled_contours(self):
+        """The shown entities (or their vectors) may have changed: update the pooled contours and
+        the checked statistics overlays once, at the next event loop iteration (after the
+        visibility and the list of the entities in this view have been updated)."""
+        self._stats_dirty = True
+        if (
+            self.contours is None
+            and self.pooled_contour_actor is None
+            and not self._checked_analysis_keys()
+        ):
+            return
+        if not self._pooled_contours_pending:
+            self._pooled_contours_pending = True
+            QTimer.singleShot(0, self._update_shown_dependent)
+
+    def _update_shown_dependent(self):
+        """Pooled contours and checked statistics overlays, from the shown entities."""
+        self._update_pooled_contours()
+        if self._checked_analysis_keys():
+            self.recompute_values()
+
+    def _shown_entities(self):
+        """(uid, collection, vtk_obj) of the entities shown in this view, in tree order. Contours
+        and statistics are computed on these."""
+        for _, row in self.actors_df.drop_duplicates(subset="uid", keep="last").iterrows():
+            if not row["show"]:
+                continue
+            collection = getattr(self.parent, row["collection"], None)
+            vtk_obj = collection.get_uid_vtk_obj(row["uid"]) if collection is not None else None
+            if vtk_obj is not None:
+                yield row["uid"], collection, vtk_obj
+
+    def _checked_analysis_keys(self):
+        """Statistics overlays whose checkbox (Analysis menu) is checked."""
+        return [
+            key
+            for key, action in getattr(self, "analysis_action_for_key", {}).items()
+            if action.isChecked()
+        ]
+
+    def _ensure_stats(self):
+        """Compute the statistics of the shown entities if they are out of date."""
+        if self._stats_dirty or not hasattr(self, "last_normals_array"):
+            self.recompute_values()
+
+    def _update_pooled_contours(self):
+        """Toggle contours: density contours (lines or filled) of the Normals and Lineations of
+        all the shown entities together."""
+        self._pooled_contours_pending = False
+        if self.pooled_contour_actor is not None:
+            try:
+                self.pooled_contour_actor.remove()
+            except Exception:
+                pass  # it belonged to a figure that has been replaced
+            self.pooled_contour_actor = None
+        if self.contours is None or not hasattr(self, "ax"):
+            if hasattr(self, "figure"):
+                self.figure.canvas.draw_idle()
+            return
+        lons, lats = [], []
+        for _, _, vtk_obj in self._shown_entities():
+            lon, lat, _ = self._entity_lonlat(vtk_obj)
+            if lon is not None:
+                lons.append(lon)
+                lats.append(lat)
+        if lons:
+            self.pooled_contour_actor = self._draw_density(
+                np_concatenate(lons), np_concatenate(lats), filled=bool(self.contours)
+            )
+        self.figure.canvas.draw_idle()
+
+    def _redraw_entities(self, updated_uids):
+        """Redraw entities after a legend change (color, opacity), keeping their visibility and
+        shown property."""
+        rows = self.actors_df.drop_duplicates(subset="uid", keep="last").set_index("uid")
+        for uid in updated_uids or []:
+            if uid not in rows.index or self.mpl_actors.get(uid) is None:
+                continue
+            row = rows.loc[uid]
+            self.show_actor_with_property(
+                uid=uid,
+                coll_name=row["collection"],
+                show_property=row["show_property"],
+                visible=bool(row["show"]),
+            )
+
+    def change_actor_color(self, updated_uids: list = None, collection=None):
+        """Markers use per-point face/edge colors (hollow upper hemisphere), so redraw."""
+        self._redraw_entities(updated_uids)
+
+    def change_actor_opacity(self, updated_uids: list = None, collection=None):
+        """Markers use per-point face/edge colors (hollow upper hemisphere), so redraw."""
+        self._redraw_entities(updated_uids)
+
+    def toggle_poles(self):
+        """Show or hide the poles and lineations of all entities (e.g. to see the contours)."""
+        self.show_poles = not self.show_poles
+        self.print_terminal("Poles shown" if self.show_poles else "Poles hidden")
+        self._rebuild_all_entity_actors()
+
+    def toggle_great_circles(self):
+        """Show or hide the great circles of the Normals of all entities."""
+        self.show_great_circles = not self.show_great_circles
+        self.print_terminal(
+            "Great circles shown" if self.show_great_circles else "Great circles hidden"
+        )
+        self._rebuild_all_entity_actors()
+
+    def set_contours_only_threshold(self):
+        """Ask the number of vectors above which an entity is drawn as contours only."""
+        result = multiple_input_dialog(
+            title="Contours-only threshold",
+            input_dict={
+                "threshold": [
+                    "Entities with more vectors than this are drawn as contours: ",
+                    str(self.contours_only_threshold),
+                ]
+            },
+        )
+        if result is None:
+            return
+        try:
+            threshold = int(result["threshold"])
+        except (TypeError, ValueError):
+            self.print_terminal("Invalid threshold.")
+            return
+        self.contours_only_threshold = max(0, threshold)
+        self._contours_only_uids = set()
+        self.print_terminal(f"Contours-only threshold: {self.contours_only_threshold} vectors")
+        self._rebuild_all_entity_actors()
+        self.figure.canvas.draw()
 
     def change_actor_point_size(self, updated_uids: list = None, collection=None):
         """
@@ -483,16 +829,12 @@ class ViewStereoplot(ViewMPL):
             collection_name = row["collection"]
             show_property = row["show_property"]
 
-            if show:
-                this_actor = self.show_actor_with_property(
-                    uid=uid,
-                    coll_name=collection_name,
-                    show_property=show_property,
-                    visible=True,
-                )
-            else:
-                this_actor = None
-                self.mpl_actors[uid] = None
+            this_actor = self.show_actor_with_property(
+                uid=uid,
+                coll_name=collection_name,
+                show_property=show_property,
+                visible=bool(show),
+            )
 
             new_rows.append(
                 {
@@ -504,7 +846,7 @@ class ViewStereoplot(ViewMPL):
                 }
             )
 
-        self._deactivate_rectangle()
+        self._deactivate_selection()
 
         self.actors_df = pd_DataFrame(new_rows)
         self.figure.canvas.draw()
@@ -513,12 +855,9 @@ class ViewStereoplot(ViewMPL):
         """Redraw every currently-active analysis visual on the current self.ax,
         for the same reason as _rebuild_all_entity_actors: the old artists belong
         to a now-destroyed figure."""
-        previously_active_keys = [
-            key for key, actor in self.analysis_actors.items() if actor is not None
-        ]
         self.analysis_actors = {}
-        for key in previously_active_keys:
-            self._show_analysis_actor(key)
+        for key in self._checked_analysis_keys():
+            self._show_analysis_actor(key, verbose=False)
 
     # --- View display toggles ---
     def toggle_projection(self):
@@ -541,11 +880,7 @@ class ViewStereoplot(ViewMPL):
         self._rebuild_analysis_actors()
 
     def toggle_contours(self):
-        """Display Kamb contours for visible poles in the stereoplot."""
-
-        self.ViewFrameLayout.removeWidget(self.canvas)
-        self.initialize_interactor()
-
+        """Cycle the density contours of all the shown entities: lines, filled, none."""
         if self.contours == None:
             self.contours = False
             self.print_terminal("Contours enabled, unfilled")
@@ -555,9 +890,7 @@ class ViewStereoplot(ViewMPL):
         else:
             self.contours = None
             self.print_terminal("Contours disabled")
-
-        self._rebuild_all_entity_actors()
-        self._rebuild_analysis_actors()
+        self._update_pooled_contours()
 
     def toggle_grid(self):
         """
@@ -599,83 +932,42 @@ class ViewStereoplot(ViewMPL):
     # --- Orientation analysis: data pipeline ---
     def get_normals_and_lineations_for_analysis(self):
         """
-        Walk through self.selected_uids and pull orientation data for statistical
-        analysis. For each selected uid, look for a "Normals" point-data property
-        and/or a "Lineations" point-data property, and stack whatever is found into
-        two separate DataFrames, each with columns ["uid", "x", "y", "z"].
-
-        A uid with neither property is skipped, and a message is printed to the
-        terminal so the user knows it was excluded.
+        Stack the Normals and Lineations vectors of the entities shown in this view (as the pooled
+        contours), each into a DataFrame with columns ["uid", "x", "y", "z"]. Hidden entities and
+        the tree selection do not matter.
 
         Returns:
-            normals_df (DataFrame): columns uid, x, y, z - one row per Normals vector
-                found across all selected uids. Empty (0 rows) if none found.
+            normals_df (DataFrame): one row per valid Normals vector. Empty if none.
             lineations_df (DataFrame): same shape, for Lineations vectors.
         """
-        normals_rows = []
-        lineations_rows = []
+        columns = ["uid", "x", "y", "z"]
+        frames = {"Normals": [], "Lineations": []}
+        for uid, _, vtk_obj in self._shown_entities():
+            for key in frames:
+                vectors, _ = self._entity_vectors(vtk_obj, key)
+                if vectors is None:
+                    continue
+                frame = pd_DataFrame(vectors, columns=["x", "y", "z"])
+                frame.insert(0, "uid", uid)
+                frames[key].append(frame)
 
-        if not self.parent.geol_coll.selected_uids:
-            self.print_terminal("No entities selected for analysis.")
-            return (
-                pd_DataFrame(columns=["uid", "x", "y", "z"]),
-                pd_DataFrame(columns=["uid", "x", "y", "z"]),
-            )
-
-        for uid in self.parent.geol_coll.selected_uids:
-            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
-            found_property = False
-
-            if vtk_obj is None:
-                self.print_terminal(f"uid {uid}: not found in geol_coll, skipped.")
-                continue
-
-            available_keys = vtk_obj.point_data_keys
-
-            # ---- Normals ----
-            if "Normals" in available_keys:
-                normals_array = vtk_obj.get_point_data("Normals")
-                # guard against a single-point entity, where reshape+squeeze
-                # collapses (1, 3) down to (3,)
-                if normals_array.ndim == 1:
-                    normals_array = normals_array.reshape(1, -1)
-                if normals_array.shape[0] > 0:
-                    found_property = True
-                    for row in normals_array:
-                        normals_rows.append(
-                            {"uid": uid, "x": row[0], "y": row[1], "z": row[2]}
-                        )
-
-            # ---- Lineations ----
-            if "Lineations" in available_keys:
-                lineations_array = vtk_obj.get_point_data("Lineations")
-                if lineations_array.ndim == 1:
-                    lineations_array = lineations_array.reshape(1, -1)
-                if lineations_array.shape[0] > 0:
-                    found_property = True
-                    for row in lineations_array:
-                        lineations_rows.append(
-                            {"uid": uid, "x": row[0], "y": row[1], "z": row[2]}
-                        )
-
-            if not found_property:
-                self.print_terminal(
-                    f"uid {uid}: no Normals or Lineations property found, skipped."
-                )
-
-        normals_df = pd_DataFrame(normals_rows, columns=["uid", "x", "y", "z"])
-        lineations_df = pd_DataFrame(lineations_rows, columns=["uid", "x", "y", "z"])
-
+        normals_df, lineations_df = (
+            pd_concat(frames[key], ignore_index=True)
+            if frames[key]
+            else pd_DataFrame(columns=columns)
+            for key in ("Normals", "Lineations")
+        )
         return normals_df, lineations_df
 
     def recompute_values(self):
         """
         Recompute all orientation statistics (Fisher, Kent, Bingham, k-medoids)
-        for the entities currently in self.selected_uids.
+        for the entities shown in this view, then redraw the overlays whose checkbox
+        is checked. Called automatically when needed (see _schedule_pooled_contours,
+        _ensure_stats): there is no Recompute command.
 
-        This is a destructive recompute: any previously drawn analysis actors
-        are removed from the canvas and self.analysis_actors is cleared, then
-        self.analysis_results is rebuilt from scratch.
+        Any previously drawn analysis actors are removed from the canvas and
+        self.analysis_actors is cleared, then self.analysis_results is rebuilt.
 
         Side effects
         ------------
@@ -687,10 +979,6 @@ class ViewStereoplot(ViewMPL):
         self.analysis_actors : dict
             Cleared to {} after removing any live matplotlib artists it held.
         """
-        previously_active_keys = [
-            key for key, actor in self.analysis_actors.items() if actor is not None
-        ]
-
         # Clear the old state
         # Remove any previously-drawn analysis artists from the canvas, then reset
         for key, actor in self.analysis_actors.items():
@@ -817,8 +1105,11 @@ class ViewStereoplot(ViewMPL):
             "kmedoids": kmean_result,
         }
 
-        for key in previously_active_keys:
-            self.toggle_analysis_actor(key)
+        self._stats_dirty = False
+        for key in self._checked_analysis_keys():
+            self._show_analysis_actor(key, verbose=False)
+        if hasattr(self, "figure"):
+            self.figure.canvas.draw_idle()
 
     def recompute_kmedoids_only(self):
         """
@@ -827,10 +1118,9 @@ class ViewStereoplot(ViewMPL):
         Leaves fisher/kent/bingham results untouched.
         Does nothing if recompute_values has not yet run at least once.
         """
-        if not hasattr(self, "last_normals_array"):
-            self.print_terminal(
-                "No data to recompute k-medoids on yet - run Recompute first."
-            )
+        if self._stats_dirty or not hasattr(self, "last_normals_array"):
+            # Everything out of date: the full recompute also computes k-medoids with k.
+            self.recompute_values()
             return
 
         k = self.kmedoids_k
@@ -905,7 +1195,8 @@ class ViewStereoplot(ViewMPL):
                     self._show_analysis_actor(key)
 
     def set_kmedoids_k(self, value):
-        self.kmedoids_k = value
+        self.kmedoids_k = int(value)
+        self.kmedoids_k_widget_action.sync(self.kmedoids_k)
         self.recompute_kmedoids_only()
 
     def _on_seed_pick(self, event):
@@ -950,7 +1241,7 @@ class ViewStereoplot(ViewMPL):
 
         seeds.append(seed)
 
-        actor, pole = self._draw_pole(seed, color="lime", marker="o", markersize=8)
+        actor, pole = self._draw_pole(seed, axial=False, color="lime", marker="o", markersize=8)
         self.seed_pick_actors.append(actor)
         self.figure.canvas.draw()
 
@@ -972,10 +1263,7 @@ class ViewStereoplot(ViewMPL):
         """
         self._clear_seed_pick_actors()
 
-        if not hasattr(self, "last_normals_array") or not hasattr(
-            self, "last_lineations_array"
-        ):
-            self.recompute_values()
+        self._ensure_stats()
 
         input_dict = {
             "number_of_clusters": ["Number of clusters: ", str(self.kmedoids_k)]
@@ -993,6 +1281,7 @@ class ViewStereoplot(ViewMPL):
             return
 
         self.kmedoids_k = k
+        self.kmedoids_k_widget_action.sync(k)
         self.seed_pick_kind = kind
         self.seed_pick_target = k
         self.picking_seeds = True
@@ -1008,24 +1297,13 @@ class ViewStereoplot(ViewMPL):
         projected_lats = []
         source_vectors = []
 
-        for uid in self.parent.geol_coll.selected_uids:
-            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
-            if vtk_obj is None:
+        key = "Normals" if kind == "normals" else "Lineations"
+        for _, _, vtk_obj in self._shown_entities():
+            lon, lat, vectors = self._entity_lonlat(vtk_obj, keys=(key,))
+            if lon is None:
                 continue
-            if kind == "normals" and "Normals" not in vtk_obj.point_data_keys:
-                continue
-            if kind == "lineations" and "Lineations" not in vtk_obj.point_data_keys:
-                continue
-            strike = (vtk_obj.points_map_dip_direction - 90) % 360
-            dip = vtk_obj.points_map_dip
-            lon, lat = mplstereonet.pole(strike, dip)
-            projected_lons.append(np_atleast_1d(lon))
-            projected_lats.append(np_atleast_1d(lat))
-            vectors = vtk_obj.get_point_data(
-                "Normals" if kind == "normals" else "Lineations"
-            )
-            if vectors.ndim == 1:
-                vectors = vectors.reshape(1, -1)
+            projected_lons.append(lon)
+            projected_lats.append(lat)
             source_vectors.append(vectors)
 
         if not projected_lons:
@@ -1065,60 +1343,45 @@ class ViewStereoplot(ViewMPL):
         if hasattr(self, "figure") and self.figure is not None:
             self.figure.canvas.draw()
 
-    # --- Orientation analysis: selection-driven auto-recompute ---
+    # --- Selection changes: lasso highlight ---
     def on_selection_changed(self, collection):
-        """
-        Detect the selection changes, if there is nothing
-        selected anymore, it toggle off all the statitics
-        in the Analysis menu.
-        """
-
-        if collection is not self.parent.geol_coll:
-            return
+        """Remove the lasso highlight when the selection changes elsewhere. Statistics do not
+        depend on the selection (they use the shown entities)."""
         if (
             self.selection_highlight_actor is not None
-            and set(self.parent.geol_coll.selected_uids)
-            != self.selection_highlight_uids
+            and set(self.selected_uids) != self.selection_highlight_uids
         ):
             self._clear_selection_highlight()
-        has_selection = bool(self.parent.geol_coll.selected_uids)
-        self.actionRecompute.setEnabled(has_selection and not self.auto_recompute)
-        if not self.auto_recompute:
-            return
-        self.recompute_values()
-
-    def toggle_auto_recompute(self):
-        """
-        Toggle the auto recomputing of the statistics when
-        the selection has changed. It also disable the manual
-        recomputing.
-        """
-        self.auto_recompute = self.actionAutoRecompute.isChecked()
-        self.actionRecompute.setEnabled(not self.auto_recompute)
-        if self.auto_recompute:
-            self.recompute_values()
 
     # --- Orientation analysis: drawing and visibility ---
     def toggle_analysis_actor(self, key):
         """
-        Toggle visibility of one analysis visual, identified by key
-        (e.g. "normals_bingham_major_pole"). If a live artist already exists
-        for this key, it is hidden. Otherwise, it is shown.
+        Show or hide one analysis visual (e.g. "bingham_major_pole") according to its checkbox in
+        the Analysis menu (keys without a checkbox are toggled). The checkbox is never changed
+        here: showing/hiding entities recomputes the statistics and redraws the checked visuals.
         """
-        if self.analysis_actors.get(key) is not None:
-            self._hide_analysis_actor(key)
-        else:
-            self._show_analysis_actor(key)
+        action = self.analysis_action_for_key.get(key)
+        show = action.isChecked() if action is not None else self.analysis_actors.get(key) is None
+        self._hide_analysis_actor(key)
+        if show:
+            self._ensure_stats()
+            if self.analysis_actors.get(key) is not None:
+                # _ensure_stats has just recomputed and redrawn the checked visuals quietly:
+                # redraw this one printing its results.
+                self._hide_analysis_actor(key)
+            self._show_analysis_actor(key, verbose=True)
 
-    def _show_analysis_actor(self, key):
+    def _show_analysis_actor(self, key, verbose=True):
         """
         Draw one analysis visual identified by key, reading whatever data it
         needs from self.analysis_results, and store the resulting artist(s)
         into self.analysis_actors. If the required data isn't available, the
         visual isn't drawn and the corresponding menu checkbox (if any) is
-        unchecked via self.analysis_action_for_key, so the checkbox state
-        never claims something is shown when it isn't.
+        not drawn (the checkbox stays checked: it is drawn again when data are
+        available). verbose prints the results (when the user checks the box), not
+        when the visuals are redrawn automatically.
         """
+        say = self.print_terminal if verbose else (lambda *args, **kwargs: None)
         new_actor = None
 
         if key == "bingham_major_pole":
@@ -1126,13 +1389,13 @@ class ViewStereoplot(ViewMPL):
             for kind in ["normals", "lineations"]:
                 bingham_result = self.analysis_results.get(kind, {}).get("bingham")
                 if bingham_result is None:
-                    self.print_terminal(f"No Bingham result available for {kind}.")
+                    say(f"No Bingham result available for {kind}.")
                     continue
                 major_axis = bingham_result["axes"][0]
                 marker = "s" if kind == "normals" else "o"
                 actor, pole = self._draw_pole(major_axis, color="red", marker=marker, markersize=8)
                 new_actor.append(actor)
-                self.print_terminal(
+                say(
                     f"Bingham major pole : {pole[0]:.2f}/{pole[1]:.2f}"
                 )
             if not new_actor:
@@ -1143,13 +1406,13 @@ class ViewStereoplot(ViewMPL):
             for kind in ["normals", "lineations"]:
                 bingham_result = self.analysis_results.get(kind, {}).get("bingham")
                 if bingham_result is None:
-                    self.print_terminal(f"No Bingham result available for {kind}.")
+                    say(f"No Bingham result available for {kind}.")
                     continue
                 intermediate_axis = bingham_result["axes"][1]
                 marker = "s" if kind == "normals" else "o"
                 actor, pole = self._draw_pole(intermediate_axis, color="green", marker=marker, markersize=8)
                 new_actor.append(actor)
-                self.print_terminal(f"Bingham intermediate pole : {pole[0]:.2f}/{pole[1]:.2f}")
+                say(f"Bingham intermediate pole : {pole[0]:.2f}/{pole[1]:.2f}")
             if not new_actor:
                 new_actor = None
 
@@ -1158,13 +1421,13 @@ class ViewStereoplot(ViewMPL):
             for kind in ["normals", "lineations"]:
                 bingham_result = self.analysis_results.get(kind, {}).get("bingham")
                 if bingham_result is None:
-                    self.print_terminal(f"No Bingham result available for {kind}.")
+                    say(f"No Bingham result available for {kind}.")
                     continue
                 minor_axis = bingham_result["axes"][2]
                 marker = "s" if kind == "normals" else "o"
                 actor, pole = self._draw_pole(minor_axis, color="blue", marker=marker, markersize=8)
                 new_actor.append(actor)
-                self.print_terminal(f"Bingham minor pole : {pole[0]:.2f}/{pole[1]:.2f}")
+                say(f"Bingham minor pole : {pole[0]:.2f}/{pole[1]:.2f}")
             if not new_actor:
                 new_actor = None
 
@@ -1173,7 +1436,7 @@ class ViewStereoplot(ViewMPL):
             for kind in ["normals", "lineations"]:
                 bingham_result = self.analysis_results.get(kind, {}).get("bingham")
                 if bingham_result is None:
-                    self.print_terminal(f"No Bingham result available for {kind}.")
+                    say(f"No Bingham result available for {kind}.")
                     continue
                 minor_axis = bingham_result["axes"][2]
                 new_actor.append(self._draw_great_circle(minor_axis, color="blue"))
@@ -1185,17 +1448,21 @@ class ViewStereoplot(ViewMPL):
             for kind in ["normals", "lineations"]:
                 cluster_result = self.analysis_results.get(kind, {}).get("kmedoids")
                 if cluster_result is None:
-                    self.print_terminal(f"No clustering result available for {kind}.")
+                    say(f"No clustering result available for {kind}.")
                     continue
-                self.print_terminal(f"Kmedoids centers :")
+                if kind == "normals":
+                    say(self.KMEDOIDS_NORMALS_NOTE)
+                say(f"Kmedoids centers :")
                 for centroid in cluster_result["centroids"]:
                     norm = np_linalg_norm(centroid)
                     if norm == 0:
                         continue
                     unit_centroid = centroid / norm
-                    actor, pole = self._draw_pole(unit_centroid, color="black", marker="^", markersize=8)
+                    actor, pole = self._draw_pole(
+                        unit_centroid, axial=kind == "normals", color="black", marker="^", markersize=8
+                    )
                     new_actor.append(actor)
-                    self.print_terminal(f"   {pole[0]:.2f}/{pole[1]:.2f}")
+                    say(f"   {pole[0]:.2f}/{pole[1]:.2f}")
             if not new_actor:
                 new_actor = None
 
@@ -1204,8 +1471,10 @@ class ViewStereoplot(ViewMPL):
             for kind in ["normals", "lineations"]:
                 cluster_result = self.analysis_results.get(kind, {}).get("kmedoids")
                 if cluster_result is None:
-                    self.print_terminal(f"No clustering result available for {kind}.")
+                    say(f"No clustering result available for {kind}.")
                     continue
+                if kind == "normals":
+                    say(self.KMEDOIDS_NORMALS_NOTE)
                 df = (
                     self.last_normals_df
                     if kind == "normals"
@@ -1215,7 +1484,8 @@ class ViewStereoplot(ViewMPL):
                     vectors = group[["x", "y", "z"]].to_numpy()
                     palette = cm.get_cmap("tab10")
                     color = palette(cluster_id % 10)
-                    actor, pole = self._draw_pole(vectors, color=color, markersize=6)
+                    # the data vectors, at the same positions as the entities
+                    actor, pole = self._draw_pole(vectors, axial=False, color=color, markersize=6)
                     new_actor.append(actor)
             if not new_actor:
                 new_actor = None
@@ -1225,13 +1495,15 @@ class ViewStereoplot(ViewMPL):
             for kind in ["normals", "lineations"]:
                 fisher_result = self.analysis_results.get(kind, {}).get("fisher")
                 if fisher_result is None:
-                    self.print_terminal(f"No fisher result available for {kind}.")
+                    say(f"No fisher result available for {kind}.")
                     continue
                 mean_direction = fisher_result["mean_direction"][0]
                 marker = "s" if kind == "normals" else "o"
-                actor, pole = self._draw_pole(mean_direction, color="purple", marker=marker, markersize=8)
+                actor, pole = self._draw_pole(
+                    mean_direction, axial=kind == "normals", color="purple", marker=marker, markersize=8
+                )
                 new_actor.append(actor)
-                self.print_terminal(f"Fisher pole and K : {pole[0]:.2f}/{pole[1]:.2f}, {fisher_result['kappa']:.2f}")
+                say(f"Fisher pole and K : {pole[0]:.2f}/{pole[1]:.2f}, {fisher_result['kappa']:.2f}")
             if not new_actor:
                 new_actor = None
 
@@ -1240,12 +1512,12 @@ class ViewStereoplot(ViewMPL):
         #     for kind in ["normals", "lineations"]:
         #         kent_result = self.analysis_results.get(kind, {}).get("kent")
         #         if kent_result is None:
-        #             self.print_terminal(f"No kent result available for {kind}.")
+        #             say(f"No kent result available for {kind}.")
         #             continue
         #         mean_direction = kent_result["axes"][0]
         #         marker = "s" if kind == "normals" else "o"
         #         new_actor.append(self._draw_pole(mean_direction, color="lightsteelblue", marker=marker, markersize=10))
-        #         self.print_terminal(f"Kent parameters : {kent_result["kappa"]}, {kent_result["beta"]}")
+        #         say(f"Kent parameters : {kent_result["kappa"]}, {kent_result["beta"]}")
         #     if not new_actor:
         #         new_actor = None
 
@@ -1254,11 +1526,11 @@ class ViewStereoplot(ViewMPL):
         #     for kind in ["normals", "lineations"]:
         #         kent_result = self.analysis_results.get(kind, {}).get("kent")
         #         if kent_result is None:
-        #             self.print_terminal(f"No kent result available for {kind}.")
+        #             say(f"No kent result available for {kind}.")
         #             continue
         #         mean_gc = kent_result["axes"][0]
         #         new_actor.append(self._draw_great_circle(mean_gc, color="lightsteelblue"))
-        #         self.print_terminal(f"Kent parameters : {kent_result["kappa"]}, {kent_result["beta"]}")
+        #         say(f"Kent parameters : {kent_result["kappa"]}, {kent_result["beta"]}")
         #     if not new_actor:
         #         new_actor = None
 
@@ -1266,13 +1538,9 @@ class ViewStereoplot(ViewMPL):
             self.print_terminal(f"Unknown analysis actor key: '{key}'")
             return
 
-        if new_actor is None:
-            action = self.analysis_action_for_key.get(key)
-            if action is not None:
-                action.setChecked(False)
-        else:
+        if new_actor is not None:
             self.analysis_actors[key] = new_actor
-            self.figure.canvas.draw()
+            self.figure.canvas.draw_idle()
 
     def _hide_analysis_actor(self, key):
         """
@@ -1294,61 +1562,71 @@ class ViewStereoplot(ViewMPL):
         for single_actor in actors_to_remove:
             self.remove_artist(single_actor)
 
-    def _draw_pole(self, vector, **kwargs):
+    def _draw_pole(self, vector, axial=True, **kwargs):
         """
-        Convert one or more cartesian unit vectors into strike/dip and plot
-        them as poles on self.ax. Accepts a single vector of shape (3,) or
-        multiple vectors as an array of shape (N, 3) - in the array case,
-        every point is drawn in a single matplotlib call, producing one
-        artist rather than one artist per point.
-        Returns the matplotlib artist created.
+        Plot one or more cartesian unit vectors (shape (3,) or (N, 3)) as points on self.ax, in a
+        single call per hemisphere. Axial results (Bingham axes, normals) are folded to the lower
+        hemisphere; directional ones (axial=False, e.g. the Fisher mean of lineations) keep their
+        sign and are drawn hollow on the upper hemisphere when they point upwards, as entities.
+        Returns (artist, pole) with pole = [trend, plunge] (or an N x 2 array), negative plunge for
+        upward vectors.
         """
-        vector = np_asarray(vector, dtype=float)
+        from numpy import arcsin as np_arcsin
+        from numpy import arctan2 as np_arctan2
+        from numpy import clip as np_clip
+        from numpy import degrees as np_degrees
+
+        single = np_asarray(vector).ndim == 1
+        vectors = np_asarray(vector, dtype=float).reshape(-1, 3)
+        vectors = vectors / np_linalg_norm(vectors, axis=1)[:, None]
+        if axial:
+            vectors[vectors[:, 2] > 0] *= -1
+        lon, lat, upward = self._vectors_to_lonlat(vectors)
         kwargs.setdefault("zorder", self.Z_STATS)
-
-        if vector.ndim == 1:
-            x, y, z = vector
-        else:
-            x, y, z = vector[:, 0], vector[:, 1], vector[:, 2]
-
-        plunge, bearing = mplstereonet.vector2plunge_bearing(x, y, z)
-        strike, dip = mplstereonet.plunge_bearing2pole(plunge, bearing)
-        actor = self.ax.pole(strike, dip, **kwargs)[0]
-        if vector.ndim == 1:
-            pole = [bearing.item(), plunge.item()]
-        else:
-            pole = np_vstack([bearing, plunge]).T
+        kwargs.setdefault("marker", "o")
+        color = kwargs.pop("color", None)
+        artists = []
+        for mask, face in ((~upward, color), (upward, "none")):
+            if mask.any():
+                artists.append(
+                    self.ax.plot(
+                        lon[mask], lat[mask], linestyle="none", color=color,
+                        markerfacecolor=face, **kwargs,
+                    )[0]
+                )
+        actor = artists[0] if len(artists) == 1 else StereoActor(artists)
+        trend = np_degrees(np_arctan2(vectors[:, 0], vectors[:, 1])) % 360
+        plunge = np_degrees(np_arcsin(np_clip(-vectors[:, 2], -1.0, 1.0)))
+        pole = [trend[0], plunge[0]] if single else np_vstack([trend, plunge]).T
         return actor, pole
 
     def _draw_great_circle(self, vector, **kwargs):
         """
-        Convert one or more cartesian unit vectors into strike/dip, treating
-        each as the POLE of a plane, and plot those planes as great circles
-        on self.ax. Accepts a single vector of shape (3,) or multiple vectors
-        as an array of shape (N, 3), drawn in a single matplotlib call.
-        Returns the matplotlib artist created.
+        Plot the planes whose poles are the given cartesian unit vectors (shape (3,) or (N, 3)) as
+        great circles on self.ax, in a single matplotlib call. Returns the matplotlib artist.
         """
-        vector = np_asarray(vector, dtype=float)
+        vectors = np_asarray(vector, dtype=float).reshape(-1, 3).copy()
+        vectors[vectors[:, 2] > 0] *= -1  # a plane is the same for both its normals
         kwargs.setdefault("zorder", self.Z_STATS)
-
-        if vector.ndim == 1:
-            x, y, z = vector
-        else:
-            x, y, z = vector[:, 0], vector[:, 1], vector[:, 2]
-
-        plunge, bearing = mplstereonet.vector2plunge_bearing(x, y, z)
+        plunge, bearing = mplstereonet.vector2plunge_bearing(
+            vectors[:, 0], vectors[:, 1], vectors[:, 2]
+        )
         strike, dip = mplstereonet.plunge_bearing2pole(plunge, bearing)
-        actor = self.ax.plane(strike, dip, **kwargs)[0]
-        return actor
+        return self.ax.plane(strike, dip, **kwargs)[0]
 
     # --- Clusters saving: saving the clusters as property ---
     def save_clusters_as_property(self, property_name):
         """
         Write the most recently computed k-medoids cluster assignment (currently
         cached in self.last_normals_df / self.last_lineations_df) onto each
-        contributing entity in geol_coll, as a new 1-component point-data
-        property named property_name.
+        contributing entity (any collection), as a new 1-component point-data
+        property named property_name. Points without a valid vector get NaN.
         """
+        from numpy import full as np_full
+        from numpy import nan as np_nan
+        from pzero.helpers.helper_functions import entity_collection
+
+        self._ensure_stats()
         for df, kind in [
             (getattr(self, "last_normals_df", None), "Normals"),
             (getattr(self, "last_lineations_df", None), "Lineations"),
@@ -1359,16 +1637,20 @@ class ViewStereoplot(ViewMPL):
                 continue
 
             for uid, group in df.groupby("uid"):
-                cluster_values = group["clusters"].to_numpy().reshape(-1, 1)
-                vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
-                if vtk_obj is None:
+                collection = entity_collection(self, uid)
+                vtk_obj = collection.get_uid_vtk_obj(uid) if collection is not None else None
+                _, valid = self._entity_vectors(vtk_obj, kind)
+                if vtk_obj is None or valid is None or valid.sum() != len(group):
                     self.print_terminal(
-                        f"uid {uid}: not found, skipped while saving clusters."
+                        f"uid {uid}: not found or changed, skipped while saving clusters."
                     )
                     continue
-                self.parent.geol_coll.append_uid_property(
-                    uid=uid, property_name=property_name, property_components=1
-                )
+                cluster_values = np_full((vtk_obj.points_number, 1), np_nan)
+                cluster_values[valid, 0] = group["clusters"].to_numpy(dtype=float)
+                if property_name not in collection.get_uid_properties_names(uid):
+                    collection.append_uid_property(
+                        uid=uid, property_name=property_name, property_components=1
+                    )
                 vtk_obj.set_point_data(
                     data_key=property_name, attribute_matrix=cluster_values
                 )
@@ -1586,14 +1868,13 @@ class ViewStereoplot(ViewMPL):
             uid = row["uid"]
             if not row["show"]:
                 continue
-            vtk_obj = self.parent.geol_coll.get_uid_vtk_obj(uid)
-            if vtk_obj is None or vtk_obj.points_number == 0:
+            collection = getattr(self.parent, row["collection"], None)
+            vtk_obj = collection.get_uid_vtk_obj(uid) if collection is not None else None
+            lon, lat, _ = self._entity_lonlat(vtk_obj)
+            if lon is None:
                 continue
-            strike = (vtk_obj.points_map_dip_direction - 90) % 360
-            dip = vtk_obj.points_map_dip
-            lon, lat = mplstereonet.pole(strike, dip)
-            uid_lons[uid] = np_atleast_1d(lon)
-            uid_lats[uid] = np_atleast_1d(lat)
+            uid_lons[uid] = lon
+            uid_lats[uid] = lat
 
         selected_uids = []
         for uid in uid_lons:
@@ -1673,9 +1954,13 @@ class ViewStereoplot(ViewMPL):
         self.selection_highlight_uids = set(selected_uids)
         self.figure.canvas.draw()
 
-        # restore_selection writes geol_coll.selected_uids, and the project selection store
-        # emits selection_changed if this changed the selection.
-        self.GeologyTreeWidget.restore_selection(selected_uids)
+        # Within this view, the entities inside the region become the selection; entities that are
+        # not in this view keep their selection state (any collection).
+        selected_set = set(selected_uids)
+        outside = [uid for uid in self.selected_uids if uid not in selected_set]
+        if outside:
+            self.parent.set_selection(uids=outside, mode="remove", source=self)
+        self.parent.set_selection(uids=selected_uids, mode="add", source=self)
         self._deactivate_selection(clear_highlight=False)
 
     def _event_to_screen_polar(self, event):
@@ -1843,10 +2128,11 @@ class ViewStereoplot(ViewMPL):
         rest of the codebase. If no results exist yet, prints a message
         and returns.
         """
+        self._ensure_stats()
         summary = self.build_statistics_summary()
 
         if not summary:
-            self.print_terminal("No statistics available — run Recompute first.")
+            self.print_terminal("No statistics: no shown entity with Normals or Lineations.")
             return
 
         # Print to terminal always

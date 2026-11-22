@@ -300,4 +300,37 @@ check("bulk removals gone from the view and its tree",
       not (set(bulk) & set(v.actors_df["uid"]))
       and not any(v.FluidsTreeWidget.get_item_uid(i) in set(bulk) for i in v.FluidsTreeWidget.findItems("", __import__("PySide6.QtCore", fromlist=["Qt"]).Qt.MatchContains | __import__("PySide6.QtCore", fromlist=["Qt"]).Qt.MatchRecursive)))
 
+# View filters: an entity whose parent_uid changes enters / leaves a cross-section view
+import pzero.views.view_xsection as vxs  # noqa: E402
+from PySide6.QtCore import Qt  # noqa: E402
+
+vxs.input_combo_dialog = lambda **kw: "XS1"
+xs_view = vxs.ViewXsection(parent=pw)
+xs_uid = pw.xsect_coll.df.loc[pw.xsect_coll.df["name"] == "XS1", "uid"].values[0]
+moving = add(pw.geol_coll, "PolyLine", PolyLine, line, "moving_line")
+app.processEvents()
+
+
+def in_xs_view(uid):
+    tree = xs_view.GeologyTreeWidget
+    items = tree.findItems("", Qt.MatchContains | Qt.MatchRecursive)
+    in_tree = any(tree.get_item_uid(item) == uid for item in items)
+    return uid in set(xs_view.actors_df["uid"]), in_tree
+
+
+def set_parent(uid, parent):
+    pw.geol_coll.df.loc[pw.geol_coll.df["uid"] == uid, "parent_uid"] = parent
+    pw.signals.metadata_modified.emit([uid], pw.geol_coll)
+    xs_view.flush_pending_updates()
+    app.processEvents()
+
+
+check("line without parent not in the cross-section view", in_xs_view(moving) == (False, False))
+set_parent(moving, xs_uid)
+check("parent_uid set to the section: the line enters the view and its tree",
+      in_xs_view(moving) == (True, True))
+set_parent(moving, "")
+check("parent_uid cleared: the line leaves the view and its tree",
+      in_xs_view(moving) == (False, False))
+
 print("RESULT:", "FAILED" if failed else "ALL PASSED")

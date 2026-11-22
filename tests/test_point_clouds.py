@@ -147,6 +147,42 @@ def _make_self(
     return self_mock
 
 
+class _FakeProject:
+    """
+    Minimal stand-in for the ProjectWindow, for the tools of the Properties and Interpolation menus
+    (normals2dd, facets_pc), which since the global selection refactor run on the project window
+    (self.dom_coll, self.geol_coll, project selection) instead of a view (self.parent.dom_coll).
+    restrict_selection_for_tool (the @uses_selection filter) accepts the selection as it is: the
+    filtering itself is tested with a real project in tests/selection. Messages go to stdout.
+    """
+
+    def __init__(self, vtk_obj=None, uid: str = "uid_001", name: str = "Pc"):
+        template = _make_self(vtk_obj, uid=uid, name=name).parent
+        self.dom_coll = template.dom_coll
+        self.geol_coll = template.geol_coll
+        self.prop_legend = MagicMock()
+        self._selection = {uid: "dom_coll"} if vtk_obj is not None else {}
+        self.dom_coll.get_uid_properties_names.return_value = (
+            list(vtk_obj.point_data_keys) if vtk_obj is not None else []
+        )
+
+    def restrict_selection_for_tool(self, **kwargs):
+        return bool(self._selection)
+
+    def selection_uids(self):
+        return list(self._selection)
+
+    @property
+    def selected_uids(self):
+        return list(self._selection)
+
+    def collection_of_uid(self, uid):
+        return self._selection.get(uid)
+
+    def print_terminal(self, string=None):
+        print(string)
+
+
 def _make_self_multi(vtk_objs: list, uids: list) -> MagicMock:
     """
     Version of _make_self for functions that loop over multiple selected UIDs.
@@ -185,14 +221,13 @@ class TestNormals2dd:
         selected_uids is empty. The function should print a clear warning
         and return immediately without touching anything else.
         """
-        self_mock = MagicMock()
-        self_mock.selected_uids = []
-        normals2dd(self_mock)
+        project = _FakeProject()
+        normals2dd(project)
 
         printed = capsys.readouterr().out
-        assert "No entities selected" in printed
+        assert "No entity with Normals selected" in printed
 
-        self_mock.parent.dom_coll.get_uid_vtk_obj.assert_not_called()
+        project.dom_coll.get_uid_vtk_obj.assert_not_called()
 
     def test_missing_normals_prints_warning(self, capsys):
         """
@@ -200,20 +235,20 @@ class TestNormals2dd:
         the function should print a warning and NOT write any data.
         """
         vtk_obj = _make_real_pc(with_points=True, with_normals=False)
-        self_mock = _make_self(vtk_obj)
-        normals2dd(self_mock)
+        project = _FakeProject(vtk_obj)
+        normals2dd(project)
 
         printed = capsys.readouterr().out
-        assert "Normal data not present" in printed
+        assert "no Normals" in printed
+        assert "dip" not in vtk_obj.point_data_keys
 
     def test_dip_values_in_valid_range(self):
         """
         Dip is the angle between a plane and the horizontal.
         It must always be between 0 degrees (flat) and 90 degrees (vertical).
         """
-        vtk_obj = _make_real_pc()
-        self_mock = _make_self(vtk_obj)
-        normals2dd(self_mock)
+        vtk_obj = _make_real_pc(with_dip=False, with_dip_dir=False)
+        normals2dd(_FakeProject(vtk_obj))
 
         dip = vtk_obj.get_point_data("dip")
         assert dip is not None, "set_point_data('dip', ...) was never called"
@@ -226,9 +261,8 @@ class TestNormals2dd:
         Dip direction is the compass bearing of the steepest descent.
         It must always be between 0 and 360 degrees.
         """
-        vtk_obj = _make_real_pc()
-        self_mock = _make_self(vtk_obj)
-        normals2dd(self_mock)
+        vtk_obj = _make_real_pc(with_dip=False, with_dip_dir=False)
+        normals2dd(_FakeProject(vtk_obj))
 
         dd = vtk_obj.get_point_data("dip direction")
         assert dd is not None, "set_point_data('dip direction', ...) was never called"
@@ -242,16 +276,15 @@ class TestNormals2dd:
         (the PCDom property) returned. This confirms that normals2dd is
         reading from the right property and not transforming it incorrectly.
         """
-        vtk_obj = _make_real_pc()
-        self_mock = _make_self(vtk_obj)
-        normals2dd(self_mock)
+        vtk_obj = _make_real_pc(with_dip=False, with_dip_dir=False)
+        normals2dd(_FakeProject(vtk_obj))
 
         written = vtk_obj.get_point_data("dip")
         expected = vtk_obj.points_map_dip
         np.testing.assert_allclose(
             written,
             expected,
-            atol=1e-6,
+            atol=1e-4,  # points_map_* are float32
             err_msg="Written dip values differ from points_map_dip",
         )
 
@@ -260,16 +293,15 @@ class TestNormals2dd:
         Same check for dip direction: values written must match exactly
         what points_map_dip_direction returned.
         """
-        vtk_obj = _make_real_pc()
-        self_mock = _make_self(vtk_obj)
-        normals2dd(self_mock)
+        vtk_obj = _make_real_pc(with_dip=False, with_dip_dir=False)
+        normals2dd(_FakeProject(vtk_obj))
 
         written = vtk_obj.get_point_data("dip direction")
         expected = vtk_obj.points_map_dip_direction
         np.testing.assert_allclose(
             written,
             expected,
-            atol=1e-6,
+            atol=1e-4,  # points_map_* are float32
             err_msg="Written dip direction values differ from points_map_dip_direction",
         )
 
@@ -310,8 +342,8 @@ class TestNormals2dd:
         vtk_obj.set_point_data.side_effect = lambda k, v: _written.update({k: v})
         vtk_obj._written = _written
 
-        self_mock = _make_self(vtk_obj)
-        normals2dd(self_mock)
+        vtk_obj.get_point_data.side_effect = lambda k: normals if k == "Normals" else _written.get(k)
+        normals2dd(_FakeProject(vtk_obj))
 
         dip = _written.get("dip")
         dd = _written.get("dip direction")
@@ -697,14 +729,13 @@ class TestFacetsPC:
         selected_uids is empty. The function should print a clear warning
         and return immediately without touching anything else.
         """
-        self_mock = MagicMock()
-        self_mock.selected_uids = []
-        facets_pc(self_mock)
+        project = _FakeProject()
+        facets_pc(project)
 
         printed = capsys.readouterr().out
-        assert "No entities selected, make sure to have the right tab open" in printed
+        assert "No point cloud selected" in printed
 
-        self_mock.parent.dom_coll.get_uid_vtk_obj.assert_not_called()
+        project.dom_coll.get_uid_vtk_obj.assert_not_called()
 
     def test_missing_clusters_prints_warning(self, capsys):
         """
@@ -714,16 +745,13 @@ class TestFacetsPC:
         """
 
         vtk_obj = _make_real_pc()
-        self_mock = _make_self(vtk_obj)
-        facets_pc(self_mock)
+        project = _FakeProject(vtk_obj)
+        facets_pc(project)
 
         printed = capsys.readouterr().out
-        assert (
-            "Selected entity has no clusters, please choose an other or make them with the proper function"
-            in printed
-        )
+        assert "has no clusters" in printed
 
-        self_mock.parent.geol_coll.add_entity_from_dict.assert_not_called()
+        project.geol_coll.add_entity_from_dict.assert_not_called()
 
     def test_n_poly(self, mock_dialog):
         """
@@ -751,11 +779,11 @@ class TestFacetsPC:
         clust = entity_dict_clust["vtk_obj"]
         n_clust = len(set(clust.get_point_data("ClusterId")))
 
-        self_mock_facets = _make_self(clust)
+        self_mock_facets = _FakeProject(clust)
         facets_pc(self_mock_facets)
         # To get back the data from facets_pc because since it is using a
         # MagicMock object, it is not returning anything
-        call_args = self_mock_facets.parent.geol_coll.add_entity_from_dict.call_args
+        call_args = self_mock_facets.geol_coll.add_entity_from_dict.call_args
         entity_dict_facets = call_args.kwargs["entity_dict"]
         facets = entity_dict_facets["vtk_obj"]
         assert (
@@ -805,11 +833,11 @@ class TestFacetsPC:
         entity_dict_clust = call_args.kwargs["entity_dict"]
         clust = entity_dict_clust["vtk_obj"]
 
-        self_mock_facets = _make_self(clust)
+        self_mock_facets = _FakeProject(clust)
         facets_pc(self_mock_facets)
         # To get back the data from facets_pc because since it is using a
         # MagicMock object, it is not returning anything
-        call_args = self_mock_facets.parent.geol_coll.add_entity_from_dict.call_args
+        call_args = self_mock_facets.geol_coll.add_entity_from_dict.call_args
         entity_dict_facets = call_args.kwargs["entity_dict"]
         facets = entity_dict_facets["vtk_obj"]
         area = facets.get_field_data("area")
@@ -839,11 +867,11 @@ class TestFacetsPC:
         entity_dict_clust = call_args.kwargs["entity_dict"]
         clust = entity_dict_clust["vtk_obj"]
 
-        self_mock_facets = _make_self(clust)
+        self_mock_facets = _FakeProject(clust)
         facets_pc(self_mock_facets)
         # To get back the data from facets_pc because since it is using a
         # MagicMock object, it is not returning anything
-        call_args = self_mock_facets.parent.geol_coll.add_entity_from_dict.call_args
+        call_args = self_mock_facets.geol_coll.add_entity_from_dict.call_args
         entity_dict_facets = call_args.kwargs["entity_dict"]
         facets = entity_dict_facets["vtk_obj"]
         assert np.all(
@@ -878,11 +906,11 @@ class TestFacetsPC:
         entity_dict_clust = call_args.kwargs["entity_dict"]
         clust = entity_dict_clust["vtk_obj"]
 
-        self_mock_facets = _make_self(clust)
+        self_mock_facets = _FakeProject(clust)
         facets_pc(self_mock_facets)
         # To get back the data from facets_pc because since it is using a
         # MagicMock object, it is not returning anything
-        call_args = self_mock_facets.parent.geol_coll.add_entity_from_dict.call_args
+        call_args = self_mock_facets.geol_coll.add_entity_from_dict.call_args
         entity_dict_facets = call_args.kwargs["entity_dict"]
         facets = entity_dict_facets["vtk_obj"]
         normals = facets.get_field_data("Normals").reshape(-1, 3)
@@ -914,11 +942,11 @@ class TestFacetsPC:
         entity_dict_clust = call_args.kwargs["entity_dict"]
         clust = entity_dict_clust["vtk_obj"]
 
-        self_mock_facets = _make_self(clust)
+        self_mock_facets = _FakeProject(clust)
         facets_pc(self_mock_facets)
         # To get back the data from facets_pc because since it is using a
         # MagicMock object, it is not returning anything
-        call_args = self_mock_facets.parent.geol_coll.add_entity_from_dict.call_args
+        call_args = self_mock_facets.geol_coll.add_entity_from_dict.call_args
         entity_dict_facets = call_args.kwargs["entity_dict"]
         facets = entity_dict_facets["vtk_obj"]
         normals = facets.get_field_data("Normals").reshape(-1, 3)
@@ -948,11 +976,11 @@ class TestFacetsPC:
         entity_dict_clust = call_args.kwargs["entity_dict"]
         clust = entity_dict_clust["vtk_obj"]
 
-        self_mock_facets = _make_self(clust)
+        self_mock_facets = _FakeProject(clust)
         facets_pc(self_mock_facets)
         # To get back the data from facets_pc because since it is using a
         # MagicMock object, it is not returning anything
-        call_args = self_mock_facets.parent.geol_coll.add_entity_from_dict.call_args
+        call_args = self_mock_facets.geol_coll.add_entity_from_dict.call_args
         entity_dict_facets = call_args.kwargs["entity_dict"]
         assert entity_dict_facets["topology"] == "TriSurf"
 
@@ -1008,11 +1036,11 @@ class TestFacetsPC:
         clust = entity_dict["vtk_obj"]
         n_clusters = len(set(clust.get_point_data("ClusterId")))
 
-        self_mock_facets = _make_self(clust)
+        self_mock_facets = _FakeProject(clust)
         facets_pc(self_mock_facets)
         # To get back the data from facets_pc because since it is using a
         # MagicMock object, it is not returning anything
-        call_args = self_mock_facets.parent.geol_coll.add_entity_from_dict.call_args
+        call_args = self_mock_facets.geol_coll.add_entity_from_dict.call_args
         entity_dict_facets = call_args.kwargs["entity_dict"]
         facets = entity_dict_facets["vtk_obj"]
 

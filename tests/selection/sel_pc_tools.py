@@ -92,7 +92,7 @@ check("dip 45 and direction 90 for a plane with downward normal", abs(float(np.m
 check("surface without Normals deselected", pw.selection_uids() == [s2_uid])
 
 
-# overturned surface (upward normals): dip < 0, standard dip direction
+# overturned surface (upward normals): dip > 90 convention
 ns3 = pv.Plane(direction=(1, 0, 1)).triangulate().compute_normals(cell_normals=False)
 surf3 = TriSurf()
 surf3.ShallowCopy(ns3)
@@ -104,8 +104,19 @@ pw.set_selection(mode="clear")
 pw.set_selection([s3_uid], mode="add")
 pw.actionCalculate_Dip_Direction.trigger()
 o = pw.geol_coll.get_uid_vtk_obj(s3_uid)
-check("overturned: dip -45 and direction 90",
-      abs(float(np.mean(o.get_point_data("dip"))) + 45.0) < 1e-4
-      and abs(float(np.mean(o.get_point_data("dip direction"))) - 90.0) < 1e-4)
+check("overturned: dip 135 and direction 270",
+      abs(float(np.mean(o.get_point_data("dip"))) - 135.0) < 1e-4
+      and abs(float(np.mean(o.get_point_data("dip direction"))) - 270.0) < 1e-4)
+
+# both overturned conventions give the same upward normal, and the round trip is exact
+from pzero.orientation_analysis import dip_directions2normals, normals2dip_directions
+n_pos = np.asarray(dip_directions2normals(dips=[135.0, 30.0], directions=[270.0, 90.0]))
+n_neg = np.asarray(dip_directions2normals(dips=[-45.0, 30.0], directions=[90.0, 90.0]))
+check("dip 135 / 270 == dip -45 / 90 (upward normal toward east)",
+      np.allclose(n_pos, n_neg) and np.allclose(n_pos[0], [2 ** -0.5, 0, 2 ** -0.5]))
+check("upright dip 30 toward east has a downward normal toward west",
+      n_pos[1][2] < 0 and n_pos[1][0] < 0)
+d_rt, dd_rt = normals2dip_directions(n_pos)
+check("round trip normals -> dip/direction", np.allclose(d_rt, [135, 30]) and np.allclose(dd_rt, [270, 90]))
 
 print("RESULT:", "FAILED" if failed else "ALL PASSED")

@@ -54,21 +54,24 @@ class ViewMPL(BaseView):
         return uid
 
     def actor_shown(self, uid: str = None):
-        """Method to check if an actor is shown in a Matplotlib plotter. Returns a boolean."""
-        return self.mpl_actors[uid].get_visible()
+        """Method to check if an actor is shown in a Matplotlib plotter. Returns a boolean.
+        Entities that this view does not draw (actor None, e.g. TriSurfs in the stereoplot) are
+        never shown."""
+        actor = self.mpl_actors.get(uid)
+        return actor.get_visible() if actor is not None else False
 
     def show_actors(self, uids: list = None):
         """Method to show actors in uids list in a Matplotlib plotter."""
         actors = self.mpl_actors
         for uid, actor in actors.items():
-            if uid in uids:
+            if uid in uids and actor is not None:
                 actor.set_visible(True)
 
     def hide_actors(self, uids: list = None):
         """Method to hide actors in uids list in a Matplotlib plotter."""
         actors = self.mpl_actors
         for uid, actor in actors.items():
-            if uid in uids:
+            if uid in uids and actor is not None:
                 actor.set_visible(False)
 
     def change_actor_color(self, updated_uids: list = None, collection=None):
@@ -156,8 +159,8 @@ class ViewMPL(BaseView):
     def set_actor_visible(self, uid=None, visible=None):
         """Set actor uid visible or invisible (visible = True or False). If the
         actor hasn't been created yet (e.g. it was never shown since the view
-        opened), it is drawn fresh instead of silently failing."""
-        if uid not in self.mpl_actors:
+        opened, or it had nothing to draw), it is drawn fresh instead of silently failing."""
+        if uid not in self.mpl_actors or (self.mpl_actors[uid] is None and visible):
             collection_name = self.actors_df.loc[
                 self.actors_df["uid"] == uid, "collection"
             ].values[0]
@@ -171,9 +174,13 @@ class ViewMPL(BaseView):
                 visible=visible,
             )
             return
+        actor = self.mpl_actors[uid]
+        if actor is None:
+            # Nothing drawn for this entity (e.g. no valid vectors in the stereoplot).
+            return
         try:
-            self.mpl_actors[uid].set_visible(visible)
-            self.mpl_actors[uid].figure.canvas.draw()
+            actor.set_visible(visible)
+            actor.figure.canvas.draw()
         except Exception as e:
             self.print_terminal(f"ERROR with set_actor_visible: {uid}: {e}")
 

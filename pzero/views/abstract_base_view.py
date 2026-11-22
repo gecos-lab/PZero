@@ -579,11 +579,27 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 visible=show,
             )
 
+    def sync_view_filter(self, updated_uids=None, collection=None):
+        """Apply self.view_filter after a change that can affect it (metadata such as parent_uid for
+        cross-section views, properties_names for the stereoplot): entities that start matching the
+        filter are added to the view, those that stop matching it are removed. Returns the updated
+        uids that were already in the view and still match it, to be updated by the caller."""
+        updated_uids = list(updated_uids or [])
+        matching = set(collection.filter_uids(query=self.view_filter, uids=updated_uids))
+        in_view = set(self.actors_df["uid"])
+        leaving = [uid for uid in updated_uids if uid in in_view and uid not in matching]
+        entering = [uid for uid in updated_uids if uid in matching and uid not in in_view]
+        if leaving:
+            self.entities_removed_update_views(updated_uids=leaving, collection=collection)
+        if entering:
+            self.entities_added_update_views(updated_uids=entering, collection=collection)
+        return [uid for uid in updated_uids if uid in matching and uid in in_view]
+
     def entities_data_keys_added_update_views(self, updated_uids=None, collection=None):
         """This is called when point or cell data (properties) are added."""
         # AT THE MOMENT THIS IS IDENTICAL TO entities_data_keys_removed_update_views
-        # remove from updated_list the uid's that are excluded from this view by self.view_filter.
-        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+        # Entities entering/leaving the view filter are added/removed; the others are updated below.
+        updated_uids = self.sync_view_filter(updated_uids=updated_uids, collection=collection)
         tree = self.tree_from_coll(coll=collection)
         for uid in updated_uids:
             # Replace the previous copy of the actor with the same uid, and update the actors dataframe, only if a
@@ -663,8 +679,9 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
         """This is called when an entity metadata are modified, and the legend is automatically updated. Signals
         to the collection view tree, if they are set, are disconnected to avoid a nasty loop that would disrupt them.
         """
-        # remove from updated_list the uid's that are excluded from this view by self.view_filter.
-        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+        # Entities entering/leaving the view filter (e.g. parent_uid changed for a cross-section view)
+        # are added/removed; the others are updated below.
+        updated_uids = self.sync_view_filter(updated_uids=updated_uids, collection=collection)
         tree = self.tree_from_coll(coll=collection)
         self.change_actor_color(collection=collection, updated_uids=updated_uids)
         self.change_actor_point_size(collection=collection, updated_uids=updated_uids)

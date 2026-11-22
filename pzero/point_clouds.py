@@ -71,8 +71,11 @@ def normals2dd(self):
     for uid in tool_uids(self):
         collection = entity_collection(self, uid)
         vtk_obj = collection.get_uid_vtk_obj(uid)
-        # -90 < dip < 90: negative for upward normals (overturned, upper hemisphere), with the
-        # standard dip direction in both cases (see orientation_analysis.normals2dip_directions).
+        if "Normals" not in vtk_obj.point_data_keys:
+            self.print_terminal(f" -- {collection.get_uid_name(uid)}: no Normals, skipped -- ")
+            continue
+        # 0 <= dip <= 90 for upright planes, dip > 90 for overturned planes (upward normals), see
+        # orientation_analysis.normals2dip_directions.
         dip, dip_dir = normals2dip_directions(vtk_obj.get_point_data("Normals"))
         try:
             for name, values in (("dip", dip), ("dip direction", dip_dir)):

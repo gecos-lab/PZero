@@ -16,6 +16,10 @@ from numpy import dot as np_dot
 from numpy import argsort as np_argsort
 from numpy import column_stack as np_column_stack
 from numpy import vstack as np_vstack
+from numpy import isin as np_isin
+from numpy import sqrt as np_sqrt
+from numpy import exp as np_exp
+from numpy import atleast_1d as np_atleast_1d
 from numpy import argmin as np_argmin
 from numpy import where as np_where
 from numpy import all as np_all
@@ -99,8 +103,11 @@ def plunge_trends2lineations(plunges=None, trends=None):
 
 
 def dip_directions2normals(dips=None, directions=None, return_dip_dir_vec=False):
-    """Convert Dip/Direction measurements in degrees (single or list)
-    to normal unit vectors pointing downwards if Dip > 0.
+    """Convert Dip/Direction measurements in degrees (single or list) to normal unit vectors.
+    0 <= Dip <= 90 gives downward normals (upright planes). Overturned planes (upward normals) are
+    accepted in both equivalent conventions: 90 < Dip <= 180 with the same Direction, or
+    -90 < Dip < 0 with the opposite Direction (Dip, Direction) == (Dip + 180, Direction + 180).
+    normals2dip_directions returns the > 90 convention.
     Accepts single values, lists or Numpy arrays and
     returns Numpy arrays. We use np_squeeze to avoid having multi-dimensional arrays"""
     if isinstance(dips, (float, int, list)) and isinstance(
@@ -114,28 +121,23 @@ def dip_directions2normals(dips=None, directions=None, return_dip_dir_vec=False)
     else:
         print("Dip/Direction type not recognized.")
     dips_array = np_squeeze(np_asarray(dips_array, dtype=float))
-    directions_array = np_squeeze(directions_array)
-    # Negative dips are overturned planes (upper hemisphere): compute the downward normal of the
-    # plane with |dip| and the same dip direction, then flip it upwards (see normals2dip_directions).
-    overturned = dips_array < 0
-    plunges_array = 90 - np_abs(dips_array)
-    trends_array = (directions_array + 180) * np_less_equal(directions_array, 180) + (
-        directions_array - 180
-    ) * np_greater(directions_array, 180)
+    directions_array = np_squeeze(np_asarray(directions_array, dtype=float))
+    # Negative dips (overturned planes) -> equivalent > 90 convention.
+    negative = dips_array < 0
+    dips_array = dips_array + 180 * negative
+    directions_array = directions_array + 180 * negative
+    # The normal is the line with trend Direction + 180 and plunge 90 - Dip: it points downwards
+    # for Dip < 90 and upwards (negative plunge) for Dip > 90.
+    plunges_array = 90 - dips_array
+    trends_array = (directions_array + 180) % 360
     normals = plunge_trends2lineations(plunges=plunges_array, trends=trends_array)
-    if np_any(overturned):
-        normals = np_asarray(normals, dtype=float)
-        if normals.ndim == 1:
-            normals = -normals
-        else:
-            normals[overturned] *= -1
 
     return normals
 
 
 def vset_set_normals(VertexSet=None, dip_name=None, dir_name=None):
-    from .entities_factory import VertexSet
-
+    """Set the Normals point property of a VertexSet / XsVertexSet (the argument, an instance)
+    from its dip and direction point properties."""
     dips_array = VertexSet.get_point_data(dip_name)
     dirs_array = VertexSet.get_point_data(dir_name)
     normals = dip_directions2normals(dips=dips_array, directions=dirs_array)
@@ -218,19 +220,13 @@ def set_normals(self):
 
 def normals2dip_directions(normals=None):
     """Convert normal vectors (N x 3, or a single 3-vector) to Dip/Direction in degrees, inverse of
-    dip_directions2normals. Normals pointing downwards give 0 <= Dip <= 90; normals pointing upwards
-    (overturned surfaces, upper hemisphere of the stereoplot) give -90 < Dip < 0. In both cases the
-    Direction is the standard dip direction, computed from the downward-pointing normal.
-    Returns two Numpy arrays (dips, directions)."""
+    dip_directions2normals. Normals pointing downwards (upright planes) give 0 <= Dip <= 90;
+    normals pointing upwards (overturned planes) give 90 < Dip <= 180 (the > 90 convention, the
+    same as PolyData.points_map_dip / points_map_dip_direction). Direction is opposite to the
+    horizontal component of the normal. Returns two Numpy arrays (dips, directions)."""
     normals = np_asarray(normals, dtype=float).reshape(-1, 3)
-    upward = normals[:, 2] > 0
-    down_normals = normals.copy()
-    down_normals[upward] *= -1
-    directions = (
-        np_arctan2(down_normals[:, 0], down_normals[:, 1]) * 180 / np_pi - 180
-    ) % 360
-    dips = 90 - np_arcsin(np_clip(-down_normals[:, 2], -1.0, 1.0)) * 180 / np_pi
-    dips[upward] *= -1
+    directions = (np_arctan2(normals[:, 0], normals[:, 1]) * 180 / np_pi - 180) % 360
+    dips = 90 - np_arcsin(np_clip(-normals[:, 2], -1.0, 1.0)) * 180 / np_pi
     return dips, directions
 
 
@@ -522,6 +518,24 @@ def kmeans_clusters(samplecart, k, seeds=None, is_axial=False):
     return {"centroids": centroids, "labels": labels}
 
 
+def _cluster_medoid(points, max_exact=4000, n_candidates=500, n_reference=4000):
+    """Index (in points) of the medoid of a cluster: the point with the smallest sum of distances
+    to the others. Exact up to max_exact points; for larger clusters (an exact search needs a
+    points x points matrix, e.g. 320 GB for 200k vectors) the candidates are the n_candidates
+    points closest to the cluster mean direction, and the sums are computed on a random sample of
+    n_reference points (as in CLARA), drawn with a fixed seed so that the PAM iterations converge."""
+    from numpy import argpartition as np_argpartition
+
+    m = points.shape[0]
+    if m <= max_exact:
+        return int(np_argmin(cdist(points, points).sum(axis=1)))
+    mean = points.mean(axis=0)
+    candidates = np_argpartition(-(points @ mean), n_candidates)[:n_candidates]
+    reference = points[np_random_default_rng(0).choice(m, n_reference, replace=False)]
+    sums = cdist(points[candidates], reference).sum(axis=1)
+    return int(candidates[np_argmin(sums)])
+
+
 def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
     """
     Calculate k-medoids clusters using the PAM algorithm.
@@ -593,12 +607,21 @@ def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
         medoid_indices = rng.choice(n_input, k, replace=False)
 
     # PAM update loop
-    ### The actual loop that is the method ###
+    ### The actual loop that is the method ###
+    best_cost = None
+    best_medoid_indices = medoid_indices.copy()
     for _ in range(300):  # 300 should be enough to converge
         D = cdist(
             samplecart_input, samplecart_input[medoid_indices]
         )  # Distance between all poles and the current medoids
         labels_input = np_argmin(D, axis=1)  # Find the nearest medoid for each point
+        # Stop when the total distance to the medoids does not decrease any more (approximated
+        # medoids of large clusters can otherwise alternate between equivalent solutions).
+        cost = D[np_arange(n_input), labels_input].sum()
+        if best_cost is not None and cost >= best_cost * (1.0 - 1e-12):
+            break
+        best_cost = cost
+        best_medoid_indices = medoid_indices.copy()
 
         new_medoid_indices = medoid_indices.copy()
         for j in range(k):  # For each cluster j
@@ -608,13 +631,11 @@ def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
             cluster_indices = np_where(cluster_mask)[
                 0
             ]  # Take all the points assigned to that cluster
-            D_cluster = cdist(
-                samplecart_input[cluster_indices], samplecart_input[cluster_indices]
-            )  # Distance between each points of that cluster
+            # The point with the smallest total distance to the others of the cluster becomes
+            # the new medoid (approximated for large clusters, see _cluster_medoid).
             best = cluster_indices[
-                np_argmin(D_cluster.sum(axis=1))
-            ]  # Sum each row giving total distance from point i to every other
-            # points in the cluster and keep the smallest one
+                _cluster_medoid(samplecart_input[cluster_indices])
+            ]
             new_medoid_indices[j] = best  # Make this point the new medoid
 
         if np_all(
@@ -622,6 +643,7 @@ def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
         ):  # If the medoid didn't changed, it converge, break the loop
             break
         medoid_indices = new_medoid_indices
+    medoid_indices = best_medoid_indices
 
     # Final assignment
     # For axial data, keep only labels for the original N vectors
@@ -639,7 +661,7 @@ def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
                 seen.append(idx)
             else:
                 # Find nearest unused data point to the original medoid
-                unused = np_array([j for j in all_indices if j not in used])
+                unused = all_indices[~np_isin(all_indices, list(used))]
                 D_unused = cdist(
                     samplecart_input[idx : idx + 1], samplecart_input[unused]
                 )
@@ -660,6 +682,76 @@ def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
     medoids = samplecart_input[medoid_indices_resolved]
 
     return {"centroids": medoids, "labels": labels}
+
+
+def kamb_density_grid(
+    lons, lats, sigma=3.0, gridsize=100, cutoff=30.0, max_kernel_n=1000, bin_size=0.02
+):
+    """Exponential Kamb density (Vollmer 1995) of axial data on a stereonet grid, in standard
+    deviations. lons, lats are stereonet coordinates (e.g. from mplstereonet.line or pole).
+    Up to max_kernel_n points the result is the same as mplstereonet.density_grid(...,
+    method="exponential_kamb"). The Kamb kernel narrows as the number of points n grows (about 0.5
+    degrees for 100k points), below the grid spacing (1.8 degrees for gridsize 100), which gives
+    noisy contours: for n > max_kernel_n the kernel and the normalization of max_kernel_n points
+    are used and the counts are scaled by max_kernel_n / n, i.e. the expected density of a random
+    sample of max_kernel_n points (smooth, comparable between datasets of any size).
+    Only counter-point pairs whose kernel is larger than exp(-cutoff) are evaluated (k-d tree),
+    so the cost grows about linearly with the number of points (1M points in a few seconds)
+    instead of points x grid nodes. Returns (lon_grid, lat_grid, density), each gridsize x gridsize."""
+    from numpy import mgrid as np_mgrid
+    from numpy import zeros as np_zeros
+    from numpy import add as np_add
+    from numpy import maximum as np_maximum
+    from numpy import finfo as np_finfo
+    from scipy.spatial import cKDTree
+    from mplstereonet import stereonet_math
+
+    bound = np_pi / 2.0
+    lon, lat = np_mgrid[-bound : bound : gridsize * 1j, -bound : bound : gridsize * 1j]
+    counters = np_vstack(stereonet_math.sph2cart(lon.ravel(), lat.ravel())).T
+    points = np_vstack(
+        stereonet_math.sph2cart(np_atleast_1d(lons).ravel(), np_atleast_1d(lats).ravel())
+    ).T
+    n = float(points.shape[0])
+    totals = np_zeros(counters.shape[0], dtype=float)
+    if n > 0:
+        n_kernel = min(n, float(max_kernel_n)) if max_kernel_n else n
+        f = 2.0 * (1.0 + n_kernel / sigma**2)
+        units = np_sqrt(n_kernel * (f / 2.0 - 1.0) / f**2)
+        # exp(f (cos - 1)) < exp(-cutoff) when 1 - cos > cutoff / f; chord**2 = 2 (1 - cos)
+        radius = np_sqrt(min(2.0, 2.0 * cutoff / f))
+        weights = None
+        if n > n_kernel:
+            # The kernel width is fixed (about 4 degrees for 1000 points): merge nearly identical
+            # vectors (bins of about 1 degree) and count them, and neglect kernel values below
+            # exp(-15), so that the cost depends on how spread the data are, not on their number
+            # (300k points in 1.5-2.5 s instead of 40 s, density error < 1% of its maximum).
+            from numpy import round as np_round
+            from numpy import unique as np_unique
+
+            points, weights = np_unique(
+                np_round(points / bin_size) * bin_size, axis=0, return_counts=True
+            )
+            points = points / np_linalg_norm(points, axis=1)[:, None]
+            radius = np_sqrt(min(2.0, 2.0 * min(cutoff, 15.0) / f))
+        counters_tree = cKDTree(counters)
+        for these_points in (points, -points):  # axial data: |cos|
+            pairs = counters_tree.sparse_distance_matrix(
+                cKDTree(these_points), radius, output_type="coo_matrix"
+            )
+            cos_dist = np_maximum(1.0 - pairs.data**2 / 2.0, 0.0)
+            kernel = np_exp(f * (cos_dist - 1.0))
+            if weights is not None:
+                kernel *= weights[pairs.col]
+            np_add.at(totals, pairs.row, kernel)
+        totals *= n_kernel / n
+        totals = (totals - 0.5) / units
+        totals[totals < 0] = 0
+    # Never draw a 0 contour for smoothed densities (as mplstereonet).
+    totals[totals == 0] = np_finfo(float).tiny
+    counter_lon, counter_lat = stereonet_math.cart2sph(*counters.T)
+    shape = lon.shape
+    return counter_lon.reshape(shape), counter_lat.reshape(shape), totals.reshape(shape)
 
 
 def resolve_lower_hemisphere(vectors):

@@ -14404,7 +14404,7 @@ class ViewInterpretation(ViewMap):
 
     def entities_data_keys_added_update_views(self, updated_uids=None, collection=None):
         """Refresh multipart filtered actors after property schema changes."""
-        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+        updated_uids = self.sync_view_filter(updated_uids=updated_uids, collection=collection)
         tree = self.tree_from_coll(coll=collection)
         for uid in updated_uids:
             actor_row = self._actors_df_row_safe(uid)
