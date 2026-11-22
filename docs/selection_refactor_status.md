@@ -56,10 +56,10 @@ dip/direction 14 s, remove 7 s; more than 15 minutes in total before).
 
 | Phase | Content | Status |
 |---|---|---|
-| 1 | Store, signals, collection delegation | Done, GUI-tested, commit 46ff7a4 |
-| 2 | Project tables adapter, tab brought to front | Done, GUI-tested, commit f75c790 |
-| 3 | View trees adapter, group selection, rebuilds keep selection | Done, GUI-tested, commit f75c790 |
-| 4 | VTK views highlight and picking + follow-ups below | Done, **GUI test pending** (commit after f75c790) |
+| 1 | Store, signals, collection delegation | Done, GUI-tested, commit 5a68684 |
+| 2 | Project tables adapter, tab brought to front | Done, GUI-tested, commit 761b61f |
+| 3 | View trees adapter, group selection, rebuilds keep selection | Done, GUI-tested, commit 761b61f |
+| 4 | VTK views highlight and picking + follow-ups below | Done, **GUI test pending** (commits from 5075b6f) |
 | 5 | Matplotlib views: stereoplot highlight (signed dips → upper hemisphere), 2D/interpretation views | To do |
 | 6 | Remove dead code: `BaseViewSignals.newSelection`, commented `on_selection_changed` slots in `view_map.py` / `view_xsection.py`, commented `selected_uids_all`, `AbstractCollection._selected_uids` | To do |
 
