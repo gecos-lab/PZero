@@ -48,6 +48,7 @@ def _choose_draw_line_collection(self):
         "Geology": self.parent.geol_coll,
         "Fluid contacts": self.parent.fluid_coll,
         "Background data": self.parent.backgrnd_coll,
+        "Boundaries": self.parent.boundary_coll,
     }
     selected_collection = input_combo_dialog(
         parent=self,
@@ -58,6 +59,36 @@ def _choose_draw_line_collection(self):
     if selected_collection is None:
         return None
     return collection_map[selected_collection]
+
+
+def _ask_new_line_metadata(source_coll, title):
+    """Ask name (and role, feature, scenario where the collection has them: boundaries have no role
+    and feature) for a new line in source_coll. Returns the entity dictionary filled with the
+    answers, or None if cancelled."""
+    line_dict = deepcopy(source_coll.entity_dict)
+    legend_df = getattr(source_coll, "legend_df", None)
+
+    def _choices(key):
+        values = []
+        if legend_df is not None and key in legend_df.columns:
+            values = list(dict.fromkeys(legend_df[key].tolist()))
+        elif key in source_coll.df.columns:
+            values = list(dict.fromkeys(source_coll.df[key].tolist()))
+        return values or [line_dict[key]]
+
+    line_dict_in = {"name": ["PolyLine name: ", "new_pline"]}
+    if "role" in line_dict:
+        line_dict_in["role"] = ["Role: ", source_coll.valid_roles]
+    if "feature" in line_dict:
+        line_dict_in["feature"] = ["Feature: ", _choices("feature")]
+    if "scenario" in line_dict:
+        line_dict_in["scenario"] = ["Scenario: ", _choices("scenario")]
+    line_dict_updt = multiple_input_dialog(title=title, input_dict=line_dict_in)
+    if line_dict_updt is None:
+        return None
+    for key in line_dict_updt:
+        line_dict[key] = line_dict_updt[key]
+    return line_dict
 
 
 @freeze_gui_on
@@ -89,41 +120,12 @@ def draw_line(self):
         freeze_gui_off(self)
         return
 
-    # Create deepcopy of the selected collection entity dictionary.
-    line_dict = deepcopy(source_coll.entity_dict)
-    feature_list = source_coll.legend_df["feature"].tolist()
-    if not feature_list:
-        feature_list = [line_dict["feature"]]
-    scenario_list = list(set(source_coll.legend_df["scenario"].tolist()))
-    if not scenario_list:
-        scenario_list = [line_dict["scenario"]]
-    # One dictionary is set as input for a general widget of multiple-value-input"""
-    line_dict_in = {
-        "name": ["PolyLine name: ", "new_pline"],
-        "role": [
-            "Role: ",
-            source_coll.valid_roles,
-        ],
-        "feature": [
-            "Feature: ",
-            feature_list,
-        ],
-        "scenario": [
-            "Scenario: ",
-            scenario_list,
-        ],
-    }
-    line_dict_updt = multiple_input_dialog(
-        title="Digitize new PolyLine", input_dict=line_dict_in
-    )
-    # Check if the output of the widget is empty or not. If the Cancel button was clicked, the tool quits
-    if line_dict_updt is None:
-        # self.enable_actions()
+    # Name, role, feature, scenario of the new line (only the fields the collection has).
+    line_dict = _ask_new_line_metadata(source_coll, "Digitize new PolyLine")
+    # If the Cancel button was clicked, the tool quits
+    if line_dict is None:
         freeze_gui_off(self)
         return
-    # Getting the values that have been typed by the user through the widget
-    for key in line_dict_updt:
-        line_dict[key] = line_dict_updt[key]
     if isinstance(self, ViewMap):
         line_dict["topology"] = "PolyLine"
         line_dict["parent_uid"] = ""
@@ -286,45 +288,11 @@ def draw_line_3d(self):
         freeze_gui_off(self)
         return
 
-    # Create deepcopy of the selected collection entity dictionary
-    line_dict = deepcopy(source_coll.entity_dict)
-    feature_list = source_coll.legend_df["feature"].tolist()
-    if not feature_list:
-        feature_list = [line_dict["feature"]]
-    scenario_list = list(set(source_coll.legend_df["scenario"].tolist()))
-    if not scenario_list:
-        scenario_list = [line_dict["scenario"]]
-
-    # One dictionary is set as input for a general widget of multiple-value-input
-    line_dict_in = {
-        "name": ["PolyLine name: ", "new_pline"],
-        "role": [
-            "Role: ",
-            source_coll.valid_roles,
-        ],
-        "feature": [
-            "Feature: ",
-            feature_list,
-        ],
-        "scenario": [
-            "Scenario: ",
-            scenario_list,
-        ],
-    }
-
-    line_dict_updt = multiple_input_dialog(
-        title="Digitize new 3D PolyLine", input_dict=line_dict_in
-    )
-
-    # Check if the output of the widget is empty or not
-    if line_dict_updt is None:
-        # self.enable_actions()
+    # Name, role, feature, scenario of the new line (only the fields the collection has).
+    line_dict = _ask_new_line_metadata(source_coll, "Digitize new 3D PolyLine")
+    if line_dict is None:
         freeze_gui_off(self)
         return
-
-    # Getting the values that have been typed by the user through the widget
-    for key in line_dict_updt:
-        line_dict[key] = line_dict_updt[key]
 
     line_dict["topology"] = "PolyLine"
     line_dict["vtk_obj"] = PolyLine()

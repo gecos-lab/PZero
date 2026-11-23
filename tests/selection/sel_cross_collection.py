@@ -114,6 +114,9 @@ check("projection outputs in geology, fluids and boundaries",
       pw.geol_coll.df["name"].iloc[-1] == "g_line_prj_XS1" and len(pw.geol_coll.df) == n_g + 1
       and pw.fluid_coll.df["name"].iloc[-1] == "f_line_prj_XS1" and len(pw.fluid_coll.df) == n_f + 1
       and pw.boundary_coll.df["name"].iloc[-1] == "b_line_prj_XS1" and len(pw.boundary_coll.df) == n_b + 1)
+check("projection to X-section: the projected entities become the selection",
+      sorted(pw.selection_uids()) == sorted([pw.geol_coll.df["uid"].iloc[-1], pw.fluid_coll.df["uid"].iloc[-1],
+                                             pw.boundary_coll.df["uid"].iloc[-1]]))
 
 # B/A: intersection of a fluid line and a geology surface together
 n_g, n_f = len(pw.geol_coll.df), len(pw.fluid_coll.df)
@@ -122,6 +125,8 @@ tds.intersection_xs(pw)
 check("intersection outputs in fluids and geology",
       pw.fluid_coll.df["topology"].iloc[-1] == "XsVertexSet" and len(pw.fluid_coll.df) == n_f + 1
       and pw.geol_coll.df["topology"].iloc[-1] == "XsPolyLine" and len(pw.geol_coll.df) == n_g + 1)
+check("intersection: the outputs become the selection instead of the inputs",
+      sorted(pw.selection_uids()) == sorted([pw.fluid_coll.df["uid"].iloc[-1], pw.geol_coll.df["uid"].iloc[-1]]))
 
 
 # split creates new entities that join the selection (split multipart: parts replace the original)
@@ -332,5 +337,143 @@ check("parent_uid set to the section: the line enters the view and its tree",
 set_parent(moving, "")
 check("parent_uid cleared: the line leaves the view and its tree",
       in_xs_view(moving) == (False, False))
+
+# Project to surface (vertical), onto any surface
+from pzero.entities_factory import VertexSet  # noqa: E402
+
+terminal = []
+pw.print_terminal = lambda string=None: terminal.append(str(string))
+tilted = pv.Plane(center=(0, 0, 0), i_size=10, j_size=10, i_resolution=10, j_resolution=10).triangulate()
+tilted.points[:, 2] = 0.5 * tilted.points[:, 0] + 1.0  # z = 0.5 x + 1
+f_tilted = add(pw.fluid_coll, "TriSurf", TriSurf, tilted, "tilted")
+# a folded surface: two layers at z = 0 and z = 5 above the same area
+layer0 = pv.Plane(center=(20, 0, 0), i_size=4, j_size=4).triangulate()
+layer5 = pv.Plane(center=(20, 0, 5), i_size=4, j_size=4).triangulate()
+b_fold = add(pw.boundary_coll, "TriSurf", TriSurf, layer0.merge(layer5), "fold")
+high_line = add(pw.geol_coll, "PolyLine", PolyLine,
+                pv.Line((-2, 0, 50), (2, 0, 50), resolution=4), "high_line")
+far_pts = add(pw.fluid_coll, "VertexSet", VertexSet,
+              pv.PolyData(np.array([[1.0, 1.0, -30.0], [100.0, 100.0, 7.0]])), "far_pts")
+fold_pts = add(pw.geol_coll, "VertexSet", VertexSet,
+               pv.PolyData(np.array([[20.0, 0.0, 4.0], [20.5, 0.5, 1.0]])), "fold_pts")
+labels = list(tds._projection_surfaces(pw).keys())
+check("surfaces offered: TriSurfs of any collection", "tilted (Fluids)" in labels and "fold (Boundaries)" in labels)
+
+
+def project_onto(label, uids, replace=False):
+    tds.options_dialog = lambda **kw: 0 if replace else 1  # Yes = replace, No = copies
+    tds.input_combo_dialog = lambda **kw: label
+    pw.set_selection(uids, mode="replace")
+    tds.project_2_dem(pw)
+
+
+n_g, n_f = len(pw.geol_coll.df), len(pw.fluid_coll.df)
+project_onto("tilted (Fluids)", [high_line, far_pts])
+out_line = pw.geol_coll.df["uid"].iloc[-1]
+out_pts = pw.fluid_coll.df["uid"].iloc[-1]
+line_pts = pw.geol_coll.get_uid_vtk_obj(out_line).points
+check("line projected onto a TriSurf (copy in its collection, named _prj_<surface>)",
+      len(pw.geol_coll.df) == n_g + 1 and pw.geol_coll.get_uid_name(out_line) == "high_line_prj_tilted"
+      and np.allclose(line_pts[:, 2], 0.5 * line_pts[:, 0] + 1.0, atol=1e-5)
+      and np.allclose(line_pts[:, :2], pw.geol_coll.get_uid_vtk_obj(high_line).points[:, :2]))
+far_out = pw.fluid_coll.get_uid_vtk_obj(out_pts).points
+check("point below the surface projected up, point outside keeps its elevation (with a message)",
+      abs(far_out[0, 2] - 1.5) < 1e-5 and abs(far_out[1, 2] - 7.0) < 1e-6
+      and any("1 of 2 points outside tilted" in m for m in terminal))
+check("the projected copies become the selection", sorted(pw.selection_uids()) == sorted([out_line, out_pts]))
+check("the original line is unchanged", np.allclose(pw.geol_coll.get_uid_vtk_obj(high_line).points[:, 2], 50))
+
+project_onto("fold (Boundaries)", [fold_pts], replace=True)
+fold_out = pw.geol_coll.get_uid_vtk_obj(fold_pts).points
+check("folded surface: the intersection nearest to each point (z 4 -> 5, z 1 -> 0), original replaced",
+      np.allclose(fold_out[:, 2], [5.0, 0.0], atol=1e-5) and pw.geol_coll.get_uid_name(fold_pts) == "fold_pts_prj_fold"
+      and pw.selection_uids() == [fold_pts])
+
+# a DEM-like surface in DOMs (structured grid) is offered and works
+from pzero.entities_factory import DEM  # noqa: E402
+
+xx, yy = np.meshgrid(np.linspace(-50, -40, 6), np.linspace(-5, 5, 6))
+grid = pv.StructuredGrid(xx, yy, 3.0 + 0 * xx)
+dem = DEM()
+dem.ShallowCopy(grid)
+d = deepcopy(pw.dom_coll.entity_dict)
+d.update(name="dem_target", uid=str(uuid4()), topology="DEM", vtk_obj=dem)
+dem_uid = pw.dom_coll.add_entity_from_dict(entity_dict=d)
+dem_line = add(pw.geol_coll, "PolyLine", PolyLine, pv.Line((-48, 0, 0), (-42, 0, 0), resolution=3), "dem_line")
+project_onto("dem_target (DOMs)", [dem_line])
+check("projection onto a DEM", np.allclose(pw.geol_coll.get_uid_vtk_obj(pw.geol_coll.df["uid"].iloc[-1]).points[:, 2], 3.0))
+
+# no surface at all: a message and no dialog
+pw2 = ProjectWindow()
+terminal2 = []
+pw2.print_terminal = lambda string=None: terminal2.append(str(string))
+lonely = deepcopy(pw2.geol_coll.entity_dict)
+lonely_obj = PolyLine()
+lonely_obj.ShallowCopy(pv.Line((0, 0, 0), (1, 0, 0)))
+lonely.update(name="lonely", uid=str(uuid4()), topology="PolyLine", vtk_obj=lonely_obj)
+lonely_uid = pw2.geol_coll.add_entity_from_dict(entity_dict=lonely)
+dialogs = []
+tds.options_dialog = lambda **kw: dialogs.append("options")
+tds.input_combo_dialog = lambda **kw: dialogs.append("combo")
+pw2.set_selection([lonely_uid], mode="replace")
+tds.project_2_dem(pw2)
+check("no surface in the project: message, no dialog",
+      not dialogs and any("no surface to project onto" in m for m in terminal2))
+check("menu label", pw.actionProject2DEM.text() == "Project to DEM/surface")
+
+# Draw line: Boundaries offered, without role and feature
+import types  # noqa: E402
+
+asked = {}
+tdl.input_combo_dialog = lambda **kw: asked.setdefault("collections", kw["choice_list"]) and "Boundaries"
+chosen = tdl._choose_draw_line_collection(types.SimpleNamespace(parent=pw))
+tdl.multiple_input_dialog = lambda title=None, input_dict=None: asked.setdefault("fields", list(input_dict)) and {"name": "bline", "scenario": input_dict["scenario"][1][0]}
+line_dict = tdl._ask_new_line_metadata(chosen, "Digitize new PolyLine")
+check("draw line: Boundaries in the destination collections",
+      "Boundaries" in asked["collections"] and chosen is pw.boundary_coll)
+check("draw line in Boundaries: name and scenario only",
+      asked["fields"] == ["name", "scenario"] and line_dict["name"] == "bline" and "role" not in line_dict)
+
+# Cross-section views show the section name in their tab
+from pzero.views.dock_window import DockWindow  # noqa: E402
+
+vxs.input_combo_dialog = lambda **kw: "XS1"
+xs_dock = DockWindow(parent=pw, window_type="ViewXsection")
+check("cross-section tab shows the section name", xs_dock.windowTitle() == "Xsection XS1")
+
+# Views keep the 3:1 split (graphics : trees) also when opened as a later tab, and on resize,
+# until the user moves the divider
+from pzero.views.view_3d import View3D as _View3D  # noqa: E402,F401
+
+pw.resize(1600, 1000)
+pw.show()
+d3_dock = DockWindow(parent=pw, window_type="View3D")
+for _ in range(10):
+    app.processEvents()
+
+
+def split_ratio(dock):
+    sizes = dock.canvas.splitter.sizes()
+    return sizes[0] / max(1, sum(sizes))
+
+
+ratios = {}
+for dock in (xs_dock, d3_dock):
+    dock.raise_()
+    for _ in range(10):
+        app.processEvents()
+    ratios[dock.windowTitle()] = round(split_ratio(dock), 2)
+check(f"3:1 split in the cross-section (first tab) and 3D (second tab) views {ratios}",
+      all(abs(r - 0.75) < 0.03 for r in ratios.values()))
+pw.resize(2200, 1200)
+for _ in range(10):
+    app.processEvents()
+check("3:1 split kept after resizing the window", abs(split_ratio(d3_dock) - 0.75) < 0.03)
+d3_dock.canvas.splitter.setSizes([500, 500])
+d3_dock.canvas._on_split_moved_by_user()
+pw.resize(1800, 1100)
+for _ in range(10):
+    app.processEvents()
+check("a split moved by the user is kept", abs(split_ratio(d3_dock) - 0.5) < 0.05)
 
 print("RESULT:", "FAILED" if failed else "ALL PASSED")

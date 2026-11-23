@@ -424,6 +424,7 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         # Extrusion (simple, or with densification) is in View3D > Create, where it makes sense.
         self.menuProjection.removeAction(self.actionExtrusion)
         self.actionProject2DEM.triggered.connect(lambda: project_2_dem(self))
+        self.actionProject2DEM.setText("Project to DEM/surface")
         self.actionXSectionIntersection.triggered.connect(lambda: intersection_xs(self))
         self.actionProject2XSection.triggered.connect(lambda: project_2_xs(self))
         self.actionSplitSurfaces.triggered.connect(lambda: split_surf(self))

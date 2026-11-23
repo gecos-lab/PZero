@@ -62,6 +62,10 @@ class DockWindow(QDockWidget):
         # Add the content widget to the dock widget and add the dock widget to the main project window.
         # After this has been set, calling self.canvas returns the same object as calling self.widget().
         self.setWidget(self.canvas)
+        # Cross-section views show the name of their section in the tab (chosen when the view opens).
+        x_section_name = getattr(self.canvas, "this_x_section_name", None)
+        if window_type == "ViewXsection" and x_section_name:
+            self.setWindowTitle(f"Xsection {x_section_name}")
         parent.addDockWidget(Qt.RightDockWidgetArea, self)
 
         # Make all dock widgets tabbed if more than one is open: tab this view with the first other

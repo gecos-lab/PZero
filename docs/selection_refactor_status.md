@@ -124,6 +124,15 @@ Phase 4 follow-ups included in the same commit:
   Voxet → XsVoxet; boundary lines give no output (Boundaries cannot store points); TetraSolid
   placeholder (future output TriSurf or XsTriSurf). Merge to multipart (Entities menu, not Weld
   lines): any PolyData topology (points, lines, surfaces, PCDom, TSDom), one topology per merge.
+- Projection > Project to DEM/surface (`project_2_dem`, 2026-11-23): onto any DEM, DOM
+  surface (TSDom) or TriSurf of any collection (`_projection_surfaces`), by intersecting the vertical
+  through each point with the surface (`_VerticalProjector`, vtkModifiedBSPTree: all crossings;
+  the one nearest to the point's elevation on folds); points outside keep their elevation (message);
+  no surface -> message, no dialog. Outputs `<name>_prj_<surface>`; the outputs of Project to
+  DEM/surface, Project to X-section and X-section Intersection become the selection
+  (`_selects_new_entities`). Views keep the 3:1 split on resize until the user moves the divider
+  (a view opened as a later tab got about 1:1). Draw line also in Boundaries (name and scenario only). Cross-section
+  views show "Xsection <name>" in their tab.
 - Merge to multipart, weld and snap: inputs and outputs belong to one cross-section; only entities
   with the parent_uid of the last selected one are used (`same_parent=True`), others deselected.
 

@@ -96,6 +96,33 @@ from .helpers.helper_functions import (
 from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
 
 
+def _selects_new_entities(func):
+    """Decorator for tools whose outputs are new entities (in any collection): the entities that
+    did not exist before the tool ran replace the selection (if there are any). Place it below
+    @uses_selection and the freeze decorators. self is the ProjectWindow."""
+    from functools import wraps
+
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        collections = [
+            self.geol_coll, self.fluid_coll, self.backgrnd_coll, self.boundary_coll,
+            self.well_coll, self.dom_coll, self.mesh3d_coll, self.image_coll,
+        ]
+        before = {collection: set(collection.get_uids) for collection in collections}
+        result = func(self, *args, **kwargs)
+        new_uids = [
+            uid
+            for collection in collections
+            for uid in collection.get_uids
+            if uid not in before[collection]
+        ]
+        if new_uids:
+            self.set_selection(uids=new_uids, mode="replace", source=self)
+        return result
+
+    return wrapper
+
+
 def _build_extrusion_output_dict(self, input_uid, title, default_suffix):
     """Create the output entity dictionary shared by extrusion tools."""
     # Input entities and outputs are in the active collection (see @uses_selection).
@@ -2221,6 +2248,7 @@ def xsection_intersection_polyline_parts(vtk_obj=None, vtk_plane=None):
 
 @uses_selection(topologies=["PolyLine", "XsPolyLine", "TriSurf", "DEM", "TSDom", "Voxet", "TetraSolid"], cross_collection=True)
 @freeze_gui_onoff
+@_selects_new_entities
 def intersection_xs(self):
     """vtkCutter is a filter to cut through data using any subclass of vtkImplicitFunction.
     HOW TO USE: select PolyLines, TriSurfs, DEMs, TSDoms or 3D meshes (Voxets) of any collection, then
@@ -2524,33 +2552,99 @@ def intersection_xs(self):
                     self.print_terminal(" -- empty object -- ")
 
 
+def _projection_surfaces(self):
+    """Surfaces that entities can be projected onto: DEMs and DOM surfaces (TSDom) in the DOM
+    collection, and TriSurfs of the geology, fluids, background and boundary collections.
+    Returns a dict {label shown in the dialog: (collection, uid)}."""
+    surfaces = {}
+    candidates = [
+        (self.dom_coll, ["DEM", "TSDom"], "DOMs"),
+        (self.geol_coll, ["TriSurf"], "Geology"),
+        (self.fluid_coll, ["TriSurf"], "Fluids"),
+        (self.backgrnd_coll, ["TriSurf"], "Background"),
+        (self.boundary_coll, ["TriSurf"], "Boundaries"),
+    ]
+    for collection, topologies, collection_label in candidates:
+        rows = collection.df.loc[collection.df["topology"].isin(topologies)]
+        for uid, name in zip(rows["uid"], rows["name"]):
+            label = f"{name} ({collection_label})"
+            if label in surfaces:
+                label = f"{name} ({collection_label}, {uid[:8]})"
+            surfaces[label] = (collection, uid)
+    return surfaces
+
+
+class _VerticalProjector:
+    """Vertical projection onto a surface (DEM, DOM surface, TriSurf): the vertical line through
+    each point is intersected with the surface (triangulated); where it crosses the surface more
+    than once (e.g. a fold), the intersection nearest to the elevation of the point is used.
+    vtkModifiedBSPTree returns all the intersections (vtkOBBTree drops consecutive ones crossing
+    in the same sense, e.g. the second limb of a fold)."""
+
+    def __init__(self, surface_vtk):
+        from vtkmodules.vtkFiltersGeometry import vtkGeometryFilter
+        from vtkmodules.vtkFiltersFlowPaths import vtkModifiedBSPTree
+
+        geometry = vtkGeometryFilter()
+        geometry.SetInputData(surface_vtk)
+        triangles = vtkTriangleFilter()
+        triangles.SetInputConnection(geometry.GetOutputPort())
+        triangles.Update()
+        self.surface = triangles.GetOutput()
+        self.tree = vtkModifiedBSPTree()
+        self.tree.SetDataSet(self.surface)
+        self.tree.BuildLocator()
+        z_min, z_max = self.surface.GetBounds()[4:6]
+        pad = 1.0 + 0.01 * abs(z_max - z_min)
+        self.z_top, self.z_bottom = z_max + pad, z_min - pad
+
+    def project(self, points):
+        """Projected copy of points (N x 3) and the boolean mask of the points that hit the
+        surface (the others keep their position)."""
+        points = np_array(points, dtype=np_float64).reshape(-1, 3)
+        projected = points.copy()
+        hit = np_zeros(points.shape[0], dtype=bool)
+        hits = vtkPoints()
+        cell_ids = vtkIdList()
+        for i, (x, y, z) in enumerate(points):
+            self.tree.IntersectWithLine(
+                (x, y, self.z_top), (x, y, self.z_bottom), 1e-6, hits, cell_ids
+            )
+            n_hits = hits.GetNumberOfPoints()
+            if n_hits == 0:
+                continue
+            elevations = [hits.GetPoint(k)[2] for k in range(n_hits)]
+            projected[i, 2] = min(elevations, key=lambda e: abs(e - z))
+            hit[i] = True
+        return projected, hit
+
+
 @uses_selection(valid={"geol_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "fluid_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "backgrnd_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "boundary_coll": ["PolyLine", "XsPolyLine"], "well_coll": None}, cross_collection=True)
 @freeze_gui_onoff
 def project_2_dem(self):
-    """vtkProjectedTerrainPath projects an input polyline onto a terrain image.
-    HOW TO USE: at the moment, as vtkProjectedTerrainPath takes vtkImageData as input, we need to import
-    DEM file also as MapImage (--> as vtkImageData) and to use this entity as source data for the
-    projection"""
-    # self.print_terminal("Vertical Projection: project target lines onto a terrain image")
-    # Selected entities can belong to different collections (@uses_selection(cross_collection=True)):
-    # each one is projected in its own collection, wells as wells.
+    """Projection > Project to surface: vertical projection of the selected points, lines and wells
+    (any collection, each output in its own collection) onto a surface chosen among DEMs, DOM
+    surfaces and TriSurfs (see _projection_surfaces, _VerticalProjector). The projected entities
+    are copies named <name>_prj_<surface> or, if chosen, replace the originals; they become the
+    selection. Wells are shifted vertically by the elevation change at their head, optionally with
+    the geology, fluids and background entities linked to them."""
     input_uids = tool_uids(self)
     if not input_uids:
         self.print_terminal("No input data selected.")
+        return
+    surfaces = _projection_surfaces(self)
+    if not surfaces:
+        self.print_terminal(
+            " -- Project to surface: no surface to project onto (DEM, DOM surface or TriSurf) -- "
+        )
         return
     well_uids = [uid for uid in input_uids if entity_collection(self, uid) is self.well_coll]
     # Before the main loop, is_well_projection tells whether there are wells among the inputs;
     # in the loop it is set for each entity.
     is_well_projection = bool(well_uids)
-    # for uid in input_uids:
-    #     if isinstance(self.geol_coll.get_uid_vtk_obj(uid), PolyLine):
-    #         pass
-    #     else:
-    #         print(" -- Error input type: only PolyLine type -- ")
-    #         return
     # Ask if the tool replaces the input entities, or if they shall be preserved
     replace_on_off = options_dialog(
-        title="Project to Surface",
+        title="Project to surface",
         message="Replace Original Entities?",
         yes_role="Yes",
         no_role="No",
@@ -2558,25 +2652,23 @@ def project_2_dem(self):
     )
     if replace_on_off is None:
         return
-    # Ask for the DOM (/DEM), source of the projection
-    dom_list_uids = self.dom_coll.get_uids
-    dom_list_names = []
-    for uid in dom_list_uids:
-        dom_list_names.append(self.dom_coll.get_uid_name(uid))
-    dom_name = input_combo_dialog(
-        title="Project to Surface",
-        label="Input surface for projection",
-        choice_list=dom_list_names,
+    surface_label = input_combo_dialog(
+        title="Project to surface",
+        label="Surface to project onto (vertical projection)",
+        choice_list=list(surfaces.keys()),
     )
-    if dom_name is None:
+    if surface_label is None:
         return
-    dom_uid = self.dom_coll.df.loc[self.dom_coll.df["name"] == dom_name, "uid"].values[
-        0
-    ]
+    surface_coll, surface_uid = surfaces[surface_label]
+    surface_name = surface_coll.get_uid_name(surface_uid)
+    suffix = f"_prj_{surface_name}"
+    projector = _VerticalProjector(surface_coll.get_uid_vtk_obj(surface_uid))
+
     project_linked_objects = False
     linked_uids_by_well = {}
     total_linked_objects = 0
     updated_uids_by_coll = {}
+    output_uids = []
 
     def _register_updated_uid(collection, uid_value):
         """Track metadata updates by collection."""
@@ -2633,7 +2725,6 @@ def project_2_dem(self):
                     not hasattr(shifted_vtk, "points_number")
                     or shifted_vtk.points_number <= 0
                 ):
-                    prgs_bar.add_one()
                     continue
 
                 shifted_points = shifted_vtk.points.copy()
@@ -2645,7 +2736,7 @@ def project_2_dem(self):
                     child_dict = deepcopy(collection.entity_dict)
                     child_dict["uid"] = None
                     child_dict["name"] = (
-                        f"{collection.get_uid_name(child_uid)}_proj_DEM"
+                        f"{collection.get_uid_name(child_uid)}{suffix}"
                     )
                     child_dict["scenario"] = collection.get_uid_scenario(child_uid)
                     child_dict["topology"] = collection.get_uid_topology(child_uid)
@@ -2664,10 +2755,9 @@ def project_2_dem(self):
                     collection.replace_vtk(uid=child_uid, vtk_object=shifted_vtk)
                     collection.set_uid_name(
                         uid=child_uid,
-                        name=f"{collection.get_uid_name(child_uid)}_proj_DEM",
+                        name=f"{collection.get_uid_name(child_uid)}{suffix}",
                     )
                     _register_updated_uid(collection, child_uid)
-                prgs_bar.add_one()
 
     if is_well_projection:
         linked_choice = options_dialog(
@@ -2694,281 +2784,136 @@ def project_2_dem(self):
                 self.print_terminal(
                     "No geology, fluids, or background objects linked to the selected well(s)."
                 )
-    #     print("dom_uid ", dom_uid)
-    #     Convert DEM (vtkStructuredGrid) in vtkImageData to perform the projection with vtkProjectedTerrainPath
-    #     dem_to_image = vtkDEMReader()
-    #     dem_to_image.SetInputData(self.dom_coll.get_uid_vtk_obj(dom_uid))
-    #     dem_to_image.Update()
-    #     print("dem_to_image ", dem_to_image)
-    #     print("dem_to_image.GetOutput() ", dem_to_image.GetOutput())
-    #     Ask for the MapImage, source of the projection
-    #     image_list_uids = self.image_coll.get_uids()
-    #     image_list_names = []
-    #     for uid in image_list_uids:
-    #         image_list_names.append(self.image_coll.get_uid_name(uid))
-    #     img_name = input_combo_dialog(title='Project to Surface', label='Input surface for projection', choice_list=image_list_names)
-    #     if img_name is None:
-    #         return
-    #     img_uid = self.image_coll.df.loc[self.image_coll.df['name'] == img_name, 'uid'].values[0]
-    # ----- some check is needed here. Check if the chosen image is a 2D map with elevation values -----
-    prgs_bar = progress_dialog(
-        max_value=len(input_uids) + total_linked_objects,
-        title_txt="Input dataframe",
-        label_txt="Projecting data to DEM...",
-        cancel_txt=None,
-        parent=self,
-    )
+    def _copy_like(vtk_obj, uid, collection):
+        """Copy of vtk_obj with the same class (cross-section classes keep their section)."""
+        if isinstance(vtk_obj, (XsPolyLine, XsVertexSet)):
+            copy = type(vtk_obj)(x_section_uid=collection.get_uid_x_section(uid), parent=self)
+        else:
+            copy = type(vtk_obj)()
+        copy.DeepCopy(vtk_obj)
+        return copy
+
+    def _new_entity_dict(collection, uid, vtk_obj):
+        """Entity dictionary of the projected copy of uid, in the same collection."""
+        obj_dict = deepcopy(collection.entity_dict)
+        obj_dict["uid"] = None  # a new uid is generated
+        obj_dict["name"] = f"{collection.get_uid_name(uid)}{suffix}"
+        obj_dict["scenario"] = collection.get_uid_scenario(uid)
+        obj_dict["topology"] = collection.get_uid_topology(uid)
+        obj_dict["parent_uid"] = uid_metadata(collection, uid, "parent_uid", obj_dict.get("parent_uid", ""))
+        obj_dict["properties_names"] = collection.get_uid_properties_names(uid)
+        obj_dict["properties_components"] = collection.get_uid_properties_components(uid)
+        if collection is self.well_coll:
+            row_idx = collection.df[collection.df["uid"] == uid].index[0]
+            obj_dict["properties_types"] = deepcopy(collection.df.at[row_idx, "properties_types"])
+            obj_dict["markers"] = deepcopy(collection.df.at[row_idx, "markers"])
+        else:
+            for key in ("feature", "role"):
+                if key in obj_dict:
+                    obj_dict[key] = uid_metadata(collection, uid, key, obj_dict[key])
+        obj_dict["vtk_obj"] = vtk_obj
+        return obj_dict
 
     for uid in input_uids:
         # Each entity is projected in its own collection.
         source_coll = entity_collection(self, uid)
         is_well_projection = source_coll is self.well_coll
-        # Determine which entity to project
-        if replace_on_off == 1:  # No - first create a copy, then project only the copy
-            # Create a copy of the original entity (not projected)
-            obj_dict = deepcopy(source_coll.entity_dict)
-            obj_dict["uid"] = None  # Will generate new uid
-            obj_dict["name"] = f"{source_coll.get_uid_name(uid)}_proj_DEM"
-            obj_dict["scenario"] = source_coll.get_uid_scenario(uid)
-            obj_dict["topology"] = source_coll.get_uid_topology(uid)
-            obj_dict["properties_names"] = source_coll.get_uid_properties_names(uid)
-            obj_dict["properties_components"] = (
-                source_coll.get_uid_properties_components(uid)
-            )
-            if not is_well_projection:
-                for key in ("feature", "role"):
-                    if key in obj_dict:
-                        obj_dict[key] = uid_metadata(source_coll, uid, key, obj_dict[key])
-            else:
-                row_idx = source_coll.df[source_coll.df["uid"] == uid].index[0]
-                obj_dict["properties_types"] = deepcopy(
-                    source_coll.df.at[row_idx, "properties_types"]
-                )
-                obj_dict["markers"] = deepcopy(source_coll.df.at[row_idx, "markers"])
-
-            # Create VTK object and copy geometry from original
-            if is_well_projection:
-                obj_dict["vtk_obj"] = source_coll.get_uid_vtk_obj(uid).deep_copy()
-            elif isinstance(source_coll.get_uid_vtk_obj(uid), PolyLine):
-                obj_dict["vtk_obj"] = PolyLine()
-            elif isinstance(source_coll.get_uid_vtk_obj(uid), Attitude):
-                obj_dict["vtk_obj"] = Attitude()
-            elif isinstance(source_coll.get_uid_vtk_obj(uid), VertexSet):
-                obj_dict["vtk_obj"] = VertexSet()
-
-            if not is_well_projection:
-                obj_dict["vtk_obj"].DeepCopy(source_coll.get_uid_vtk_obj(uid))
-
-            # Add the copy to collection
-            if obj_dict["vtk_obj"].points_number > 0:
-                new_uid = source_coll.add_entity_from_dict(obj_dict)
-                uid_to_project = new_uid
-            else:
-                self.print_terminal(" -- empty object -- ")
-                prgs_bar.add_one()
-                continue
-        else:  # Yes - project original entity directly
-            uid_to_project = uid
-
-        # Now project the target entity (either original or the new copy)
+        source_obj = source_coll.get_uid_vtk_obj(uid)
+        name = source_coll.get_uid_name(uid)
+        if not hasattr(source_obj, "points_number") or source_obj.points_number <= 0:
+            self.print_terminal(f" -- {name}: empty object, not projected -- ")
+            continue
+        delta_z = None
         if is_well_projection:
-            source_well = source_coll.get_uid_vtk_obj(uid_to_project)
-            if (
-                not hasattr(source_well, "points_number")
-                or source_well.points_number <= 0
-            ):
-                self.print_terminal(
-                    f" -- well {source_coll.get_uid_name(uid_to_project)} has no trace points -- "
-                )
-                prgs_bar.add_one()
-                continue
-
-            head_xyz = _get_well_reference_xyz(source_well)
+            head_xyz = _get_well_reference_xyz(source_obj)
             if head_xyz is None:
-                self.print_terminal(
-                    f" -- well {source_coll.get_uid_name(uid_to_project)} has no valid head/trace XY for DEM projection -- "
-                )
-                prgs_bar.add_one()
+                self.print_terminal(f" -- well {name}: no valid head/trace XY for the projection -- ")
                 continue
-
             head_z = head_xyz[2]
             if head_z != head_z:
-                first_trace_z = np_float64(source_well.points[0][2])
+                first_trace_z = np_float64(source_obj.points[0][2])
                 head_z = first_trace_z if first_trace_z == first_trace_z else 0.0
-
-            head_probe = VertexSet()
-            head_probe.points = np_array([head_xyz], dtype=np_float64)
-            head_probe.auto_cells()
-
-            projection = vtkPointInterpolator2D()
-            projection.SetInputData(head_probe)
-            projection.SetSourceData(self.dom_coll.get_uid_vtk_obj(dom_uid))
-            projection.SetKernel(vtkVoronoiKernel())
-            projection.SetNullPointsStrategyToClosestPoint()
-            projection.SetZArrayName("elevation")
-            projection.Update()
-
-            projected_probe = VertexSet()
-            projected_probe.DeepCopy(projection.GetOutput())
-            if projected_probe.points_number == 0:
-                self.print_terminal(" -- empty object after projection -- ")
-                prgs_bar.add_one()
+            projected_head, hit = projector.project([[head_xyz[0], head_xyz[1], head_z]])
+            if not hit[0]:
+                self.print_terminal(f" -- well {name}: head outside {surface_name}, not projected -- ")
                 continue
-            elevation = np_array(
-                projected_probe.get_point_data("elevation"), dtype=np_float64
-            ).reshape(-1)
-            if elevation.size == 0:
-                self.print_terminal(
-                    " -- DEM elevation not available for projected well head -- "
-                )
-                prgs_bar.add_one()
-                continue
-            target_head_z = np_float64(elevation[0])
-            if target_head_z != target_head_z:
-                self.print_terminal(
-                    " -- DEM returned an invalid elevation for well head -- "
-                )
-                prgs_bar.add_one()
-                continue
+            target_head_z = np_float64(projected_head[0, 2])
             delta_z = target_head_z - head_z
-
-            projected_obj = source_well.deep_copy()
+            projected_obj = source_obj.deep_copy()
             new_points = projected_obj.points.copy()
             new_points[:, 2] = new_points[:, 2] + delta_z
             projected_obj.points = new_points
-
             field_keys = list(projected_obj.get_field_data_keys())
             for field_key in field_keys:
-                is_position_key = field_key == "pmarker_head" or field_key.startswith(
-                    "pmarker_"
-                )
+                is_position_key = field_key == "pmarker_head" or field_key.startswith("pmarker_")
                 if not is_position_key and field_key.startswith("p"):
-                    is_position_key = (
-                        field_key not in ["pname", "pMD"]
-                        and field_key[1:] in field_keys
-                    )
+                    is_position_key = field_key not in ["pname", "pMD"] and field_key[1:] in field_keys
                 if not is_position_key:
                     continue
                 try:
-                    field_xyz = np_array(
-                        projected_obj.get_field_data(field_key), dtype=np_float64
-                    ).reshape(-1, 3)
+                    field_xyz = np_array(projected_obj.get_field_data(field_key), dtype=np_float64).reshape(-1, 3)
                 except (TypeError, ValueError):
                     continue
                 field_xyz[:, 2] = field_xyz[:, 2] + delta_z
                 if field_key in list(projected_obj.get_field_data_keys()):
                     projected_obj.GetFieldData().RemoveArray(field_key)
                 projected_obj.set_field_data(name=field_key, data=field_xyz)
-
             if "pmarker_head" in list(projected_obj.get_field_data_keys()):
                 projected_obj.GetFieldData().RemoveArray("pmarker_head")
             projected_obj.set_field_data(
                 name="pmarker_head",
-                data=np_array(
-                    [[head_xyz[0], head_xyz[1], target_head_z]], dtype=np_float64
-                ),
+                data=np_array([[head_xyz[0], head_xyz[1], target_head_z]], dtype=np_float64),
             )
             projected_obj.Modified()
         else:
-            projection = vtkPointInterpolator2D()
-            projection.SetInputData(source_coll.get_uid_vtk_obj(uid_to_project))
-            projection.SetSourceData(self.dom_coll.get_uid_vtk_obj(dom_uid))
-            projection.SetKernel(vtkVoronoiKernel())
-            projection.SetNullPointsStrategyToClosestPoint()
-            projection.SetZArrayName("elevation")
-            projection.Update()
-
-            # Create temporary object to hold projected geometry
-            projected_obj = None
-            if isinstance(source_coll.get_uid_vtk_obj(uid_to_project), PolyLine):
-                projected_obj = PolyLine()
-            elif isinstance(source_coll.get_uid_vtk_obj(uid_to_project), Attitude):
-                projected_obj = Attitude()
-            elif isinstance(source_coll.get_uid_vtk_obj(uid_to_project), VertexSet):
-                projected_obj = VertexSet()
-
-            if projected_obj is None:
-                self.print_terminal(
-                    f" -- Unknown object type for uid {uid_to_project} -- "
-                )
-                prgs_bar.add_one()
+            new_points, hit = projector.project(source_obj.points)
+            if not hit.any():
+                self.print_terminal(f" -- {name}: outside {surface_name}, not projected -- ")
                 continue
-
-            # Apply projection - use DeepCopy to ensure complete copy of geometry
-            projected_obj.DeepCopy(projection.GetOutput())
-            # Update Z coordinates with elevation data - recreate points array to ensure VTK recognizes the change
-            elevation = projected_obj.get_point_data("elevation")
-            new_points = projected_obj.points.copy()
-            new_points[:, 2] = elevation
+            if not hit.all():
+                self.print_terminal(
+                    f" -- {name}: {int((~hit).sum())} of {hit.size} points outside "
+                    f"{surface_name} keep their elevation -- "
+                )
+            projected_obj = _copy_like(source_obj, uid, source_coll)
             projected_obj.points = new_points
-            # Force update of internal VTK structures
             projected_obj.Modified()
 
-        if projected_obj.points_number == 0:
-            self.print_terminal(" -- empty object after projection -- ")
-            prgs_bar.add_one()
-            continue
-
-        # Update the entity with projected geometry
-        # Note: replace_vtk already emits geom_modified signal
-        if is_well_projection:
-            source_coll.set_uid_vtk_obj(uid=uid_to_project, vtk_obj=projected_obj)
-            self.signals.geom_modified.emit([uid_to_project], source_coll)
-        else:
-            source_coll.replace_vtk(uid=uid_to_project, vtk_object=projected_obj)
-
-        # Update entity name
-        if replace_on_off == 1:  # No - set name for new entity
-            source_coll.set_uid_name(
-                uid=uid_to_project, name=f"{source_coll.get_uid_name(uid)}_proj_DEM"
-            )
-        else:  # Yes - set name for original entity
-            source_coll.set_uid_name(
-                uid=uid_to_project, name=f"{source_coll.get_uid_name(uid)}_proj_DEM"
-            )
-
+        if replace_on_off == 1:  # No: add the projected copy
+            output_uid = source_coll.add_entity_from_dict(_new_entity_dict(source_coll, uid, projected_obj))
+        else:  # Yes: replace the original
+            output_uid = uid
+            if is_well_projection:
+                source_coll.set_uid_vtk_obj(uid=uid, vtk_obj=projected_obj)
+                self.signals.geom_modified.emit([uid], source_coll)
+            else:
+                source_coll.replace_vtk(uid=uid, vtk_object=projected_obj)
+            source_coll.set_uid_name(uid=uid, name=f"{name}{suffix}")
+            _register_updated_uid(source_coll, uid)
         if is_well_projection:
             source_coll.attr_modified_update_legend_table()
-
-        _register_updated_uid(source_coll, uid_to_project)
+        output_uids.append(output_uid)
+        self.print_terminal(f"{name} projected onto {surface_name}")
 
         if is_well_projection and project_linked_objects:
             _translate_gfb_linked_entities(
                 source_well_uid=uid,
-                target_parent_uid=uid_to_project,
+                target_parent_uid=output_uid,
                 delta_z=delta_z,
             )
-
-        prgs_bar.add_one()
-
-    prgs_bar.close()
 
     # Emit metadata_modified signal for name changes (geom_modified already emitted by replace_vtk)
     for collection, collection_uids in updated_uids_by_coll.items():
         if collection_uids:
-            self.signals.metadata_modified.emit(
-                list(dict.fromkeys(collection_uids)), collection
-            )
-
-    # Force render in all views to ensure visual update
-    from pzero.views.dock_window import DockWindow
-
-    dock_windows = self.findChildren(DockWindow)
-    for dock in dock_windows:
-        if hasattr(dock, "canvas") and hasattr(dock.canvas, "plotter"):
-            try:
-                dock.canvas.plotter.render()
-            except Exception:
-                pass  # Ignore if render fails
-
-    # Clear selection in all views after projection
-    for dock in dock_windows:
-        if hasattr(dock, "canvas") and hasattr(dock.canvas, "clear_selection"):
-            dock.canvas.clear_selection()
+            self.signals.metadata_modified.emit(list(dict.fromkeys(collection_uids)), collection)
+    # The projected entities become the selection.
+    if output_uids:
+        self.set_selection(uids=output_uids, mode="replace", source=self)
 
 
 @uses_selection(valid={"geol_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "fluid_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "backgrnd_coll": ["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], "boundary_coll": ["PolyLine", "XsPolyLine"], "well_coll": ["PolyLine", "XsPolyLine"]}, cross_collection=True)
 @freeze_gui_onoff
+@_selects_new_entities
 def project_2_xs(self):
     """Projection of a copy of point/polyline geological entities to selected planar cross sections, along an axis specified with plunge/trend."""
     self.print_terminal(
