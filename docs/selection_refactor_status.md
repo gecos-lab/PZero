@@ -188,6 +188,16 @@ Phase 4 follow-ups included in the same commit:
   e.g. Calculate Normals adds an entity to the stereoplot, a parent_uid change moves it in/out of a
   cross-section view (no tool changes parent_uid of an existing entity at the moment). Fixed Calculate Normals on point
   sets (`vset_set_normals` shadowed its argument).
+- Stereoplot Select menu: "By polygon" (one-shot region selection, no checkbox) and
+  "Clear Selection" (as in the other views). Ctrl+A / Ctrl+Shift+A work on the stereoplot
+  canvas (it had no focus policy, so the view shortcuts never received the keys).
+  Move to another collection brings the destination table tab to front.
+- Stereoplot selection highlight (`selection_modified_update_actors`,
+  `_update_selection_highlight`): yellow rings on the poles of the selected entities shown in
+  the view, whatever selected them (Ctrl+A, polygon, tables, other views); hidden entities and
+  hidden poles are not highlighted; at most 2000 rings per entity. The polygon tool no longer
+  draws its own highlight. The mplstereonet warning "invalid value encountered in arcsin" (cursor
+  far outside the stereonet circle) is filtered in view_stereoplot.py (library untouched).
 - Test: `tests/selection/sel_stereoplot.py`.
 
 ## Open items

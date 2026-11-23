@@ -2,7 +2,7 @@
 PZero© Andrea Bistacchi"""
 
 # PySide6 imports____
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QSpinBox, QWidgetAction
 
@@ -38,6 +38,19 @@ from pzero.helpers.helper_dialogs import multiple_input_dialog, save_file_dialog
 
 # mplstereonet import____
 import mplstereonet
+
+# Moving the mouse over the figure far outside the stereonet circle (e.g. the corners), matplotlib
+# converts the cursor position to stereonet coordinates, and the inverse projection of mplstereonet
+# warns "invalid value encountered in arcsin" (the point has no stereonet coordinates: NaN, no
+# coordinates are shown). Harmless: ignore only this warning of that module.
+import warnings as _warnings
+
+_warnings.filterwarnings(
+    "ignore",
+    message="invalid value encountered in arcsin",
+    category=RuntimeWarning,
+    module=r"mplstereonet\.stereonet_transforms",
+)
 
 # Matplotlib imports____
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -161,8 +174,10 @@ class ViewStereoplot(ViewMPL):
         self.seed_pick_cid = None
         self.rectangle_selector = None  # holds the active RectangleSelector widget
         self.selection_tool_active = False
+        # Selection highlight: yellow rings on the poles of the selected entities shown in this view.
         self.selection_highlight_actor = None
         self.selection_highlight_uids = set()
+        self._highlight_pending = False
 
         # In __init__:
         self.selection_press_cid = None
@@ -212,10 +227,14 @@ class ViewStereoplot(ViewMPL):
         self.menuView.addAction(self.actionSavePng)
 
         # ---- Select Menu ----
-        self.actionSelectionTool = QAction("Polygon selection", self)
-        self.actionSelectionTool.setCheckable(True)
+        self.actionSelectionTool = QAction("By polygon", self)
         self.actionSelectionTool.triggered.connect(self.toggle_selection_tool)
         self.menuSelect.addAction(self.actionSelectionTool)
+
+        # Same as the other views: deselect the entities of this view (Ctrl+Shift+A).
+        self.actionClearSelection = QAction("Clear Selection", self)
+        self.actionClearSelection.triggered.connect(self.deselect_all_in_view)
+        self.menuSelect.addAction(self.actionClearSelection)
 
         # ---- Analysis Menu ----
         self.actionSaveClusters = QAction("Save clusters as a property", self)
@@ -326,9 +345,6 @@ class ViewStereoplot(ViewMPL):
         )
         self.menuAnalysis.addAction(self.actionSeedPickingLineations)
 
-        for action in self.findChildren(QAction):
-            if action is not self.actionSelectionTool:
-                action.triggered.connect(self._clear_selection_highlight)
 
     def connect_all_signals(self):
         super().connect_all_signals()
@@ -372,6 +388,9 @@ class ViewStereoplot(ViewMPL):
 
         # get a reference to the canvas that contains the figure
         self.canvas = FigureCanvas(self.figure)
+        # Take the keyboard focus on click, so that the view shortcuts (Ctrl+A, Ctrl+Shift+A) work
+        # in the graphics (the matplotlib canvas has no focus policy by default).
+        self.canvas.setFocusPolicy(Qt.ClickFocus)
 
         # Create Qt layout and add Matplotlib canvas (created above) as a widget to the Qt layout
         self.ViewFrameLayout.addWidget(self.canvas)
@@ -649,15 +668,18 @@ class ViewStereoplot(ViewMPL):
                 this_actor.figure.canvas.draw_idle()
         self.mpl_actors[uid] = this_actor
         self._schedule_pooled_contours()
+        self._schedule_highlight()
         return this_actor
 
     def set_actor_visible(self, uid=None, visible=None):
         super().set_actor_visible(uid=uid, visible=visible)
         self._schedule_pooled_contours()
+        self._schedule_highlight()
 
     def remove_actor_in_view(self, uid=None, redraw=False):
         super().remove_actor_in_view(uid=uid, redraw=redraw)
         self._schedule_pooled_contours()
+        self._schedule_highlight()
 
     def _schedule_pooled_contours(self):
         """The shown entities (or their vectors) may have changed: update the pooled contours and
@@ -1350,15 +1372,64 @@ class ViewStereoplot(ViewMPL):
         if hasattr(self, "figure") and self.figure is not None:
             self.figure.canvas.draw()
 
-    # --- Selection changes: lasso highlight ---
+    # --- Selection highlight ---
+    # Rings on at most this number of vectors per entity (entities drawn as contours can have
+    # millions of vectors: a sample is enough to show that they are selected).
+    HIGHLIGHT_MAX_POINTS_PER_ENTITY = 2000
+
     def on_selection_changed(self, collection):
-        """Remove the lasso highlight when the selection changes elsewhere. Statistics do not
-        depend on the selection (they use the shown entities)."""
-        if (
-            self.selection_highlight_actor is not None
-            and set(self.selected_uids) != self.selection_highlight_uids
-        ):
-            self._clear_selection_highlight()
+        """Legacy selection signal: the highlight follows selection_modified (see
+        selection_modified_update_actors). Statistics do not depend on the selection (they use the
+        shown entities)."""
+
+    def selection_modified_update_actors(self, added=None, removed=None, source=None):
+        """The project selection changed: update the highlight (once per event loop iteration)."""
+        self._schedule_highlight()
+
+    def _schedule_highlight(self):
+        if not self._highlight_pending:
+            self._highlight_pending = True
+            QTimer.singleShot(0, self._update_selection_highlight)
+
+    def _update_selection_highlight(self):
+        """Yellow rings on the poles / lineations of the selected entities that are shown in this
+        view (one artist for all of them). Hidden entities are not highlighted (they stay
+        selected), nor are entities while poles are hidden (Toggle poles)."""
+        from numpy import linspace as np_linspace
+
+        self._highlight_pending = False
+        self._clear_selection_highlight(redraw=False)
+        if not hasattr(self, "ax"):
+            return
+        selected = set(self.selected_uids)
+        lons, lats, highlighted = [], [], set()
+        if selected and self.show_poles:
+            for uid, _, vtk_obj in self._shown_entities():
+                if uid not in selected or self.mpl_actors.get(uid) is None:
+                    continue
+                lon, lat, _ = self._entity_lonlat(vtk_obj)
+                if lon is None:
+                    continue
+                if lon.size > self.HIGHLIGHT_MAX_POINTS_PER_ENTITY:
+                    sample = np_linspace(0, lon.size - 1, self.HIGHLIGHT_MAX_POINTS_PER_ENTITY).astype(int)
+                    lon, lat = lon[sample], lat[sample]
+                lons.append(lon)
+                lats.append(lat)
+                highlighted.add(uid)
+        if lons:
+            self.selection_highlight_actor = self.ax.plot(
+                np_concatenate(lons),
+                np_concatenate(lats),
+                linestyle="none",
+                marker="o",
+                markersize=8,
+                markerfacecolor="none",
+                markeredgecolor="yellow",
+                markeredgewidth=1.5,
+                zorder=self.Z_STATS + 1,
+            )[0]
+            self.selection_highlight_uids = highlighted
+        self.figure.canvas.draw_idle()
 
     # --- Orientation analysis: drawing and visibility ---
     def toggle_analysis_actor(self, key):
@@ -1680,24 +1751,21 @@ class ViewStereoplot(ViewMPL):
         self.save_clusters_as_property(property_name=property_name)
 
     def toggle_selection_tool(self):
-        self.selection_tool_active = self.actionSelectionTool.isChecked()
-
+        """Select > By polygon: draw a region on the stereoplot (click and drag) to select the
+        entities with poles inside it. One selection per command (the tool then deactivates)."""
         if self.selection_tool_active:
-            self.selection_press_cid = self.canvas.mpl_connect(
-                "button_press_event", self._on_selection_press
-            )
-            self.selection_motion_cid = self.canvas.mpl_connect(
-                "motion_notify_event", self._on_selection_motion
-            )
-            self.selection_release_cid = self.canvas.mpl_connect(
-                "button_release_event", self._on_selection_release
-            )
-            self.print_terminal(
-                "Selection tool active — click and drag to select poles."
-            )
-        else:
-            self._deactivate_selection()
-            self.print_terminal("Selection tool deactivated.")
+            return
+        self.selection_tool_active = True
+        self.selection_press_cid = self.canvas.mpl_connect(
+            "button_press_event", self._on_selection_press
+        )
+        self.selection_motion_cid = self.canvas.mpl_connect(
+            "motion_notify_event", self._on_selection_motion
+        )
+        self.selection_release_cid = self.canvas.mpl_connect(
+            "button_release_event", self._on_selection_release
+        )
+        self.print_terminal("Select by polygon: click and drag on the stereoplot.")
 
     def _deactivate_selection(self, clear_highlight=True):
         """Disconnect selection events and clean up visual state."""
@@ -1713,15 +1781,8 @@ class ViewStereoplot(ViewMPL):
         self.selection_release_cid = None
         self.selection_start = None
         self._remove_selection_patch()
-        if clear_highlight and self.selection_highlight_actor is not None:
-            try:
-                self.selection_highlight_actor.remove()
-            except Exception:
-                pass
-            self.selection_highlight_actor = None
-            self.selection_highlight_uids = set()
+        # (clear_highlight is kept for compatibility: the highlight follows the selection)
         self.selection_tool_active = False
-        self.actionSelectionTool.setChecked(False)
         if hasattr(self, "figure"):
             self.figure.canvas.draw()
 
@@ -1734,17 +1795,17 @@ class ViewStereoplot(ViewMPL):
                 pass
             self.selection_patch = None
 
-    def _clear_selection_highlight(self, *args):
-        """Remove the yellow markers drawn after a stereonet region selection."""
+    def _clear_selection_highlight(self, *args, redraw=True):
+        """Remove the yellow selection rings (they are drawn again by _update_selection_highlight)."""
         if self.selection_highlight_actor is not None:
             try:
                 self.selection_highlight_actor.remove()
             except Exception:
-                pass
+                pass  # it belonged to a figure that has been replaced
             self.selection_highlight_actor = None
             self.selection_highlight_uids = set()
-            if hasattr(self, "figure"):
-                self.figure.canvas.draw()
+            if redraw and hasattr(self, "figure"):
+                self.figure.canvas.draw_idle()
 
     def _build_selection_path(self, lon0, lat0, lon1, lat1, n=50):
         """
@@ -1936,30 +1997,6 @@ class ViewStereoplot(ViewMPL):
         self.print_terminal(
             f"Selected {len(selected_uids)} entity/entities via region selection."
         )
-
-        # Highlight selected poles
-        if self.selection_highlight_actor is not None:
-            try:
-                self.selection_highlight_actor.remove()
-            except Exception:
-                pass
-            self.selection_highlight_actor = None
-
-        all_lons = np_concatenate([uid_lons[uid] for uid in selected_uids])
-        all_lats = np_concatenate([uid_lats[uid] for uid in selected_uids])
-        self.selection_highlight_actor = self.ax.plot(
-            all_lons,
-            all_lats,
-            linestyle="none",
-            marker="o",
-            markersize=8,
-            markerfacecolor="none",
-            markeredgecolor="yellow",
-            markeredgewidth=1.5,
-            zorder=self.Z_STATS + 1,
-        )[0]
-        self.selection_highlight_uids = set(selected_uids)
-        self.figure.canvas.draw()
 
         # Within this view, the entities inside the region become the selection; entities that are
         # not in this view keep their selection state (any collection).

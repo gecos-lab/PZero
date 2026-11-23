@@ -421,4 +421,82 @@ check("dip / direction only: 30/90 -> 150/270, -45/90 and 135/270 -> 45/90",
       and np.allclose(o2.get_point_data("dip direction"), [270, 90, 90])
       and "Normals" not in o2.point_data_keys)
 
+# Select menu: "By polygon" (one-shot, no checkbox) and "Clear Selection"; Ctrl+A / Ctrl+Shift+A
+from PySide6.QtCore import Qt as _Qt  # noqa: E402
+from PySide6.QtTest import QTest  # noqa: E402
+
+select_texts = [a.text() for a in stereo.menuSelect.actions()]
+check("Select menu: By polygon and Clear Selection",
+      "By polygon" in select_texts and "Clear Selection" in select_texts
+      and not stereo.actionSelectionTool.isCheckable())
+stereo.actionSelectionTool.trigger()
+check("By polygon activates the region selection", stereo.selection_tool_active)
+stereo._deactivate_selection()
+check("... and deactivates after use", not stereo.selection_tool_active)
+
+other = pw.geol_coll.add_entity_from_dict(entity_dict={**deepcopy(pw.geol_coll.entity_dict), "uid": str(uuid4()),
+                                                       "name": "not_in_stereo", "topology": "PolyLine",
+                                                       "vtk_obj": PolyLine()})
+app.processEvents()
+# a stereoplot in a dock of the shown project window, as opened from the Windows menu
+from pzero.views.dock_window import DockWindow  # noqa: E402
+
+pw.resize(1400, 900)
+pw.show()
+stereo_dock = DockWindow(parent=pw, window_type="ViewStereoplot")
+sv = stereo_dock.canvas
+pw.activateWindow()
+for _ in range(10):
+    app.processEvents()
+QTest.mouseClick(sv.canvas, _Qt.LeftButton)  # the canvas takes the focus on click
+app.processEvents()
+check("clicking the stereoplot canvas gives it the keyboard focus", app.focusWidget() is sv.canvas)
+shown_in_view = set(sv.shown_uids)
+pw.set_selection([other], mode="replace")
+QTest.keyClick(sv.canvas, _Qt.Key_A, _Qt.ControlModifier)
+app.processEvents()
+check("Ctrl+A on the stereoplot canvas selects the entities shown in the view (others kept)",
+      shown_in_view and shown_in_view <= set(pw.selection_uids()) and other in pw.selection_uids())
+for _ in range(3):
+    app.processEvents()
+ringed = {u for u in shown_in_view if sv.mpl_actors.get(u) is not None}
+check("... and highlights them with yellow rings",
+      sv.selection_highlight_actor is not None and sv.selection_highlight_uids == ringed
+      and sv.selection_highlight_actor.get_markeredgecolor() == "yellow")
+hidden_one = sorted(ringed)[0]
+sv.actors_df.loc[sv.actors_df["uid"] == hidden_one, "show"] = False
+sv.set_actor_visible(uid=hidden_one, visible=False)
+for _ in range(3):
+    app.processEvents()
+check("a hidden entity stays selected but is not highlighted",
+      hidden_one in pw.selection_uids() and hidden_one not in sv.selection_highlight_uids)
+sv.actors_df.loc[sv.actors_df["uid"] == hidden_one, "show"] = True
+sv.set_actor_visible(uid=hidden_one, visible=True)
+QTest.keyClick(sv.canvas, _Qt.Key_A, _Qt.ControlModifier | _Qt.ShiftModifier)
+app.processEvents()
+check("Ctrl+Shift+A on the canvas deselects the entities of the view only",
+      pw.selection_uids() == [other])
+for _ in range(3):
+    app.processEvents()
+check("... and removes the highlight", sv.selection_highlight_actor is None)
+pw.set_selection([f_pts], mode="replace")  # e.g. selected in a table
+for _ in range(3):
+    app.processEvents()
+check("an entity selected elsewhere (table, other view) is highlighted",
+      sv.selection_highlight_uids == {f_pts})
+pw.set_selection([other], mode="replace")
+sv.select_all_in_view()
+sv.actionClearSelection.trigger()
+check("Clear Selection deselects the entities of the view only", pw.selection_uids() == [other])
+
+# Move to another collection: the table tab follows
+pw.show_collection_tab("geol_coll")
+pw.set_selection([other], mode="replace")
+pw.transfer_entities_between_collections(
+    source_collection_name="geol_coll", destination_collection_name="fluid_coll",
+    selected_uids=[other], move=True,
+)
+check("after Move to Fluids the Fluids tab is in front and the entity stays selected",
+      pw.tabWidgetTopLeft.currentWidget() is pw.tabFluids and pw.selection_uids() == [other])
+
 print("RESULT:", "FAILED" if failed else "ALL PASSED")

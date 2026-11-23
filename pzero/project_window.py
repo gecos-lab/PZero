@@ -879,6 +879,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                 mode="add",
                 source=self,
             )
+        if move and report["added_uids"]:
+            # The table tab follows the moved entities.
+            self.show_collection_tab(destination_collection_name)
 
         operation = "Moved" if move else "Copied"
         self.print_terminal(
