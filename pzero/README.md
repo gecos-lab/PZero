@@ -78,6 +78,7 @@ Outputs are stored in the collection of their input, with metadata copied by `de
 | Merge to multipart (Entities menu, at least 2; the merged entity is selected) | `entities_merge` | One | PolyData of one topology (VertexSet, XsVertexSet, PolyLine, XsPolyLine, TriSurf, PCDom, TSDom), with the same parent_uid (cross-section) as the last selected entity |
 | Calculate normals (Properties menu): point sets from their dip/direction properties, TriSurfs, XsPolyLines and point clouds from geometry | `normals_calculate` → `orientation_analysis.set_normals` | Mixed | VertexSet, XsVertexSet, TriSurf, XsPolyLine, PCDom in any collection (not DEMs) |
 | Calculate Dip/Direction (Properties menu): dip and dip direction point properties from point normals (0-90 for upright planes, > 90 for overturned planes) | `point_clouds.normals2dd` | Mixed | Any entity with the Normals point property |
+| Invert normals (Properties menu): Normals n -> -n and/or dip -> 180 - dip, direction -> direction + 180 (both consistently if both present); TriSurf triangle order reversed so that Calculate Normals keeps it | `orientation_analysis.invert_polarity` | Mixed | Any entity with Normals and/or dip and dip direction point properties |
 | Add / remove property | `property_add`, `property_remove` | Mixed | Any entity except cross-sections, which have no properties (remove offers only properties present on all selected entities) |
 | Add / remove texture | `texture_add`, `texture_remove` | One | DOMs |
 | Build octree (Point Clouds menu) | `build_octree` | One | DOM point clouds (PCDom) |

@@ -89,8 +89,13 @@ def normals2dd(self):
                 f" -- {collection.get_uid_name(uid)}: cannot store dip/direction ({exc}) -- "
             )
             continue
+        self.print_terminal(f"Dip/direction set on {collection.get_uid_name(uid)}")
         # Properties are set in place (the geometry does not change): no replace_vtk.
+    from .orientation_analysis import _emit_values_modified
+
+    _emit_values_modified(self, tool_uids(self))
     self.prop_legend.update_widget(self)
+    self.print_terminal("All dip/directions set.")
 
 
 def extract_id(vtk_obj, ids):

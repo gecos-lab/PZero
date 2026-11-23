@@ -745,6 +745,13 @@ class ViewStereoplot(ViewMPL):
                 visible=bool(row["show"]),
             )
 
+    def entities_data_val_modified_update_views(self, updated_uids=None, collection=None):
+        """Normals / Lineations values changed (e.g. Invert polarity, Calculate Normals): the
+        positions of the poles change whatever property is shown, so redraw (contours and the
+        checked statistics follow)."""
+        updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
+        self._redraw_entities(updated_uids)
+
     def change_actor_color(self, updated_uids: list = None, collection=None):
         """Markers use per-point face/edge colors (hollow upper hemisphere), so redraw."""
         self._redraw_entities(updated_uids)

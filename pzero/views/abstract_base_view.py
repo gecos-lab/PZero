@@ -595,6 +595,29 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.entities_added_update_views(updated_uids=entering, collection=collection)
         return [uid for uid in updated_uids if uid in matching and uid in in_view]
 
+    # Items of the property drop-down that are not entity properties and are always available.
+    ALWAYS_AVAILABLE_PROPERTIES = ("none", "X", "Y", "Z", "RGB total", "Marker", "Annotations")
+
+    def shown_property_available(self, collection=None, uid=None, shown_property=None):
+        """True if the item shown from the property drop-down still exists for uid: a default item
+        (none, X, Y, Z, ...), a property, a component "Name[i]" of a multi-component property
+        (e.g. Normals[2], listed as "Normals" in properties_names), or a texture of the entity."""
+        if shown_property is None:
+            return False
+        if shown_property in self.ALWAYS_AVAILABLE_PROPERTIES:
+            return True
+        names = list(collection.get_uid_properties_names(uid) or [])
+        if shown_property in names:
+            return True
+        if isinstance(shown_property, str) and shown_property.endswith("]") and "[" in shown_property:
+            if shown_property[: shown_property.index("[")] in names:
+                return True
+        if "textures" in collection.df.columns:
+            textures = collection.df.loc[collection.df["uid"] == uid, "textures"].values
+            if len(textures) and shown_property in list(textures[0] or []):
+                return True
+        return False
+
     def entities_data_keys_added_update_views(self, updated_uids=None, collection=None):
         """This is called when point or cell data (properties) are added."""
         # AT THE MOMENT THIS IS IDENTICAL TO entities_data_keys_removed_update_views
@@ -611,9 +634,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 ].to_list()[0]
                 is None
             ):
-                if not self.actors_df.loc[
-                    self.actors_df["uid"] == uid, "show_property"
-                ].values[0] in collection.get_uid_properties_names(uid):
+                if not self.shown_property_available(
+                    collection,
+                    uid,
+                    self.actors_df.loc[self.actors_df["uid"] == uid, "show_property"].values[0],
+                ):
                     show = self.actors_df.loc[
                         self.actors_df["uid"] == uid, "show"
                     ].to_list()[0]
@@ -643,35 +668,24 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
     def entities_data_val_modified_update_views(
         self, updated_uids=None, collection=None
     ):
-        """This is called when entity point or cell data are modified. The actor is modified just if the
-        modified property is currently shown. Trees do not need to be modified."""
+        """This is called when entity point or cell data are modified. The actor is redrawn if it shows a
+        property (its values may have changed). Trees do not need to be modified."""
         # remove from updated_list the uid's that are excluded from this view by self.view_filter.
         updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
         for uid in updated_uids:
-            # Replace the previous copy of the actor with the same uid, and update the actors dataframe, only if a
-            # property that has been removed is shown at the moment. See issue #33 for a discussion on actors
-            # replacement by the PyVista add_mesh and add_volume methods.
-            if (
-                not self.actors_df.loc[
-                    self.actors_df["uid"] == uid, "show_property"
-                ].to_list()[0]
-                is None
-            ):
-                if not self.actors_df.loc[
-                    self.actors_df["uid"] == uid, "show_property"
-                ].values[0] in collection.get_uid_properties_names(uid):
-                    show = self.actors_df.loc[
-                        self.actors_df["uid"] == uid, "show"
-                    ].to_list()[0]
-                    self.show_actor_with_property(
-                        uid=uid,
-                        coll_name=collection.collection_name,
-                        show_property=None,
-                        visible=show,
-                    )
-                    self.actors_df.loc[
-                        self.actors_df["uid"] == uid, ["show_property"]
-                    ] = None
+            actor_rows = self.actors_df.loc[self.actors_df["uid"] == uid]
+            if actor_rows.empty:
+                continue
+            shown_property = actor_rows["show_property"].values[0]
+            # Redraw with the shown item (values changed). Properties cannot disappear here: removals
+            # are handled by entities_data_keys_removed_update_views.
+            if self.shown_property_available(collection, uid, shown_property) and shown_property != "none":
+                self.show_actor_with_property(
+                    uid=uid,
+                    coll_name=collection.collection_name,
+                    show_property=shown_property,
+                    visible=actor_rows["show"].values[0],
+                )
 
     def entities_metadata_modified_update_views(
         self, collection=None, updated_uids=None

@@ -214,8 +214,108 @@ def set_normals(self):
         collection.get_uid_vtk_obj(uid).vtk_set_normals()
         self.print_terminal(f"Normals set on {collection.get_uid_name(uid)}")
 
+    _emit_values_modified(self, uids)
     self.prop_legend.update_widget(self)
     self.print_terminal("All Normals set.")
+
+
+def _emit_values_modified(self, uids):
+    """Emit data_val_modified for uids, grouped by collection, so that the views showing these
+    properties (e.g. the stereoplot showing Normals) redraw them. self is the ProjectWindow."""
+    from .helpers.helper_functions import entity_collection
+
+    by_collection = {}
+    for uid in uids:
+        collection = entity_collection(self, uid)
+        if collection is not None:
+            by_collection.setdefault(collection.collection_name, (collection, []))[1].append(uid)
+    for collection, collection_uids in by_collection.values():
+        self.signals.data_val_modified.emit(collection_uids, collection)
+
+
+def invert_dip_directions(dips=None, directions=None):
+    """Dip/Direction of the same planes with the opposite polarity (normal n -> -n): an upright
+    plane becomes overturned and vice versa. Negative (overturned) dips are first converted to the
+    equivalent > 90 convention, so the result is always 0 <= Dip <= 180. Returns two Numpy arrays."""
+    dips = np_asarray(dips, dtype=float).copy()
+    directions = np_asarray(directions, dtype=float).copy()
+    negative = dips < 0
+    dips[negative] += 180
+    directions[negative] += 180
+    return 180 - dips, (directions + 180) % 360
+
+
+@uses_selection(cross_collection=True)
+@freeze_gui_onoff
+def invert_polarity(self):
+    """
+    Properties > Invert polarity: invert the facing direction of the selected entities (any class
+    and collection), e.g. a surface whose normals point downwards on the overturned limb and upwards
+    on the upright one. Normals are inverted (n -> -n) if present; dip / dip direction point
+    properties are converted to the opposite polarity if present (dip -> 180 - dip, direction ->
+    direction + 180); both, consistently, if both are present. For TriSurfs the order of the
+    triangle vertices is also reversed, so that Calculate Normals keeps the new polarity.
+    Entities with neither Normals nor dip and dip direction are deselected.
+    """
+    from vtkmodules.vtkFiltersCore import vtkReverseSense
+    from .entities_factory import TriSurf
+    from .helpers.helper_functions import entity_collection, tool_uids
+
+    unusable = []
+    inverted = []
+    for uid in tool_uids(self):
+        collection = entity_collection(self, uid)
+        vtk_obj = collection.get_uid_vtk_obj(uid) if collection is not None else None
+        keys = list(vtk_obj.point_data_keys) if vtk_obj is not None else []
+        has_normals = "Normals" in keys
+        has_dip = "dip" in keys and "dip direction" in keys
+        if not (has_normals or has_dip):
+            unusable.append(uid)
+            continue
+        done = []
+        if has_normals:
+            # Flip the existing arrays in place: same data type and same role (active point /
+            # cell normals), so that the views show them exactly as before.
+            from vtkmodules.util.numpy_support import vtk_to_numpy
+
+            for data in (vtk_obj.GetPointData(), vtk_obj.GetCellData()):
+                array = data.GetArray("Normals")
+                if array is not None:
+                    values = vtk_to_numpy(array)  # a view on the VTK array
+                    values *= -1
+                    array.Modified()
+            done.append("Normals")
+            if isinstance(vtk_obj, TriSurf) and vtk_obj.GetNumberOfPolys() > 0:
+                # Reverse the triangle vertex order (point normals and data are untouched), so
+                # that vtkPolyDataNormals (Calculate Normals) gives the new polarity.
+                reverse = vtkReverseSense()
+                reverse.SetInputData(vtk_obj)
+                reverse.ReverseCellsOn()
+                reverse.ReverseNormalsOff()
+                reverse.Update()
+                vtk_obj.SetPolys(reverse.GetOutput().GetPolys())
+                done.append("triangle order")
+        if has_dip:
+            dips, directions = invert_dip_directions(
+                vtk_obj.get_point_data("dip"), vtk_obj.get_point_data("dip direction")
+            )
+            vtk_obj.set_point_data(data_key="dip", attribute_matrix=dips)
+            vtk_obj.set_point_data(data_key="dip direction", attribute_matrix=directions)
+            done.append("dip / dip direction")
+        vtk_obj.Modified()
+        inverted.append(uid)
+        self.print_terminal(
+            f"Polarity inverted on {collection.get_uid_name(uid)}: {', '.join(done)}"
+        )
+    if unusable:
+        self.print_terminal(
+            f" -- Invert polarity: {len(unusable)} entities without Normals or dip and dip "
+            f"direction deselected -- "
+        )
+        self.set_selection(uids=unusable, mode="remove", source=self)
+    if inverted:
+        _emit_values_modified(self, inverted)
+        self.prop_legend.update_widget(self)
 
 
 def normals2dip_directions(normals=None):

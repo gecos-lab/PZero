@@ -161,6 +161,7 @@ class _FakeProject:
         self.dom_coll = template.dom_coll
         self.geol_coll = template.geol_coll
         self.prop_legend = MagicMock()
+        self.signals = MagicMock()  # views are told of changed values (data_val_modified)
         self._selection = {uid: "dom_coll"} if vtk_obj is not None else {}
         self.dom_coll.get_uid_properties_names.return_value = (
             list(vtk_obj.point_data_keys) if vtk_obj is not None else []
@@ -248,10 +249,12 @@ class TestNormals2dd:
         It must always be between 0 degrees (flat) and 90 degrees (vertical).
         """
         vtk_obj = _make_real_pc(with_dip=False, with_dip_dir=False)
-        normals2dd(_FakeProject(vtk_obj))
+        project = _FakeProject(vtk_obj)
+        normals2dd(project)
 
         dip = vtk_obj.get_point_data("dip")
         assert dip is not None, "set_point_data('dip', ...) was never called"
+        assert project.signals.data_val_modified.emit.called, "views not told of the new values"
         assert np.all(dip >= 0) and np.all(
             dip <= 90
         ), f"Dip out of [0, 90]: min={dip.min():.2f}  max={dip.max():.2f}"

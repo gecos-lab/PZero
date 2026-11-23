@@ -349,4 +349,76 @@ res = oa.kmedoids_clusters(many, 5, is_axial=True)
 check("k-medoids, 100k axial vectors, k=5 in a few seconds",
       time.perf_counter() - t0 < 10 and len(res["labels"]) == len(many))
 
+# Properties > Invert polarity
+from pzero.orientation_analysis import normals2dip_directions  # noqa: E402
+import pzero.point_clouds as pcs  # noqa: E402
+
+check("Invert polarity in the Properties menu",
+      pw.actionInvertPolarity in pw.menuProperties.actions())
+
+# TriSurf with Normals and dip / dip direction: a plane dipping 30 toward east, but with upward
+# normals (wrong polarity, as an upright limb that looks overturned)
+tilted = pv.Plane(direction=(np.sin(np.radians(30)), 0, np.cos(np.radians(30))),
+                  i_resolution=4, j_resolution=4).triangulate()
+inv_surf = TriSurf()
+inv_surf.ShallowCopy(tilted)
+inv_surf.vtk_set_normals()
+d = deepcopy(pw.geol_coll.entity_dict)
+d.update(name="inv_surf", uid=str(uuid4()), topology="TriSurf", vtk_obj=inv_surf,
+         properties_names=["Normals"], properties_components=[3])
+g_inv = pw.geol_coll.add_entity_from_dict(entity_dict=d)
+upward_before = float(np.mean(inv_surf.get_point_data("Normals")[:, 2])) > 0
+pw.set_selection([g_inv], mode="replace")
+pcs.normals2dd(pw)
+dip0 = float(np.mean(inv_surf.get_point_data("dip")))
+dd0 = float(np.mean(inv_surf.get_point_data("dip direction")))
+check("starting surface: upward normals, dip 150 toward 270 (looks overturned)",
+      upward_before and abs(dip0 - 150) < 1e-3 and abs(dd0 - 270) < 1e-3)
+app.processEvents()
+before_offsets = np.asarray(scatters(stereo.mpl_actors[g_inv])[0].get_offsets()).copy()
+before_hollow = scatters(stereo.mpl_actors[g_inv])[0].get_facecolors()[:, 3] == 0
+pw.set_selection([g_inv, g_line_noprops := add(pw.geol_coll, "PolyLine", PolyLine,
+                  pv.Line((0, 0, 0), (1, 0, 0)), "plain_line", [])], mode="replace")
+pw.set_selection([g_inv], mode="add")
+messages.clear()
+oa.invert_polarity(pw)
+stereo.flush_pending_updates()
+app.processEvents()
+n_after = inv_surf.get_point_data("Normals")
+check("Normals inverted (now downward)", float(np.mean(n_after[:, 2])) < 0)
+check("dip / dip direction inverted consistently: 30 toward 90",
+      abs(float(np.mean(inv_surf.get_point_data("dip"))) - 30) < 1e-3
+      and abs(float(np.mean(inv_surf.get_point_data("dip direction"))) - 90) < 1e-3)
+dips_from_normals, dirs_from_normals = normals2dip_directions(n_after)
+check("Normals and dip / dip direction agree after the inversion",
+      np.allclose(dips_from_normals, inv_surf.get_point_data("dip"), atol=1e-3)
+      and np.allclose(dirs_from_normals, inv_surf.get_point_data("dip direction"), atol=1e-3))
+inv_surf.vtk_set_normals()
+check("Calculate Normals after the inversion keeps the new polarity (triangle order reversed)",
+      float(np.mean(inv_surf.get_point_data("Normals")[:, 2])) < 0)
+check("entity without Normals or dip / direction deselected with a message",
+      pw.selection_uids() == [g_inv] and any("deselected" in m for m in messages))
+after_scatter = scatters(stereo.mpl_actors[g_inv])[0]
+check("stereoplot redrawn: poles move to the other side and change from hollow to filled",
+      not np.allclose(np.asarray(after_scatter.get_offsets()), before_offsets)
+      and before_hollow.all() and (after_scatter.get_facecolors()[:, 3] > 0).all())
+
+# point set with dip / dip direction only (both conventions for overturned planes)
+att2 = pv.PolyData(np.random.default_rng(7).random((3, 3)))
+att2["dip"] = np.array([30.0, -45.0, 135.0])
+att2["dip direction"] = np.array([90.0, 90.0, 270.0])
+d = deepcopy(pw.geol_coll.entity_dict)
+d.update(name="att2", uid=str(uuid4()), topology="VertexSet", properties_names=["dip", "dip direction"],
+         properties_components=[1, 1])
+o2 = VertexSet()
+o2.ShallowCopy(att2)
+d["vtk_obj"] = o2
+g_att2 = pw.geol_coll.add_entity_from_dict(entity_dict=d)
+pw.set_selection([g_att2], mode="replace")
+oa.invert_polarity(pw)
+check("dip / direction only: 30/90 -> 150/270, -45/90 and 135/270 -> 45/90",
+      np.allclose(o2.get_point_data("dip"), [150, 45, 45])
+      and np.allclose(o2.get_point_data("dip direction"), [270, 90, 90])
+      and "Normals" not in o2.point_data_keys)
+
 print("RESULT:", "FAILED" if failed else "ALL PASSED")

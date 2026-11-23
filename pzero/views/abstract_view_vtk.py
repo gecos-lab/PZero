@@ -769,17 +769,19 @@ class ViewVTK(BaseView):
                     # Safely check for multicomponent scalar arrays
                     try:
                         shape = plot_entity.get_point_data_shape(show_property)
-                        if shape and shape[-1] == 3:
-                            plot_rgb_option = True
                     except Exception:
-                        pass
-                    else:
+                        shape = None
+                    if shape and shape[-1] == 3:
+                        # 3-component properties (e.g. Normals, RGB) are shown as RGB colors.
+                        # They are listed in the property legend only per component
+                        # (e.g. Normals[0]), so they must not be checked against it.
+                        plot_rgb_option = True
+                    elif (
+                        not show_property
+                        in self.parent.prop_legend_df["property_name"].tolist()
+                    ):
                         # last option to catch unexpected cases
-                        if (
-                            not show_property
-                            in self.parent.prop_legend_df["property_name"].tolist()
-                        ):
-                            show_property = None
+                        show_property = None
                 this_actor = self.plot_mesh(
                     uid=uid,
                     plot_entity=plot_entity,

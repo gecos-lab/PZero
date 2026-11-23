@@ -14413,7 +14413,7 @@ class ViewInterpretation(ViewMap):
             shown_property = actor_row["show_property"].to_list()[0]
             if shown_property is None:
                 continue
-            if shown_property in collection.get_uid_properties_names(uid):
+            if self.shown_property_available(collection, uid, shown_property):
                 continue
             show = actor_row["show"].to_list()[0]
             self.show_actor_with_property(
@@ -14448,7 +14448,7 @@ class ViewInterpretation(ViewMap):
             shown_property = actor_row["show_property"].to_list()[0]
             if shown_property is None:
                 continue
-            if shown_property in collection.get_uid_properties_names(uid):
+            if self.shown_property_available(collection, uid, shown_property):
                 continue
             show = actor_row["show"].to_list()[0]
             self.show_actor_with_property(

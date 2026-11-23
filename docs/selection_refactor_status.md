@@ -106,7 +106,18 @@ Phase 4 follow-ups included in the same commit:
   and lineations: overturned/upward = negative plunge. Planes: overturned can be dip > 90 or
   negative dip with opposite direction (equivalent, same pole); both accepted on input
   (`dip_directions2normals`), dip > 90 used when computing from normals
-  (`normals2dip_directions`, same as `points_map_dip`).
+  (`normals2dip_directions`, same as `points_map_dip`). The facing direction of a surface cannot
+  be known by the software (VTK orients normals consistently, not up/down): Properties > Invert normals
+  polarity (`orientation_analysis.invert_polarity`) flips Normals and/or dip/direction of the
+  selected entities (TriSurf triangle order too, so Calculate Normals keeps it). Calculate Normals,
+  Calculate Dip/Direction and Invert polarity emit data_val_modified: views showing the changed
+  values redraw them (the stereoplot always, since pole positions depend on Normals). Fixed in
+  `ViewVTK.show_actor_with_property`: 3-component properties (Normals, RGB) on lines/surfaces were
+  reset to the legend colour unless a stale legend row with the plain name existed (the property
+  legend lists them only per component, e.g. Normals[0]), which made the redraw fail. Views check
+  the shown drop-down item with `BaseView.shown_property_available` (default items, properties,
+  components such as Normals[2] of "Normals", textures): before, an entity showing a component was
+  reset to the legend colour (tree not updated) whenever properties were added or values changed.
   `PolyData.points_map_dip` / `points_map_dip_direction` deliberately unchanged (apparent-dip traces
   in map/cross-section views rely on them).
 - Intersection: PolyLine/XsPolyLine → XsVertexSet, TriSurf → XsPolyLine, DEM/TSDom → DomXs,
@@ -208,7 +219,8 @@ Watch the PZero terminal and the console for tracebacks.
    what is needed and does not run.
 6. Moved tools: View3D > Create > Extrusion with and without densification (not in project window
    or 2D views); Properties > Calculate Dip/Direction on a point cloud and a TriSurf with Normals
-   (overturned → dip > 90); Interpolation > Planar facets from PC clusters; Build Octree only on
+   (overturned → dip > 90; wrong polarity → Properties > Invert normals); Interpolation > Planar
+   facets from PC clusters; Build Octree only on
    point clouds.
 7. Intersection/projection: boundary TriSurf → XsPolyLine; boundary line → message, no output;
    DEM and TSDom → DomXs; Voxet in Meshes and in Images → XsVoxet; TetraSolid → "not implemented";

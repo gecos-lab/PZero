@@ -158,4 +158,103 @@ pw.geol_coll.remove_entities([surf_uid])
 flush()
 check("removed entity pruned", not pw.is_selected(surf_uid) and surf_uid not in v1._highlighted)
 
+# Normals shown as RGB in a 3D view: still shown after Calculate Normals / Dip/Direction
+# (3-component properties are in the property legend only per component, e.g. Normals[0])
+import io  # noqa: E402
+import contextlib  # noqa: E402
+import pzero.orientation_analysis as oa  # noqa: E402
+from pzero.point_clouds import normals2dd  # noqa: E402
+
+nsurf_uid = add_entity("TriSurf", TriSurf, pv.Sphere().triangulate(), "nsurf")
+flush()
+terminal = []
+pw.print_terminal = lambda string=None: terminal.append(str(string))
+pw.set_selection([nsurf_uid], mode="replace")
+oa.set_normals(pw)
+flush()
+
+
+def normals_shown(view):
+    mapper = view.get_actor_by_uid(nsurf_uid).GetMapper()
+    row = view.actors_df.loc[view.actors_df["uid"] == nsurf_uid]
+    return (row["show_property"].values[0] == "Normals" and mapper.GetScalarVisibility()
+            and mapper.GetArrayName() == "Normals")
+
+
+stderr = io.StringIO()
+with contextlib.redirect_stderr(stderr):
+    v1.toggle_property(collection_name="geol_coll", uid=nsurf_uid, prop_text="Normals")
+    flush()
+    shown_first = normals_shown(v1)
+    pw.set_selection([nsurf_uid], mode="replace")
+    oa.set_normals(pw)
+    v1.flush_pending_updates()
+    flush()
+    shown_after_normals = normals_shown(v1)
+    normals2dd(pw)
+    v1.flush_pending_updates()
+    flush()
+    shown_after_dip = normals_shown(v1)
+    pw.set_selection([nsurf_uid], mode="replace")
+    oa.invert_polarity(pw)
+    v1.flush_pending_updates()
+    flush()
+    shown_after_invert = normals_shown(v1)
+check("Normals shown as RGB colors (no legend row 'Normals')", shown_first)
+check("still shown after Calculate Normals", shown_after_normals)
+check("still shown after Calculate Dip/Direction", shown_after_dip)
+check("still shown after Invert polarity", shown_after_invert)
+check("no traceback while redrawing", "Traceback" not in stderr.getvalue())
+check("Calculate Dip/Direction reports in the terminal",
+      any("Dip/direction set on nsurf" in m for m in terminal) and "All dip/directions set." in terminal)
+
+import numpy as np  # noqa: E402
+
+# several TriSurfs showing a component (Normals[2]): Invert normals, then Calculate Dip/Direction
+# (which adds properties) keep it shown, in the actor and in the tree
+comp_uids = [add_entity("TriSurf", TriSurf, pv.Sphere(center=(3 * i, 0, 0)).triangulate(), f"comp{i}")
+             for i in range(3)]
+flush()
+pw.set_selection(comp_uids, mode="replace")
+oa.set_normals(pw)
+v1.flush_pending_updates()
+flush()
+for u in comp_uids:
+    v1.toggle_property(collection_name="geol_coll", uid=u, prop_text="Normals[2]")
+flush()
+
+
+def component_shown(u):
+    actor = v1.get_actor_by_uid(u)
+    row = v1.actors_df.loc[v1.actors_df["uid"] == u]
+    return row["show_property"].values[0] == "Normals[2]" and bool(actor.GetMapper().GetScalarVisibility())
+
+
+def mapped_z(u):
+    # the scalar values the actor shows (the z component of the normals)
+    mapper = v1.get_actor_by_uid(u).GetMapper()
+    data = mapper.GetInput().GetPointData()
+    arr = data.GetArray(mapper.GetArrayName()) if mapper.GetArrayName() else data.GetScalars()
+    return float(np.mean([arr.GetTuple1(i) for i in range(arr.GetNumberOfTuples())]))
+
+
+check("Normals[2] shown on three TriSurfs", all(component_shown(u) for u in comp_uids))
+z_before = [mapped_z(u) for u in comp_uids]
+stderr = io.StringIO()
+with contextlib.redirect_stderr(stderr):
+    pw.set_selection(comp_uids, mode="replace")
+    oa.invert_polarity(pw)
+    v1.flush_pending_updates()
+    flush()
+check("after Invert normals Normals[2] still shown on all of them", all(component_shown(u) for u in comp_uids))
+check("... with the inverted values", all(abs(mapped_z(u) + zb) < 1e-6 for u, zb in zip(comp_uids, z_before)))
+with contextlib.redirect_stderr(stderr):
+    pw.set_selection(comp_uids, mode="replace")
+    normals2dd(pw)  # adds dip and dip direction: data_keys_added
+    v1.flush_pending_updates()
+    flush()
+check("after Calculate Dip/Direction (new properties) Normals[2] still shown",
+      all(component_shown(u) for u in comp_uids))
+check("no traceback", "Traceback" not in stderr.getvalue())
+
 print("RESULT:", "FAILED" if failed else "ALL PASSED")

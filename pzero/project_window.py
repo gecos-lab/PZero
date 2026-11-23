@@ -155,7 +155,7 @@ from .helpers.helper_functions import (
 )
 from .helpers.helper_functions import freeze_gui_onoff
 from .legend_manager import Legend, legend_level_col
-from .orientation_analysis import set_normals
+from .orientation_analysis import set_normals, invert_polarity
 from .point_clouds import decimate_pc, normals2dd, facets_pc
 from .properties_manager import PropertiesCMaps, ensure_property_legend_schema
 from .three_d_surfaces import (
@@ -385,6 +385,13 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionCalculateNormals.triggered.connect(self.normals_calculate)
         # Dip and dip direction point properties of point clouds, from their normals.
         self.actionCalculate_Dip_Direction.triggered.connect(lambda: normals2dd(self))
+        # Invert the polarity of Normals and/or dip / dip direction (e.g. overturned limbs).
+        self.actionInvertPolarity = QAction("Invert normals", self)
+        self.actionInvertPolarity.setObjectName("actionInvertPolarity")
+        self.actionInvertPolarity.triggered.connect(lambda: invert_polarity(self))
+        self.menuProperties.insertAction(
+            self.actionCalculateLineations, self.actionInvertPolarity
+        )
         self.actionCalculateLineations.triggered.connect(self.lineations_calculate)
 
         self.actionBuildOctree.triggered.connect(self.build_octree)
