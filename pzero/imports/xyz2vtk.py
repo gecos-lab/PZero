@@ -35,7 +35,17 @@ from pzero.imports.shp2vtk import (
     _get_valid_roles_for_collection,
     _validate_and_fix_roles,
 )
-from pzero.orientation_analysis import dip_directions2normals
+from pzero.orientation_analysis import (
+    dip_directions2normals,
+    plunge_trends2lineations,
+    NORMALS,
+    DIP,
+    DIRECTION,
+    LINEATIONS,
+    PLUNGE,
+    TREND,
+)
+from numpy.linalg import norm as np_linalg_norm
 from pzero.ui.import_window_ui import Ui_ImportOptionsWindow
 
 TEXT_EXTENSIONS = {".txt", ".csv", ".xyz", ".asc", ".dat"}
@@ -58,12 +68,17 @@ SPECIAL_ASSIGNMENTS = [
     "role",
     "name",
     "scenario",
-    "dip",
-    "dip_dir",
-    "dir",
+    "Dip",
+    "Direction",
+    "Strike",
     "Nx",
     "Ny",
     "Nz",
+    "Plunge",
+    "Trend",
+    "Lx",
+    "Ly",
+    "Lz",
     "User defined",
     "N.a.",
 ]
@@ -75,12 +90,17 @@ SPECIAL_POINT_COLUMNS = {
     "role",
     "name",
     "scenario",
-    "dip",
-    "dip_dir",
-    "dir",
+    "Dip",
+    "Direction",
+    "Strike",
     "Nx",
     "Ny",
     "Nz",
+    "Plunge",
+    "Trend",
+    "Lx",
+    "Ly",
+    "Lz",
 }
 UNIQUE_ASSIGNMENTS = SPECIAL_POINT_COLUMNS.copy()
 FIELD_ALIASES = {
@@ -91,12 +111,26 @@ FIELD_ALIASES = {
     "role": ("role",),
     "name": ("name", "label"),
     "scenario": ("scenario",),
-    "dip": ("dip", "inclination"),
-    "dip_dir": ("dipdir", "dipdirection", "dip_direction", "dip direction"),
-    "dir": ("dir",),
+    # Orientation of planes: Dip with Direction (dip direction) or Strike (right-hand rule,
+    # Direction = Strike + 90), or Normals (Nx, Ny, Nz). Orientation of lines: Plunge and Trend, or
+    # Lineations (Lx, Ly, Lz). See "Orientation conventions" in pzero/README.md.
+    "Dip": ("dip", "inclination"),
+    "Direction": (
+        "dipdir", "dipdirection", "dip_direction", "dip direction", "direction",
+        "dipazimuth", "dip_azimuth", "dip azimuth", "azimuth",
+    ),
+    "Strike": ("strike", "dir"),
     "Nx": ("nx", "normalx", "normal_x", "xnormal"),
     "Ny": ("ny", "normaly", "normal_y", "ynormal"),
     "Nz": ("nz", "normalz", "normal_z", "znormal"),
+    "Plunge": ("plunge",),
+    "Trend": (
+        "trend", "plungeazimuth", "plunge_azimuth", "plunge azimuth", "plungedirection",
+        "plunge direction", "azimuth",
+    ),
+    "Lx": ("lx", "lineationx", "lineation_x"),
+    "Ly": ("ly", "lineationy", "lineation_y"),
+    "Lz": ("lz", "lineationz", "lineation_z"),
 }
 
 
@@ -495,13 +529,23 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             "role",
             "name",
             "scenario",
-            "dip",
-            "dip_dir",
-            "dir",
+            "Dip",
+            "Plunge",
+            "Direction",
+            "Strike",
+            "Trend",
             "Nx",
             "Ny",
             "Nz",
+            "Lx",
+            "Ly",
+            "Lz",
         ):
+            # "azimuth" is the Direction of planes (with a Dip) or the Trend of lines (with a Plunge).
+            if field_name in ("Direction", "Strike") and "Dip" not in auto_map.values():
+                continue
+            if field_name == "Trend" and "Plunge" not in auto_map.values():
+                continue
             match = _first_match(column_names, FIELD_ALIASES[field_name], used_columns)
             if match is None:
                 continue
@@ -580,19 +624,19 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
                 if other_combo and other_combo.currentText() == selected_value:
                     other_combo.setCurrentText("N.a.")
 
-        if selected_value == "dir":
+        if selected_value == "Strike":
             for other_row in range(self.AssignTable.rowCount()):
                 if other_row == row_idx:
                     continue
                 other_combo = self.AssignTable.cellWidget(other_row, 1)
-                if other_combo and other_combo.currentText() == "dip_dir":
+                if other_combo and other_combo.currentText() == "Direction":
                     other_combo.setCurrentText("N.a.")
-        elif selected_value == "dip_dir":
+        elif selected_value == "Direction":
             for other_row in range(self.AssignTable.rowCount()):
                 if other_row == row_idx:
                     continue
                 other_combo = self.AssignTable.cellWidget(other_row, 1)
-                if other_combo and other_combo.currentText() == "dir":
+                if other_combo and other_combo.currentText() == "Strike":
                     other_combo.setCurrentText("N.a.")
 
         custom_line = self.AssignTable.cellWidget(row_idx, 2)
@@ -738,14 +782,29 @@ class XYZImportDialog(QMainWindow, Ui_ImportOptionsWindow):
             )
             return
 
-        has_dip = "dip" in mapped_names
-        has_dip_dir = "dip_dir" in mapped_names
-        has_dir = "dir" in mapped_names
-        if has_dip != (has_dip_dir or has_dir):
+        has_dip = "Dip" in mapped_names
+        has_direction = "Direction" in mapped_names
+        has_strike = "Strike" in mapped_names
+        if has_dip != (has_direction or has_strike):
             QMessageBox.warning(
                 self,
                 "Incomplete orientation",
-                "Dip requires either dip_dir or dir, and vice versa.",
+                "Dip requires either Direction or Strike (right-hand rule), and vice versa.",
+            )
+            return
+        if ("Plunge" in mapped_names) != ("Trend" in mapped_names):
+            QMessageBox.warning(
+                self,
+                "Incomplete orientation",
+                "Plunge requires Trend, and vice versa.",
+            )
+            return
+        lineation_components = [name for name in ("Lx", "Ly", "Lz") if name in mapped_names]
+        if lineation_components and len(lineation_components) != 3:
+            QMessageBox.warning(
+                self,
+                "Incomplete lineations",
+                "Lineations require all three components: Lx, Ly and Lz.",
             )
             return
 
@@ -842,7 +901,9 @@ def _read_tabular_dataframe(file_path, import_config):
     input_df.columns = source_names
     input_df.rename(columns=rename_map, inplace=True)
 
-    for numeric_column in ("X", "Y", "Z", "dip", "dip_dir", "dir", "Nx", "Ny", "Nz"):
+    for numeric_column in (
+        "X", "Y", "Z", "Dip", "Direction", "Strike", "Nx", "Ny", "Nz", "Plunge", "Trend", "Lx", "Ly", "Lz",
+    ):
         if numeric_column in input_df.columns:
             input_df[numeric_column] = pd_to_numeric(
                 input_df[numeric_column], errors="raise"
@@ -906,10 +967,15 @@ def _build_text_entity_dict(collection, vtk_obj, file_path, metadata):
 def _build_tabular_vtk_object(group_df):
     """Create a VertexSet/Attitude object from a grouped DataFrame."""
     has_direct_normals = all(axis in group_df.columns for axis in ("Nx", "Ny", "Nz"))
-    has_dip = "dip" in group_df.columns
-    has_dip_dir = "dip_dir" in group_df.columns
-    has_dir = "dir" in group_df.columns
-    needs_attitude = has_direct_normals or has_dip or has_dip_dir or has_dir
+    has_dip = "Dip" in group_df.columns
+    has_direction = "Direction" in group_df.columns
+    has_strike = "Strike" in group_df.columns
+    has_direct_lineations = all(axis in group_df.columns for axis in ("Lx", "Ly", "Lz"))
+    has_plunge_trend = "Plunge" in group_df.columns and "Trend" in group_df.columns
+    needs_attitude = (
+        has_direct_normals or has_dip or has_direction or has_strike
+        or has_direct_lineations or has_plunge_trend
+    )
     vtk_class = Attitude if needs_attitude else VertexSet
 
     points = _coerce_points_to_3d(group_df[["X", "Y", "Z"]].to_numpy())
@@ -923,28 +989,48 @@ def _build_tabular_vtk_object(group_df):
                 group_df["Nz"].to_numpy(),
             )
         )
-        normals_flipped = np_where(normals[:, 2:] > 0, normals * -1, normals)
-        vtk_obj.set_point_data("Normals", normals_flipped)
+        # Normals keep their sign: downwards for normal polarity, upwards for overturned planes.
+        normals = normals / np_linalg_norm(normals, axis=1)[:, None]
+        vtk_obj.set_point_data(NORMALS, normals)
 
     if has_dip:
-        vtk_obj.set_point_data("dip", group_df["dip"].to_numpy())
+        vtk_obj.set_point_data(DIP, group_df["Dip"].to_numpy())
 
-    if has_dir:
-        direction = (group_df["dir"].to_numpy() + 90.0) % 360.0
-        vtk_obj.set_point_data("dip_dir", direction)
-    elif has_dip_dir:
-        vtk_obj.set_point_data("dip_dir", group_df["dip_dir"].to_numpy())
+    if has_strike:
+        # Strike with the right-hand rule: the plane dips to the right, Direction = Strike + 90.
+        direction = (group_df["Strike"].to_numpy() + 90.0) % 360.0
+        vtk_obj.set_point_data(DIRECTION, direction)
+    elif has_direction:
+        vtk_obj.set_point_data(DIRECTION, group_df["Direction"].to_numpy())
 
     if (
         has_dip
-        and ("dip_dir" in vtk_obj.point_data_keys)
-        and "Normals" not in vtk_obj.point_data_keys
+        and (DIRECTION in vtk_obj.point_data_keys)
+        and NORMALS not in vtk_obj.point_data_keys
     ):
         normals = dip_directions2normals(
-            vtk_obj.get_point_data("dip"),
-            vtk_obj.get_point_data("dip_dir"),
+            vtk_obj.get_point_data(DIP),
+            vtk_obj.get_point_data(DIRECTION),
         )
-        vtk_obj.set_point_data("Normals", normals)
+        vtk_obj.set_point_data(NORMALS, normals)
+
+    if has_direct_lineations:
+        # Lineations keep their sign: downwards, or upwards (negative plunge) for overturned ones.
+        lineations = np_column_stack(
+            (group_df["Lx"].to_numpy(), group_df["Ly"].to_numpy(), group_df["Lz"].to_numpy())
+        )
+        vtk_obj.set_point_data(LINEATIONS, lineations / np_linalg_norm(lineations, axis=1)[:, None])
+    if has_plunge_trend:
+        vtk_obj.set_point_data(PLUNGE, group_df["Plunge"].to_numpy())
+        vtk_obj.set_point_data(TREND, group_df["Trend"].to_numpy())
+        if LINEATIONS not in vtk_obj.point_data_keys:
+            vtk_obj.set_point_data(
+                LINEATIONS,
+                plunge_trends2lineations(
+                    plunges=group_df["Plunge"].to_numpy(dtype=float),
+                    trends=group_df["Trend"].to_numpy(dtype=float),
+                ),
+            )
 
     point_properties = _extract_numeric_properties(
         group_df,

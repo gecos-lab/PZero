@@ -370,8 +370,8 @@ g_inv = pw.geol_coll.add_entity_from_dict(entity_dict=d)
 upward_before = float(np.mean(inv_surf.get_point_data("Normals")[:, 2])) > 0
 pw.set_selection([g_inv], mode="replace")
 pcs.normals2dd(pw)
-dip0 = float(np.mean(inv_surf.get_point_data("dip")))
-dd0 = float(np.mean(inv_surf.get_point_data("dip direction")))
+dip0 = float(np.mean(inv_surf.get_point_data("Dip")))
+dd0 = float(np.mean(inv_surf.get_point_data("Direction")))
 check("starting surface: upward normals, dip 150 toward 270 (looks overturned)",
       upward_before and abs(dip0 - 150) < 1e-3 and abs(dd0 - 270) < 1e-3)
 app.processEvents()
@@ -387,12 +387,12 @@ app.processEvents()
 n_after = inv_surf.get_point_data("Normals")
 check("Normals inverted (now downward)", float(np.mean(n_after[:, 2])) < 0)
 check("dip / dip direction inverted consistently: 30 toward 90",
-      abs(float(np.mean(inv_surf.get_point_data("dip"))) - 30) < 1e-3
-      and abs(float(np.mean(inv_surf.get_point_data("dip direction"))) - 90) < 1e-3)
+      abs(float(np.mean(inv_surf.get_point_data("Dip"))) - 30) < 1e-3
+      and abs(float(np.mean(inv_surf.get_point_data("Direction"))) - 90) < 1e-3)
 dips_from_normals, dirs_from_normals = normals2dip_directions(n_after)
 check("Normals and dip / dip direction agree after the inversion",
-      np.allclose(dips_from_normals, inv_surf.get_point_data("dip"), atol=1e-3)
-      and np.allclose(dirs_from_normals, inv_surf.get_point_data("dip direction"), atol=1e-3))
+      np.allclose(dips_from_normals, inv_surf.get_point_data("Dip"), atol=1e-3)
+      and np.allclose(dirs_from_normals, inv_surf.get_point_data("Direction"), atol=1e-3))
 inv_surf.vtk_set_normals()
 check("Calculate Normals after the inversion keeps the new polarity (triangle order reversed)",
       float(np.mean(inv_surf.get_point_data("Normals")[:, 2])) < 0)
@@ -402,8 +402,8 @@ after_scatter = scatters(stereo.mpl_actors[g_inv])[0]
 check("stereoplot redrawn: poles move to the other side and change from hollow to filled",
       not np.allclose(np.asarray(after_scatter.get_offsets()), before_offsets)
       and before_hollow.all() and (after_scatter.get_facecolors()[:, 3] > 0).all())
-
-# point set with dip / dip direction only (both conventions for overturned planes)
+# point set with dip / dip direction only, stored under older names (an entity not converted yet):
+# Invert normals finds and updates them (both conventions for overturned planes)
 att2 = pv.PolyData(np.random.default_rng(7).random((3, 3)))
 att2["dip"] = np.array([30.0, -45.0, 135.0])
 att2["dip direction"] = np.array([90.0, 90.0, 270.0])

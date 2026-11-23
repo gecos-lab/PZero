@@ -26,7 +26,58 @@ This folder contains the core Python modules for the PZero project. These files 
   Functions and tools for processing, segmenting, and analyzing point cloud data. Includes utilities for normal calculation, region extraction, segmentation by dip and dip direction, decimation, cutting, calibration, and conversion to geological features. Integrates with VTK, PyVista, matplotlib, seaborn, and NumPy for advanced point cloud operations and visualization.
 
 - `orientation_analysis.py`  
-  Functions for orientation analysis, including conversions between geological orientation measurements (strike, dip, dip direction, plunge, trend), calculation of normal and lineation vectors, and utilities for setting normals on geological entities and point clouds. Integrates with NumPy and project-specific entity classes.
+  Functions for orientation analysis, including conversions between geological orientation measurements (Dip/Direction, Strike, Plunge/Trend), calculation of normal and lineation vectors, orientation property names (see Orientation conventions below), and utilities for setting normals on geological entities and point clouds. Integrates with NumPy and project-specific entity classes.
+
+## Orientation conventions
+
+Names and meaning of orientation data (constants and helpers in `orientation_analysis.py`).
+
+**Planes and surfaces** (attitudes, bedding, faults, TriSurfs, point clouds, ...):
+
+- `Normals`: unit vectors (point property, 3 components) pointing **downwards for normal
+  polarity** (upright planes) and **upwards for overturned** planes.
+- `Dip` and `Direction` (dip direction): 0 <= Dip <= 90 for upright planes. Overturned planes can
+  be given as Dip > 90 with the same Direction, or as a negative Dip with the opposite Direction:
+  the two are equivalent (`(Dip, Direction) == (Dip + 180, Direction + 180)`) and both are
+  accepted on input (`dip_directions2normals`). When computed from Normals the > 90 convention is
+  used (`normals2dip_directions`, Properties > Calculate Dip/Direction).
+- Strike, when imported, follows the right-hand rule (the plane dips to the right):
+  Direction = Strike + 90.
+
+**Lines and lineations**:
+
+- `Lineations`: unit vectors (point property, 3 components) pointing **downwards for normal
+  polarity** and **upwards for overturned** lineations.
+- `Plunge` and `Trend`: Plunge > 0 downwards, negative Plunge for upward (overturned) lineations,
+  Trend toward the direction of the vector (`plunge_trends2lineations`).
+
+**Polarity** (which side a surface faces) cannot be decided by the software: normals computed
+from a TriSurf follow the order of the triangle vertices, so a whole surface can come out
+inverted. Properties > Invert normals flips Normals and/or Dip/Direction (and the TriSurf
+triangle order, so that Calculate Normals keeps the new polarity).
+
+**Older names** are recognised (ignoring case, spaces and underscores) and converted
+(`orientation_name_map`, `find_orientation_property`):
+
+| Canonical | Older names |
+|---|---|
+| `Normals` | normals, normal |
+| `Dip` | dip |
+| `Direction` | dip direction, dip_dir, dipdir, direction, dip azimuth; azimuth next to a dip |
+| `Lineations` | lineations, lineation |
+| `Plunge` | plunge |
+| `Trend` | trend, plunge azimuth, plunge direction; azimuth next to a plunge |
+
+When a project is opened, these names are renamed to the canonical ones in the entity metadata
+(`properties_names`), in the VTK point, cell and field arrays and in the property legend, and
+the renaming is reported in the terminal (`normalize_orientation_names`). Importers (xyz/csv,
+shapefile) and tools write the canonical names; tools also find the older names of entities not
+converted yet. In the import dialogs the orientation columns are Dip, Direction, Strike, Nx/Ny/Nz
+(planes) and Plunge, Trend, Lx/Ly/Lz (lines; Lx/Ly/Lz in xyz/csv only); vector components keep
+their sign.
+
+Not covered by this convention: the orientation of cross-sections (`strike` and `dip` columns of
+the cross-section table) and seismic attributes (e.g. `dip` in the interpretation view).
 
 ## Selection and tools
 
@@ -77,8 +128,8 @@ Outputs are stored in the collection of their input, with metadata copied by `de
 | Connected parts, split multipart | `connected_parts`, `split_multipart` | Mixed | PolyLine and TriSurf in any collection; DOM point clouds |
 | Merge to multipart (Entities menu, at least 2; the merged entity is selected) | `entities_merge` | One | PolyData of one topology (VertexSet, XsVertexSet, PolyLine, XsPolyLine, TriSurf, PCDom, TSDom), with the same parent_uid (cross-section) as the last selected entity |
 | Calculate normals (Properties menu): point sets from their dip/direction properties, TriSurfs, XsPolyLines and point clouds from geometry | `normals_calculate` → `orientation_analysis.set_normals` | Mixed | VertexSet, XsVertexSet, TriSurf, XsPolyLine, PCDom in any collection (not DEMs) |
-| Calculate Dip/Direction (Properties menu): dip and dip direction point properties from point normals (0-90 for upright planes, > 90 for overturned planes) | `point_clouds.normals2dd` | Mixed | Any entity with the Normals point property |
-| Invert normals (Properties menu): Normals n -> -n and/or dip -> 180 - dip, direction -> direction + 180 (both consistently if both present); TriSurf triangle order reversed so that Calculate Normals keeps it | `orientation_analysis.invert_polarity` | Mixed | Any entity with Normals and/or dip and dip direction point properties |
+| Calculate Dip/Direction (Properties menu): Dip and Direction point properties from point Normals (0-90 for upright planes, > 90 for overturned planes) | `point_clouds.normals2dd` | Mixed | Any entity with the Normals point property |
+| Invert normals (Properties menu): Normals n -> -n and/or Dip -> 180 - Dip, Direction -> Direction + 180 (both consistently if both present); TriSurf triangle order reversed so that Calculate Normals keeps it | `orientation_analysis.invert_polarity` | Mixed | Any entity with Normals and/or dip and dip direction point properties |
 | Add / remove property | `property_add`, `property_remove` | Mixed | Any entity except cross-sections, which have no properties (remove offers only properties present on all selected entities) |
 | Add / remove texture | `texture_add`, `texture_remove` | One | DOMs |
 | Build octree (Point Clouds menu) | `build_octree` | One | DOM point clouds (PCDom) |

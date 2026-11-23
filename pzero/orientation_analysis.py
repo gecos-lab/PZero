@@ -75,6 +75,148 @@ def strikes2dip_directions(strikes=None):
         print("Strike type not recognized")
 
 
+# ---- Orientation property names (see "Orientation conventions" in pzero/README.md) ----
+# Planes / surfaces: Normals (unit vectors, downwards for normal polarity, upwards for overturned)
+# and Dip / Direction. Lines / lineations: Lineations (unit vectors, downwards for normal polarity,
+# upwards for overturned) and Plunge / Trend.
+NORMALS = "Normals"
+DIP = "Dip"
+DIRECTION = "Direction"
+LINEATIONS = "Lineations"
+PLUNGE = "Plunge"
+TREND = "Trend"
+ORIENTATION_PROPERTY_NAMES = (NORMALS, DIP, DIRECTION, LINEATIONS, PLUNGE, TREND)
+
+# Older names, compared ignoring case, spaces, underscores and other separators.
+_ORIENTATION_ALIASES = {
+    "normals": NORMALS,
+    "normal": NORMALS,
+    "lineations": LINEATIONS,
+    "lineation": LINEATIONS,
+    "dip": DIP,
+    "dipdirection": DIRECTION,
+    "dipdir": DIRECTION,
+    "direction": DIRECTION,
+    "dipazimuth": DIRECTION,
+    "dipaz": DIRECTION,
+    "plunge": PLUNGE,
+    "trend": TREND,
+    "plungeazimuth": TREND,
+    "plungeaz": TREND,
+    "plungedirection": TREND,
+    "plungedir": TREND,
+}
+
+
+def _orientation_key(name):
+    from re import sub as re_sub
+
+    return re_sub(r"[^a-z0-9]", "", str(name).lower())
+
+
+def orientation_name_map(names=None):
+    """Renames {old name: canonical name} for the orientation properties among names (e.g.
+    "dip direction" -> "Direction", "plunge" -> "Plunge"). A plain "azimuth" is the Direction of a
+    plane if there is a dip, or the Trend of a line if there is a plunge (unchanged if both or
+    neither). Names whose canonical name is already present are not renamed."""
+    names = [str(name) for name in (names or [])]
+    keys = {_orientation_key(name) for name in names}
+    has_dip, has_plunge = "dip" in keys, "plunge" in keys
+    taken = set(names)
+    mapping = {}
+    for name in names:
+        key = _orientation_key(name)
+        new = _ORIENTATION_ALIASES.get(key)
+        if key == "azimuth":
+            new = DIRECTION if has_dip and not has_plunge else (TREND if has_plunge and not has_dip else None)
+        if new and new != name and new not in taken:
+            mapping[name] = new
+            taken.add(new)
+    return mapping
+
+
+def find_orientation_property(names=None, canonical=None):
+    """The name under which the orientation property canonical (e.g. DIRECTION) is stored among
+    names: the canonical name, or an older name (e.g. "dip direction") of an entity not converted
+    yet. None if absent."""
+    names = [str(name) for name in (names or [])]
+    if canonical in names:
+        return canonical
+    for old, new in orientation_name_map(names).items():
+        if new == canonical:
+            return old
+    return None
+
+
+def rename_orientation_arrays(vtk_obj=None):
+    """Rename the orientation arrays of a VTK object (point, cell and field data) to the canonical
+    names. Returns {old: new} of the point data (the entity properties)."""
+    point_mapping = {}
+    for data, is_point_data in (
+        (vtk_obj.GetPointData(), True),
+        (vtk_obj.GetCellData(), False),
+        (vtk_obj.GetFieldData(), False),
+    ):
+        if data is None:
+            continue
+        array_names = [data.GetArrayName(i) for i in range(data.GetNumberOfArrays())]
+        mapping = orientation_name_map([name for name in array_names if name])
+        for old, new in mapping.items():
+            data.GetAbstractArray(old).SetName(new)
+        if is_point_data:
+            point_mapping = mapping
+    if point_mapping or vtk_obj is not None:
+        vtk_obj.Modified()
+    return point_mapping
+
+
+def normalize_orientation_names(project=None):
+    """Failsafe for projects saved with older orientation names (dip direction, dip_dir, azimuth,
+    plunge, trend, ...): rename them to the canonical names (Dip, Direction, Plunge, Trend, ...) in
+    the entity metadata (properties_names), in the VTK arrays and in the property legend. Called
+    when a project is opened. Returns {(old, new): number of entities} and prints a summary."""
+    collections = [
+        getattr(project, name, None)
+        for name in ("geol_coll", "fluid_coll", "backgrnd_coll", "boundary_coll", "dom_coll", "mesh3d_coll")
+    ]
+    renamed = {}
+    for collection in collections:
+        if collection is None or "properties_names" not in collection.df.columns:
+            continue
+        for idx in collection.df.index:
+            uid = collection.df.at[idx, "uid"]
+            vtk_obj = collection.get_uid_vtk_obj(uid)
+            if vtk_obj is not None:
+                rename_orientation_arrays(vtk_obj)
+            names = list(collection.df.at[idx, "properties_names"] or [])
+            mapping = orientation_name_map(names)
+            if not mapping:
+                continue
+            collection.df.at[idx, "properties_names"] = [mapping.get(name, name) for name in names]
+            for old, new in mapping.items():
+                renamed[(old, new)] = renamed.get((old, new), 0) + 1
+    legend = getattr(project, "prop_legend_df", None)
+    if legend is not None and "property_name" in legend.columns and not legend.empty:
+        legend_names = legend["property_name"].astype(str).tolist()
+        bases = [name.split("[")[0] for name in legend_names]
+        base_mapping = orientation_name_map(list(dict.fromkeys(bases)))
+        drop = []
+        for idx, name, base in zip(legend.index, legend_names, bases):
+            if base in base_mapping:
+                new_name = base_mapping[base] + name[len(base):]
+                if new_name in legend_names:
+                    drop.append(idx)
+                else:
+                    legend.at[idx, "property_name"] = new_name
+        if drop:
+            legend.drop(index=drop, inplace=True)
+            legend.reset_index(drop=True, inplace=True)
+    if renamed and hasattr(project, "print_terminal"):
+        summary = ", ".join(f"{old} -> {new} ({count})" for (old, new), count in renamed.items())
+        project.print_terminal(f"Orientation property names updated to the current convention: {summary}")
+    return renamed
+
+
 def plunge_trends2lineations(plunges=None, trends=None):
     """Convert Plunge/Trend measurements in degrees (single or list)
     to lineation unit vectors pointing downwards if Plunge > 0.
@@ -255,7 +397,7 @@ def invert_polarity(self):
     properties are converted to the opposite polarity if present (dip -> 180 - dip, direction ->
     direction + 180); both, consistently, if both are present. For TriSurfs the order of the
     triangle vertices is also reversed, so that Calculate Normals keeps the new polarity.
-    Entities with neither Normals nor dip and dip direction are deselected.
+    Entities with neither Normals nor Dip and Direction are deselected.
     """
     from vtkmodules.vtkFiltersCore import vtkReverseSense
     from .entities_factory import TriSurf
@@ -267,8 +409,10 @@ def invert_polarity(self):
         collection = entity_collection(self, uid)
         vtk_obj = collection.get_uid_vtk_obj(uid) if collection is not None else None
         keys = list(vtk_obj.point_data_keys) if vtk_obj is not None else []
-        has_normals = "Normals" in keys
-        has_dip = "dip" in keys and "dip direction" in keys
+        has_normals = NORMALS in keys
+        dip_name = find_orientation_property(keys, DIP)
+        direction_name = find_orientation_property(keys, DIRECTION)
+        has_dip = dip_name is not None and direction_name is not None
         if not (has_normals or has_dip):
             unusable.append(uid)
             continue
@@ -297,11 +441,11 @@ def invert_polarity(self):
                 done.append("triangle order")
         if has_dip:
             dips, directions = invert_dip_directions(
-                vtk_obj.get_point_data("dip"), vtk_obj.get_point_data("dip direction")
+                vtk_obj.get_point_data(dip_name), vtk_obj.get_point_data(direction_name)
             )
-            vtk_obj.set_point_data(data_key="dip", attribute_matrix=dips)
-            vtk_obj.set_point_data(data_key="dip direction", attribute_matrix=directions)
-            done.append("dip / dip direction")
+            vtk_obj.set_point_data(data_key=dip_name, attribute_matrix=dips)
+            vtk_obj.set_point_data(data_key=direction_name, attribute_matrix=directions)
+            done.append("Dip / Direction")
         vtk_obj.Modified()
         inverted.append(uid)
         self.print_terminal(
@@ -309,8 +453,8 @@ def invert_polarity(self):
         )
     if unusable:
         self.print_terminal(
-            f" -- Invert polarity: {len(unusable)} entities without Normals or dip and dip "
-            f"direction deselected -- "
+            f" -- Invert normals: {len(unusable)} entities without Normals or Dip and "
+            f"Direction deselected -- "
         )
         self.set_selection(uids=unusable, mode="remove", source=self)
     if inverted:

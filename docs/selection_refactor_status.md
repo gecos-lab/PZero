@@ -133,6 +133,13 @@ Phase 4 follow-ups included in the same commit:
   (`_selects_new_entities`). Views keep the 3:1 split on resize until the user moves the divider
   (a view opened as a later tab got about 1:1). Draw line also in Boundaries (name and scenario only). Cross-section
   views show "Xsection <name>" in their tab.
+- Orientation property names (2026-11-23, see "Orientation conventions" in pzero/README.md):
+  Normals, Dip, Direction (planes); Lineations, Plunge, Trend (lines). Older names (dip direction,
+  dip_dir, azimuth, plunge, trend, ...) are renamed when a project is opened
+  (`normalize_orientation_names`: metadata, VTK point/cell/field arrays, property legend);
+  importers (xyz, shapefile: Dip, Direction, Strike = right-hand rule, Plunge, Trend, Nx/Ny/Nz,
+  Lx/Ly/Lz) and tools write the canonical names; xyz-imported normals keep their sign.
+  Test: `tests/selection/sel_orientation_names.py`.
 - Merge to multipart, weld and snap: inputs and outputs belong to one cross-section; only entities
   with the parent_uid of the last selected one are used (`same_parent=True`), others deselected.
 

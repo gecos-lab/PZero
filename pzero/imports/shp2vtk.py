@@ -21,7 +21,16 @@ from pzero.collections.fluid_collection import FluidCollection
 from pzero.collections.geological_collection import GeologicalCollection
 from pzero.entities_factory import PolyLine, VertexSet, Attitude
 from pzero.helpers.helper_dialogs import ShapefileAssignmentDialog, options_dialog
-from pzero.orientation_analysis import dip_directions2normals
+from pzero.orientation_analysis import (
+    dip_directions2normals,
+    plunge_trends2lineations,
+    NORMALS,
+    DIP,
+    DIRECTION,
+    LINEATIONS,
+    PLUNGE,
+    TREND,
+)
 
 USER_DEFINED_FEATURE_TOKEN = "__user_defined_feature__"
 USER_DEFINED_FEATURE_COLUMN = "__pzero_user_defined_feature__"
@@ -267,9 +276,12 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
     if collection in ["Geology", "Fluid contacts"]:
         props_allowed.add("scenario")
     props_map = {k: v for k, v in attribute_mapping.items() if k in props_allowed}
-    # Include dip, dip_dir, and dir (dir will be converted to dip_dir with +90° rotation)
+    # Orientation (see "Orientation conventions" in pzero/README.md): Dip with Direction or Strike
+    # (right-hand rule, converted to Direction = Strike + 90), Plunge with Trend.
     orient_map = {
-        k: v for k, v in attribute_mapping.items() if k in {"dip", "dip_dir", "dir"}
+        k: v
+        for k, v in attribute_mapping.items()
+        if k in {"Dip", "Direction", "Strike", "Plunge", "Trend"}
     }
 
     column_names = list(gdf.columns)
@@ -355,12 +367,16 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
             imported_count = 0
             for _group_key, group_df in gdf.groupby(group_cols):
                 curr_obj_dict = deepcopy(target_collection.entity_dict)
-                dip_col = orient_map.get("dip")
+                dip_col = orient_map.get("Dip")
+                plunge_col = orient_map.get("Plunge")
+                trend_col = orient_map.get("Trend")
+                has_lineations = bool(
+                    plunge_col and trend_col and plunge_col in column_names and trend_col in column_names
+                )
                 vtk_obj = (
                     Attitude()
                     if collection != "Background data"
-                    and dip_col
-                    and dip_col in column_names
+                    and ((dip_col and dip_col in column_names) or has_lineations)
                     else VertexSet()
                 )
                 for pzero_prop, shp_col in props_map.items():
@@ -382,28 +398,37 @@ def shp2vtk(self=None, in_file_name=None, collection=None):
                 if isinstance(vtk_obj, Attitude):
                     if dip_col and dip_col in column_names:
                         curr_obj_dict["vtk_obj"].set_point_data(
-                            "dip", np_atleast_1d(group_df[dip_col].values)
+                            DIP, np_atleast_1d(group_df[dip_col].values)
                         )
-                    dir_col = orient_map.get("dir")
-                    dip_dir_col = orient_map.get("dip_dir")
+                    dir_col = orient_map.get("Strike")
+                    dip_dir_col = orient_map.get("Direction")
                     has_angle_data = False
                     if dir_col and dir_col in column_names:
+                        # Strike with the right-hand rule: Direction = Strike + 90.
                         direction = (group_df[dir_col].values + 90) % 360
                         curr_obj_dict["vtk_obj"].set_point_data(
-                            "dip_dir", np_atleast_1d(direction)
+                            DIRECTION, np_atleast_1d(direction)
                         )
                         has_angle_data = True
                     elif dip_dir_col and dip_dir_col in column_names:
                         curr_obj_dict["vtk_obj"].set_point_data(
-                            "dip_dir", np_atleast_1d(group_df[dip_dir_col].values)
+                            DIRECTION, np_atleast_1d(group_df[dip_dir_col].values)
                         )
                         has_angle_data = True
                     if dip_col and dip_col in column_names and has_angle_data:
                         normals = dip_directions2normals(
-                            curr_obj_dict["vtk_obj"].get_point_data("dip"),
-                            curr_obj_dict["vtk_obj"].get_point_data("dip_dir"),
+                            curr_obj_dict["vtk_obj"].get_point_data(DIP),
+                            curr_obj_dict["vtk_obj"].get_point_data(DIRECTION),
                         )
-                        curr_obj_dict["vtk_obj"].set_point_data("Normals", normals)
+                        curr_obj_dict["vtk_obj"].set_point_data(NORMALS, normals)
+                    if has_lineations:
+                        plunges = np_atleast_1d(group_df[plunge_col].values).astype(float)
+                        trends = np_atleast_1d(group_df[trend_col].values).astype(float)
+                        curr_obj_dict["vtk_obj"].set_point_data(PLUNGE, plunges)
+                        curr_obj_dict["vtk_obj"].set_point_data(TREND, trends)
+                        curr_obj_dict["vtk_obj"].set_point_data(
+                            LINEATIONS, plunge_trends2lineations(plunges=plunges, trends=trends)
+                        )
 
                 curr_obj_dict["vtk_obj"].auto_cells()
                 properties_names = curr_obj_dict["vtk_obj"].point_data_keys

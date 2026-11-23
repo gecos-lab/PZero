@@ -1142,9 +1142,10 @@ class ShapefileAssignmentDialog(QMainWindow):
 
         # Orientation fields ONLY for Point topology AND NOT for Background data
         if self.topology_type == "Point" and not self.include_label:
-            # For Geology/Fluid points we need dip and either dip_dir OR dir
-            required.extend(["dip"])
-            optional.extend(["dip_dir", "dir"])
+            # Orientation of Geology/Fluid points (optional, see "Orientation conventions" in
+            # pzero/README.md): planes with Dip and either Direction or Strike (right-hand rule),
+            # lines with Plunge and Trend.
+            optional.extend(["Dip", "Direction", "Strike", "Plunge", "Trend"])
 
         return required, optional
 
@@ -1292,11 +1293,18 @@ class ShapefileAssignmentDialog(QMainWindow):
         # Combine required and optional for matching
         all_fields = self.required_fields + self.optional_fields
 
-        # Exact, case-insensitive match only (no fuzzy, no char removal)
+        # Exact, case-insensitive match only (no fuzzy, no char removal), plus the older names of
+        # the orientation fields (e.g. dip_dir, dip direction -> Direction; see orientation_name_map).
+        from pzero.orientation_analysis import orientation_name_map
+
+        orientation_fields = orientation_name_map(shapefile_columns)
         for shp_col in shapefile_columns:
             clean_col = str(shp_col).strip().lower()
             for field in all_fields:
-                if clean_col == field.strip().lower():
+                if (
+                    clean_col == field.strip().lower()
+                    or orientation_fields.get(str(shp_col)) == field
+                ):
                     current_assignment = self.combo_boxes[field].currentText()
                     if current_assignment == "<none>":
                         self.combo_boxes[field].setCurrentText(shp_col)
@@ -1320,13 +1328,13 @@ class ShapefileAssignmentDialog(QMainWindow):
                 if combo.currentText() == selected_text:
                     combo.setCurrentText("<none>")
 
-        # dir and dip_dir are mutually exclusive regardless of column
-        if changed_field == "dir" and selected_text != "<none>":
-            dip_dir_combo = self.combo_boxes.get("dip_dir")
+        # Strike and Direction are mutually exclusive regardless of column
+        if changed_field == "Strike" and selected_text != "<none>":
+            dip_dir_combo = self.combo_boxes.get("Direction")
             if dip_dir_combo and dip_dir_combo.currentText() != "<none>":
                 dip_dir_combo.setCurrentText("<none>")
-        elif changed_field == "dip_dir" and selected_text != "<none>":
-            dir_combo = self.combo_boxes.get("dir")
+        elif changed_field == "Direction" and selected_text != "<none>":
+            dir_combo = self.combo_boxes.get("Strike")
             if dir_combo and dir_combo.currentText() != "<none>":
                 dir_combo.setCurrentText("<none>")
 
@@ -1483,17 +1491,15 @@ class ShapefileAssignmentDialog(QMainWindow):
                 missing_fields.append(field)
 
         if self.topology_type == "Point" and not self.include_label:
-            has_dip_dir = (
-                self.combo_boxes.get("dip_dir")
-                and self.combo_boxes["dip_dir"].currentText() != "<none>"
-            )
-            has_dir = (
-                self.combo_boxes.get("dir")
-                and self.combo_boxes["dir"].currentText() != "<none>"
-            )
 
-            if not (has_dip_dir or has_dir):
-                missing_fields.append("dip_dir or dir")
+            def _assigned(field):
+                combo = self.combo_boxes.get(field)
+                return bool(combo) and combo.currentText() != "<none>"
+
+            if _assigned("Dip") != (_assigned("Direction") or _assigned("Strike")):
+                missing_fields.append("Dip together with Direction or Strike")
+            if _assigned("Plunge") != _assigned("Trend"):
+                missing_fields.append("Plunge together with Trend")
 
         if missing_fields:
             from PySide6.QtWidgets import QMessageBox

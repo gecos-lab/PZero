@@ -56,7 +56,7 @@ pw.set_selection([s_uid], mode="add")
 pw.set_selection([pc_uid], mode="add")
 pw.actionCalculate_Dip_Direction.trigger()
 names = pw.dom_coll.get_uid_properties_names(pc_uid)
-check("dip and dip direction added to point cloud", "dip" in names and "dip direction" in names)
+check("dip and dip direction added to point cloud", "Dip" in names and "Direction" in names)
 check("surface deselected by dip tool", pw.selection_uids() == [pc_uid])
 
 n_geol = len(pw.geol_coll.df)
@@ -86,9 +86,9 @@ pw.set_selection([s_uid], mode="add")
 pw.set_selection([s2_uid], mode="add")
 pw.actionCalculate_Dip_Direction.trigger()
 names2 = pw.geol_coll.get_uid_properties_names(s2_uid)
-check("dip/direction on geology TriSurf with Normals", "dip" in names2 and "dip direction" in names2)
-dip_vals = pw.geol_coll.get_uid_vtk_obj(s2_uid).get_point_data("dip")
-check("dip 45 and direction 90 for a plane with downward normal", abs(float(np.mean(dip_vals)) - 45.0) < 1e-4 and abs(float(np.mean(pw.geol_coll.get_uid_vtk_obj(s2_uid).get_point_data("dip direction"))) - 90.0) < 1e-4)
+check("dip/direction on geology TriSurf with Normals", "Dip" in names2 and "Direction" in names2)
+dip_vals = pw.geol_coll.get_uid_vtk_obj(s2_uid).get_point_data("Dip")
+check("dip 45 and direction 90 for a plane with downward normal", abs(float(np.mean(dip_vals)) - 45.0) < 1e-4 and abs(float(np.mean(pw.geol_coll.get_uid_vtk_obj(s2_uid).get_point_data("Direction"))) - 90.0) < 1e-4)
 check("surface without Normals deselected", pw.selection_uids() == [s2_uid])
 
 
@@ -105,8 +105,8 @@ pw.set_selection([s3_uid], mode="add")
 pw.actionCalculate_Dip_Direction.trigger()
 o = pw.geol_coll.get_uid_vtk_obj(s3_uid)
 check("overturned: dip 135 and direction 270",
-      abs(float(np.mean(o.get_point_data("dip"))) - 135.0) < 1e-4
-      and abs(float(np.mean(o.get_point_data("dip direction"))) - 270.0) < 1e-4)
+      abs(float(np.mean(o.get_point_data("Dip"))) - 135.0) < 1e-4
+      and abs(float(np.mean(o.get_point_data("Direction"))) - 270.0) < 1e-4)
 
 # both overturned conventions give the same upward normal, and the round trip is exact
 from pzero.orientation_analysis import dip_directions2normals, normals2dip_directions

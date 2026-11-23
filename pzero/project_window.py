@@ -4573,7 +4573,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         print("error: missing VTK file")
                         return
                     if self.geol_coll.get_uid_topology(uid) == "VertexSet":
-                        if "dip" in self.geol_coll.get_uid_properties_names(uid):
+                        from .orientation_analysis import DIP, find_orientation_property
+
+                        if find_orientation_property(
+                            self.geol_coll.get_uid_properties_names(uid), DIP
+                        ):
                             vtk_object = Attitude()
                         else:
                             vtk_object = VertexSet()
@@ -4812,6 +4816,11 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                     prgs_bar.add_one()
                 self.backgrnd_coll.table_model.endResetModel()
             # Update legend.
+            # Failsafe for projects saved with older orientation names (dip direction, dip_dir,
+            # azimuth, plunge, trend, ...): rename them to Dip, Direction, Plunge, Trend, ...
+            from .orientation_analysis import normalize_orientation_names
+
+            normalize_orientation_names(self)
             self.prop_legend.update_widget(parent=self)
             self.load_custom_tables(in_dir_name=in_dir_name)
 
@@ -5652,9 +5661,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
                         for key in entity.point_data_keys:
                             data = entity.get_point_data(key)
 
-                            if key == "Normals":
-                                df["dip dir"] = entity.points_map_dip_direction
-                                df["dip"] = entity.points_map_dip
+                            if key == "Normals" and "Dip" not in entity.point_data_keys:
+                                df["Direction"] = entity.points_map_dip_direction
+                                df["Dip"] = entity.points_map_dip
                             if data.ndim == 1:
                                 df[key] = data
                             else:

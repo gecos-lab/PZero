@@ -241,7 +241,7 @@ class TestNormals2dd:
 
         printed = capsys.readouterr().out
         assert "no Normals" in printed
-        assert "dip" not in vtk_obj.point_data_keys
+        assert "Dip" not in vtk_obj.point_data_keys
 
     def test_dip_values_in_valid_range(self):
         """
@@ -252,7 +252,7 @@ class TestNormals2dd:
         project = _FakeProject(vtk_obj)
         normals2dd(project)
 
-        dip = vtk_obj.get_point_data("dip")
+        dip = vtk_obj.get_point_data("Dip")
         assert dip is not None, "set_point_data('dip', ...) was never called"
         assert project.signals.data_val_modified.emit.called, "views not told of the new values"
         assert np.all(dip >= 0) and np.all(
@@ -267,7 +267,7 @@ class TestNormals2dd:
         vtk_obj = _make_real_pc(with_dip=False, with_dip_dir=False)
         normals2dd(_FakeProject(vtk_obj))
 
-        dd = vtk_obj.get_point_data("dip direction")
+        dd = vtk_obj.get_point_data("Direction")
         assert dd is not None, "set_point_data('dip direction', ...) was never called"
         assert np.all(dd >= 0) and np.all(
             dd < 360
@@ -282,7 +282,7 @@ class TestNormals2dd:
         vtk_obj = _make_real_pc(with_dip=False, with_dip_dir=False)
         normals2dd(_FakeProject(vtk_obj))
 
-        written = vtk_obj.get_point_data("dip")
+        written = vtk_obj.get_point_data("Dip")
         expected = vtk_obj.points_map_dip
         np.testing.assert_allclose(
             written,
@@ -299,7 +299,7 @@ class TestNormals2dd:
         vtk_obj = _make_real_pc(with_dip=False, with_dip_dir=False)
         normals2dd(_FakeProject(vtk_obj))
 
-        written = vtk_obj.get_point_data("dip direction")
+        written = vtk_obj.get_point_data("Direction")
         expected = vtk_obj.points_map_dip_direction
         np.testing.assert_allclose(
             written,
@@ -348,8 +348,8 @@ class TestNormals2dd:
         vtk_obj.get_point_data.side_effect = lambda k: normals if k == "Normals" else _written.get(k)
         normals2dd(_FakeProject(vtk_obj))
 
-        dip = _written.get("dip")
-        dd = _written.get("dip direction")
+        dip = _written.get("Dip")
+        dd = _written.get("Direction")
 
         assert dip is not None and dd is not None
         print(f"\n[.dat] dip:           mean={dip.mean():.1f}  std={dip.std():.1f}")
@@ -499,7 +499,7 @@ class TestSegmentPC:
 
         printed = capsys.readouterr().out
         assert (
-            "dip direction/dip data not present in the dataset. Calculate from Normals using the specific function."
+            "Dip / Direction not present in the dataset."
             in printed
         )
 
@@ -796,10 +796,10 @@ class TestFacetsPC:
             len(facets.get_field_data("Centers")) // 3 == n_clust
         ), "There is a wrong number of centers"
         assert (
-            len(facets.get_field_data("dip")) == n_clust
+            len(facets.get_field_data("Dip")) == n_clust
         ), "There is a wrong number of dip"
         assert (
-            len(facets.get_field_data("dip direction")) == n_clust
+            len(facets.get_field_data("Direction")) == n_clust
         ), "There is a wrong number of dir"
         assert (
             len(facets.get_field_data("area")) == n_clust
@@ -1049,13 +1049,13 @@ class TestFacetsPC:
 
         #### TEST ####
         # Dip values in valid geological range
-        dip = facets.get_field_data("dip")
+        dip = facets.get_field_data("Dip")
         assert np.all(dip >= 0) and np.all(
             dip <= 90
         ), f"Dip out of [0, 90]: min={dip.min():.1f}  max={dip.max():.1f}"
 
         # Dip direction values in valid range
-        dip_dir = facets.get_field_data("dip direction")
+        dip_dir = facets.get_field_data("Direction")
         assert np.all(dip_dir >= 0) and np.all(
             dip_dir < 360
         ), f"Dip direction out of [0, 360): min={dip_dir.min():.1f}  max={dip_dir.max():.1f}"

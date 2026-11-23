@@ -63,7 +63,7 @@ def normals2dd(self):
     selected entities of any collection (points, lines, surfaces, point clouds, ...).
     Project window > Properties > Calculate Dip/Direction (self is the ProjectWindow)."""
     from .helpers.helper_functions import entity_collection, tool_uids
-    from .orientation_analysis import normals2dip_directions
+    from .orientation_analysis import DIP, DIRECTION, find_orientation_property, normals2dip_directions
 
     if len(tool_uids(self)) == 0:
         self.print_terminal(" -- No entity with Normals selected -- ")
@@ -78,7 +78,10 @@ def normals2dd(self):
         # orientation_analysis.normals2dip_directions.
         dip, dip_dir = normals2dip_directions(vtk_obj.get_point_data("Normals"))
         try:
-            for name, values in (("dip", dip), ("dip direction", dip_dir)):
+            names = collection.get_uid_properties_names(uid)
+            # Overwrite Dip / Direction, also if still stored under an older name.
+            for canonical, values in ((DIP, dip), (DIRECTION, dip_dir)):
+                name = find_orientation_property(names, canonical) or canonical
                 if name not in collection.get_uid_properties_names(uid):
                     collection.append_uid_property(
                         uid=uid, property_name=name, property_components=1
@@ -268,9 +271,14 @@ def segment_pc(self):
     vtk_obj = self.parent.dom_coll.get_uid_vtk_obj(uid)
 
     if isinstance(vtk_obj, PCDom):
-        if "dip direction" not in self.parent.dom_coll.get_uid_properties_names(uid):
+        from .orientation_analysis import DIP, DIRECTION, find_orientation_property
+
+        pc_names = self.parent.dom_coll.get_uid_properties_names(uid)
+        dip_name = find_orientation_property(pc_names, DIP)
+        direction_name = find_orientation_property(pc_names, DIRECTION)
+        if dip_name is None or direction_name is None:
             print(
-                "dip direction/dip data not present in the dataset. Calculate from Normals using the specific function."
+                "Dip / Direction not present in the dataset. Calculate them from Normals with Properties > Calculate Dip/Direction."
             )
             return
 
@@ -289,7 +297,7 @@ def segment_pc(self):
         if dialog is None:
             return
 
-        vtk_obj.GetPointData().SetActiveScalars("dip direction")
+        vtk_obj.GetPointData().SetActiveScalars(direction_name)
         connectivity_filter_dd = vtkEuclideanClusterExtraction()
         connectivity_filter_dd.SetInputData(vtk_obj)
         connectivity_filter_dd.SetRadius(dialog["rad"])
@@ -299,7 +307,7 @@ def segment_pc(self):
         connectivity_filter_dd.Update()
 
         f1 = connectivity_filter_dd.GetOutput()
-        f1.GetPointData().SetActiveScalars("dip")
+        f1.GetPointData().SetActiveScalars(dip_name)
         connectivity_filter_dip = vtkEuclideanClusterExtraction()
         connectivity_filter_dip.SetInputData(f1)
         connectivity_filter_dip.SetRadius(dialog["rad"])
@@ -448,8 +456,8 @@ def facets_pc(self):
     facets.ShallowCopy(appender.GetOutput())
     facets.set_field_data("Normals", n_list)
     facets.set_field_data("Centers", c_list)
-    facets.set_field_data("dip direction", dd_list)
-    facets.set_field_data("dip", d_list)
+    facets.set_field_data("Direction", dd_list)
+    facets.set_field_data("Dip", d_list)
     facets.set_field_data("area", a_list)
     facets.set_field_data("width", w_list)
     facets.set_field_data("length", l_list)
