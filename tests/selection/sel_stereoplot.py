@@ -250,11 +250,28 @@ with warnings.catch_warnings(record=True) as caught:
     for key in keys:
         stereo.analysis_action_for_key[key].trigger()  # check the box, as the user
 check("checked overlays drawn", all(stereo.analysis_actors.get(k) for k in keys))
+
+
+def zorders(actor):
+    items = actor if isinstance(actor, list) else [actor]
+    out = []
+    for item in items:
+        out += [a.get_zorder() for a in item.artists] if isinstance(item, StereoActor) else [item.get_zorder()]
+    return out
+
+
+pole_z = min(z for k in ("fisher_mean_pole", "bingham_major_pole", "bingham_intermediate_pole",
+                         "bingham_minor_pole", "kmedoids_centers") for z in zorders(stereo.analysis_actors[k]))
+circle_z = max(zorders(stereo.analysis_actors["bingham_minor_gc"]))
+cluster_colors_z = max(zorders(stereo.analysis_actors["kmedoids_color"]))
+data_z = max(a.get_zorder() for actor in stereo.mpl_actors.values() if actor is not None for a in actor.artists)
+check("drawing order: data < cluster colours < selection rings < great circle < mean and cluster-centre poles",
+      data_z < cluster_colors_z < stereo.Z_HIGHLIGHT < circle_z < pole_z)
 check("no arcsin warning from analysis overlays",
       not any("arcsin" in str(w.message) for w in caught))
 
-check("biaxial k-medoids note printed when the k-medoids boxes are checked",
-      any("k-medoids on Normals is biaxial" in m for m in messages))
+check("k-medoids with k=2: exactly 2 cluster centres (opposite copies merged)",
+      len(stereo.analysis_results["normals"]["kmedoids"]["centroids"]) == stereo.kmedoids_k == 2)
 
 # k spin box: one per place the menu is shown (e.g. a detached copy), all in sync
 from PySide6.QtWidgets import QMenu  # noqa: E402
@@ -498,5 +515,156 @@ pw.transfer_entities_between_collections(
 )
 check("after Move to Fluids the Fluids tab is in front and the entity stays selected",
       pw.tabWidgetTopLeft.currentWidget() is pw.tabFluids and pw.selection_uids() == [other])
+
+# ---- Analysis > Contour settings (methods of mplstereonet) and Axial / Polar data
+import pzero.views.view_stereoplot as vsp  # noqa: E402
+from pzero.orientation_analysis import DENSITY_METHODS  # noqa: E402
+
+analysis_texts = [a.text() for a in stereo.menuAnalysis.actions()]
+check("Analysis menu: Contour settings, Axial (bidirectional) / Polar (unidirectional) data",
+      {"Contour settings...", "Axial (bidirectional) data", "Polar (unidirectional) data"} <= set(analysis_texts)
+      and stereo.data_axial and stereo.actionAxialData.isChecked() and not stereo.actionPolarData.isChecked())
+
+vectors = unit(np.random.default_rng(11).normal(size=(60, 3)) * [0.4, 0.4, 1] + [0.3, 0, -1])
+pl, tr = mplstereonet.vector2plunge_bearing(*vectors.T)
+lo, la = mplstereonet.line(pl, tr)
+same = True
+for method in DENSITY_METHODS:
+    for sigma in (3.0, 1.0):
+        ours = kamb_density_grid(lo, la, method=method, sigma=sigma)[2]
+        theirs = density_grid(pl, tr, measurement="lines", method=method, sigma=sigma)[2]
+        tiny = np.finfo(float).tiny
+        ours, theirs = np.where(ours <= tiny, 0, ours), np.where(theirs <= tiny, 0, theirs)
+        same &= np.allclose(ours, theirs, rtol=1e-9, atol=1e-12 * max(theirs.max(), 1))
+check("all contour methods (exponential / linear Kamb, Kamb 1959, Schmidt) equal mplstereonet", same)
+
+# near-horizontal lineations toward 315: axial counting also fills the opposite rim (135), polar does not
+horizontal = unit(np.random.default_rng(12).normal(size=(40, 3)) * [0.03, 0.03, 0.02] + [-0.7, 0.7, -0.12])
+check("test data: all lineations point downwards (plunge > 0)", (horizontal[:, 2] < 0).all())
+pl, tr = mplstereonet.vector2plunge_bearing(*horizontal.T)
+lo, la = mplstereonet.line(pl, tr)
+opposite = mplstereonet.line(2.0, 135.0)
+
+
+def density_at(lon_grid, lat_grid, density, point):
+    index = np.argmin((lon_grid - point[0][0]) ** 2 + (lat_grid - point[1][0]) ** 2)
+    return density.ravel()[index]
+
+
+axial_grid = kamb_density_grid(lo, la, axial=True)
+polar_grid = kamb_density_grid(lo, la, axial=False)
+check("axial: density also on the opposite rim; polar: none there",
+      density_at(*axial_grid, opposite) > 1.0 and density_at(*polar_grid, opposite) < 1e-6)
+
+vsp.multiple_input_dialog = lambda **kw: {"method": "Schmidt (1% area)", "sigma": "3"}
+stereo.contours = False
+stereo.set_contour_settings()
+app.processEvents()
+check("Contour settings: Schmidt chosen, pooled contours redrawn with it",
+      stereo.density_method == "schmidt" and stereo.pooled_contour_actor is not None)
+messages.clear()
+vsp.multiple_input_dialog = lambda **kw: {"method": "Exponential Kamb (Vollmer 1995)", "sigma": "-1"}
+stereo.set_contour_settings()
+check("invalid sigma refused", stereo.density_method == "schmidt" and any("Invalid sigma" in m for m in messages))
+vsp.multiple_input_dialog = lambda **kw: {"method": "Exponential Kamb (Vollmer 1995)", "sigma": "1.5"}
+stereo.set_contour_settings()
+check("Contour settings: exponential Kamb, sigma 1.5", stereo.density_method == "exponential_kamb" and stereo.density_sigma == 1.5)
+
+stereo.actionPolarData.trigger()
+stereo.recompute_values()
+check("Polar data: statistics keep upward normals (no folding to the lower hemisphere)",
+      not stereo.data_axial and stereo.actionPolarData.isChecked()
+      and (np.asarray(stereo.last_normals_array, dtype=float)[:, 2] > 0).any())
+stereo.actionAxialData.trigger()
+stereo.recompute_values()
+check("Axial data: normals folded to the lower hemisphere again",
+      stereo.data_axial and (np.asarray(stereo.last_normals_array, dtype=float)[:, 2] <= 0).all())
+stereo.density_sigma = 3.0
+stereo.contours = None
+
+# ---- menus: Analysis order; View > Contour display settings (colour, contours-only threshold)
+from PySide6.QtWidgets import QWidgetAction as _QWidgetAction  # noqa: E402
+
+
+def menu_layout(menu):
+    out = []
+    for action in menu.actions():
+        if action.isSeparator():
+            out.append("|" + action.text())
+        elif isinstance(action, _QWidgetAction):
+            out.append("<k>")
+        else:
+            out.append(action.text())
+    return out
+
+
+check("Analysis menu order",
+      menu_layout(stereo.menuAnalysis) == [
+          "Polar (unidirectional) data", "Axial (bidirectional) data", "|",
+          "Contour settings...", "|Fisher",
+          "Mean direction as pole", "|Bingham",
+          "Major axis as pole", "Intermediate axis as pole", "Minor axis as pole", "Great circle ⊥ minor axis", "|K-medoids",
+          "<k>", "Seed picking for clustering (Normals objects)", "Seed picking for clustering (Lineations objects)",
+          "Cluster centers as poles", "Color Clusters", "Save cluster ID as property", "Show statistics",
+      ])
+view_texts = [a.text() for a in stereo.menuView.actions()]
+check("View menu: Contour display settings (no separate threshold item)",
+      "Contour display settings..." in view_texts and "Contours-only threshold..." not in view_texts)
+
+stereo.contours = True
+stereo._update_pooled_contours()
+check("filled contours keep their contour lines on top",
+      stereo.pooled_contour_actor.filled and stereo.pooled_contour_lines is not None
+      and not stereo.pooled_contour_lines.filled)
+blue_fill = np.asarray(stereo.pooled_contour_actor.get_facecolor())[-1]
+vsp.multiple_input_dialog = lambda **kw: {"color": "Red", "threshold": str(stereo.contours_only_threshold)}
+stereo.set_contour_display()
+red_fill = np.asarray(stereo.pooled_contour_actor.get_facecolor())[-1]
+red_line = np.asarray(stereo.pooled_contour_lines.get_edgecolor())[-1]
+check("Contour display settings: base colour Red for fills and lines",
+      stereo.contour_color == "Red" and blue_fill[2] > blue_fill[0] and red_fill[0] > red_fill[2]
+      and red_line[0] > red_line[2])
+check("... the contours-only entity is still drawn as contours",
+      any(isinstance(a, ContourSet) for a in stereo.mpl_actors[g_big].artists))
+vsp.multiple_input_dialog = lambda **kw: {"color": "Red", "threshold": "100000"}
+stereo.set_contour_display()
+check("contours-only threshold set in Contour display settings: the large entity gets markers",
+      stereo.contours_only_threshold == 100000 and scatters(stereo.mpl_actors[g_big]))
+vsp.multiple_input_dialog = lambda **kw: {"color": "Blue", "threshold": "500"}
+stereo.set_contour_display()
+stereo.contours = None
+stereo._update_pooled_contours()
+check("contours off: fills and lines removed",
+      stereo.pooled_contour_actor is None and stereo.pooled_contour_lines is None)
+
+asked_save = []
+vsp.multiple_input_dialog = lambda **kw: asked_save.append(kw) or None
+messages.clear()
+stereo.actionExportStats.trigger()
+check("Show statistics prints the summary, no save dialog",
+      not asked_save and any("Orientation Statistics Summary" in m for m in messages))
+
+# ---- k-medoids: exactly k clusters for any k (axial data are doubled; opposite copies merged)
+from pzero.orientation_analysis import kmedoids_clusters, plunge_trends2lineations  # noqa: E402
+
+rng_k = np.random.default_rng(0)
+
+
+def k_group(n, trend, plunge):
+    v = np.asarray(plunge_trends2lineations(plunges=np.full(n, float(plunge)), trends=np.full(n, float(trend))))
+    return unit(v + rng_k.normal(size=(n, 3)) * 0.1)
+
+
+four_groups = np.vstack([k_group(300, 140, 50), -k_group(200, 40, 20), k_group(250, 260, 70), k_group(150, 330, 10)])
+counts_ok = all(len(kmedoids_clusters(four_groups, k, is_axial=True)["centroids"]) == k for k in range(1, 7))
+check("axial k-medoids: k centres for k = 1..6 (even k gave k/2 before)", counts_ok)
+result4 = kmedoids_clusters(four_groups, 4, is_axial=True)
+check("axial k-medoids, k = 4: the four groups recovered (one given as upward vectors)",
+      sorted(np.bincount(result4["labels"]).tolist()) == [150, 200, 250, 300]
+      and (np.asarray(result4["centroids"])[:, 2] <= 0).all())
+result4p = kmedoids_clusters(four_groups, 4, is_axial=False)
+check("polar k-medoids, k = 4: four groups, the upward one with an upward centre",
+      sorted(np.bincount(result4p["labels"]).tolist()) == [150, 200, 250, 300]
+      and (np.asarray(result4p["centroids"])[:, 2] > 0).sum() == 1)
 
 print("RESULT:", "FAILED" if failed else "ALL PASSED")

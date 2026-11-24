@@ -118,17 +118,27 @@ class ViewStereoplot(ViewMPL):
 
     MARKER_SIZE = 4
 
-    # Printed when k-medoids results of Normals are shown (see orientation_analysis.kmedoids_clusters).
-    KMEDOIDS_NORMALS_NOTE = (
-        "Note: k-medoids on Normals is biaxial: each normal is clustered together with its "
-        "antipode (the data are doubled), so a cluster and its antipodal copy can both be found, "
-        "giving two (nearly) identical centers; centers are shown on the lower hemisphere."
-    )
+    # Base colours of the contours (View > Contour display settings) and their colormaps.
+    CONTOUR_COLORS = {
+        "Blue": "Blues",
+        "Green": "Greens",
+        "Red": "Reds",
+        "Purple": "Purples",
+        "Orange": "Oranges",
+        "Grey": "Greys",
+    }
 
+    # Drawing order, from back to front: contours, grid, data, data coloured by cluster, selection
+    # rings, statistics great circles (in front of everything but the poles), mean / cluster-centre
+    # poles (always in front), region patch (only while drawing a selection).
     Z_CONTOURS = 1
     Z_GRID = 2
     Z_ENTITIES = 3
-    Z_STATS = 4
+    Z_CLUSTER_COLORS = 4
+    Z_HIGHLIGHT = 5
+    Z_STATS_CIRCLES = 6
+    Z_STATS = 7
+    Z_SELECTION_REGION = 8
 
     def __init__(self, *args, **kwargs):
         # Some properties need to be set before calling super.__init__ to import the parent class.
@@ -143,6 +153,17 @@ class ViewStereoplot(ViewMPL):
         # of the Normals of all entities, in addition to the "Planes" shown property).
         self.show_poles = True
         self.show_great_circles = False
+        # Analysis > Contour settings: density method and sigma (as in mplstereonet), and
+        # Analysis > Axial / Polar data: planes and lineations treated as axes (bidirectional: a vector
+        # and its opposite are the same orientation) or as directions (polar / unidirectional, e.g.
+        # bedding with younging direction, slip directions). Used by contours and statistics.
+        self.density_method = "exponential_kamb"
+        self.density_sigma = 3.0
+        self.data_axial = True
+        # View > Contour display settings: base colour of contour lines and fills (a single-hue
+        # colormap, light for low densities, dark for high densities).
+        self.contour_color = "Blue"
+        self.pooled_contour_lines = None
         # Toggle contours: one density of all the shown entities together (pooled), updated after
         # entities are shown, hidden, added, removed or redrawn.
         self.pooled_contour_actor = None
@@ -214,9 +235,9 @@ class ViewStereoplot(ViewMPL):
         self.actionToggleGreatCircles.triggered.connect(self.toggle_great_circles)
         self.menuView.addAction(self.actionToggleGreatCircles)
 
-        self.actionContoursThreshold = QAction("Contours-only threshold...", self)
-        self.actionContoursThreshold.triggered.connect(self.set_contours_only_threshold)
-        self.menuView.addAction(self.actionContoursThreshold)
+        self.actionContourDisplay = QAction("Contour display settings...", self)
+        self.actionContourDisplay.triggered.connect(self.set_contour_display)
+        self.menuView.addAction(self.actionContourDisplay)
 
         self.actionSetPolar = QAction("Toggle grid", self)
         self.actionSetPolar.triggered.connect(self.toggle_grid)
@@ -237,7 +258,25 @@ class ViewStereoplot(ViewMPL):
         self.menuSelect.addAction(self.actionClearSelection)
 
         # ---- Analysis Menu ----
-        self.actionSaveClusters = QAction("Save clusters as a property", self)
+        self.actionContourSettings = QAction("Contour settings...", self)
+        self.actionContourSettings.triggered.connect(self.set_contour_settings)
+        self.menuAnalysis.addAction(self.actionContourSettings)
+
+        from PySide6.QtGui import QActionGroup
+
+        self.dataTypeGroup = QActionGroup(self)
+        self.dataTypeGroup.setExclusive(True)
+        self.actionAxialData = QAction("Axial (bidirectional) data", self)
+        self.actionPolarData = QAction("Polar (unidirectional) data", self)
+        for action, axial in ((self.actionAxialData, True), (self.actionPolarData, False)):
+            action.setCheckable(True)
+            action.setChecked(axial == self.data_axial)
+            action.triggered.connect(lambda checked=False, axial=axial: self.set_data_axial(axial))
+            self.dataTypeGroup.addAction(action)
+            self.menuAnalysis.addAction(action)
+        self.menuAnalysis.addSeparator()
+
+        self.actionSaveClusters = QAction("Save cluster ID as property", self)
         self.actionSaveClusters.triggered.connect(self.prompt_and_save_clusters)
         self.menuAnalysis.addAction(self.actionSaveClusters)
 
@@ -246,8 +285,8 @@ class ViewStereoplot(ViewMPL):
         self.kmedoids_k_widget_action = KSpinBoxAction(self)
         self.menuAnalysis.addAction(self.kmedoids_k_widget_action)
 
-        self.actionExportStats = QAction("Export statistics summary", self)
-        self.actionExportStats.triggered.connect(self.export_statistics_summary)
+        self.actionExportStats = QAction("Show statistics", self)
+        self.actionExportStats.triggered.connect(self.show_statistics_summary)
         self.menuAnalysis.addAction(self.actionExportStats)
 
         # ---- Analysis actors ----
@@ -344,6 +383,45 @@ class ViewStereoplot(ViewMPL):
             lambda: self.seed_picking("lineations")
         )
         self.menuAnalysis.addAction(self.actionSeedPickingLineations)
+        self._arrange_analysis_menu()
+
+    def _arrange_analysis_menu(self):
+        """Analysis menu order: data type, contour settings, Fisher, Bingham, K-medoids (number of
+        clusters, seed picking, centres, colours, cluster ID as property), statistics."""
+        groups = [
+            (None, [self.actionPolarData, self.actionAxialData]),
+            (None, [self.actionContourSettings]),
+            ("Fisher", [self.actionFisher]),
+            (
+                "Bingham",
+                [
+                    self.actionBinghamMajorPole,
+                    self.actionBinghamIntermediatePole,
+                    self.actionBinghamMinorPole,
+                    self.actionBinghamMinorGC,
+                ],
+            ),
+            (
+                "K-medoids",
+                [
+                    self.kmedoids_k_widget_action,
+                    self.actionSeedPickingNormals,
+                    self.actionSeedPickingLineations,
+                    self.actionKmedoidsCenters,
+                    self.actionKmedoidsColor,
+                    self.actionSaveClusters,
+                    self.actionExportStats,
+                ],
+            ),
+        ]
+        self.menuAnalysis.clear()
+        for index, (title, group) in enumerate(groups):
+            if title:
+                self.menuAnalysis.addSection(title)  # separator with the subsection title
+            elif index:
+                self.menuAnalysis.addSeparator()
+            for action in group:
+                self.menuAnalysis.addAction(action)
 
 
     # ================================  Methods required by BaseView(), (re-)implemented here =========================
@@ -551,14 +629,19 @@ class ViewStereoplot(ViewMPL):
         return artists
 
     def _draw_density(self, lon, lat, color=None, filled=False):
-        """Exponential Kamb contours of the given stereonet points (axial counting, so both
-        hemispheres count together). With color, contour lines in that color (entities shown as
-        contours only); otherwise the default colormap, filled or not (Toggle contours)."""
+        """Density contours of the given stereonet points (method, sigma and axial / polar counting
+        from the Analysis menu). With color, contour lines in that color (entities shown as contours
+        only). Otherwise (Toggle contours) contours in the base colour of View > Contour display
+        settings, light for low and dark for high densities: lines, or fills with their lines on
+        top. Returns the main artist; for fills the lines are self._last_density_lines."""
+        from matplotlib import colormaps
+        from matplotlib.ticker import MaxNLocator
         from pzero.orientation_analysis import kamb_density_grid
 
-        from matplotlib.ticker import MaxNLocator
-
-        lon_grid, lat_grid, density = kamb_density_grid(lon, lat)
+        self._last_density_lines = None
+        lon_grid, lat_grid, density = kamb_density_grid(
+            lon, lat, method=self.density_method, sigma=self.density_sigma, axial=self.data_axial
+        )
         levels = MaxNLocator(nbins=8).tick_values(0.0, float(density.max()))
         levels = levels[levels > 0]  # no level at 0: the empty background is not filled
         if levels.size < 2:
@@ -568,13 +651,24 @@ class ViewStereoplot(ViewMPL):
                 lon_grid, lat_grid, density, levels=levels, colors=[color], linewidths=1.0,
                 zorder=self.Z_CONTOURS,
             )
+        cmap = colormaps[self.CONTOUR_COLORS.get(self.contour_color, "Blues")]
+        n_levels = levels.size
+        # colours from the light (not white) to the dark end of the base colour
+        shades = [cmap(0.3 + 0.7 * i / max(n_levels - 1, 1)) for i in range(n_levels)]
         if filled:
-            return self.ax.contourf(
-                lon_grid, lat_grid, density, levels=levels, cmap="Blues", alpha=0.8,
+            fills = self.ax.contourf(
+                lon_grid, lat_grid, density, levels=levels, colors=shades[:-1] or shades,
+                alpha=0.8, zorder=self.Z_CONTOURS,
+            )
+            # the contour lines are kept on top of the fills, a little darker
+            darker = [tuple(0.75 * c for c in shade[:3]) for shade in shades]
+            self._last_density_lines = self.ax.contour(
+                lon_grid, lat_grid, density, levels=levels, colors=darker, linewidths=0.8,
                 zorder=self.Z_CONTOURS,
             )
+            return fills
         return self.ax.contour(
-            lon_grid, lat_grid, density, levels=levels, cmap="viridis", linewidths=1.0,
+            lon_grid, lat_grid, density, levels=levels, colors=shades, linewidths=1.0,
             zorder=self.Z_CONTOURS,
         )
 
@@ -719,12 +813,14 @@ class ViewStereoplot(ViewMPL):
         """Toggle contours: density contours (lines or filled) of the Normals and Lineations of
         all the shown entities together."""
         self._pooled_contours_pending = False
-        if self.pooled_contour_actor is not None:
-            try:
-                self.pooled_contour_actor.remove()
-            except Exception:
-                pass  # it belonged to a figure that has been replaced
-            self.pooled_contour_actor = None
+        for name in ("pooled_contour_actor", "pooled_contour_lines"):
+            artist = getattr(self, name, None)
+            if artist is not None:
+                try:
+                    artist.remove()
+                except Exception:
+                    pass  # it belonged to a figure that has been replaced
+                setattr(self, name, None)
         if self.contours is None or not hasattr(self, "ax"):
             if hasattr(self, "figure"):
                 self.figure.canvas.draw_idle()
@@ -739,6 +835,7 @@ class ViewStereoplot(ViewMPL):
             self.pooled_contour_actor = self._draw_density(
                 np_concatenate(lons), np_concatenate(lats), filled=bool(self.contours)
             )
+            self.pooled_contour_lines = self._last_density_lines
         self.figure.canvas.draw_idle()
 
     def _redraw_entities(self, updated_uids):
@@ -771,6 +868,56 @@ class ViewStereoplot(ViewMPL):
         """Markers use per-point face/edge colors (hollow upper hemisphere), so redraw."""
         self._redraw_entities(updated_uids)
 
+    def set_contour_settings(self):
+        """Analysis > Contour settings: density method (exponential Kamb, linear Kamb, Kamb 1959,
+        Schmidt) and sigma of the Kamb methods (default 3; smaller: narrower kernel, more detail and
+        more noise). Kamb densities are in standard deviations, Schmidt in percent."""
+        from pzero.orientation_analysis import DENSITY_METHODS
+
+        labels = list(DENSITY_METHODS.values())
+        current = DENSITY_METHODS[self.density_method]
+        result = multiple_input_dialog(
+            title="Contour settings",
+            input_dict={
+                "method": ["Method: ", [current] + [label for label in labels if label != current]],
+                "sigma": ["Sigma (Kamb methods): ", str(self.density_sigma)],
+            },
+        )
+        if result is None:
+            return
+        try:
+            sigma = float(result["sigma"])
+            if sigma <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            self.print_terminal("Invalid sigma (a positive number is required).")
+            return
+        self.density_method = next(key for key, label in DENSITY_METHODS.items() if label == result["method"])
+        self.density_sigma = sigma
+        self.print_terminal(
+            f"Contours: {DENSITY_METHODS[self.density_method]}"
+            + (f", sigma {sigma:g}" if self.density_method != "schmidt" else "")
+        )
+        self._refresh_density_and_statistics()
+
+    def set_data_axial(self, axial=True):
+        """Analysis > Axial / Polar data: treat planes and lineations as axes (bidirectional) or as
+        directions (polar / unidirectional), in contours and statistics."""
+        self.data_axial = bool(axial)
+        self.actionAxialData.setChecked(self.data_axial)
+        self.actionPolarData.setChecked(not self.data_axial)
+        self.print_terminal(
+            "Data treated as axial (bidirectional)" if self.data_axial else "Data treated as polar (unidirectional)"
+        )
+        self._refresh_density_and_statistics()
+
+    def _refresh_density_and_statistics(self):
+        """Redraw what depends on the contour settings and on the data type: the contours of the
+        entities drawn as contours only (the other entities do not change), then, once, the pooled
+        contours and the checked statistics overlays (_schedule_pooled_contours)."""
+        self._redraw_entities(sorted(self._contours_only_uids))
+        self._schedule_pooled_contours()
+
     def toggle_poles(self):
         """Show or hide the poles and lineations of all entities (e.g. to see the contours)."""
         self.show_poles = not self.show_poles
@@ -785,29 +932,38 @@ class ViewStereoplot(ViewMPL):
         )
         self._rebuild_all_entity_actors()
 
-    def set_contours_only_threshold(self):
-        """Ask the number of vectors above which an entity is drawn as contours only."""
+    def set_contour_display(self):
+        """View > Contour display settings: base colour of the contours (lines and fills) and the
+        number of vectors above which an entity is drawn as contours only."""
+        colors = list(self.CONTOUR_COLORS)
         result = multiple_input_dialog(
-            title="Contours-only threshold",
+            title="Contour display settings",
             input_dict={
+                "color": ["Contour colour: ", [self.contour_color] + [c for c in colors if c != self.contour_color]],
                 "threshold": [
                     "Entities with more vectors than this are drawn as contours: ",
                     str(self.contours_only_threshold),
-                ]
+                ],
             },
         )
         if result is None:
             return
         try:
-            threshold = int(result["threshold"])
+            threshold = max(0, int(result["threshold"]))
         except (TypeError, ValueError):
             self.print_terminal("Invalid threshold.")
             return
-        self.contours_only_threshold = max(0, threshold)
-        self._contours_only_uids = set()
-        self.print_terminal(f"Contours-only threshold: {self.contours_only_threshold} vectors")
-        self._rebuild_all_entity_actors()
-        self.figure.canvas.draw()
+        threshold_changed = threshold != self.contours_only_threshold
+        self.contour_color = result["color"] if result["color"] in self.CONTOUR_COLORS else self.contour_color
+        self.contours_only_threshold = threshold
+        self.print_terminal(
+            f"Contours: {self.contour_color}; drawn as contours only above {threshold} vectors"
+        )
+        if threshold_changed:
+            # which entities are drawn as contours only may change
+            self._contours_only_uids = set()
+            self._rebuild_all_entity_actors()
+        self._update_pooled_contours()
 
     def change_actor_point_size(self, updated_uids: list = None, collection=None):
         """
@@ -1013,7 +1169,8 @@ class ViewStereoplot(ViewMPL):
         # Get the objects
         normals_df, lineations_df = self.get_normals_and_lineations_for_analysis()
         normals_array = normals_df[["x", "y", "z"]].to_numpy()
-        normals_array = resolve_lower_hemisphere(normals_array)
+        if self.data_axial:
+            normals_array = resolve_lower_hemisphere(normals_array)
         lineations_array = lineations_df[["x", "y", "z"]].to_numpy()
         self.last_normals_array = normals_array
         self.last_lineations_array = lineations_array
@@ -1024,7 +1181,7 @@ class ViewStereoplot(ViewMPL):
             self.is_normals = True
             # Fisher parameters calculation
             try:
-                fisher_result = fisherparams(normals_array, is_axial=True)
+                fisher_result = fisherparams(normals_array, is_axial=self.data_axial)
             except ValueError as e:
                 self.print_terminal(f"Fisher stats failed: {e}")
                 fisher_result = None
@@ -1038,7 +1195,7 @@ class ViewStereoplot(ViewMPL):
 
             # Bingham parameters calculation
             try:
-                bingham_result = bingham(normals_array, is_axial=True)
+                bingham_result = bingham(normals_array, is_axial=self.data_axial)
             except ValueError as e:
                 self.print_terminal(f"Bingham stats failed: {e}")
                 bingham_result = None
@@ -1046,7 +1203,7 @@ class ViewStereoplot(ViewMPL):
             # K-medoids clusters calculation
             try:
                 # kmean_result = kmeans_clusters(normals_array, k, is_axial=True)
-                kmean_result = kmedoids_clusters(normals_array, k, is_axial=True)
+                kmean_result = kmedoids_clusters(normals_array, k, is_axial=self.data_axial)
             except ValueError as e:
                 self.print_terminal(f"K-medoids clusters failed: {e}")
                 kmean_result = None
@@ -1076,7 +1233,7 @@ class ViewStereoplot(ViewMPL):
             self.is_lineations = True
             # Fisher parameters calculation
             try:
-                fisher_result = fisherparams(lineations_array)
+                fisher_result = fisherparams(lineations_array, is_axial=self.data_axial)
             except ValueError as e:
                 self.print_terminal(f"Fisher stats failed: {e}")
                 fisher_result = None
@@ -1090,7 +1247,7 @@ class ViewStereoplot(ViewMPL):
 
             # Bingham parameters calculation
             try:
-                bingham_result = bingham(lineations_array)
+                bingham_result = bingham(lineations_array, is_axial=self.data_axial)
             except ValueError as e:
                 self.print_terminal(f"Bingham stats failed: {e}")
                 bingham_result = None
@@ -1098,7 +1255,7 @@ class ViewStereoplot(ViewMPL):
             # K-medoids clusters calculation
             try:
                 # kmean_result = kmeans_clusters(lineations_array, k)
-                kmean_result = kmedoids_clusters(lineations_array, k)
+                kmean_result = kmedoids_clusters(lineations_array, k, is_axial=self.data_axial)
             except ValueError as e:
                 self.print_terminal(f"K-medoids clusters failed: {e}")
                 kmean_result = None
@@ -1152,7 +1309,7 @@ class ViewStereoplot(ViewMPL):
                         self.last_normals_array,
                         k,
                         seeds=np_asarray(self.seed_pick_normals),
-                        is_axial=True,
+                        is_axial=self.data_axial,
                     )
                 except ValueError as e:
                     self.print_terminal(f"K-medoids clusters failed: {e}")
@@ -1161,7 +1318,7 @@ class ViewStereoplot(ViewMPL):
                 try:
                     # kmean_result = kmeans_clusters(self.last_normals_array, k, is_axial=True)
                     kmean_result = kmedoids_clusters(
-                        self.last_normals_array, k, is_axial=True
+                        self.last_normals_array, k, is_axial=self.data_axial
                     )
                 except ValueError as e:
                     self.print_terminal(f"K-medoids clusters failed: {e}")
@@ -1188,6 +1345,7 @@ class ViewStereoplot(ViewMPL):
                         self.last_lineations_array,
                         k,
                         seeds=np_asarray(self.seed_pick_lineations),
+                        is_axial=self.data_axial,
                     )
                 except ValueError as e:
                     self.print_terminal(f"K-medoids clusters failed: {e}")
@@ -1195,7 +1353,9 @@ class ViewStereoplot(ViewMPL):
             else:
                 try:
                     # kmean_result = kmeans_clusters(self.last_lineations_array, k)
-                    kmean_result = kmedoids_clusters(self.last_lineations_array, k)
+                    kmean_result = kmedoids_clusters(
+                        self.last_lineations_array, k, is_axial=self.data_axial
+                    )
                 except ValueError as e:
                     self.print_terminal(f"K-medoids clusters failed: {e}")
                     kmean_result = None
@@ -1410,7 +1570,7 @@ class ViewStereoplot(ViewMPL):
                 markerfacecolor="none",
                 markeredgecolor="yellow",
                 markeredgewidth=1.5,
-                zorder=self.Z_STATS + 1,
+                zorder=self.Z_HIGHLIGHT,
             )[0]
             self.selection_highlight_uids = highlighted
         self.figure.canvas.draw_idle()
@@ -1512,8 +1672,6 @@ class ViewStereoplot(ViewMPL):
                 if cluster_result is None:
                     say(f"No clustering result available for {kind}.")
                     continue
-                if kind == "normals":
-                    say(self.KMEDOIDS_NORMALS_NOTE)
                 say(f"Kmedoids centers :")
                 for centroid in cluster_result["centroids"]:
                     norm = np_linalg_norm(centroid)
@@ -1521,7 +1679,7 @@ class ViewStereoplot(ViewMPL):
                         continue
                     unit_centroid = centroid / norm
                     actor, pole = self._draw_pole(
-                        unit_centroid, axial=kind == "normals", color="black", marker="^", markersize=8
+                        unit_centroid, axial=self.data_axial, color="black", marker="^", markersize=8
                     )
                     new_actor.append(actor)
                     say(f"   {pole[0]:.2f}/{pole[1]:.2f}")
@@ -1535,8 +1693,6 @@ class ViewStereoplot(ViewMPL):
                 if cluster_result is None:
                     say(f"No clustering result available for {kind}.")
                     continue
-                if kind == "normals":
-                    say(self.KMEDOIDS_NORMALS_NOTE)
                 df = (
                     self.last_normals_df
                     if kind == "normals"
@@ -1547,7 +1703,9 @@ class ViewStereoplot(ViewMPL):
                     palette = cm.get_cmap("tab10")
                     color = palette(cluster_id % 10)
                     # the data vectors, at the same positions as the entities
-                    actor, pole = self._draw_pole(vectors, axial=False, color=color, markersize=6)
+                    actor, pole = self._draw_pole(
+                        vectors, axial=False, color=color, markersize=6, zorder=self.Z_CLUSTER_COLORS
+                    )
                     new_actor.append(actor)
             if not new_actor:
                 new_actor = None
@@ -1562,7 +1720,7 @@ class ViewStereoplot(ViewMPL):
                 mean_direction = fisher_result["mean_direction"][0]
                 marker = "s" if kind == "normals" else "o"
                 actor, pole = self._draw_pole(
-                    mean_direction, axial=kind == "normals", color="purple", marker=marker, markersize=8
+                    mean_direction, axial=self.data_axial, color="purple", marker=marker, markersize=8
                 )
                 new_actor.append(actor)
                 say(f"Fisher pole and K : {pole[0]:.2f}/{pole[1]:.2f}, {fisher_result['kappa']:.2f}")
@@ -1669,7 +1827,7 @@ class ViewStereoplot(ViewMPL):
         """
         vectors = np_asarray(vector, dtype=float).reshape(-1, 3).copy()
         vectors[vectors[:, 2] > 0] *= -1  # a plane is the same for both its normals
-        kwargs.setdefault("zorder", self.Z_STATS)
+        kwargs.setdefault("zorder", self.Z_STATS_CIRCLES)
         plunge, bearing = mplstereonet.vector2plunge_bearing(
             vectors[:, 0], vectors[:, 1], vectors[:, 2]
         )
@@ -1889,7 +2047,7 @@ class ViewStereoplot(ViewMPL):
             linewidth=1.5,
             linestyle="--",
             alpha=0.3,
-            zorder=self.Z_STATS + 2,
+            zorder=self.Z_SELECTION_REGION,
         )[0]
 
         self.figure.canvas.draw()
@@ -2148,44 +2306,12 @@ class ViewStereoplot(ViewMPL):
         lines.append("=" * 60)
         return "\n".join(lines)
 
-    def export_statistics_summary(self):
-        """
-        Build the statistics summary and offer the user a choice:
-        print to the PZero terminal, save to a text file, or both.
-        Uses multiple_input_dialog for the file path, consistent with the
-        rest of the codebase. If no results exist yet, prints a message
-        and returns.
-        """
+    def show_statistics_summary(self):
+        """Analysis > Show statistics: print the statistics summary of the shown entities in the
+        terminal."""
         self._ensure_stats()
         summary = self.build_statistics_summary()
-
         if not summary:
             self.print_terminal("No statistics: no shown entity with Normals or Lineations.")
             return
-
-        # Print to terminal always
         self.print_terminal(summary)
-
-        # Ask user if they also want to save to file
-        input_dict = {"save_to_file": ["Save to file? (leave empty to skip): ", ""]}
-        result = multiple_input_dialog(
-            title="Export statistics summary", input_dict=input_dict
-        )
-        if result is None:
-            return  # user cancelled
-
-        filepath = result["save_to_file"].strip()
-        if not filepath:
-            return  # user left it blank — terminal-only was enough
-
-        # Add .txt extension if the user didn't
-        if not filepath.endswith(".txt"):
-            filepath += ".txt"
-
-        try:
-            with open(filepath, "w", encoding="utf-8") as f:
-                f.write(summary)
-                f.write("\n")
-            self.print_terminal(f"Statistics saved to: {filepath}")
-        except OSError as e:
-            self.print_terminal(f"Could not save statistics file: {e}")

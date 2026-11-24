@@ -16,6 +16,7 @@ from numpy import dot as np_dot
 from numpy import argsort as np_argsort
 from numpy import column_stack as np_column_stack
 from numpy import vstack as np_vstack
+from numpy import concatenate as np_concatenate
 from numpy import isin as np_isin
 from numpy import sqrt as np_sqrt
 from numpy import exp as np_exp
@@ -39,7 +40,7 @@ from numpy import number as np_number
 from scipy.spatial.distance import cdist
 from scipy.cluster.vq import kmeans2
 
-from pzero.helpers.helper_dialogs import multiple_input_dialog
+from pzero.helpers.helper_dialogs import multiple_input_dialog, options_dialog
 
 from .helpers.helper_functions import uses_selection
 from .helpers.helper_functions import freeze_gui_onoff, freeze_gui_on, freeze_gui_off
@@ -462,6 +463,290 @@ def invert_polarity(self):
         self.prop_legend.update_widget(self)
 
 
+def lineations2plunge_trends(lineations=None):
+    """Convert lineation vectors (N x 3, or a single 3-vector) to Plunge/Trend in degrees, inverse of
+    plunge_trends2lineations: -90 <= Plunge <= 90, positive for vectors pointing downwards and
+    negative for upward (overturned) ones; 0 <= Trend < 360 toward the horizontal component of the
+    vector. Returns two Numpy arrays (plunges, trends)."""
+    from numpy import degrees as np_degrees
+
+    vectors = np_asarray(lineations, dtype=float).reshape(-1, 3)
+    plunges = np_degrees(np_arcsin(np_clip(-vectors[:, 2], -1.0, 1.0)))
+    trends = np_degrees(np_arctan2(vectors[:, 0], vectors[:, 1])) % 360
+    return plunges, trends
+
+
+def line_lineations(polyline=None):
+    """Lineations of a polyline: at each node, the unit vector of the average of the unit vectors of
+    the segments meeting at that node, oriented from the first to the last node of each line. The
+    end nodes of open lines have one segment; on closed loops (last node = first node, by index or
+    by position) the first and last nodes have two; nodes shared by several lines average all their
+    segments. Nodes without segments (or where segments cancel out) get NaN.
+    Returns an N x 3 Numpy array."""
+    from numpy import allclose as np_allclose
+    from numpy import full as np_full
+    from numpy import nan as np_nan
+    from numpy import zeros as np_zeros
+    from numpy.linalg import norm as np_norm
+    from vtkmodules.vtkCommonCore import vtkIdList
+
+    points = np_asarray(polyline.points, dtype=float).reshape(-1, 3)
+    sums = np_zeros(points.shape, dtype=float)
+    lines = polyline.GetLines()
+    ids = vtkIdList()
+    lines.InitTraversal()
+    while lines.GetNextCell(ids):
+        cell = [ids.GetId(i) for i in range(ids.GetNumberOfIds())]
+        if len(cell) < 2:
+            continue
+        units = []
+        for a, b in zip(cell[:-1], cell[1:]):
+            segment = points[b] - points[a]
+            length = np_norm(segment)
+            unit = segment / length if length > 0 else None
+            units.append(unit)
+            if unit is not None:
+                sums[a] += unit
+                sums[b] += unit
+        closed_by_position = cell[0] != cell[-1] and np_allclose(points[cell[0]], points[cell[-1]])
+        if closed_by_position and units[0] is not None and units[-1] is not None:
+            # closed loop with distinct first and last nodes at the same position
+            sums[cell[0]] += units[-1]
+            sums[cell[-1]] += units[0]
+    norms = np_norm(sums, axis=1)
+    lineations = np_full(points.shape, np_nan)
+    valid = norms > 1e-12
+    lineations[valid] = sums[valid] / norms[valid][:, None]
+    return lineations
+
+
+def _reverse_line_order(polyline=None):
+    """Reverse the node order of every line cell of a polyline (point data untouched)."""
+    from vtkmodules.vtkCommonCore import vtkIdList
+    from vtkmodules.vtkCommonDataModel import vtkCellArray
+
+    reversed_lines = vtkCellArray()
+    ids = vtkIdList()
+    lines = polyline.GetLines()
+    lines.InitTraversal()
+    while lines.GetNextCell(ids):
+        cell = [ids.GetId(i) for i in range(ids.GetNumberOfIds())]
+        reversed_lines.InsertNextCell(len(cell), cell[::-1])
+    polyline.SetLines(reversed_lines)
+
+
+def _invert_lineations_of(vtk_obj=None):
+    """Invert the sense of the lineations of an entity: Lineations n -> -n, Plunge -> -Plunge,
+    Trend -> Trend + 180 (the same line, opposite sense), and the node order of lines (so that
+    Calculate Lineations keeps the new sense). Returns the list of what was changed."""
+    from vtkmodules.util.numpy_support import vtk_to_numpy
+    from .entities_factory import PolyLine
+
+    done = []
+    keys = list(vtk_obj.point_data_keys)
+    for data in (vtk_obj.GetPointData(), vtk_obj.GetCellData()):
+        array = data.GetArray(LINEATIONS) if data is not None else None
+        if array is not None:
+            values = vtk_to_numpy(array)  # a view on the VTK array
+            values *= -1
+            array.Modified()
+    if LINEATIONS in keys:
+        done.append(LINEATIONS)
+    plunge_name = find_orientation_property(keys, PLUNGE)
+    trend_name = find_orientation_property(keys, TREND)
+    if plunge_name and trend_name:
+        plunges = np_asarray(vtk_obj.get_point_data(plunge_name), dtype=float)
+        trends = np_asarray(vtk_obj.get_point_data(trend_name), dtype=float)
+        vtk_obj.set_point_data(data_key=plunge_name, attribute_matrix=-plunges)
+        vtk_obj.set_point_data(data_key=trend_name, attribute_matrix=(trends + 180.0) % 360)
+        done.append("Plunge / Trend")
+    if isinstance(vtk_obj, PolyLine) and vtk_obj.GetNumberOfLines() > 0:
+        _reverse_line_order(vtk_obj)
+        done.append("node order")
+    vtk_obj.Modified()
+    return done
+
+
+def _set_point_property(collection, uid, vtk_obj, name, values):
+    """Store values as the point property name of uid (added to the metadata if new)."""
+    if name not in collection.get_uid_properties_names(uid):
+        collection.append_uid_property(
+            uid=uid, property_name=name, property_components=1 if values.ndim == 1 else values.shape[1]
+        )
+    vtk_obj.set_point_data(data_key=name, attribute_matrix=values)
+
+
+@uses_selection(topologies=["VertexSet", "XsVertexSet", "PolyLine", "XsPolyLine"], cross_collection=True)
+@freeze_gui_onoff
+def set_lineations(self):
+    """
+    Properties > Calculate Lineations on the selected entities, of any collection, each in its own:
+    - point sets (VertexSet, XsVertexSet): Lineations from their Plunge / Trend properties (found
+      under the canonical or older names; otherwise their names are asked, among the properties
+      shared by those point sets);
+    - lines (PolyLine, XsPolyLine): at each node, the average of the segments meeting there,
+      oriented from the first to the last node (line_lineations). Lines with lineations mostly
+      pointing upwards (overturned by the convention) can then be inverted.
+    Lineations are unit vectors, downwards for positive plunge (see "Orientation conventions" in
+    pzero/README.md). Other entities are deselected by @uses_selection.
+    """
+    from .entities_factory import PolyLine
+    from .helpers.helper_functions import entity_collection, tool_uids
+
+    uids = tool_uids(self)
+    if not uids:
+        self.print_terminal("No input data selected.")
+        return
+    line_uids = [uid for uid in uids if isinstance(entity_collection(self, uid).get_uid_vtk_obj(uid), PolyLine)]
+    point_set_uids = [uid for uid in uids if uid not in set(line_uids)]
+    done_uids = []
+
+    # Point sets: from Plunge / Trend.
+    names_by_uid = {}
+    missing = []
+    for uid in point_set_uids:
+        names = entity_collection(self, uid).get_uid_properties_names(uid)
+        plunge_name = find_orientation_property(names, PLUNGE)
+        trend_name = find_orientation_property(names, TREND)
+        if plunge_name and trend_name:
+            names_by_uid[uid] = (plunge_name, trend_name)
+        else:
+            missing.append(uid)
+    if missing:
+        shared = list(entity_collection(self, missing[0]).get_uid_properties_names(missing[0]))
+        for uid in missing[1:]:
+            names = entity_collection(self, uid).get_uid_properties_names(uid)
+            shared = [name for name in shared if name in names]
+        if not shared:
+            self.print_terminal(
+                " -- Lineations of point sets: no Plunge / Trend properties shared by all of them -- "
+            )
+        else:
+            answer = multiple_input_dialog(
+                title="Select Plunge/Trend property names",
+                input_dict={
+                    "plunge_name": ["Plunge property: ", shared],
+                    "trend_name": ["Trend property: ", shared],
+                },
+            )
+            if answer is not None:
+                for uid in missing:
+                    names_by_uid[uid] = (answer["plunge_name"], answer["trend_name"])
+    for uid, (plunge_name, trend_name) in names_by_uid.items():
+        collection = entity_collection(self, uid)
+        vtk_obj = collection.get_uid_vtk_obj(uid)
+        lineations = np_asarray(
+            plunge_trends2lineations(
+                plunges=np_asarray(vtk_obj.get_point_data(plunge_name), dtype=float).reshape(-1),
+                trends=np_asarray(vtk_obj.get_point_data(trend_name), dtype=float).reshape(-1),
+            ),
+            dtype=float,
+        ).reshape(-1, 3)
+        _set_point_property(collection, uid, vtk_obj, LINEATIONS, lineations)
+        done_uids.append(uid)
+        self.print_terminal(f"Lineations set on {collection.get_uid_name(uid)} (from {plunge_name} / {trend_name})")
+
+    # Lines: from the segments, first to last node.
+    upward_uids = []
+    for uid in line_uids:
+        collection = entity_collection(self, uid)
+        vtk_obj = collection.get_uid_vtk_obj(uid)
+        lineations = line_lineations(vtk_obj)
+        valid = lineations[:, 2] == lineations[:, 2]  # not NaN
+        if not valid.any():
+            self.print_terminal(f" -- {collection.get_uid_name(uid)}: no segments, no lineations -- ")
+            continue
+        _set_point_property(collection, uid, vtk_obj, LINEATIONS, lineations)
+        done_uids.append(uid)
+        if (lineations[valid, 2] > 0).mean() > 0.5:
+            upward_uids.append(uid)
+        self.print_terminal(f"Lineations set on {collection.get_uid_name(uid)} (first to last node)")
+    if upward_uids:
+        names = ", ".join(entity_collection(self, uid).get_uid_name(uid) for uid in upward_uids)
+        choice = options_dialog(
+            title="Calculate Lineations",
+            message=(
+                f"The lineations of {len(upward_uids)} line(s) mostly point upwards "
+                f"(negative plunge, overturned by the convention):\n{names}\n\n"
+                "Invert them (and the node order of the lines)?"
+            ),
+            yes_role="Invert",
+            no_role="Keep",
+            reject_role=None,
+        )
+        if choice == 0:
+            for uid in upward_uids:
+                _invert_lineations_of(entity_collection(self, uid).get_uid_vtk_obj(uid))
+            self.print_terminal(f"Lineations inverted on: {names}")
+    if done_uids:
+        _emit_values_modified(self, done_uids)
+        self.prop_legend.update_widget(self)
+    self.print_terminal("All Lineations set.")
+
+
+@uses_selection(valid=None, require_properties=["Lineations"], cross_collection=True)
+@freeze_gui_onoff
+def lineations2pt(self):
+    """Properties > Calculate Plunge/Trend: Plunge and Trend point properties from the Lineations of
+    the selected entities, of any collection (lineations2plunge_trends: -90 <= Plunge <= 90,
+    negative for upward lineations)."""
+    from .helpers.helper_functions import entity_collection, tool_uids
+
+    done_uids = []
+    for uid in tool_uids(self):
+        collection = entity_collection(self, uid)
+        vtk_obj = collection.get_uid_vtk_obj(uid)
+        if LINEATIONS not in vtk_obj.point_data_keys:
+            self.print_terminal(f" -- {collection.get_uid_name(uid)}: no Lineations, skipped -- ")
+            continue
+        plunges, trends = lineations2plunge_trends(vtk_obj.get_point_data(LINEATIONS))
+        names = collection.get_uid_properties_names(uid)
+        for canonical, values in ((PLUNGE, plunges), (TREND, trends)):
+            _set_point_property(
+                collection, uid, vtk_obj, find_orientation_property(names, canonical) or canonical, values
+            )
+        done_uids.append(uid)
+        self.print_terminal(f"Plunge/trend set on {collection.get_uid_name(uid)}")
+    if done_uids:
+        _emit_values_modified(self, done_uids)
+        self.prop_legend.update_widget(self)
+    self.print_terminal("All plunge/trends set.")
+
+
+@uses_selection(cross_collection=True)
+@freeze_gui_onoff
+def invert_lineations(self):
+    """Properties > Invert lineations: invert the sense of the lineations of the selected entities (any
+    class and collection): Lineations n -> -n, Plunge -> -Plunge and Trend -> Trend + 180 (the same
+    line, opposite sense), consistently if both are present; for lines also the node order, so that
+    Calculate Lineations keeps the new sense. Entities with neither Lineations nor Plunge and Trend
+    are deselected."""
+    from .helpers.helper_functions import entity_collection, tool_uids
+
+    unusable = []
+    inverted = []
+    for uid in tool_uids(self):
+        collection = entity_collection(self, uid)
+        vtk_obj = collection.get_uid_vtk_obj(uid) if collection is not None else None
+        keys = list(vtk_obj.point_data_keys) if vtk_obj is not None else []
+        has_plunge_trend = find_orientation_property(keys, PLUNGE) and find_orientation_property(keys, TREND)
+        if LINEATIONS not in keys and not has_plunge_trend:
+            unusable.append(uid)
+            continue
+        done = _invert_lineations_of(vtk_obj)
+        inverted.append(uid)
+        self.print_terminal(f"Lineations inverted on {collection.get_uid_name(uid)}: {', '.join(done)}")
+    if unusable:
+        self.print_terminal(
+            f" -- Invert lineations: {len(unusable)} entities without Lineations or Plunge and "
+            f"Trend deselected -- "
+        )
+        self.set_selection(uids=unusable, mode="remove", source=self)
+    if inverted:
+        _emit_values_modified(self, inverted)
+        self.prop_legend.update_widget(self)
+
+
 def normals2dip_directions(normals=None):
     """Convert normal vectors (N x 3, or a single 3-vector) to Dip/Direction in degrees, inverse of
     dip_directions2normals. Normals pointing downwards (upright planes) give 0 <= Dip <= 90;
@@ -831,24 +1116,54 @@ def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
 
     n_input = samplecart_input.shape[0]
 
-    if k > n_input:
+    if k > n:
         raise ValueError(
-            f"k ({k}) cannot be greater than the number of data points ({n_input})"
+            f"k ({k}) cannot be greater than the number of data points ({n})"
         )
+    # Axial data are doubled (each vector and its opposite), so every cluster has an opposite copy:
+    # 2k clusters are searched, starting from opposite pairs of medoids, and each cluster is merged
+    # with its opposite copy at the end, giving k clusters (with k clusters of the doubled data,
+    # a cluster and its own copy would often be two of them, i.e. only k/2 distinct clusters).
+    k_input = 2 * k if is_axial else k
 
     # Initialize medoid indices
     if seeds is not None:
         seeds = np_asarray(seeds, dtype=float)
         if seeds.shape[0] != k:
             raise ValueError(f"seeds must have shape (k, 3), got {seeds.shape}")
+        if is_axial:
+            seeds = np_vstack([seeds, -seeds])
         # Match each seed to its nearest actual data point
         D_seeds = cdist(
             seeds, samplecart_input
         )  # If seed picking, initialize the medoid with the closest point
         medoid_indices = np_argmin(D_seeds, axis=1)  # for each seed
     else:
-        rng = np_random_default_rng(42)  # If no seed picking, random pick
-        medoid_indices = rng.choice(n_input, k, replace=False)
+        # If no seed picking: k-medoids++ (Arthur and Vassilvitskii 2007), the first medoid at random,
+        # the next ones far from those already chosen (probability proportional to the squared
+        # distance), fixed seed. For axial data the medoids are chosen in opposite pairs.
+        from numpy import minimum as np_minimum
+
+        rng = np_random_default_rng(42)
+        chosen = [int(rng.integers(n))]
+        candidates = samplecart_input[:n]
+
+        def _pair(indices):
+            return list(indices) + [i + n for i in indices] if is_axial else list(indices)
+
+        nearest = cdist(candidates, samplecart_input[_pair(chosen)]).min(axis=1)
+        while len(chosen) < k:
+            weights = nearest**2
+            total = weights.sum()
+            if total > 0:
+                new = int(rng.choice(n, p=weights / total))
+            else:
+                new = int(rng.choice([i for i in range(n) if i not in chosen]))
+            chosen.append(new)
+            nearest = np_minimum(
+                nearest, cdist(candidates, samplecart_input[_pair([new])]).min(axis=1)
+            )
+        medoid_indices = np_array(_pair(chosen))
 
     # PAM update loop
     ### The actual loop that is the method ###
@@ -868,7 +1183,7 @@ def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
         best_medoid_indices = medoid_indices.copy()
 
         new_medoid_indices = medoid_indices.copy()
-        for j in range(k):  # For each cluster j
+        for j in range(k_input):  # For each cluster j
             cluster_mask = labels_input == j  # Test if there are poles in that cluster
             if not cluster_mask.any():
                 continue
@@ -890,66 +1205,76 @@ def kmedoids_clusters(samplecart, k, seeds=None, is_axial=False):
     medoid_indices = best_medoid_indices
 
     # Final assignment
-    # For axial data, keep only labels for the original N vectors
-    if is_axial:
-        medoid_indices_resolved = np_where(
-            medoid_indices >= n, medoid_indices - n, medoid_indices
-        )
-
-        seen = []
-        used = set()
-        all_indices = np_arange(n)
-        for i, idx in enumerate(medoid_indices_resolved):
-            if idx not in used:
-                used.add(idx)
-                seen.append(idx)
-            else:
-                # Find nearest unused data point to the original medoid
-                unused = all_indices[~np_isin(all_indices, list(used))]
-                D_unused = cdist(
-                    samplecart_input[idx : idx + 1], samplecart_input[unused]
-                )
-                replacement = unused[np_argmin(D_unused)]
-                used.add(replacement)
-                seen.append(replacement)
-        medoid_indices_resolved = np_array(seen)
-
-    else:
-        medoid_indices_resolved = medoid_indices
-
-    D = cdist(samplecart_input, samplecart_input[medoid_indices_resolved])
+    D = cdist(samplecart_input, samplecart_input[medoid_indices])
     labels_input = np_argmin(D, axis=1)
+    if is_axial:
+        # Merge each cluster with its opposite copy: the cluster that contains the opposite of
+        # its medoid (index + n in the doubled data). Each pair keeps the smaller cluster id.
+        from numpy import minimum as np_minimum
+        from numpy import unique as np_unique
 
-    # For axial data, keep only labels for the original N vectors
-    ### That part is just because we doubled the data for planes ###
-    labels = labels_input[:n]  # Label all the points to their cluster
-    medoids = samplecart_input[medoid_indices_resolved]
+        partner = labels_input[(medoid_indices + n) % n_input]
+        pair_id = np_minimum(np_arange(k_input), partner)
+        pair_labels = pair_id[labels_input[:n]]  # labels of the original N vectors only
+        kept_clusters, labels = np_unique(pair_labels, return_inverse=True)
+        # centre of each pair: its medoid, as the original (lower hemisphere) vector
+        medoids = samplecart_input[medoid_indices[kept_clusters] % n]
+    else:
+        labels = labels_input
+        medoids = samplecart_input[medoid_indices]
 
     return {"centroids": medoids, "labels": labels}
 
 
+# Density contouring methods (as in mplstereonet), with the labels shown in the stereoplot.
+DENSITY_METHODS = {
+    "exponential_kamb": "Exponential Kamb (Vollmer 1995)",
+    "linear_kamb": "Linear Kamb (Vollmer 1995)",
+    "kamb": "Kamb (1959)",
+    "schmidt": "Schmidt (1% area)",
+}
+
+
 def kamb_density_grid(
-    lons, lats, sigma=3.0, gridsize=100, cutoff=30.0, max_kernel_n=1000, bin_size=0.02
+    lons,
+    lats,
+    sigma=3.0,
+    gridsize=100,
+    cutoff=30.0,
+    max_kernel_n=1000,
+    bin_size=0.02,
+    method="exponential_kamb",
+    axial=True,
 ):
-    """Exponential Kamb density (Vollmer 1995) of axial data on a stereonet grid, in standard
-    deviations. lons, lats are stereonet coordinates (e.g. from mplstereonet.line or pole).
-    Up to max_kernel_n points the result is the same as mplstereonet.density_grid(...,
-    method="exponential_kamb"). The Kamb kernel narrows as the number of points n grows (about 0.5
-    degrees for 100k points), below the grid spacing (1.8 degrees for gridsize 100), which gives
-    noisy contours: for n > max_kernel_n the kernel and the normalization of max_kernel_n points
-    are used and the counts are scaled by max_kernel_n / n, i.e. the expected density of a random
-    sample of max_kernel_n points (smooth, comparable between datasets of any size).
-    Only counter-point pairs whose kernel is larger than exp(-cutoff) are evaluated (k-d tree),
-    so the cost grows about linearly with the number of points (1M points in a few seconds)
-    instead of points x grid nodes. Returns (lon_grid, lat_grid, density), each gridsize x gridsize."""
-    from numpy import mgrid as np_mgrid
-    from numpy import zeros as np_zeros
+    """Density of orientation data on a stereonet grid, with the methods of mplstereonet:
+    "exponential_kamb" (default) and "linear_kamb" (Vollmer 1995) and "kamb" (Kamb 1959), in
+    standard deviations; "schmidt" (count in 1% of the sphere area), in percent.
+    lons, lats are stereonet coordinates (e.g. from mplstereonet.line or pole).
+    axial=True (axial / bidirectional data): each vector is counted with its opposite (|cos|), as in
+    mplstereonet; up to max_kernel_n points the result is the same as mplstereonet.density_grid.
+    axial=False (polar / unidirectional data): each vector is counted only as itself.
+    The Kamb kernels narrow as the number of points n grows (the exponential one is about 0.5 degrees
+    wide for 100k points), below the grid spacing (1.8 degrees for gridsize 100), which gives noisy
+    contours: for n > max_kernel_n the kernel and the normalization of max_kernel_n points are used
+    and the counts are scaled by max_kernel_n / n, i.e. the expected density of a random sample of
+    max_kernel_n points; vectors are then merged in bins of about 1 degree (error < 1% of the
+    maximum; the exponential kernel is then cut at exp(-10)). Only counter-point pairs inside the
+    kernel (exponential: larger than exp(-cutoff)) are
+    evaluated (k-d tree), so the cost grows about linearly with the number of points.
+    Returns (lon_grid, lat_grid, density), each gridsize x gridsize."""
     from numpy import add as np_add
-    from numpy import maximum as np_maximum
+    from numpy import concatenate as np_concatenate
     from numpy import finfo as np_finfo
+    from numpy import maximum as np_maximum
+    from numpy import mgrid as np_mgrid
+    from numpy import ones as np_ones
+    from numpy import unique as np_unique
+    from numpy import zeros as np_zeros
     from scipy.spatial import cKDTree
     from mplstereonet import stereonet_math
 
+    if method not in DENSITY_METHODS:
+        raise ValueError(f"Unknown density method: {method}")
     bound = np_pi / 2.0
     lon, lat = np_mgrid[-bound : bound : gridsize * 1j, -bound : bound : gridsize * 1j]
     counters = np_vstack(stereonet_math.sph2cart(lon.ravel(), lat.ravel())).T
@@ -959,40 +1284,67 @@ def kamb_density_grid(
     n = float(points.shape[0])
     totals = np_zeros(counters.shape[0], dtype=float)
     if n > 0:
-        n_kernel = min(n, float(max_kernel_n)) if max_kernel_n else n
-        f = 2.0 * (1.0 + n_kernel / sigma**2)
-        units = np_sqrt(n_kernel * (f / 2.0 - 1.0) / f**2)
-        # exp(f (cos - 1)) < exp(-cutoff) when 1 - cos > cutoff / f; chord**2 = 2 (1 - cos)
-        radius = np_sqrt(min(2.0, 2.0 * cutoff / f))
-        weights = None
-        if n > n_kernel:
-            # The kernel width is fixed (about 4 degrees for 1000 points): merge nearly identical
-            # vectors (bins of about 1 degree) and count them, and neglect kernel values below
-            # exp(-15), so that the cost depends on how spread the data are, not on their number
-            # (300k points in 1.5-2.5 s instead of 40 s, density error < 1% of its maximum).
+        # Kernel parameters (as mplstereonet), with the number of points capped for the Kamb kernels.
+        n_kernel = min(n, float(max_kernel_n)) if (max_kernel_n and method != "schmidt") else n
+        if method == "exponential_kamb":
+            f = 2.0 * (1.0 + n_kernel / sigma**2)
+            units = np_sqrt(n_kernel * (f / 2.0 - 1.0) / f**2)
+            min_cos = 1.0 - cutoff / f  # exp(f (cos - 1)) < exp(-cutoff) below this
+        elif method in ("linear_kamb", "kamb"):
+            kamb_radius = 1.0 - sigma**2 / (n_kernel + sigma**2)
+            f = 2.0 / (1.0 - kamb_radius)
+            units = np_sqrt(n_kernel * kamb_radius * (1.0 - kamb_radius))
+            min_cos = kamb_radius
+        else:  # schmidt
+            min_cos = 1.0 - 0.01
+        weights = np_ones(points.shape[0])
+        if max_kernel_n and n > max_kernel_n:
+            # merge nearly identical vectors (bins of about 1 degree) and count them
             from numpy import round as np_round
-            from numpy import unique as np_unique
 
-            points, weights = np_unique(
-                np_round(points / bin_size) * bin_size, axis=0, return_counts=True
-            )
+            points, counts = np_unique(np_round(points / bin_size) * bin_size, axis=0, return_counts=True)
             points = points / np_linalg_norm(points, axis=1)[:, None]
-            radius = np_sqrt(min(2.0, 2.0 * min(cutoff, 15.0) / f))
+            weights = counts.astype(float)
+            if method == "exponential_kamb":
+                # neglect kernel values below exp(-10) of the peak (error ~0.002% of the maximum)
+                min_cos = 1.0 - min(cutoff, 10.0) / f
+        # chord**2 = 2 (1 - cos)
+        radius = np_sqrt(min(4.0, max(0.0, 2.0 * (1.0 - min_cos)))) + 1e-12
         counters_tree = cKDTree(counters)
-        for these_points in (points, -points):  # axial data: |cos|
+        rows, cols, cosines = [], [], []
+        for these_points in ((points, -points) if axial else (points,)):
             pairs = counters_tree.sparse_distance_matrix(
-                cKDTree(these_points), radius, output_type="coo_matrix"
+                cKDTree(these_points), radius, output_type="ndarray"
             )
-            cos_dist = np_maximum(1.0 - pairs.data**2 / 2.0, 0.0)
-            kernel = np_exp(f * (cos_dist - 1.0))
-            if weights is not None:
-                kernel *= weights[pairs.col]
-            np_add.at(totals, pairs.row, kernel)
-        totals *= n_kernel / n
-        totals = (totals - 0.5) / units
-        totals[totals < 0] = 0
-    # Never draw a 0 contour for smoothed densities (as mplstereonet).
-    totals[totals == 0] = np_finfo(float).tiny
+            rows.append(pairs["i"])
+            cols.append(pairs["j"])
+            cosines.append(1.0 - pairs["v"] ** 2 / 2.0)
+        rows, cols, cosines = np_concatenate(rows), np_concatenate(cols), np_concatenate(cosines)
+        if axial and rows.size and min_cos <= 0:
+            # |cos|: a counter-point pair found for the vector and for its opposite counts once,
+            # with the larger cosine (as mplstereonet). Only possible with kernels wider than 90
+            # degrees (very few points): otherwise the two cannot both be near the same counter.
+            keys = rows.astype("int64") * points.shape[0] + cols
+            order = (-cosines).argsort(kind="stable")
+            _, first = np_unique(keys[order], return_index=True)
+            keep = order[first]
+            rows, cols, cosines = rows[keep], cols[keep], cosines[keep]
+        if method == "exponential_kamb":
+            kernel = np_exp(f * (np_maximum(cosines, -1.0) - 1.0))
+        elif method == "linear_kamb":
+            kernel = np_maximum(f * (cosines - kamb_radius), 0.0) * (cosines >= kamb_radius)
+        else:  # kamb, schmidt: counts inside the radius
+            kernel = (cosines >= min_cos).astype(float)
+        np_add.at(totals, rows, kernel * weights[cols])
+        if method == "schmidt":
+            totals = totals / (n * 0.01)  # percent of the points in 1% of the area
+        else:
+            totals *= n_kernel / n
+            totals = (totals - 0.5) / units
+            totals[totals < 0] = 0
+    if method in ("exponential_kamb", "linear_kamb"):
+        # Never draw a 0 contour for smoothed densities (as mplstereonet).
+        totals[totals == 0] = np_finfo(float).tiny
     counter_lon, counter_lat = stereonet_math.cart2sph(*counters.T)
     shape = lon.shape
     return counter_lon.reshape(shape), counter_lat.reshape(shape), totals.reshape(shape)

@@ -155,7 +155,13 @@ from .helpers.helper_functions import (
 )
 from .helpers.helper_functions import freeze_gui_onoff
 from .legend_manager import Legend, legend_level_col
-from .orientation_analysis import set_normals, invert_polarity
+from .orientation_analysis import (
+    set_normals,
+    invert_polarity,
+    set_lineations,
+    lineations2pt,
+    invert_lineations,
+)
 from .point_clouds import decimate_pc, normals2dd, facets_pc
 from .properties_manager import PropertiesCMaps, ensure_property_legend_schema
 from .three_d_surfaces import (
@@ -393,6 +399,20 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
             self.actionCalculateLineations, self.actionInvertPolarity
         )
         self.actionCalculateLineations.triggered.connect(self.lineations_calculate)
+        # Plunge and trend point properties from Lineations (the counterpart of Calculate Dip/Direction).
+        self.actionCalculate_Plunge_Trend.triggered.connect(lambda: lineations2pt(self))
+        # Invert the sense of Lineations and/or Plunge/Trend (and the node order of lines).
+        self.actionInvertLineations = QAction("Invert lineations", self)
+        self.actionInvertLineations.setObjectName("actionInvertLineations")
+        self.actionInvertLineations.triggered.connect(lambda: invert_lineations(self))
+        _properties_actions = self.menuProperties.actions()
+        _after_plunge_trend = _properties_actions.index(self.actionCalculate_Plunge_Trend) + 1
+        if _after_plunge_trend < len(_properties_actions):
+            self.menuProperties.insertAction(
+                _properties_actions[_after_plunge_trend], self.actionInvertLineations
+            )
+        else:
+            self.menuProperties.addAction(self.actionInvertLineations)
 
         self.actionBuildOctree.triggered.connect(self.build_octree)
 
@@ -1863,9 +1883,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         set_normals(self)
 
     def lineations_calculate(self):
-        # ____________________________________________________ IMPLEMENT THIS FOR POINTS WITH PLUNGE/TREND AND FOR POLYLINES
-        """Calculate lineations on geological entities."""
-        pass
+        """Properties > Calculate Lineations: point sets (from Plunge/Trend) and lines (from their
+        segments), of any collection (see orientation_analysis.set_lineations)."""
+        set_lineations(self)
 
     @uses_selection(valid={"dom_coll": ["PCDom"]})
     def build_octree(self):

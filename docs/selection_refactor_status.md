@@ -148,6 +148,21 @@ Phase 4 follow-ups included in the same commit:
   single-component property) is painted with the colormap and range of the properties legend
   (`ViewVTK.image_property_texture`). X, Y, Z are offered only for entities that store point
   coordinates (not Voxet, XsVoxet, MapImage, XsImage). Test: `tests/selection/sel_initial_property.py`.
+- Lineation tools (2026-11-24): Properties > Calculate Lineations (`set_lineations`: point sets
+  from Plunge/Trend, lines from their segments, inversion proposed if mostly upwards), Calculate
+  Plunge/Trend (`lineations2pt`, was not connected), Invert lineations (`invert_lineations`, also
+  reverses the node order of lines). Test: `tests/selection/sel_lineations.py`.
+- Stereoplot Analysis menu (2026-11-24): Contour settings (exponential Kamb, linear Kamb, Kamb,
+  Schmidt; sigma) and Axial (bidirectional) / Polar (unidirectional) data, used by contours and
+  statistics for both normals and lineations (before: normals axial, lineations polar for
+  statistics, everything axial for contours). `kamb_density_grid(method=..., axial=...)`.
+  Analysis menu order: data type | Contour settings | Fisher | Bingham | K-medoids (k, seed
+  picking, centres, colours, Save cluster ID as property, Show statistics: terminal only), with
+  titled sections Fisher, Bingham, K-medoids.
+  View > Contour display settings: base colour (single-hue colormap) of lines and fills (filled
+  contours keep their lines) and the contours-only threshold. Switching axial/polar redraws only
+  the entities drawn as contours and computes the pooled contours once (3.8 s -> 1.3 s with a
+  100k-vector entity).
 - Merge to multipart, weld and snap: inputs and outputs belong to one cross-section; only entities
   with the parent_uid of the last selected one are used (`same_parent=True`), others deselected.
 
@@ -174,9 +189,9 @@ Phase 4 follow-ups included in the same commit:
   the statistics swap); medoids of clusters above 4000 vectors are approximated as in
   CLARA (`_cluster_medoid`), iterations stop when the total distance stops decreasing.
   100k normals: k=1..8 in 0.05-0.8 s; results on small datasets unchanged. k-medoids on Normals
-  stays biaxial (data doubled with antipodes, user decision 2026-11-23): a cluster and its
-  antipodal copy can give two (nearly) identical centers; a note is printed in the terminal when
-  the k-medoids boxes are checked. The k spin box works in detached menus (`KSpinBoxAction`). Benchmark: markers 0.35 s per
+  stays biaxial (data doubled with antipodes, user decision 2026-11-23). Since 2026-11-24: 2k
+  clusters of the doubled data, each merged with its opposite copy, so k clusters for any k
+  (with k clusters of the doubled data even k gave k/2); paired k-medoids++ initialisation. The k spin box works in detached menus (`KSpinBoxAction`). Benchmark: markers 0.35 s per
   100k points per redraw; mplstereonet Kamb contours 10 s for 20k points, so contours use
   `orientation_analysis.kamb_density_grid` (same result, k-d tree, 0.34 s for 100k, 2.7 s for 1M).
 - Statistics (Fisher, Bingham, k-medoids) are computed on the shown entities, as the pooled
@@ -210,12 +225,12 @@ Phase 4 follow-ups included in the same commit:
 
 ## Open items
 
-All phases done and GUI-tested (checklist below), except section 6 point-cloud checks (Planar
-facets, Build Octree), skipped. Left for separate work:
+All phases done and GUI-tested (checklist below). Left for separate work:
 
 - Tools specific to the interpretation and cross-section views (`view_interpretation.py`,
   `view_xsection.py`) still keep their own record of picked entities.
 - Exports refactor (deferred by the user).
+- Point-cloud tools: GUI checks of section 6 (Planar facets from PC clusters, Build Octree), deferred by the user.
 - Not covered by headless tests: DEM/TSDom/Voxet intersection branches, project-to-DEM of boundary
   lines, mouse picking, visual look of the highlight.
 

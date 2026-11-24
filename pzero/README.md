@@ -56,6 +56,24 @@ from a TriSurf follow the order of the triangle vertices, so a whole surface can
 inverted. Properties > Invert normals flips Normals and/or Dip/Direction (and the TriSurf
 triangle order, so that Calculate Normals keeps the new polarity).
 
+Lineations of lines (Properties > Calculate Lineations) are computed at each node as the average
+of the segments meeting there (one segment at the ends of open lines, two at the first and last
+nodes of closed loops), oriented from the first to the last node; if they mostly point upwards
+the tool proposes to invert them. Properties > Invert lineations flips Lineations and/or
+Plunge/Trend (Plunge -> -Plunge, Trend -> Trend + 180) and the node order of lines.
+Properties > Calculate Plunge/Trend derives Plunge/Trend from Lineations.
+
+**Axial or polar data** (stereoplot, Analysis menu; terms as in qAttitude): planes and lineations
+are treated either as axes (axial / bidirectional: a vector and its opposite are the same
+orientation, e.g. foliations, fold axes; default) or as directions (polar / unidirectional, e.g.
+bedding with younging direction, slip directions). This applies to density contours (axial:
+each vector is counted with its opposite, so data near the primitive circle also contour on the
+opposite rim) and to the statistics (Fisher, Bingham, k-medoids; axial data are folded to the
+lower hemisphere). Contour settings: exponential Kamb (default), linear Kamb (Vollmer 1995),
+Kamb (1959), Schmidt (1% area), and the Kamb sigma (default 3; the kernel narrows with the number
+of vectors: with about 20 vectors it is about 25 degrees wide, so small populations look round;
+a smaller sigma keeps more detail and more noise). Results equal mplstereonet's for axial data.
+
 **Older names** are recognised (ignoring case, spaces and underscores) and converted
 (`orientation_name_map`, `find_orientation_property`):
 
@@ -130,6 +148,9 @@ Outputs are stored in the collection of their input, with metadata copied by `de
 | Calculate normals (Properties menu): point sets from their dip/direction properties, TriSurfs, XsPolyLines and point clouds from geometry | `normals_calculate` → `orientation_analysis.set_normals` | Mixed | VertexSet, XsVertexSet, TriSurf, XsPolyLine, PCDom in any collection (not DEMs) |
 | Calculate Dip/Direction (Properties menu): Dip and Direction point properties from point Normals (0-90 for upright planes, > 90 for overturned planes) | `point_clouds.normals2dd` | Mixed | Any entity with the Normals point property |
 | Invert normals (Properties menu): Normals n -> -n and/or Dip -> 180 - Dip, Direction -> Direction + 180 (both consistently if both present); TriSurf triangle order reversed so that Calculate Normals keeps it | `orientation_analysis.invert_polarity` | Mixed | Any entity with Normals and/or dip and dip direction point properties |
+| Calculate Lineations (Properties menu): Lineations of point sets from Plunge/Trend, of lines from their segments (average at each node, first to last node; inversion proposed if mostly upwards) | `orientation_analysis.set_lineations` | Mixed | VertexSet, XsVertexSet (with Plunge/Trend), PolyLine, XsPolyLine |
+| Calculate Plunge/Trend (Properties menu): Plunge and Trend point properties from Lineations (-90 <= Plunge <= 90) | `orientation_analysis.lineations2pt` | Mixed | Any entity with the Lineations point property |
+| Invert lineations (Properties menu): Lineations n -> -n and/or Plunge -> -Plunge, Trend -> Trend + 180 (both consistently if both present); node order of lines reversed so that Calculate Lineations keeps it | `orientation_analysis.invert_lineations` | Mixed | Any entity with Lineations and/or Plunge and Trend point properties |
 | Add / remove property | `property_add`, `property_remove` | Mixed | Any entity except cross-sections, which have no properties (remove offers only properties present on all selected entities) |
 | Add / remove texture | `texture_add`, `texture_remove` | One | DOMs |
 | Build octree (Point Clouds menu) | `build_octree` | One | DOM point clouds (PCDom) |
