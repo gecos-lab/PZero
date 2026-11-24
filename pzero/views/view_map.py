@@ -413,7 +413,7 @@ class ViewMap(View2D):
             if show_property == "none" or show_property is None:
                 plot_texture_option = None
             else:
-                plot_texture_option = plot_entity.texture
+                plot_texture_option = self.image_property_texture(plot_entity, show_property)
             this_actor = self.plot_mesh(
                 uid=uid,
                 plot_entity=plot_entity.frame,
@@ -538,10 +538,12 @@ class ViewMap(View2D):
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
+                # The legend colour is used when no property is shown (with no colour, PyVista
+                # would colour the Voxet by its active array).
                 this_actor = self.plot_mesh(
                     uid=uid,
                     plot_entity=plot_entity,
-                    color_RGB=None,
+                    color_RGB=color_RGB,
                     show_property=show_property,
                     color_bar_range=None,
                     show_property_title=show_property_title,

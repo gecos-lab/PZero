@@ -119,13 +119,14 @@ class ViewInterpretation(ViewMap):
                             except Exception:
                                 skip_raw_actor = False
 
+                    initial_property = self.initial_show_property(collection_name, uid)
                     if skip_raw_actor:
                         this_actor = None
                     else:
                         this_actor = self.show_actor_with_property(
                             uid=uid,
                             coll_name=collection_name,
-                            show_property=None,
+                            show_property=initial_property,
                             visible=True,
                         )
 
@@ -135,7 +136,7 @@ class ViewInterpretation(ViewMap):
                             "actor": this_actor,
                             "show": True,
                             "collection": collection_name,
-                            "show_property": None,
+                            "show_property": initial_property,
                         }
                     )
                     prgs_bar.add_one()

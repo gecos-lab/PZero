@@ -140,6 +140,14 @@ Phase 4 follow-ups included in the same commit:
   importers (xyz, shapefile: Dip, Direction, Strike = right-hand rule, Plunge, Trend, Nx/Ny/Nz,
   Lx/Ly/Lz) and tools write the canonical names; xyz-imported normals keep their sign.
   Test: `tests/selection/sel_orientation_names.py`.
+- Meshes and images open showing their active property (or the first one), and the tree drop-down
+  shows it (`BaseView.initial_show_property`). Before, Voxets were drawn without a colour, so
+  PyVista coloured them by their active property while the drop-down said "none"; with "none"
+  Voxets now use the legend colour. Images: a whole RGB(A) property is shown as is (the Images
+  tree lists whole multi-component properties), one band (a component such as RGB[0], or a
+  single-component property) is painted with the colormap and range of the properties legend
+  (`ViewVTK.image_property_texture`). X, Y, Z are offered only for entities that store point
+  coordinates (not Voxet, XsVoxet, MapImage, XsImage). Test: `tests/selection/sel_initial_property.py`.
 - Merge to multipart, weld and snap: inputs and outputs belong to one cross-section; only entities
   with the parent_uid of the last selected one are used (`same_parent=True`), others deselected.
 
@@ -208,8 +216,6 @@ facets, Build Octree), skipped. Left for separate work:
 - Tools specific to the interpretation and cross-section views (`view_interpretation.py`,
   `view_xsection.py`) still keep their own record of picked entities.
 - Exports refactor (deferred by the user).
-- Pre-existing: meshes open with a scalar property applied but not selected in the tree drop-down
-  (not investigated).
 - Not covered by headless tests: DEM/TSDom/Voxet intersection branches, project-to-DEM of boundary
   lines, mouse picking, visual look of the highlight.
 

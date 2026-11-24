@@ -397,6 +397,49 @@ class ViewVTK(BaseView):
             parent=self.parent, property_name=property_name
         )
 
+    def image_property_texture(self, image=None, show_property=None):
+        """Texture of an image (MapImage, XsImage) for the property chosen in the tree drop-down:
+        a whole RGB / RGBA property is used as is; one band (a component such as RGB[0], or a
+        single-component property) is painted with the colormap and range of that item in the
+        properties legend. None if the property does not exist."""
+        from matplotlib import colormaps
+        from numpy import clip as np_clip
+        from numpy import isfinite as np_isfinite
+        from numpy import nan_to_num as np_nan_to_num
+        from numpy import nanmax as np_nanmax
+        from numpy import nanmin as np_nanmin
+        from numpy import uint8 as np_uint8
+        from pyvista import ImageData as pv_ImageData
+        from pyvista import image_to_texture as pv_image_to_texture
+        from vtkmodules.util.numpy_support import vtk_to_numpy
+
+        name = str(show_property)
+        base = name.split("[")[0]
+        array = image.GetPointData().GetArray(base)
+        if array is None:
+            return None
+        n_components = array.GetNumberOfComponents()
+        component = int(name[name.index("[") + 1 : name.index("]")]) if name.endswith("]") else None
+        if component is None and n_components >= 3:
+            # Whole RGB / RGBA property: the texture is made from the active array.
+            image.GetPointData().SetActiveScalars(base)
+            return image.texture
+        values = vtk_to_numpy(array).reshape(-1, n_components)[:, component or 0].astype(float)
+        cmap_name, clim = self._resolve_scalar_range_and_cmap(property_name=name)
+        if clim is None or not all(np_isfinite(clim)) or clim[0] >= clim[1]:
+            clim = (float(np_nanmin(values)), float(np_nanmax(values)))
+        span = (clim[1] - clim[0]) or 1.0
+        normalized = np_clip(np_nan_to_num((values - clim[0]) / span), 0.0, 1.0)
+        try:
+            cmap = colormaps[cmap_name] if cmap_name else colormaps["rainbow"]
+        except KeyError:
+            cmap = colormaps["rainbow"]
+        band = pv_ImageData()
+        band.CopyStructure(image)
+        band.point_data["band_rgb"] = (cmap(normalized)[:, :3] * 255).astype(np_uint8)
+        band.set_active_scalars("band_rgb")
+        return pv_image_to_texture(band)
+
     def _resolve_scalar_range_and_cmap(self, property_name=None, color_bar_range=None):
         if property_name is None:
             return None, color_bar_range
@@ -1056,7 +1099,7 @@ class ViewVTK(BaseView):
             if show_property == "none" or show_property is None:
                 plot_texture_option = None
             else:
-                plot_texture_option = plot_entity.texture
+                plot_texture_option = self.image_property_texture(plot_entity, show_property)
             this_actor = self.plot_mesh(
                 uid=uid,
                 plot_entity=plot_entity.frame,
@@ -1181,10 +1224,12 @@ class ViewVTK(BaseView):
                 else:
                     if plot_entity.get_point_data_shape(show_property)[-1] == 3:
                         plot_rgb_option = True
+                # The legend colour is used when no property is shown (with no colour, PyVista
+                # would colour the Voxet by its active array).
                 this_actor = self.plot_mesh(
                     uid=uid,
                     plot_entity=plot_entity,
-                    color_RGB=None,
+                    color_RGB=color_RGB,
                     show_property=show_property,
                     color_bar_range=None,
                     show_property_title=show_property_title,

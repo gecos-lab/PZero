@@ -525,16 +525,41 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
             self.print_terminal("Error in tree_from_coll")
             return None
 
+    # Collections whose entities open showing a property (their active one) instead of "none".
+    INITIAL_PROPERTY_COLLECTIONS = ("mesh3d_coll", "image_coll")
+
+    def initial_show_property(self, collection_name=None, uid=None):
+        """Property shown when an entity is added to this view (and selected in the tree drop-down).
+        Meshes and images open showing their active property (the active scalars of the VTK
+        object, which PyVista would draw anyway), or their first property if none is active; other
+        entities open with none (legend color)."""
+        if collection_name not in self.INITIAL_PROPERTY_COLLECTIONS:
+            return None
+        collection = getattr(self.parent, collection_name, None)
+        try:
+            names = list(collection.get_uid_properties_names(uid) or [])
+            vtk_obj = collection.get_uid_vtk_obj(uid)
+        except Exception:
+            return None
+        if not names or vtk_obj is None:
+            return None
+        for data in (vtk_obj.GetPointData(), vtk_obj.GetCellData()):
+            scalars = data.GetScalars() if data is not None else None
+            if scalars is not None and scalars.GetName() in names:
+                return scalars.GetName()
+        return names[0]
+
     def entities_added_update_views(self, updated_uids=None, collection=None):
         """This is called when an entity is added to a collection."""
         # remove from updated_list the uid's that are excluded from this view by self.view_filter.
         updated_uids = collection.filter_uids(query=self.view_filter, uids=updated_uids)
         tree = self.tree_from_coll(coll=collection)
         for uid in updated_uids:
+            initial_property = self.initial_show_property(collection.collection_name, uid)
             this_actor = self.show_actor_with_property(
                 uid=uid,
                 coll_name=collection.collection_name,
-                show_property=None,
+                show_property=initial_property,
                 visible=True,
             )
 
@@ -548,7 +573,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                 "actor": this_actor,
                                 "show": True,
                                 "collection": collection.collection_name,
-                                "show_property": None,
+                                "show_property": initial_property,
                             }
                         ]
                     ),
@@ -887,10 +912,11 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                 .df.query(self.view_filter)["uid"]
                 .tolist()
             ):
+                initial_property = self.initial_show_property(collection_name, uid)
                 this_actor = self.show_actor_with_property(
                     uid=uid,
                     coll_name=collection_name,
-                    show_property=None,
+                    show_property=initial_property,
                     visible=True,
                 )
                 # New Pandas >= 2.0.0
@@ -904,7 +930,7 @@ class BaseView(QMainWindow, Ui_BaseViewWindow):
                                     "actor": this_actor,
                                     "show": True,
                                     "collection": collection_name,
-                                    "show_property": None,
+                                    "show_property": initial_property,
                                 }
                             ]
                         ),

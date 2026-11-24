@@ -349,7 +349,16 @@ class CustomTreeWidget(QTreeWidget):
         uid = str(row[self.uid_label])
 
         property_combo = QComboBox()
+        # X, Y, Z only for entities that store point coordinates (not for vtkImageData-based
+        # entities: Voxet, XsVoxet, MapImage, XsImage).
+        try:
+            entity = self.collection.get_uid_vtk_obj(uid)
+        except Exception:
+            entity = None
+        has_coordinates = entity is None or hasattr(entity, "points_X")
         for label in self.default_labels:
+            if label in ("X", "Y", "Z") and not has_coordinates:
+                continue
             property_combo.addItem(label)
             property_combo.setItemData(property_combo.findText(label), label)
         if self.prop_label:
@@ -383,6 +392,10 @@ class CustomTreeWidget(QTreeWidget):
                 # property_combo.addItem(prop)
                 # property_combo.setItemData(property_combo.findText(prop), prop)
                 if prop_comp > 1:
+                    if getattr(self.collection, "collection_name", None) == "image_coll":
+                        # Images show a whole (e.g. RGB) property as texture: list it too.
+                        property_combo.addItem(prop)
+                        property_combo.setItemData(property_combo.count() - 1, prop)
                     if is_dom_point_cloud and prop == "RGB" and prop_comp >= 3:
                         rgb_total = "RGB total"
                         if property_combo.findText(rgb_total) < 0:
