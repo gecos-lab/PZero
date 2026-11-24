@@ -55,7 +55,6 @@ class ViewXsection(View2D):
         # Super here after having set the x_section_uid and _name
         super(ViewXsection, self).__init__(parent, *args, **kwargs)
         self.parent = parent
-        # self.parent.signals.selection_changed.connect(self.on_selection_changed)
 
         # Rename Base View, Menu and Tool
         self.setWindowTitle(f"Xsection View: {self.this_x_section_name}")
@@ -242,12 +241,6 @@ class ViewXsection(View2D):
         for separator in (";", ",", "|"):
             text = text.replace(separator, " ")
         return [token.strip() for token in text.split() if token.strip()]
-
-    # # --- AGGIUNTA: funzione di slot per sincronizzazione selezione ---
-    # def on_selection_changed(self, collection):
-    #     print("DEBUG SLOT: selection_changed ricevuto per collection:", collection)
-    #     self.selected_uids = collection.selected_uids.copy()
-    #     self.actor_in_table(self.selected_uids)
 
     # ================================  Methods required by ViewVTK(), (re-)implemented here ==========================
 

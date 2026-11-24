@@ -36,9 +36,6 @@ class BaseViewSignals(QObject):
     # signal broadcast on property combobox changed, with the collection, uid and property as arguments
     # # Create signal ===================================================================================================
     # propertyToggled = pyqtSignal(str, str, str)
-    # signal for selection change, emits a list of UIDs
-    # Create signal ===================================================================================================
-    newSelection = pyqtSignal(list)
 
 
 class BaseView(QMainWindow, Ui_BaseViewWindow):

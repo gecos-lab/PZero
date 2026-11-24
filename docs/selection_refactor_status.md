@@ -59,9 +59,9 @@ dip/direction 14 s, remove 7 s; more than 15 minutes in total before).
 | 1 | Store, signals, collection delegation | Done, GUI-tested, commit 5a68684 |
 | 2 | Project tables adapter, tab brought to front | Done, GUI-tested, commit 761b61f |
 | 3 | View trees adapter, group selection, rebuilds keep selection | Done, GUI-tested, commit 761b61f |
-| 4 | VTK views highlight and picking + follow-ups below | Done, **GUI test pending** (commits from 5075b6f) |
-| 5 | Matplotlib views: stereoplot drawing (done, uncommitted, GUI test pending: item 9), stereoplot highlight, 2D/interpretation views | In progress |
-| 6 | Remove dead code: `BaseViewSignals.newSelection`, commented `on_selection_changed` slots in `view_map.py` / `view_xsection.py`, commented `selected_uids_all`, `AbstractCollection._selected_uids` | To do |
+| 4 | VTK views highlight and picking + follow-ups below | Done, GUI-tested (commits from 5075b6f) |
+| 5 | Stereoplot: drawing, contours, statistics on shown entities, selection highlight, shortcuts, Select menu | Done, GUI-tested (commits be142d7 to ea149cc) |
+| 6 | Remove dead code: `BaseViewSignals.newSelection`, commented `on_selection_changed` slots in `view_map.py` / `view_xsection.py`, commented `selected_uids_all`, the empty stereoplot `on_selection_changed` slot. `AbstractCollection._selected_uids` is kept: it is the fallback of collections not attached to a project window | Done |
 
 Phase 4 follow-ups included in the same commit:
 
@@ -202,10 +202,12 @@ Phase 4 follow-ups included in the same commit:
 
 ## Open items
 
-- GUI test of the phase 4 commit (checklist below).
-- Phase 5 and 6.
+All phases done and GUI-tested (checklist below), except section 6 point-cloud checks (Planar
+facets, Build Octree), skipped. Left for separate work:
+
 - Tools specific to the interpretation and cross-section views (`view_interpretation.py`,
-  `view_xsection.py`) and the stereoplot still use their own selection logic (phase 5).
+  `view_xsection.py`) still keep their own record of picked entities.
+- Exports refactor (deferred by the user).
 - Pre-existing: meshes open with a scalar property applied but not selected in the tree drop-down
   (not investigated).
 - Not covered by headless tests: DEM/TSDom/Voxet intersection branches, project-to-DEM of boundary

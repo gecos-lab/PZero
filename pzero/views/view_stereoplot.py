@@ -346,17 +346,6 @@ class ViewStereoplot(ViewMPL):
         self.menuAnalysis.addAction(self.actionSeedPickingLineations)
 
 
-    def connect_all_signals(self):
-        super().connect_all_signals()
-        self.sig_selection_lmb = lambda collection: self.on_selection_changed(
-            collection
-        )
-        self.parent.signals.selection_changed.connect(self.sig_selection_lmb)
-
-    def disconnect_all_signals(self):
-        super().disconnect_all_signals()
-        self.parent.signals.selection_changed.disconnect(self.sig_selection_lmb)
-
     # ================================  Methods required by BaseView(), (re-)implemented here =========================
 
     def initialize_interactor(self):
@@ -1376,11 +1365,6 @@ class ViewStereoplot(ViewMPL):
     # Rings on at most this number of vectors per entity (entities drawn as contours can have
     # millions of vectors: a sample is enough to show that they are selected).
     HIGHLIGHT_MAX_POINTS_PER_ENTITY = 2000
-
-    def on_selection_changed(self, collection):
-        """Legacy selection signal: the highlight follows selection_modified (see
-        selection_modified_update_actors). Statistics do not depend on the selection (they use the
-        shown entities)."""
 
     def selection_modified_update_actors(self, added=None, removed=None, source=None):
         """The project selection changed: update the highlight (once per event loop iteration)."""
