@@ -41,7 +41,6 @@ from ..entities_factory import (
     VertexSet,
     PolyLine,
     TriSurf,
-    TetraSolid,
     XsVertexSet,
     XsPolyLine,
     DEM,
