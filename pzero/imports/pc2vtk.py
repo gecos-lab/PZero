@@ -198,10 +198,15 @@ def pc2vtk(
             )
             return
 
-        offset = input_df[["X", "Y"]].iloc[0].round(-2)
-
-        input_df["X"] -= offset["X"]
-        input_df["Y"] -= offset["Y"]
+        # Keep the input coordinates in their original reference system.
+        # The former local-origin adjustment is intentionally disabled: it
+        # subtracted the first point's X/Y rounded to the nearest hundred,
+        # independently for each imported file, without storing that offset.
+        # As a result, separate point clouds could lose their relative
+        # georeferencing and appear shifted or superimposed.
+        # offset = input_df[["X", "Y"]].iloc[0].round(-2)
+        # input_df["X"] -= offset["X"]
+        # input_df["Y"] -= offset["Y"]
 
         XYZ = numpy_to_vtk(
             np_column_stack(

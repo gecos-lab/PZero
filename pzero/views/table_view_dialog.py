@@ -3414,6 +3414,7 @@ class ViewTable(QWidget):
         allow_column_edit = (
             allow_structure_edit and has_columns and not is_colormap_table
         )
+        allow_add_column = allow_structure_edit and not is_colormap_table
         selected_domain_column = self._current_domain_column_name()
 
         self.editing_toggle_button.setText(
@@ -3467,7 +3468,7 @@ class ViewTable(QWidget):
         else:
             self.add_row_action.setEnabled(allow_row_edit)
             self.delete_row_action.setEnabled(allow_row_edit and has_rows)
-            self.add_field_action.setEnabled(allow_structure_edit)
+            self.add_field_action.setEnabled(allow_add_column)
             self.rename_field_action.setEnabled(allow_column_edit)
             self.delete_field_action.setEnabled(allow_column_edit)
         self.table_view.horizontalHeader().setStretchLastSection(not is_colormap_table)
