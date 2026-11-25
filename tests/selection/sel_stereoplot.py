@@ -506,6 +506,66 @@ sv.select_all_in_view()
 sv.actionClearSelection.trigger()
 check("Clear Selection deselects the entities of the view only", pw.selection_uids() == [other])
 
+# By polygon with real mouse drags, also past the rim of the stereonet (matplotlib gives no
+# stereonet coordinates outside the circle: a drag ending there used to select nothing)
+from pzero.orientation_analysis import plunge_trends2lineations as _pt2l  # noqa: E402
+from PySide6.QtCore import QPoint as _QPoint  # noqa: E402
+
+
+def add_pole(name, trend, plunge):
+    v = np.asarray(_pt2l(plunges=np.array([float(plunge)]), trends=np.array([float(trend)]))).reshape(1, 3)
+    m = pv.PolyData(np.zeros((1, 3)))
+    m["Normals"] = v
+    return add(pw.geol_coll, "VertexSet", VertexSet, m, name, ["Normals"])
+
+
+rim_e, mid_e, rim_w = add_pole("rim_east", 90, 5), add_pole("mid_east", 90, 45), add_pole("rim_west", 270, 5)
+for _ in range(5):
+    app.processEvents()
+cxp, cyp = sv.ax.transAxes.transform((0.5, 0.5))
+rxp = sv.ax.transAxes.transform((1.0, 0.5))[0] - cxp
+ratio = sv.canvas.devicePixelRatioF()
+
+
+def screen(theta_deg, radius):
+    t = np.radians(theta_deg)
+    x, y = cxp + radius * rxp * np.sin(t), cyp + radius * rxp * np.cos(t)
+    return _QPoint(int(round(x / ratio)), int(round(sv.canvas.height() - y / ratio)))
+
+
+def drag(a, b):
+    pw.set_selection(mode="clear")
+    sv.actionSelectionTool.trigger()
+    for _ in range(3):
+        app.processEvents()  # pending redraws (e.g. of the selection highlight) before the drag
+    QTest.mousePress(sv.canvas, _Qt.LeftButton, _Qt.NoModifier, a)
+    full_draws = []
+    original_draw = sv.figure.canvas.draw
+    sv.figure.canvas.draw = lambda *args, **kwargs: (full_draws.append(1), original_draw(*args, **kwargs))
+    for step in np.linspace(0, 1, 6)[1:]:  # several mouse movements
+        QTest.mouseMove(sv.canvas, a + (b - a) * float(step))
+        app.processEvents()
+    sv.figure.canvas.draw = original_draw
+    xy = sv.selection_patch.get_xy() if sv.selection_patch is not None else np.zeros((0, 2))
+    # drawn in axes coordinates, inside the stereonet circle, no full redraw while dragging
+    patch_ok = (sv.selection_patch is not None and np.isfinite(xy).all()
+                and sv.selection_patch.get_transform() == sv.ax.transAxes
+                and (np.hypot(xy[:, 0] - 0.5, xy[:, 1] - 0.5) <= 0.5 + 1e-6).all()
+                and not full_draws)
+    QTest.mouseRelease(sv.canvas, _Qt.LeftButton, _Qt.NoModifier, b)
+    app.processEvents()
+    sv._deactivate_selection()
+    return set(pw.selection_uids()) & {rim_e, mid_e, rim_w}, patch_ok
+
+
+check("By polygon inside the circle", drag(screen(80, 0.8), screen(100, 0.98))[0] == {rim_e})
+selected, patch_ok = drag(screen(80, 0.8), screen(100, 1.2))
+check("By polygon released past the rim: selects up to the rim, region drawn correctly",
+      selected == {rim_e} and patch_ok)
+check("By polygon pressed past the rim", drag(screen(80, 1.3), screen(100, 0.8))[0] == {rim_e})
+check("By polygon from the centre area to past the rim", drag(screen(80, 0.3), screen(100, 1.35))[0] == {rim_e, mid_e})
+check("a press far from the net does not start a region", drag(screen(80, 1.8), screen(100, 0.5))[0] == set())
+
 # Move to another collection: the table tab follows
 pw.show_collection_tab("geol_coll")
 pw.set_selection([other], mode="replace")

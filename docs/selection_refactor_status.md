@@ -213,7 +213,11 @@ Phase 4 follow-ups included in the same commit:
   sets (`vset_set_normals` shadowed its argument).
 - Stereoplot Select menu: "By polygon" (one-shot region selection, no checkbox) and
   "Clear Selection" (as in the other views). Ctrl+A / Ctrl+Shift+A work on the stereoplot
-  canvas (it had no focus policy, so the view shortcuts never received the keys).
+  canvas (it had no focus policy, so the view shortcuts never received the keys). By polygon
+  works on screen positions and clamps points past the rim onto it (matplotlib gives no stereonet
+  coordinates outside the circle: a drag starting or ending there used to select nothing). The
+  region is drawn in axes coordinates (clipped to the circle) and repainted by blitting while
+  dragging (5 ms per mouse movement with 15k poles instead of a 0.55 s full redraw).
   Move to another collection brings the destination table tab to front.
 - Stereoplot selection highlight (`selection_modified_update_actors`,
   `_update_selection_highlight`): yellow rings on the poles of the selected entities shown in

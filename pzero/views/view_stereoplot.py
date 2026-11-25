@@ -206,6 +206,7 @@ class ViewStereoplot(ViewMPL):
         self.selection_release_cid = None
         self.selection_start = None  # (lon, lat) in data coords
         self.selection_patch = None  # the drawn region patch
+        self._selection_background = None  # figure image saved at the press, for blitting
 
         super(ViewStereoplot, self).__init__(*args, **kwargs)
         self.setWindowTitle("Stereoplot View")
@@ -1930,6 +1931,7 @@ class ViewStereoplot(ViewMPL):
 
     def _remove_selection_patch(self):
         """Remove the drawn selection region from the axes."""
+        self._selection_background = None
         if self.selection_patch is not None:
             try:
                 self.selection_patch.remove()
@@ -1976,17 +1978,22 @@ class ViewStereoplot(ViewMPL):
         return np_vstack([top, right, bottom, left])
 
     def _on_selection_press(self, event):
-        if event.button != 1:
+        if event.button != 1 or event.x is None or event.y is None:
             return
-        if event.xdata is None or event.ydata is None:
+        # Screen positions only: matplotlib gives no stereonet coordinates outside the circle, and
+        # mplstereonet wrong ones just outside it. A press slightly past the rim starts on the rim;
+        # a press far from the net is ignored.
+        if self._event_to_screen_polar(event, clamp=False)[1] > 1.5:
             return
         self.selection_start = self._event_to_screen_polar(event)
         self._remove_selection_patch()
+        # Draw the figure once and save it: while dragging only the region is repainted on top of
+        # this image (blitting), instead of redrawing all the poles at every mouse movement.
+        self.figure.canvas.draw()
+        self._selection_background = self.figure.canvas.copy_from_bbox(self.ax.bbox)
 
     def _on_selection_motion(self, event):
-        if self.selection_start is None:
-            return
-        if event.xdata is None or event.ydata is None:
+        if self.selection_start is None or event.x is None or event.y is None:
             return
 
         theta0, r0 = self.selection_start
@@ -2001,8 +2008,6 @@ class ViewStereoplot(ViewMPL):
                 theta1 += 2 * np_pi
         theta_min, theta_max = min(theta0, theta1), max(theta0, theta1)
         r_min, r_max = min(r0, r1), max(r0, r1)
-
-        self._remove_selection_patch()
 
         from numpy import linspace as np_linspace
 
@@ -2037,25 +2042,40 @@ class ViewStereoplot(ViewMPL):
                 cy + radius * radius_px * np_cos(theta),
             ]
         ).T
-        verts_data = self.ax.transData.inverted().transform(display_xy)
+        # The region is drawn in axes coordinates (a plain screen geometry, clipped to the
+        # stereonet circle), not converted to stereonet coordinates, which are wrong or missing at
+        # and past the rim.
+        axes_xy = self.ax.transAxes.inverted().transform(display_xy)
+        if self.selection_patch is None:
+            from matplotlib.patches import Polygon
 
-        self.selection_patch = self.ax.fill(
-            verts_data[:, 0],
-            verts_data[:, 1],
-            facecolor="lightblue",
-            edgecolor="blue",
-            linewidth=1.5,
-            linestyle="--",
-            alpha=0.3,
-            zorder=self.Z_SELECTION_REGION,
-        )[0]
-
-        self.figure.canvas.draw()
+            self.selection_patch = Polygon(
+                axes_xy,
+                closed=True,
+                transform=self.ax.transAxes,
+                facecolor="lightblue",
+                edgecolor="blue",
+                linewidth=1.5,
+                linestyle="--",
+                alpha=0.3,
+                zorder=self.Z_SELECTION_REGION,
+                animated=self._selection_background is not None,
+            )
+            self.ax.add_patch(self.selection_patch)
+        else:
+            self.selection_patch.set_xy(axes_xy)
+        canvas = self.figure.canvas
+        if self._selection_background is not None:
+            canvas.restore_region(self._selection_background)
+            self.ax.draw_artist(self.selection_patch)
+            canvas.blit(self.ax.bbox)
+        else:
+            canvas.draw_idle()
 
     def _on_selection_release(self, event):
         if self.selection_start is None:
             return
-        if event.xdata is None or event.ydata is None:
+        if event.x is None or event.y is None:
             self._remove_selection_patch()
             self.selection_start = None
             self.figure.canvas.draw()
@@ -2149,7 +2169,10 @@ class ViewStereoplot(ViewMPL):
         self.parent.set_selection(uids=selected_uids, mode="add", source=self)
         self._deactivate_selection(clear_highlight=False)
 
-    def _event_to_screen_polar(self, event):
+    def _event_to_screen_polar(self, event, clamp=True):
+        """Mouse position as (angle from north, clockwise; distance from the centre in units of the
+        stereonet radius), from screen pixels. With clamp, positions past the rim are put on the
+        rim (same direction), so that a region dragged past the rim ends at the rim."""
         cx, cy = self.ax.transAxes.transform((0.5, 0.5))
         x0, y0 = self.ax.transAxes.transform((0.0, 0.0))
         x1, y1 = self.ax.transAxes.transform((1.0, 1.0))
@@ -2164,6 +2187,8 @@ class ViewStereoplot(ViewMPL):
 
         theta = np_arctan2(dx, dy)  # 0 at north, clockwise-ish
         r = np_hypot(dx, dy) / radius_px
+        if clamp:
+            r = min(r, 1.0)
 
         return theta, r
 
