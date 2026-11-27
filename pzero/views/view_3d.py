@@ -4237,6 +4237,21 @@ class View3D(ViewVTK):
         options_group = QGroupBox("Extension", dialog)
         options_layout = QVBoxLayout(options_group)
 
+        mode_combo = QComboBox(options_group)
+        mode_combo.addItem("Vector extension", "vector")
+        if topology == "TriSurf":
+            mode_combo.addItem("Boundary dilation (1 unit per iteration)", "dilation")
+        options_layout.addWidget(QLabel("Method"))
+        options_layout.addWidget(mode_combo)
+
+        iterations_layout = QHBoxLayout()
+        iterations_layout.addWidget(QLabel("Iterations"))
+        iterations_spin = QSpinBox(options_group)
+        iterations_spin.setRange(1, 2_147_483_647)
+        iterations_spin.setValue(1)
+        iterations_layout.addWidget(iterations_spin)
+        options_layout.addLayout(iterations_layout)
+
         distance_layout = QHBoxLayout()
         distance_layout.addWidget(QLabel("Scale"))
         distance_spin = QDoubleSpinBox(options_group)
@@ -4297,13 +4312,23 @@ class View3D(ViewVTK):
             if not live_preview_check.isChecked():
                 self._cleanup_extend_surface_preview()
                 return
-            preview_obj = self._build_extension_preview_geometry(
-                vtk_obj=vtk_obj,
-                topology=topology,
-                direction=get_vector(),
-                distance=float(distance_spin.value()),
-                side=side_combo.currentData(),
-            )
+            dilation_mode = mode_combo.currentData() == "dilation"
+            iterations_layout.setEnabled(dilation_mode)
+            direction_group.setEnabled(not dilation_mode)
+            distance_spin.setEnabled(not dilation_mode)
+            side_combo.setEnabled(not dilation_mode)
+            if dilation_mode:
+                preview_obj = vtk_obj
+                for _ in range(iterations_spin.value()):
+                    preview_obj = preview_obj.boundary_dilation(tol=1.0)
+            else:
+                preview_obj = self._build_extension_preview_geometry(
+                    vtk_obj=vtk_obj,
+                    topology=topology,
+                    direction=get_vector(),
+                    distance=float(distance_spin.value()),
+                    side=side_combo.currentData(),
+                )
             self._show_extend_surface_preview(uid=uid, vtk_obj=preview_obj)
 
         role_button.clicked.connect(
@@ -4327,16 +4352,23 @@ class View3D(ViewVTK):
         for spin in [x_spin, y_spin, z_spin, distance_spin]:
             spin.valueChanged.connect(update_preview)
         side_combo.currentIndexChanged.connect(update_preview)
+        mode_combo.currentIndexChanged.connect(update_preview)
+        iterations_spin.valueChanged.connect(update_preview)
         live_preview_check.toggled.connect(update_preview)
 
         def apply_extension():
-            out_obj = self._build_extended_geology_entity(
-                vtk_obj=vtk_obj,
-                topology=topology,
-                direction=get_vector(),
-                distance=float(distance_spin.value()),
-                side=side_combo.currentData(),
-            )
+            if mode_combo.currentData() == "dilation":
+                out_obj = vtk_obj
+                for _ in range(iterations_spin.value()):
+                    out_obj = out_obj.boundary_dilation(tol=1.0)
+            else:
+                out_obj = self._build_extended_geology_entity(
+                    vtk_obj=vtk_obj,
+                    topology=topology,
+                    direction=get_vector(),
+                    distance=float(distance_spin.value()),
+                    side=side_combo.currentData(),
+                )
             if out_obj is None:
                 return
             self._cleanup_extend_surface_preview()

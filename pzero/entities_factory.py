@@ -1000,7 +1000,11 @@ class TriSurf(PolyData):
         # trisurf_copy = self.deep_copy()
         # """Clean topology, store point and cell ids on scalars named vtkIdFilter_Ids."""
         # trisurf_copy.clean_topology()
-        trisurf_copy = self.clean_topology()
+        # vtkCleanPolyData returns a generic vtkPolyData, which lacks the
+        # PZero helpers used below. Copy its cleaned geometry back into TriSurf.
+        cleaned_surface = self.clean_topology()
+        trisurf_copy = self.deep_copy()
+        trisurf_copy.DeepCopy(cleaned_surface)
         trisurf_copy.Squeeze()
         trisurf_copy.Modified()
         trisurf_copy.BuildCells()
