@@ -86,6 +86,14 @@ a smaller sigma keeps more detail and more noise). Results equal mplstereonet's 
 | `Plunge` | plunge |
 | `Trend` | trend, plunge azimuth, plunge direction; azimuth next to a plunge |
 
+Names are compared ignoring a unit in brackets too (e.g. "Dip (degrees)", "Dip direction
+(degrees)" as written by CloudCompare). When importing point clouds, GOCAD files and VTK files
+(Import VTK/PLY/OBJ/STL), such names, normals components (Nx/Ny/Nz,
+normal_x, ...) and lowercase normals are converted (`plan_imported_properties`,
+`convert_imported_entity`): normals components become the 3-component Normals, keeping their sign;
+for point clouds R/G/B (Red/Green/Blue) become RGB. The changes are listed and confirmed once per
+import command (all its files and entities).
+
 When a project is opened, these names are renamed to the canonical ones in the entity metadata
 (`properties_names`), in the VTK point, cell and field arrays and in the property legend, and
 the renaming is reported in the terminal (`normalize_orientation_names`). Importers (xyz/csv,

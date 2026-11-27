@@ -363,6 +363,8 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
         self.actionImportTable.triggered.connect(self.import_tables)
         self.actionImportXYZ.triggered.connect(self.import_XYZ)
         self.actionImportPyVista.triggered.connect(lambda: pyvista2vtk(self=self))
+        # Files read with PyVista: VTK formats, also PLY, OBJ, STL.
+        self.actionImportPyVista.setText("Import VTK/PLY/OBJ/STL")
         self.actionImportPC.triggered.connect(self.import_PC)
         self.actionImportSHP.triggered.connect(self.import_SHP)
         self.actionImportDEM.triggered.connect(self.import_DEM)
@@ -4811,6 +4813,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def import_gocad(self):
         """Import Gocad ASCII file and update geological collection."""
+        from .orientation_analysis import start_property_import
+
+        start_property_import(self)  # property names converted after one confirmation per import
         self.print_terminal("Importing Gocad ASCII format")
         self.print_terminal(
             "Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)"
@@ -4828,6 +4833,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def import_gocad_sections(self):
         """Import cross-section saved as Gocad ASCII file and update geological collection."""
+        from .orientation_analysis import start_property_import
+
+        start_property_import(self)  # property names converted after one confirmation per import
         self.print_terminal("Importing Gocad ASCII format")
         self.print_terminal(
             "Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)"
@@ -5213,6 +5221,9 @@ class ProjectWindow(QMainWindow, Ui_ProjectWindow):
 
     def import_PC(self):
         """Import point cloud data. File extension dependent (.txt, .xyz, .las) -> Ui_ImportOptionsWindow ui to preview the data (similar to stereonet)"""
+        from .orientation_analysis import start_property_import
+
+        start_property_import(self)  # property names converted after one confirmation per import
 
         default_attr_list = [
             "As is",

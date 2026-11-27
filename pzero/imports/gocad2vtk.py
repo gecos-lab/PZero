@@ -444,6 +444,12 @@ def gocad2vtk(self=None, in_file_name=None, uid_from_name=None):
 
             # print(curr_obj_dict["vtk_obj"])
 
+            # Property names to the PZero conventions (after confirmation, once per import).
+            from os.path import basename as _basename
+            from pzero.orientation_analysis import convert_imported_entity
+
+            convert_imported_entity(self, curr_obj_dict, _basename(in_file_name))
+
             # Add current_entity to entities collection, after checking if the entity is valid.
             if curr_obj_dict["vtk_obj"].points_number > 0:
                 if curr_obj_dict["topology"] == "VertexSet":
@@ -727,6 +733,12 @@ def gocad2vtk_section(
                     curr_obj_dict["vtk_obj"].GetPointData().AddArray(
                         curr_obj_properties_collection.GetItem(i)
                     )
+
+            # Property names to the PZero conventions (after confirmation, once per import).
+            from os.path import basename as _basename
+            from pzero.orientation_analysis import convert_imported_entity
+
+            convert_imported_entity(self, curr_obj_dict, _basename(in_file_name))
 
             # Add current_entity to entities collection
             self.geol_coll.add_entity_from_dict(entity_dict=curr_obj_dict)

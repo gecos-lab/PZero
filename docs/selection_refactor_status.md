@@ -163,6 +163,12 @@ Phase 4 follow-ups included in the same commit:
   contours keep their lines) and the contours-only threshold. Switching axial/polar redraws only
   the entities drawn as contours and computes the pooled contours once (3.8 s -> 1.3 s with a
   100k-vector entity).
+- Import conversion (2026-11-27): point clouds, GOCAD (objects and sections) and Import VTK/PLY/OBJ/STL
+  (was "Import PyVista") convert property names after one confirmation per
+  import command (`start_property_import`, `convert_imported_entity`): orientation names with or
+  without units, normals components and lowercase normals -> Normals (sign kept), R/G/B -> RGB for
+  point clouds. Point-cloud normals are no longer flipped downwards. ply2vtk/obj2vtk/stl2vtk are
+  exporters. Test: `tests/selection/sel_import_conversion.py`.
 - Merge to multipart, weld and snap: inputs and outputs belong to one cross-section; only entities
   with the parent_uid of the last selected one are used (`same_parent=True`), others deselected.
 

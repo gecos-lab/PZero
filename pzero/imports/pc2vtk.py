@@ -198,6 +198,31 @@ def pc2vtk(
             )
             return
 
+        # Property names to the PZero conventions, after confirmation (once per import): normals
+        # components (nx, normal_x, ...) -> Nx, Ny, Nz (merged into Normals below), colour channels
+        # (R, G, B, ...) -> Red, Green, Blue (merged into RGB below), orientation names (e.g.
+        # "Dip (degrees)", "dip direction") -> Dip, Direction, ...
+        from pzero.orientation_analysis import confirm_property_conversion, plan_imported_properties
+
+        plan = plan_imported_properties(
+            [c for c in input_df.columns if c not in ("X", "Y", "Z")], rgb=True
+        )
+        plan = [  # columns already named as the importer expects are not reported
+            step for step in plan
+            if not (step["kind"] == "normals" and step["sources"] == ["Nx", "Ny", "Nz"])
+            and not (step["kind"] == "rgb" and step["sources"] == ["Red", "Green", "Blue"])
+        ]
+        if plan and confirm_property_conversion(self.parent, basename, plan):
+            column_names = {}
+            for step in plan:
+                if step["kind"] == "normals":
+                    column_names.update(zip(step["sources"], ("Nx", "Ny", "Nz")))
+                elif step["kind"] == "rgb":
+                    column_names.update(zip(step["sources"], ("Red", "Green", "Blue")))
+                else:
+                    column_names[step["sources"][0]] = step["target"]
+            input_df.rename(columns=column_names, inplace=True)
+
         # Keep the input coordinates in their original reference system.
         # The former local-origin adjustment is intentionally disabled: it
         # subtracted the first point's X/Y rounded to the nearest hundred,
@@ -286,9 +311,9 @@ def pc2vtk(
             if "Nx" in input_df.columns:
                 point_cloud.init_point_data("Normals", 3)
                 normals = np_array([input_df["Nx"], input_df["Ny"], input_df["Nz"]]).T
-
-                normals_flipped = np_where(normals[:, 2:] > 0, normals * -1, normals)
-                point_cloud.set_point_data("Normals", normals_flipped)
+                # Normals keep their sign: downwards for normal polarity, upwards for overturned
+                # surfaces (see Orientation conventions; Properties > Invert normals if needed).
+                point_cloud.set_point_data("Normals", normals)
 
                 input_df.drop(["Nx", "Ny", "Nz"], axis=1, inplace=True)
 

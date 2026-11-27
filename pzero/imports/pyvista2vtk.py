@@ -85,7 +85,10 @@ def pyvista2vtk(self):
     surface and tetrahedral meshes as VTK polydata entities.
     <self> is the calling ProjectWindow() instance.
     """
-    self.print_terminal("Importing PyVista-supported format")
+    self.print_terminal("Importing VTK, PLY, OBJ or STL file (formats read by PyVista)")
+    from pzero.orientation_analysis import convert_imported_entity, start_property_import
+
+    start_property_import(self)
     self.print_terminal(
         "Properties are discarded if they are not 1D, 2D, 3D, 4D, 6D or 9D (due to VTK limitations)"
     )
@@ -111,7 +114,10 @@ def pyvista2vtk(self):
     # Get topology (CellType) of first cell in object - THEN ASSUMES ALL CELLS ARE OF THE SAME TYPE
     # Select and open input file
     in_file_name = QFileDialog.getOpenFileName(
-        self, "Import entities from PyVista-supported file"
+        self,
+        "Import entities from VTK file",
+        "",
+        "VTK and other formats (*.vtk *.vtp *.vtu *.vts *.vti *.ply *.obj *.stl);;All files (*.*)",
     )[0]
     if in_file_name:
         self.print_terminal(f"in_file_name: {in_file_name}")
@@ -182,6 +188,9 @@ def pyvista2vtk(self):
         curr_obj_attributes["properties_names"] = properties_names
         curr_obj_attributes["properties_components"] = properties_components
         curr_obj_attributes["properties_types"] = properties_types
+
+        # Property names to the PZero conventions (e.g. normals -> Normals), after confirmation.
+        convert_imported_entity(self, curr_obj_attributes, os.path.basename(in_file_name))
 
         # Add the entity to the appropriate collection
         out_coll.add_entity_from_dict(entity_dict=curr_obj_attributes)

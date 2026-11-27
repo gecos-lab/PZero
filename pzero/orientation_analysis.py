@@ -110,9 +110,11 @@ _ORIENTATION_ALIASES = {
 
 
 def _orientation_key(name):
+    """Name compared ignoring case, separators and a unit in brackets (e.g. "Dip (degrees)" -> "dip")."""
     from re import sub as re_sub
 
-    return re_sub(r"[^a-z0-9]", "", str(name).lower())
+    name = re_sub(r"[\(\[\{][^\)\]\}]*[\)\]\}]", "", str(name))
+    return re_sub(r"[^a-z0-9]", "", name.lower())
 
 
 def orientation_name_map(names=None):
@@ -134,6 +136,155 @@ def orientation_name_map(names=None):
             mapping[name] = new
             taken.add(new)
     return mapping
+
+
+def _vector_component_axis(name):
+    """x, y or z if name is a component of normals (e.g. Nx, normal_x, X normal), else None."""
+    from re import fullmatch as re_fullmatch
+
+    key = _orientation_key(name)
+    match = re_fullmatch(r"(?:n|normal|normals)([xyz])", key) or re_fullmatch(r"([xyz])(?:n|normal|normals)", key)
+    return match.group(1) if match else None
+
+
+def _colour_channel(name):
+    """r, g or b if name is a colour channel (R, Red, ...), else None."""
+    return {"r": "r", "red": "r", "g": "g", "green": "g", "b": "b", "blue": "b"}.get(_orientation_key(name))
+
+
+def plan_imported_properties(names=None, rgb=False):
+    """Conversions of imported property names to the PZero conventions, as a list of steps
+    {"kind": "normals" | "rgb" | "rename", "sources": [...], "target": ...}:
+    - "normals": three components (Nx, Ny, Nz, normal_x, ...) merged into the 3-component Normals;
+    - "rgb" (only with rgb=True, e.g. point clouds): R, G, B (or Red, Green, Blue) merged into RGB;
+    - "rename": orientation names (e.g. "dip direction", "Dip (degrees)", "plunge", "normals") to
+      Dip, Direction, Plunge, Trend, Normals, Lineations (orientation_name_map).
+    Targets that already exist are not created again."""
+    names = [str(name) for name in (names or [])]
+    plan = []
+    used = set()
+    groups = [("normals", NORMALS, _vector_component_axis, "xyz")]
+    if rgb:
+        groups.append(("rgb", "RGB", _colour_channel, "rgb"))
+    for kind, target, channel_of, channels in groups:
+        if target in names:
+            continue
+        found = {}
+        for name in names:
+            channel = channel_of(name)
+            if channel and channel not in found:
+                found[channel] = name
+        if all(channel in found for channel in channels):
+            sources = [found[channel] for channel in channels]
+            plan.append({"kind": kind, "sources": sources, "target": target})
+            used.update(sources)
+    remaining = [name for name in names if name not in used]
+    taken = set(remaining) | {step["target"] for step in plan}
+    for old, new in orientation_name_map(remaining).items():
+        if new not in taken:
+            plan.append({"kind": "rename", "sources": [old], "target": new})
+            taken.add(new)
+    return plan
+
+
+def describe_property_plan(plan=None):
+    """Lines describing a plan of plan_imported_properties, for messages."""
+    lines = []
+    for step in plan or []:
+        if step["kind"] == "rename":
+            lines.append(f"{step['sources'][0]} -> {step['target']}")
+        else:
+            lines.append(f"{', '.join(step['sources'])} -> {step['target']} (3 components)")
+    return lines
+
+
+def start_property_import(project=None):
+    """Call at the start of an import command: the conversion of property names is then asked once
+    for all the files and entities of that import (confirm_property_conversion)."""
+    project._import_conversion_answer = None
+
+
+def confirm_property_conversion(project=None, source=None, plan=None):
+    """Ask (once per import command, see start_property_import) whether to convert the imported
+    property names of the plan to the PZero conventions. Returns True to convert."""
+    if not plan:
+        return False
+    answer = getattr(project, "_import_conversion_answer", None)
+    if answer is None:
+        lines = "\n".join("   " + line for line in describe_property_plan(plan))
+        choice = options_dialog(
+            title="Import: property names",
+            message=(
+                f"{source} has properties that can be converted to the PZero conventions "
+                f"(see Orientation conventions):\n\n{lines}\n\n"
+                "Convert them? The answer applies to all the files and entities of this import."
+            ),
+            yes_role="Convert",
+            no_role="Keep the original names",
+            reject_role=None,
+        )
+        answer = choice == 0
+        project._import_conversion_answer = answer
+    if hasattr(project, "print_terminal"):
+        verb = "converted" if answer else "kept (not converted)"
+        project.print_terminal(f"{source}: properties {verb}: {'; '.join(describe_property_plan(plan))}")
+    return answer
+
+
+def apply_property_plan(vtk_obj=None, plan=None):
+    """Apply a plan of plan_imported_properties to the arrays of a VTK object: merged components
+    become one 3-component array (Normals keep their sign), renamed arrays get the new name.
+    RGB merges are done by the point-cloud importer (scaling to 8 bits) and skipped here."""
+    from vtkmodules.util.numpy_support import numpy_to_vtk, vtk_to_numpy
+
+    point_data = vtk_obj.GetPointData()
+    for step in plan or []:
+        if step["kind"] == "normals":
+            arrays = [point_data.GetArray(name) for name in step["sources"]]
+            if any(array is None for array in arrays):
+                continue
+            values = np_column_stack([vtk_to_numpy(array).astype(float).reshape(-1) for array in arrays])
+            merged = numpy_to_vtk(values, deep=True)
+            merged.SetName(step["target"])
+            for name in step["sources"]:
+                point_data.RemoveArray(name)
+            point_data.AddArray(merged)
+        elif step["kind"] == "rename":
+            for data in (point_data, vtk_obj.GetCellData()):
+                array = data.GetAbstractArray(step["sources"][0]) if data is not None else None
+                if array is not None:
+                    array.SetName(step["target"])
+    vtk_obj.Modified()
+
+
+def convert_imported_entity(project=None, entity_dict=None, source=None):
+    """Convert, after confirmation (once per import), the property names of an entity dictionary
+    built by an importer: its VTK arrays and its properties_names / properties_components (and
+    properties_types if present) lists, in the same order."""
+    names = list(entity_dict.get("properties_names") or [])
+    plan = plan_imported_properties(names)
+    if not plan or not confirm_property_conversion(project, source, plan):
+        return
+    apply_property_plan(entity_dict["vtk_obj"], plan)
+    replaced = {}
+    for step in plan:
+        for index, name in enumerate(step["sources"]):
+            replaced[name] = (step["target"], 3 if step["kind"] != "rename" else None) if index == 0 else None
+    components = list(entity_dict.get("properties_components") or [None] * len(names))
+    types = entity_dict.get("properties_types")
+    new_names, new_components, new_types = [], [], []
+    for i, name in enumerate(names):
+        if name in replaced and replaced[name] is None:
+            continue  # merged into the first component
+        target, n_components = replaced.get(name, (name, None))
+        new_names.append(target)
+        new_components.append(n_components or (components[i] if i < len(components) else 1))
+        if types is not None:
+            new_types.append("float" if n_components else types[i])
+    entity_dict["properties_names"] = new_names
+    entity_dict["properties_components"] = new_components
+    if types is not None:
+        entity_dict["properties_types"] = new_types
 
 
 def find_orientation_property(names=None, canonical=None):
